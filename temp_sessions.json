@@ -1,0 +1,59 @@
+{
+  "madrassa": [
+    {
+      "id": "ef2e6bce-1b84-49f0-9a80-c40b14989e7c",
+      "name": "MADRASA Shift 2",
+      "type": "Madrassa",
+      "standards": null,
+      "start_time": "13:30:00",
+      "end_time": "16:30:00"
+    },
+    {
+      "id": "2119cbd9-80f7-4259-990f-197ed1e83ab5",
+      "name": "MADRASA Shift 1",
+      "type": "Madrassa",
+      "standards": null,
+      "start_time": "09:30:00",
+      "end_time": "12:30:00"
+    }
+  ],
+  "hifz": [
+    {
+      "id": "2e441095-7718-4423-a6b8-e32ad11db3d8",
+      "name": "CLASS 2",
+      "type": "Hifz",
+      "standards": [
+        "5th",
+        "7th",
+        "9th",
+        "Hifz"
+      ],
+      "start_time": "09:30:00",
+      "end_time": "11:30:00"
+    },
+    {
+      "id": "ad411b76-3d76-406e-968f-0f509007c6e9",
+      "name": "CLASS 1",
+      "type": "Hifz",
+      "standards": [
+        "5th",
+        "Hifz",
+        "6th",
+        "7th",
+        "8th",
+        "9th",
+        "10th"
+      ],
+      "start_time": "06:30:00",
+      "end_time": "08:30:00"
+    },
+    {
+      "id": "38722431-e568-4f62-a870-ac97a2e212ab",
+      "name": "CLASS 3",
+      "type": "Hifz",
+      "standards": null,
+      "start_time": "14:00:00",
+      "end_time": "15:30:00"
+    }
+  ]
+}

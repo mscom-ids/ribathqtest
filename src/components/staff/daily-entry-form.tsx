@@ -1,0 +1,680 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useForm, useFieldArray } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { format, subDays, isBefore } from "date-fns"
+import { Loader2, Save, ArrowLeft, PlusCircle, Trash2 } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { supabase } from "@/lib/auth"
+import { SURAH_LIST } from "@/lib/data/surah-list"
+type Surah = { id: number; name: string; totalVerses: number };
+const typedSurahList = SURAH_LIST as Surah[];
+
+// Helper: preprocess empty/falsy values to undefined so .optional() works with z.coerce
+const optionalNum = z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : val),
+    z.coerce.number().optional()
+)
+const optionalNumMin1 = z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : val),
+    z.coerce.number().min(1).optional()
+)
+
+// Schema
+const formSchema = z.object({
+    date: z.string(), // YYYY-MM-DD
+    session: z.enum(["Subh", "Breakfast", "Lunch"]),
+
+    mode: z.enum(["New Verses", "Recent Revision", "Juz Revision"]),
+
+    // New Verses - Array of entries
+    new_verses: z.array(z.object({
+        surah_id: optionalNumMin1,
+        start_v: optionalNum,
+        end_v: optionalNum,
+    })),
+
+    // Recent Revision (Pages)
+    start_page: optionalNumMin1,
+    end_page: optionalNumMin1,
+    // Juz Revision
+    juz_number: optionalNumMin1,
+    juz_portion: z.preprocess(
+        (val) => (val === "" || val === undefined || val === null ? undefined : val),
+        z.enum(["Full", "1st Half", "2nd Half", "Q1", "Q2", "Q3", "Q4"]).optional()
+    ),
+    // Common
+    rating: optionalNumMin1,
+}).superRefine((data, ctx) => {
+    if (data.mode === "New Verses") {
+        data.new_verses.forEach((entry, index) => {
+            if (!entry.surah_id) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Surah is required", path: ["new_verses", index, "surah_id"] })
+            } else {
+                const surah = typedSurahList.find(s => s.id === entry.surah_id);
+                if (surah && surah.totalVerses) {
+                    if (entry.start_v && (entry.start_v < 1 || entry.start_v > surah.totalVerses)) {
+                        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Must be 1-${surah.totalVerses}`, path: ["new_verses", index, "start_v"] })
+                    }
+                    if (entry.end_v && (entry.end_v < 1 || entry.end_v > surah.totalVerses)) {
+                        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Must be 1-${surah.totalVerses}`, path: ["new_verses", index, "end_v"] })
+                    }
+                    if (entry.start_v && entry.end_v && entry.start_v > entry.end_v) {
+                        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End verse must be >= start verse", path: ["new_verses", index, "end_v"] })
+                    }
+                }
+            }
+            if (!entry.start_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "start_v"] })
+            if (!entry.end_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "end_v"] })
+        })
+    } else if (data.mode === "Recent Revision") {
+        if (!data.start_page) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Start page is required", path: ["start_page"] })
+        if (!data.end_page) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End page is required", path: ["end_page"] })
+        if (data.start_page && data.end_page && data.start_page > data.end_page) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End page must be >= start page", path: ["end_page"] })
+        }
+    } else if (data.mode === "Juz Revision") {
+        if (!data.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_number"] })
+        if (!data.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_portion"] })
+    }
+})
+
+type FormValues = z.infer<typeof formSchema>
+
+export default function DailyEntryForm({ studentId }: { studentId: string }) {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const returnTo = searchParams.get("returnTo")
+    const [loading, setLoading] = useState(false)
+    const [logId, setLogId] = useState<string | null>(null)
+    const [student, setStudent] = useState<{ adm_no: string; name: string } | null>(null)
+    const [assignedUsthadId, setAssignedUsthadId] = useState<string | null>(null)
+    const [mounted, setMounted] = useState(false)
+
+    const today = new Date()
+    const minDate = subDays(today, 7)
+
+    const form = useForm<FormValues>({
+        resolver: zodResolver(formSchema) as any,
+        defaultValues: {
+            date: searchParams.get("date") || format(today, "yyyy-MM-dd"),
+            session: "Subh",
+            mode: "New Verses",
+            new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
+            rating: 3,
+        },
+    })
+
+    // Field array for multiple surahs
+    const { fields: versesFields, append: appendVerse, remove: removeVerse } = useFieldArray({
+        control: form.control,
+        name: "new_verses"
+    });
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    useEffect(() => {
+        async function loadData() {
+            const { data: s } = await supabase.from("students").select("adm_no, name, assigned_usthad_id").eq("adm_no", studentId).single()
+            if (s) {
+                setStudent(s)
+                setAssignedUsthadId(s.assigned_usthad_id)
+            }
+
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const logIdParam = searchParams.get("log_id")
+            let existingLog = null
+
+            if (logIdParam) {
+                const { data } = await supabase.from("hifz_logs").select("*").eq("id", logIdParam).single()
+                existingLog = data
+            } else {
+                const date = form.getValues("date")
+                const session = form.getValues("session")
+                const mode = form.getValues("mode")
+
+                const { data } = await supabase
+                    .from("hifz_logs")
+                    .select("*")
+                    .eq("student_id", studentId)
+                    .eq("entry_date", date)
+                    .eq("session_type", session)
+                    .eq("mode", mode)
+                    .limit(1)
+                    .maybeSingle()
+                existingLog = data
+            }
+
+            if (existingLog) {
+                setLogId(existingLog.id)
+                // Need to map SURAH name to ID for the new form schema
+                let surahId = undefined;
+                if (existingLog.surah_name) {
+                    const matched = SURAH_LIST.find(s => s.name === existingLog.surah_name);
+                    surahId = matched?.id;
+                }
+
+                form.reset({
+                    date: existingLog.entry_date,
+                    session: existingLog.session_type as any,
+                    mode: existingLog.mode as any,
+                    new_verses: [{
+                        surah_id: surahId,
+                        start_v: existingLog.start_v || undefined,
+                        end_v: existingLog.end_v || undefined
+                    }],
+                    start_page: existingLog.start_page,
+                    end_page: existingLog.end_page,
+                    juz_number: existingLog.juz_number,
+                    juz_portion: existingLog.juz_portion as any,
+                    rating: existingLog.rating || 3
+                })
+            } else {
+                if (!logIdParam) {
+                    setLogId(null)
+                    form.setValue("new_verses", [{ surah_id: undefined, start_v: undefined, end_v: undefined }])
+                    form.setValue("start_page", undefined)
+                    form.setValue("end_page", undefined)
+                    form.setValue("juz_number", undefined)
+                    form.setValue("juz_portion", undefined as any)
+                    form.setValue("rating", 3)
+                }
+            }
+        }
+        loadData()
+    }, [studentId, form, searchParams])
+
+    // Re-fetch when date/session/mode change (track via separate effect)
+    const watchedDate = form.watch("date")
+    const watchedSession = form.watch("session")
+    const watchedMode = form.watch("mode")
+
+    useEffect(() => {
+        if (!mounted) return
+        async function reloadLog() {
+            const logIdParam = searchParams.get("log_id")
+            if (logIdParam) return // Don't re-fetch if editing a specific log
+
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const { data } = await supabase
+                .from("hifz_logs")
+                .select("*")
+                .eq("student_id", studentId)
+                .eq("entry_date", watchedDate)
+                .eq("session_type", watchedSession)
+                .eq("mode", watchedMode)
+                .limit(1)
+                .maybeSingle()
+
+            if (data) {
+                setLogId(data.id)
+                let surahId = undefined;
+                if (data.surah_name) {
+                    const matched = SURAH_LIST.find(s => s.name === data.surah_name);
+                    surahId = matched?.id;
+                }
+                form.reset({
+                    date: data.entry_date,
+                    session: data.session_type as any,
+                    mode: data.mode as any,
+                    new_verses: [{
+                        surah_id: surahId,
+                        start_v: data.start_v || undefined,
+                        end_v: data.end_v || undefined
+                    }],
+                    start_page: data.start_page,
+                    end_page: data.end_page,
+                    juz_number: data.juz_number,
+                    juz_portion: data.juz_portion as any,
+                    rating: data.rating || 3
+                })
+            } else {
+                setLogId(null)
+            }
+        }
+        reloadLog()
+    }, [watchedDate, watchedSession, watchedMode])
+
+    const onSubmit = async (values: FormValues) => {
+        setLoading(true)
+
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user?.id).single()
+        const { data: staff } = await supabase.from("staff").select("id").eq("profile_id", user?.id).single()
+
+        if (!staff) {
+            alert("Error: You seem to be logged out or not a staff member.")
+            setLoading(false)
+            return
+        }
+
+        let targetUsthadId = staff.id
+        if (["admin", "principal", "vice_principal"].includes(profile?.role || "") && assignedUsthadId) {
+            targetUsthadId = assignedUsthadId
+        }
+
+        const commonData = {
+            student_id: studentId,
+            usthad_id: targetUsthadId,
+            entry_date: values.date,
+            session_type: values.session,
+            mode: values.mode,
+            rating: values.rating
+        }
+
+        let logError = null;
+
+        if (values.mode === "New Verses") {
+            // Bulk insert multiple records
+            const recordsToInsert = values.new_verses.map(v => ({
+                ...commonData,
+                surah_name: SURAH_LIST.find(s => s.id === v.surah_id)?.name || null,
+                start_v: v.start_v,
+                end_v: v.end_v,
+                start_page: null, end_page: null, juz_number: null, juz_portion: null
+            }))
+
+            if (logId) {
+                // Update the specific log
+                const { error } = await supabase.from("hifz_logs").update(recordsToInsert[0]).eq("id", logId)
+                logError = error
+                // If they added extra surahs while editing, insert the rest as new logs
+                if (!error && recordsToInsert.length > 1) {
+                    const { error: insertError } = await supabase.from("hifz_logs").insert(recordsToInsert.slice(1))
+                    logError = insertError || logError
+                }
+            } else {
+                const { error } = await supabase.from("hifz_logs").insert(recordsToInsert)
+                logError = error
+            }
+        } else {
+            // Other modes are single records
+            const singleData = {
+                ...commonData,
+                surah_name: null, start_v: null, end_v: null,
+                start_page: values.mode === "Recent Revision" ? values.start_page : null,
+                end_page: values.mode === "Recent Revision" ? values.end_page : null,
+                juz_number: values.mode === "Juz Revision" ? values.juz_number : null,
+                juz_portion: values.mode === "Juz Revision" ? values.juz_portion : null,
+            }
+            if (logId) {
+                const { error } = await supabase.from("hifz_logs").update(singleData).eq("id", logId)
+                logError = error
+            } else {
+                const { error } = await supabase.from("hifz_logs").insert(singleData)
+                logError = error
+            }
+        }
+
+        if (logError) {
+            alert(`Failed to save log: ${logError.message}`)
+        } else {
+            if (returnTo) {
+                router.push(returnTo)
+            } else {
+                alert("Saved successfully!")
+                form.setValue("new_verses", [{ surah_id: undefined, start_v: undefined, end_v: undefined }])
+            }
+        }
+        setLoading(false)
+    }
+
+    const handleDelete = async () => {
+        if (!logId) return
+        if (!confirm("Are you sure you want to delete this specific entry?")) return
+
+        setLoading(true)
+        const { error } = await supabase.from("hifz_logs").delete().eq("id", logId)
+        setLoading(false)
+        if (error) {
+            alert("Error deleting: " + error.message)
+        } else {
+            alert("Entry deleted.")
+            if (returnTo) {
+                router.push(returnTo)
+            } else {
+                setLogId(null)
+            }
+        }
+    }
+
+    const isOldDate = isBefore(new Date(form.watch("date")), minDate)
+
+    if (!mounted) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
+
+    return (
+        <div className="p-4 max-w-lg mx-auto pb-20">
+            <div className="flex items-center mb-6">
+                <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                    <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <h1 className="ml-2 text-xl font-bold">{student?.name || "Loading..."}</h1>
+            </div>
+
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+                    console.error("Form validation errors:", errors)
+                    const firstError = Object.values(errors)[0]
+                    const msg = Array.isArray(firstError)
+                        ? firstError[0]?.surah_id?.message || firstError[0]?.start_v?.message || firstError[0]?.end_v?.message || "Validation error"
+                        : (firstError as any)?.message || "Please fill all required fields"
+                    alert("Validation failed: " + msg)
+                })} className="space-y-6">
+
+                    <Card>
+                        <CardHeader className="pb-3 border-b border-white/5">
+                            <CardTitle className="text-base text-emerald-400">Session Setup</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="date"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs text-gray-400">Date</FormLabel>
+                                            <FormControl>
+                                                <Input type="date" {...field} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="session"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs text-gray-400">Session</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
+                                                <FormControl>
+                                                    <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="Subh">Subh</SelectItem>
+                                                    <SelectItem value="Breakfast">Breakfast</SelectItem>
+                                                    <SelectItem value="Lunch">Lunch</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border border-emerald-900/40 shadow-xl shadow-emerald-900/10">
+                        <CardHeader className="pb-3 bg-white/5 border-b border-white/5">
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-base text-emerald-400">Hifz Progress Tracker</CardTitle>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-6 pt-4">
+                            <FormField
+                                control={form.control}
+                                name="mode"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-emerald-900/20 border-emerald-600/50 text-emerald-300 font-semibold h-12">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="New Verses">New Verses</SelectItem>
+                                                <SelectItem value="Recent Revision">Recent Revision (Sabaq Para)</SelectItem>
+                                                <SelectItem value="Juz Revision">Juz Revision (Amak)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* New Verses Mode - Multiple Surahs */}
+                            {form.watch("mode") === "New Verses" && (
+                                <div className="space-y-4">
+                                    {versesFields.map((field, index) => (
+                                        <div key={field.id} className="p-4 border-l-2 border-emerald-500 bg-emerald-950/10 rounded-r-lg relative group">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-xs uppercase tracking-wider text-emerald-500/80 font-semibold">Surah Entry {index + 1}</span>
+                                                {versesFields.length > 1 && !isOldDate && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                                        onClick={() => removeVerse(index)}
+                                                    >
+                                                        <Trash2 size={14} className="mr-1" /> Remove
+                                                    </Button>
+                                                )}
+                                            </div>
+
+                                            <FormField
+                                                control={form.control}
+                                                name={`new_verses.${index}.surah_id`}
+                                                render={({ field }) => (
+                                                    <FormItem className="mb-3">
+                                                        <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString() || ""} disabled={isOldDate}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500">
+                                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-500/50 pointer-events-none">
+                                                                        {typedSurahList.find(s => s.id === field.value)?.totalVerses ? `${typedSurahList.find(s => s.id === field.value)?.totalVerses} Ayahs` : ''}
+                                                                    </div>
+                                                                    <SelectValue placeholder="Select Surah" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent className="max-h-[300px]">
+                                                                {typedSurahList.map((surah) => (
+                                                                    <SelectItem key={surah.id} value={surah.id.toString()}>
+                                                                        {surah.id}. {surah.name} <span className="text-xs text-muted-foreground ml-2">({surah.totalVerses} ayahs)</span>
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`new_verses.${index}.start_v`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel className="text-xs text-gray-400">Start Verse</FormLabel>
+                                                            <FormControl>
+                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500" />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`new_verses.${index}.end_v`}
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel className="text-xs text-gray-400">End Verse</FormLabel>
+                                                            <FormControl>
+                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500" />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {!isOldDate && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={() => appendVerse({ surah_id: undefined, start_v: undefined, end_v: undefined })}
+                                            className="w-full border border-dashed border-emerald-800 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-950/30"
+                                        >
+                                            <PlusCircle size={16} className="mr-2" /> Add another Surah
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Recent Revision Mode - Page Based */}
+                            {form.watch("mode") === "Recent Revision" && (
+                                <div className="space-y-4 p-4 border-l-2 border-blue-500 bg-blue-950/10 rounded-r-lg">
+                                    <div className="flex gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="start_page"
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormLabel className="text-xs text-gray-400">Start Page</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" placeholder="1" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="end_page"
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormLabel className="text-xs text-gray-400">End Page</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" placeholder="5" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Juz Revision Mode */}
+                            {form.watch("mode") === "Juz Revision" && (
+                                <div className="space-y-4 p-4 border-l-2 border-purple-500 bg-purple-950/10 rounded-r-lg">
+                                    <div className="flex gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="juz_number"
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormLabel className="text-xs text-gray-400">Juz Number</FormLabel>
+                                                    <Select onValueChange={(v) => field.onChange(parseInt(v))} value={field.value?.toString()} disabled={isOldDate}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                                <SelectValue placeholder="Select Juz" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent className="max-h-[200px]">
+                                                            {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
+                                                                <SelectItem key={juz} value={juz.toString()}>
+                                                                    Juz {juz}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="juz_portion"
+                                            render={({ field }) => (
+                                                <FormItem className="flex-1">
+                                                    <FormLabel className="text-xs text-gray-400">Portion</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                                <SelectValue placeholder="Portion" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            <SelectItem value="Full">Full Juz</SelectItem>
+                                                            <SelectItem value="1st Half">1st Half</SelectItem>
+                                                            <SelectItem value="2nd Half">2nd Half</SelectItem>
+                                                            <SelectItem value="Q1">Quarter 1</SelectItem>
+                                                            <SelectItem value="Q2">Quarter 2</SelectItem>
+                                                            <SelectItem value="Q3">Quarter 3</SelectItem>
+                                                            <SelectItem value="Q4">Quarter 4</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="border-t border-white/5 pt-4">
+                                <FormField
+                                    control={form.control}
+                                    name="rating"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="text-xs text-gray-400 uppercase tracking-wider block mb-2">Performance Rating (1-5)</FormLabel>
+                                            <FormControl>
+                                                <div className="flex gap-2 w-full">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <Button
+                                                            key={star}
+                                                            type="button"
+                                                            variant="outline"
+                                                            className={`flex-1 h-12 transition-all ${field.value === star
+                                                                ? 'bg-emerald-500 text-white border-none shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400'
+                                                                : 'bg-[#1e1e1e] border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800'}`}
+                                                            onClick={() => field.onChange(star)}
+                                                            disabled={isOldDate}
+                                                        >
+                                                            <span className="text-lg font-bold">{star}</span>
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </FormControl>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                        </CardContent>
+                    </Card>
+
+                    <div className="flex gap-4">
+                        {logId && (
+                            <Button type="button" variant="destructive" className="h-12 flex-1 max-w-[120px]" onClick={handleDelete} disabled={loading || isOldDate}>
+                                Delete
+                            </Button>
+                        )}
+                        <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-12 font-bold transition-all shadow-lg shadow-emerald-900/40" disabled={loading || isOldDate}>
+                            {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                            {logId ? "Update Record" : "Save Progress"}
+                        </Button>
+                    </div>
+                </form>
+            </Form>
+        </div>
+    )
+}

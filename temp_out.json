@@ -1,0 +1,98 @@
+{
+  "mSess": [
+    {
+      "id": "ef2e6bce-1b84-49f0-9a80-c40b14989e7c",
+      "name": "MADRASA Shift 2",
+      "type": "Madrassa",
+      "days_of_week": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "standards": null
+    },
+    {
+      "id": "2119cbd9-80f7-4259-990f-197ed1e83ab5",
+      "name": "MADRASA Shift 1",
+      "type": "Madrassa",
+      "days_of_week": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "standards": null
+    }
+  ],
+  "hSess": [
+    {
+      "id": "2e441095-7718-4423-a6b8-e32ad11db3d8",
+      "name": "CLASS 2",
+      "type": "Hifz",
+      "days_of_week": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "standards": [
+        "5th",
+        "7th",
+        "9th",
+        "Hifz"
+      ]
+    },
+    {
+      "id": "ad411b76-3d76-406e-968f-0f509007c6e9",
+      "name": "CLASS 1",
+      "type": "Hifz",
+      "days_of_week": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "standards": [
+        "5th",
+        "Hifz",
+        "6th",
+        "7th",
+        "8th",
+        "9th",
+        "10th"
+      ]
+    },
+    {
+      "id": "38722431-e568-4f62-a870-ac97a2e212ab",
+      "name": "CLASS 3",
+      "type": "Hifz",
+      "days_of_week": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6
+      ],
+      "standards": null
+    }
+  ],
+  "st": [
+    {
+      "standard": "6th",
+      "hifz_standard": null,
+      "madrassa_standard": null
+    }
+  ]
+}

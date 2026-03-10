@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bc89f557-9801-4acc-bead-19a8df6203b3",
+    "role": "admin",
+    "full_name": "System Administrator"
+  },
+  {
+    "id": "2309a74f-576a-4bb8-b010-a0380577c8d1",
+    "role": "admin",
+    "full_name": "System Administrator"
+  },
+  {
+    "id": "909440c5-4d82-48ac-8fc4-b67bdc9a46c8",
+    "role": "staff",
+    "full_name": "Test Staff"
+  }
+]

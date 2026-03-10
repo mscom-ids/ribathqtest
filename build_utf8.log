@@ -1,0 +1,55 @@
+﻿
+> institution-os@0.1.0 build
+> next build
+
+Γû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 8.8s
+  Running TypeScript ...
+npm : Failed to compile.
+At line:1 char:1
++ npm run build > build.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpeci 
+   fied: (Failed to compile.:String)   
+  [], RemoteException
+    + FullyQualifiedErrorId : NativeCo 
+   mmandError
+ 
+
+./src/app/admin/leaves/tabs/quick-view-
+dashboard.tsx:183:79
+Type error: 'percent' is possibly 
+'undefined'.
+
+[0m [90m 181 |[39m                  
+                   
+fill[33m=[39m[32m"#8884d8"[39m
+ [90m 182 |[39m                      
+               
+dataKey[33m=[39m[32m"value"[39m
+[31m[1m>[22m[39m[90m 183 |[39m   
+                                  
+label[33m=[39m{({ name[33m,[39m 
+percent }) [33m=>[39m [32m`${name} 
+${(percent * 100).toFixed(0)}%`[39m}
+ [90m     |[39m                      
+                                       
+                  [31m[1m^[22m[39m
+ [90m 184 |[39m                      
+           [33m>[39m
+ [90m 185 |[39m                      
+               {pieData[33m.[39mmap((
+entry[33m,[39m index) [33m=>[39m (
+ [90m 186 |[39m                      
+                   
+[33m<[39m[33mCell[39m key[33m=[39
+m{[32m`cell-${index}`[39m} 
+fill[33m=[39m{[33mCOLORS[39m[index 
+[33m%[39m 
+[33mCOLORS[39m[33m.[39mlength]} 
+[33m/[39m[33m>[39m[0m
+Next.js build worker exited with code: 
+1 and signal: null

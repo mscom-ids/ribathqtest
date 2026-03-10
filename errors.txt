@@ -1,0 +1,8 @@
+src/actions/staff-auth.ts(24,65): error TS2339: Property 'errors' does not exist on type 'ZodError<{ email: string; password: string; name: string; role: "admin" | "principal" | "vice_principal" | "controller" | "staff" | "usthad" | "teacher"; phone?: string | undefined; existingStaffId?: string | undefined; }>'.
+src/actions/staff-auth.ts(24,76): error TS7006: Parameter 'e' implicitly has an 'any' type.
+src/app/admin/staff/page.tsx(101,17): error TS2322: Type 'string' is not assignable to type '"admin" | "principal" | "vice_principal" | "controller" | "staff" | "usthad" | "teacher"'.
+src/app/parent/page.tsx(87,65): error TS2554: Expected 1 arguments, but got 2.
+src/app/parent/page.tsx(87,66): error TS7006: Parameter 'name' implicitly has an 'any' type.
+src/app/staff/student/[id]/page.tsx(67,23): error TS2322: Type '{ progress: number; adm_no: any; name: any; batch_year: any; standard: any; photo_url: any; dob: any; assigned_usthad: { name: any; }[]; }' is not assignable to type 'Student'.
+  Types of property 'assigned_usthad' are incompatible.
+    Property 'name' is missing in type '{ name: any; }[]' but required in type '{ name: string; }'.

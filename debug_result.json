@@ -1,0 +1,24 @@
+{
+  "anon_students": [],
+  "anon_students_err": null,
+  "admin_students": [
+    {
+      "adm_no": "R002"
+    },
+    {
+      "adm_no": "R001"
+    }
+  ],
+  "anon_fees": [],
+  "anon_fees_err": null,
+  "admin_fees": [
+    {
+      "id": "b62cc8a8-16e1-4945-bf27-fcf143f197c2",
+      "student_id": "R002"
+    },
+    {
+      "id": "21cc0706-b237-4b44-b698-6769a102d6d7",
+      "student_id": "R001"
+    }
+  ]
+}
