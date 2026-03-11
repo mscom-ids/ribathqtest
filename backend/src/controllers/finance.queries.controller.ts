@@ -105,7 +105,7 @@ export const getMonthlyFeesForCurrentMonth = async (req: Request, res: Response)
 export const getActiveStudents = async (req: Request, res: Response) => {
     try {
         const result = await db.query(
-            `SELECT adm_no, name, batch_year, standard, photo_url, date_of_birth, status 
+            `SELECT adm_no, name, batch_year, standard, photo_url, dob as date_of_birth, status 
              FROM students WHERE status = 'active' ORDER BY adm_no ASC`
         );
         res.json({ success: true, data: result.rows });
