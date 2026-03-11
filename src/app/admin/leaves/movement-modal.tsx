@@ -11,7 +11,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { toast } from "sonner"
 import type { StudentLeave } from "./page"
 
@@ -30,50 +30,28 @@ export function MovementModal({ leave, open, onOpenChange, onSuccess }: Movement
 
     const handleMovement = async () => {
         setLoading(true)
-        const { data: { user } } = await supabase.auth.getUser()
         
         const now = new Date()
         const expectedReturn = new Date(leave.end_datetime)
         const isLate = !isExit && isAfter(now, expectedReturn)
 
-        // 1. Record the movement audit log
-        const { error: movementError } = await supabase.from("student_movements").insert({
-            student_id: leave.student_id,
-            leave_id: leave.id,
-            direction: isExit ? "exit" : "return",
-            is_late: isLate,
-            recorded_by: user?.id
-        })
+        try {
+            const res = await api.post(`/leaves/${leave.id}/movement`, {
+                direction: isExit ? "exit" : "return",
+                is_late: isLate,
+                timestamp: now.toISOString()
+            })
 
-        if (movementError) {
-            toast.error(`Failed to record ${action}`, { description: movementError.message })
-            setLoading(false)
-            return
-        }
-
-        // 2. Update the main leave record
-        const updatePayload: any = {
-            status: isExit ? "outside" : "completed",
-            updated_at: now.toISOString()
+            if (res.data.success) {
+                toast.success(`Student marked as ${isExit ? "Outside" : "Returned"}`)
+                onSuccess()
+            } else {
+                toast.error(`Failed to record ${action}`, { description: res.data.error })
+            }
+        } catch (error: any) {
+            toast.error(`Failed to record ${action}`, { description: error.message })
         }
         
-        if (isExit) {
-            updatePayload.actual_exit_datetime = now.toISOString()
-        } else {
-            updatePayload.actual_return_datetime = now.toISOString()
-        }
-
-        const { error: leaveUpdateError } = await supabase
-            .from("student_leaves")
-            .update(updatePayload)
-            .eq("id", leave.id)
-
-        if (leaveUpdateError) {
-            toast.error(`Failed to update leave status`, { description: leaveUpdateError.message })
-        } else {
-            toast.success(`Student marked as ${isExit ? "Outside" : "Returned"}`)
-            onSuccess()
-        }
         setLoading(false)
     }
 

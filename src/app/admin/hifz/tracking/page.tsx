@@ -29,7 +29,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 interface Student {
@@ -74,41 +74,34 @@ export default function HifzTrackingPage() {
             setLoading(true)
             const dateStr = format(date, "yyyy-MM-dd")
 
-            // Load all active students enrolled in Hifz
-            const { data: studentsData, error } = await supabase
-                .from("students")
-                .select("adm_no, name, hifz_standard")
-                .not("hifz_standard", "is", null)
-                .order("name")
+            try {
+                // Load all active students enrolled in Hifz
+                const { data: { students: studentsData } } = await api.get('/hifz/students');
 
-            if (studentsData) {
-                setStudents(studentsData)
-            }
+                if (studentsData) {
+                    setStudents(studentsData)
+                }
 
-            // Load existing hifz logs for this date (filter by session if selected)
-            let logsQuery = supabase
-                .from("hifz_logs")
-                .select("*")
-                .eq("entry_date", dateStr)
+                // Load existing hifz logs for this date (filter by session if selected)
+                const { data: { logs: logsData } } = await api.get('/hifz/logs', {
+                    params: { date: dateStr, session_type: selectedSession }
+                });
 
-            // If a session is selected (not "all"), filter by it
-            if (selectedSession && selectedSession !== "all") {
-                logsQuery = logsQuery.eq("session_type", selectedSession)
-            }
-
-            const { data: logsData } = await logsQuery
-
-            if (logsData) {
-                // Group logs by student_id - each student can have multiple logs (one per mode)
-                const logsMap: Record<string, HifzLog[]> = {}
-                logsData.forEach(log => {
-                    if (!logsMap[log.student_id]) {
-                        logsMap[log.student_id] = []
-                    }
-                    logsMap[log.student_id].push(log)
-                })
-                setHifzLogs(logsMap)
-            } else {
+                if (logsData) {
+                    // Group logs by student_id - each student can have multiple logs (one per mode)
+                    const logsMap: Record<string, HifzLog[]> = {}
+                    logsData.forEach((log: HifzLog) => {
+                        if (!logsMap[log.student_id]) {
+                            logsMap[log.student_id] = []
+                        }
+                        logsMap[log.student_id].push(log)
+                    })
+                    setHifzLogs(logsMap)
+                } else {
+                    setHifzLogs({})
+                }
+            } catch (err) {
+                console.error("Failed to load hifz tracking data", err);
                 setHifzLogs({})
             }
 
@@ -137,12 +130,16 @@ export default function HifzTrackingPage() {
     const handleDeleteLog = async (logId: string) => {
         if (!confirm("Are you sure you want to delete this specific entry?")) return
 
-        const { error } = await supabase.from("hifz_logs").delete().eq("id", logId)
-        if (error) {
+        try {
+            const res = await api.delete(`/hifz/logs/${logId}`);
+            if (res.data && res.data.success) {
+                // Trigger refresh
+                setRefreshKey(prev => prev + 1)
+            } else {
+                alert("Error deleting log");
+            }
+        } catch (error: any) {
             alert("Error deleting: " + error.message)
-        } else {
-            // Trigger refresh
-            setRefreshKey(prev => prev + 1)
         }
     }
 

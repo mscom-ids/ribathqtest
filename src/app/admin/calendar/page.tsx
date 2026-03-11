@@ -34,7 +34,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 // Type Definitions
@@ -101,8 +101,10 @@ export default function CalendarPage() {
     // Load Sessions
     useEffect(() => {
         async function loadSessions() {
-            const { data } = await supabase.from("academic_sessions").select("*").eq("is_active", true)
-            if (data) setSessions(data)
+            try {
+                const res = await api.get('/academics/sessions', { params: { is_active: true } })
+                if (res.data.success) setSessions(res.data.sessions || [])
+            } catch (e) { console.error(e) }
         }
         loadSessions()
     }, [])
@@ -110,12 +112,14 @@ export default function CalendarPage() {
     // Load Policies
     async function loadPolicies() {
         setLoading(true)
-        const { data } = await supabase.from("academic_calendar").select("*")
-        if (data) {
-            const map: Record<string, CalendarPolicy> = {}
-            data.forEach((p: any) => { map[p.date] = p })
-            setPolicies(map)
-        }
+        try {
+            const res = await api.get('/academics/calendar')
+            if (res.data.success) {
+                const map: Record<string, CalendarPolicy> = {}
+                ;(res.data.policies || []).forEach((p: any) => { map[p.date] = p })
+                setPolicies(map)
+            }
+        } catch (e) { console.error(e) }
         setLoading(false)
     }
 
@@ -190,28 +194,31 @@ export default function CalendarPage() {
         payload.cancellation_reason_type = editingPolicy.is_holiday ? (editingPolicy.cancellation_reason_type || null) : null
         payload.cancellation_reason_text = editingPolicy.is_holiday ? (editingPolicy.cancellation_reason_text || null) : null
 
-        const { error } = await supabase
-            .from("academic_calendar")
-            .upsert(payload, { onConflict: 'date' })
-
-        if (error) {
-            console.error(error)
-            alert("Failed to save policy. Make sure you've run the database migration.")
-        } else {
-            loadPolicies()
-            setDialogOpen(false)
+        try {
+            const res = await api.put('/academics/calendar', payload)
+            if (res.data.success) {
+                loadPolicies()
+                setDialogOpen(false)
+            } else {
+                alert("Failed to save policy: " + res.data.error)
+            }
+        } catch (err: any) {
+            console.error(err)
+            alert("Failed to save policy: " + err.message)
         }
     }
 
     const deletePolicy = async () => {
         if (!editingPolicy || !date) return
         if (!confirm("Reset custom rules for this date?")) return
-        const { error } = await supabase.from("academic_calendar").delete().eq("date", editingPolicy.date)
-        if (error) {
-            alert("Failed to reset date")
-        } else {
-            const np = { ...policies }; delete np[editingPolicy.date]; setPolicies(np); setDialogOpen(false)
-        }
+        try {
+            const res = await api.delete(`/academics/calendar/${editingPolicy.date}`)
+            if (res.data.success) {
+                const np = { ...policies }; delete np[editingPolicy.date]; setPolicies(np); setDialogOpen(false)
+            } else {
+                alert("Failed to reset date")
+            }
+        } catch { alert("Failed to reset date") }
     }
 
     // ============================
@@ -241,13 +248,17 @@ export default function CalendarPage() {
                 })
             }
 
-            for (let i = 0; i < entries.length; i += 50) {
-                const { error } = await supabase.from("academic_calendar")
-                    .upsert(entries.slice(i, i + 50), { onConflict: 'date', ignoreDuplicates: true })
-                if (error) { alert(`Error at chunk ${i}`); break }
-            }
-            await loadPolicies()
-            alert(`Generated ${entries.length} new day entries!`)
+            try {
+                const res = await api.post('/academics/calendar/generate', {
+                    entries: entries.filter((_, i) => i < 1000) // Limit safety
+                })
+                if (res.data.success) {
+                    await loadPolicies()
+                    alert(`Generated ${entries.length} new day entries!`)
+                } else {
+                    alert('Failed to generate: ' + res.data.error)
+                }
+            } catch (err) { alert("Failed") }
         } catch (err) { alert("Failed") }
         finally { setGenerating(false) }
     }
@@ -306,14 +317,16 @@ export default function CalendarPage() {
                 }
             }
 
-            for (let i = 0; i < entries.length; i += 50) {
-                const { error } = await supabase.from("academic_calendar")
-                    .upsert(entries.slice(i, i + 50), { onConflict: 'date' })
-                if (error) { alert(`Error at chunk ${i}`); break }
-            }
-            await loadPolicies()
-            setBulkDialogOpen(false)
-            alert(`Updated ${entries.length} days!`)
+            try {
+                const res = await api.post('/academics/calendar/bulk', { entries })
+                if (res.data.success) {
+                    await loadPolicies()
+                    setBulkDialogOpen(false)
+                    alert(`Updated ${entries.length} days!`)
+                } else {
+                    alert('Failed: ' + res.data.error)
+                }
+            } catch (err) { alert("Failed") }
         } catch (err) { alert("Failed") }
         finally { setBulkSaving(false) }
     }
@@ -351,15 +364,16 @@ export default function CalendarPage() {
                 cancellation_reason_type: null, cancellation_reason_text: null,
             }))
 
-            for (let i = 0; i < entries.length; i += 50) {
-                const { error } = await supabase.from("academic_calendar")
-                    .upsert(entries.slice(i, i + 50), { onConflict: 'date' })
-                if (error) { alert(`Error at chunk ${i}`); break }
-            }
-
-            await loadPolicies()
-            setModeEditorOpen(false)
-            alert(`Applied "${modeEditTarget}" rules to ${entries.length} days from ${modeEffectiveDate}!`)
+            try {
+                const res = await api.post('/academics/calendar/bulk', { entries })
+                if (res.data.success) {
+                    await loadPolicies()
+                    setModeEditorOpen(false)
+                    alert(`Applied "${modeEditTarget}" rules to ${entries.length} days from ${modeEffectiveDate}!`)
+                } else {
+                    alert('Failed: ' + res.data.error)
+                }
+            } catch (err) { alert("Failed") }
         } catch (err) { alert("Failed") }
         finally { setModeSaving(false) }
     }

@@ -22,9 +22,8 @@ import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
-    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { StudentCard } from "@/components/admin/student-card"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 import { getActiveStudents } from "../financeActions"
@@ -84,31 +83,23 @@ export default function StudentsPage() {
                 if (!res.success || !res.data) throw new Error(res.error || 'Failed to load')
                 const studentsData = res.data
 
-                const { data: logsData, error: logsError } = await supabase
-                    .from("hifz_logs")
-                    .select("student_id, juz_part")
-                    .eq("mode", "Juz Revision")
-
-                if (logsError) throw logsError
-
-                const progressMap: Record<string, Set<string>> = {}
-                if (logsData) {
-                    logsData.forEach(log => {
-                        if (!log.student_id || !log.juz_part) return
-                        if (!progressMap[log.student_id]) {
-                            progressMap[log.student_id] = new Set()
-                        }
-                        const match = log.juz_part.match(/Juz\s+(\d+)/i)
-                        if (match) {
-                            progressMap[log.student_id].add(match[1])
-                        }
-                    })
-                }
-
                 const merged = (studentsData as any).map((s: any) => ({
                     ...s,
-                    progress: progressMap[s.adm_no] ? progressMap[s.adm_no].size : 0
+                    progress: 0 // Will populate after parallel request if needed
                 }))
+                
+                // Fetch progress from new API wrapper
+                try {
+                    const progRes = await api.get('/hifz/progress-summary')
+                    if (progRes.data.success && progRes.data.progressMap) {
+                        const pMap = progRes.data.progressMap
+                        merged.forEach((s: any) => {
+                            s.progress = pMap[s.adm_no] || 0
+                        })
+                    }
+                } catch (e) {
+                    // Ignore hifz progress errors if not module active
+                }
 
                 setStudents(merged)
 
@@ -131,12 +122,16 @@ export default function StudentsPage() {
 
     // Status change handler
     const updateStudentStatus = async (admNo: string, newStatus: string) => {
-        const { error } = await supabase.from("students").update({ status: newStatus }).eq("adm_no", admNo)
-        if (!error) {
-            setStudents(prev => prev.map(s => s.adm_no === admNo ? { ...s, status: newStatus } : s))
-            if (selectedStudent?.adm_no === admNo) {
-                setSelectedStudent(prev => prev ? { ...prev, status: newStatus } : null)
+        try {
+            const res = await api.put(`/students/${admNo}`, { status: newStatus })
+            if (res.data.success) {
+                setStudents(prev => prev.map(s => s.adm_no === admNo ? { ...s, status: newStatus } : s))
+                if (selectedStudent?.adm_no === admNo) {
+                    setSelectedStudent(prev => prev ? { ...prev, status: newStatus } : null)
+                }
             }
+        } catch (error) {
+            console.error("Failed to update status", error)
         }
     }
 

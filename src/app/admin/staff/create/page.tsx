@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 const formSchema = z.object({
     name: z.string().min(2),
@@ -37,8 +37,6 @@ const formSchema = z.object({
     role: z.enum(["admin", "principal", "vice_principal", "controller", "staff", "usthad", "teacher"]),
     phone: z.string().optional(),
 })
-
-import { createStaffUser } from "@/actions/staff-auth"
 
 export default function CreateStaffPage() {
     const router = useRouter()
@@ -59,32 +57,22 @@ export default function CreateStaffPage() {
         setLoading(true)
 
         try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData.session?.access_token;
-            
-            if (!token) {
-                alert("Authentication error. Please log in again.");
-                setLoading(false);
-                return;
-            }
-
-            const result = await createStaffUser({
+            const result = await api.post('/staff', {
                 email: values.email,
                 password: values.password,
                 name: values.name,
                 role: values.role,
-                phone: values.phone,
-                token: token
+                phone: values.phone
             })
 
-            if (result.error) {
-                alert("Error: " + result.error)
+            if (!result.data.success) {
+                alert("Error: " + result.data.error)
             } else {
                 router.push("/admin/staff")
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(error)
-            alert("Failed to add staff record")
+            alert(`Failed to add staff record: ${error.message}`)
         } finally {
             setLoading(false)
         }

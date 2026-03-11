@@ -23,7 +23,7 @@ import { Calendar } from "@/components/ui/calendar"
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type SessionInfo = {
@@ -103,52 +103,38 @@ export default function StaffAttendancePage() {
     useEffect(() => {
         async function init() {
             setLoading(true)
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) { router.push("/login"); return }
+            try {
+                const { data: { user } } = await api.get('/auth/me');
+                if (!user) { router.push("/login"); return }
 
-            // Get role
-            const { data: profile } = await supabase
-                .from("profiles")
-                .select("role")
-                .eq("id", user.id)
-                .single()
+                setUserRole(user.role)
 
-            if (profile) setUserRole(profile.role)
+                // Get staff ID
+                const { data: { staff } } = await api.get('/staff/me');
 
-            // Get staff ID
-            const { data: staff } = await supabase
-                .from("staff")
-                .select("id")
-                .eq("profile_id", user.id)
-                .single()
+                if (!staff) {
+                    toast.error("Staff profile not found")
+                    setLoading(false)
+                    return
+                }
 
-            if (!staff) {
-                toast.error("Staff profile not found")
+                setStaffId(staff.id)
+
+                // Load all active sessions
+                const { data: { sessions: sessionsData } } = await api.get('/academics/sessions');
+
+                if (sessionsData) setSessions(sessionsData as SessionInfo[])
+
+                // Load assigned students
+                const { data: { students: studentsData } } = await api.get(`/staff/students?staff_id=${staff.id}`);
+
+                if (studentsData) setStudents(studentsData)
+
+            } catch (error) {
+                console.error("Auth init error:", error)
+            } finally {
                 setLoading(false)
-                return
             }
-
-            setStaffId(staff.id)
-
-            // Load all active sessions
-            const { data: sessionsData } = await supabase
-                .from("academic_sessions")
-                .select("*")
-                .eq("is_active", true)
-                .order("start_time")
-
-            if (sessionsData) setSessions(sessionsData as SessionInfo[])
-
-            // Load assigned students
-            const { data: studentsData } = await supabase
-                .from("students")
-                .select("adm_no, name, photo_url, standard")
-                .eq("assigned_usthad_id", staff.id)
-                .order("name")
-
-            if (studentsData) setStudents(studentsData)
-
-            setLoading(false)
         }
         init()
     }, [router])
@@ -159,66 +145,65 @@ export default function StaffAttendancePage() {
         setLoadingSessions(true)
 
         // Load calendar policy for this date
-        const { data: policyData } = await supabase
-            .from("academic_calendar")
-            .select("*")
-            .eq("date", dateStr)
-            .single()
+        try {
+            const { data: { calendar: policyData } } = await api.get(`/academics/calendar/${dateStr}`);
 
-        const pol = policyData as CalendarPolicy | null
-        setPolicy(pol)
+            const pol = policyData as CalendarPolicy | null
+            setPolicy(pol)
 
-        // Determine which sessions are active today
-        const dayOfWeek = selectedDate.getDay()
-        const mode = pol?.day_mode || getImplicitMode(dayOfWeek)
-        const allowedTypes = pol?.allowed_session_types || getAllowedTypes(mode)
-        const cancelledMap = pol?.cancelled_sessions || {}
+            // Determine which sessions are active today
+            const dayOfWeek = selectedDate.getDay()
+            const mode = pol?.day_mode || getImplicitMode(dayOfWeek)
+            const allowedTypes = pol?.allowed_session_types || getAllowedTypes(mode)
+            const cancelledMap = pol?.cancelled_sessions || {}
 
-        const activeSessions = sessions.filter(s => {
-            // Day of week check
-            if (s.days_of_week && s.days_of_week.length > 0 && !s.days_of_week.includes(dayOfWeek)) {
-                return false
+            const activeSessions = sessions.filter(s => {
+                // Day of week check
+                if (s.days_of_week && s.days_of_week.length > 0 && !s.days_of_week.includes(dayOfWeek)) {
+                    return false
+                }
+                // Type check
+                if (!allowedTypes.includes(s.type)) return false
+                return true
+            })
+
+            // Load attendance records for all students on this date
+            const studentIds = students.map(s => s.adm_no)
+            if (studentIds.length === 0) {
+                setSessionRows(activeSessions.map(s => ({
+                    session: s,
+                    status: cancelledMap[s.id] ? "cancelled" as const : "pending" as const,
+                    studentCount: 0,
+                    markedCount: 0,
+                })))
+                setLoadingSessions(false)
+                return
             }
-            // Type check
-            if (!allowedTypes.includes(s.type)) return false
-            return true
-        })
 
-        // Load attendance records for all students on this date
-        const studentIds = students.map(s => s.adm_no)
-        if (studentIds.length === 0) {
-            setSessionRows(activeSessions.map(s => ({
-                session: s,
-                status: cancelledMap[s.id] ? "cancelled" as const : "pending" as const,
-                studentCount: 0,
-                markedCount: 0,
-            })))
+            const { data: { data: attendanceData } } = await api.get(`/academics/attendance`, {
+                params: { date: dateStr, student_ids: studentIds.join(',') }
+            });
+
+            // Build session rows
+            const rows: SessionRow[] = activeSessions.map(session => {
+                const isCancelled = !!cancelledMap[session.id]
+                const sessionAttendance = (attendanceData || []).filter((a: any) => a.session_id === session.id)
+                const markedCount = sessionAttendance.length
+
+                return {
+                    session,
+                    status: isCancelled ? "cancelled" : markedCount > 0 ? "marked" : "pending",
+                    studentCount: students.length,
+                    markedCount,
+                }
+            })
+
+            setSessionRows(rows)
+        } catch (error) {
+            console.error(error)
+        } finally {
             setLoadingSessions(false)
-            return
         }
-
-        const { data: attendanceData } = await supabase
-            .from("attendance")
-            .select("student_id, session_id, status")
-            .eq("date", dateStr)
-            .in("student_id", studentIds)
-
-        // Build session rows
-        const rows: SessionRow[] = activeSessions.map(session => {
-            const isCancelled = !!cancelledMap[session.id]
-            const sessionAttendance = (attendanceData || []).filter(a => a.session_id === session.id)
-            const markedCount = sessionAttendance.length
-
-            return {
-                session,
-                status: isCancelled ? "cancelled" : markedCount > 0 ? "marked" : "pending",
-                studentCount: students.length,
-                markedCount,
-            }
-        })
-
-        setSessionRows(rows)
-        setLoadingSessions(false)
     }, [staffId, sessions, students, dateStr, selectedDate])
 
     useEffect(() => { loadDateSessions() }, [loadDateSessions])
@@ -229,25 +214,22 @@ export default function StaffAttendancePage() {
 
         // Load existing attendance for this session + date
         const studentIds = students.map(s => s.adm_no)
-        const { data: existingAtt } = await supabase
-            .from("attendance")
-            .select("student_id, status")
-            .eq("date", dateStr)
-            .eq("session_id", session.id)
-            .in("student_id", studentIds)
+        
+        try {
+            const { data: { data: existingAtt } } = await api.get(`/academics/attendance`, {
+                params: { date: dateStr, session_id: session.id, student_ids: studentIds.join(',') }
+            });
 
-        // Load active leaves for these students (currently "outside")
-        const { data: activeLeaves } = await supabase
-            .from("student_leaves")
-            .select("student_id, leave_type")
-            .eq("status", "outside")
-            .in("student_id", studentIds)
+            // Load active leaves for these students (currently "outside")
+            const { data: { leaves: activeLeaves } } = await api.get(`/leaves`, {
+                params: { status: 'outside', student_ids: studentIds.join(',') }
+            });
 
-        const locks: Record<string, string> = {}
-        if (activeLeaves) {
-            activeLeaves.forEach(l => { locks[l.student_id] = l.leave_type })
-        }
-        setLockedLeaves(locks)
+            const locks: Record<string, string> = {}
+            if (activeLeaves) {
+                activeLeaves.forEach((l: any) => { locks[l.student_id] = l.leave_type })
+            }
+            setLockedLeaves(locks)
 
         // Build map: default to Present for unmarked
         const map: Record<string, "Present" | "Absent" | "Leave"> = {}
@@ -258,16 +240,20 @@ export default function StaffAttendancePage() {
                 map[s.adm_no] = "Present" 
             }
         })
-        if (existingAtt) {
-            existingAtt.forEach(a => { 
-                if (!locks[a.student_id]) {
-                    map[a.student_id] = a.status as any 
-                }
-            })
-        }
+            if (existingAtt) {
+                existingAtt.forEach((a: any) => { 
+                    if (!locks[a.student_id]) {
+                        map[a.student_id] = a.status 
+                    }
+                })
+            }
 
-        setAttendanceMap(map)
-        setModalOpen(true)
+            setAttendanceMap(map)
+            setModalOpen(true)
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to load attendance")
+        }
     }
 
     // Toggle student status
@@ -288,30 +274,27 @@ export default function StaffAttendancePage() {
         if (!activeSession || !staffId) return
         setSaving(true)
 
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { setSaving(false); return }
-
         const upsertData = students.map(s => ({
             student_id: s.adm_no,
             date: dateStr,
             session_id: activeSession.id,
             status: attendanceMap[s.adm_no] || "Present",
-            recorded_by: user.id,
+            department: activeSession.type // Fulfill schema requirements
         }))
 
-        const { error } = await supabase
-            .from("attendance")
-            .upsert(upsertData, { onConflict: "student_id,date,session_id" })
-
-        if (error) {
-            toast.error(`Failed to save: ${error.message}`)
-            console.error(error)
-        } else {
+        try {
+            const { data } = await api.post("/academics/attendance", { attendanceData: upsertData });
+            if (!data.success) throw new Error(data.error);
+            
             toast.success(`Attendance saved for ${upsertData.length} students`)
             setModalOpen(false)
             loadDateSessions() // Refresh the table
+        } catch (error: any) {
+            toast.error(`Failed to save: ${error.message || 'Unknown error'}`)
+            console.error(error)
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
     }
 
     // Cancel class for this date
@@ -319,49 +302,18 @@ export default function StaffAttendancePage() {
         if (!activeSession) return
         setCancelling(true)
 
-        // Read existing calendar policy
-        const { data: existing } = await supabase
-            .from("academic_calendar")
-            .select("*")
-            .eq("date", dateStr)
-            .single()
+        try {
+            const res = await api.post("/staff/cancel-session", { date: dateStr, session_id: activeSession.id });
+            if (!res.data.success) throw new Error(res.data.error);
 
-        const currentCancelled = (existing?.cancelled_sessions as Record<string, any>) || {}
-        const updatedCancelled = { ...currentCancelled, [activeSession.id]: true }
-
-        if (existing) {
-            // Update existing row
-            const { error } = await supabase
-                .from("academic_calendar")
-                .update({ cancelled_sessions: updatedCancelled })
-                .eq("date", dateStr)
-
-            if (error) {
-                toast.error(`Failed to cancel: ${error.message}`)
-            } else {
-                toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
-                setModalOpen(false)
-                loadDateSessions()
-            }
-        } else {
-            // Insert new calendar row
-            const { error } = await supabase
-                .from("academic_calendar")
-                .insert({
-                    date: dateStr,
-                    is_holiday: false,
-                    cancelled_sessions: updatedCancelled,
-                })
-
-            if (error) {
-                toast.error(`Failed to cancel: ${error.message}`)
-            } else {
-                toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
-                setModalOpen(false)
-                loadDateSessions()
-            }
+            toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
+            setModalOpen(false)
+            loadDateSessions()
+        } catch (error: any) {
+             toast.error(`Failed to cancel: ${error.message}`)
+        } finally {
+             setCancelling(false)
         }
-        setCancelling(false)
     }
 
     // Mark all students with a status

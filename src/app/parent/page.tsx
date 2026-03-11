@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ProgressRing } from "@/components/parent/progress-ring"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { calculateProgress, HifzLog } from "@/lib/hifz-progress"
 import { LeaveRequestModal } from "./leave-request-modal"
 
@@ -39,25 +39,21 @@ export default function ParentDashboard() {
     // 1. Load Parent & Children
     useEffect(() => {
         async function loadFamily() {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
+            try {
+                const res = await api.get('/parent/children')
+                if (!res.data.success) {
+                    router.push("/login")
+                    return
+                }
+                const students = res.data.students || []
+                if (students.length > 0) {
+                    setChildren(students)
+                    setSelectedChildId(students[0].adm_no)
+                } else {
+                    setChildren([])
+                }
+            } catch (e) {
                 router.push("/login")
-                return
-            }
-
-            // Fetch students linked to this parent (simplistic match by generic 'email' field on student for now,
-            // or explicit parent_email field if schema had it. Schema said 'email' on student or 'Parent Info'.
-            // The schema has `email` on student. RLS says: email = auth.email().
-            const { data: students, error } = await supabase
-                .from("students")
-                .select("*")
-            // The RLS policy should filter this automatically for the logged in parent
-
-            if (students && students.length > 0) {
-                setChildren(students)
-                setSelectedChildId(students[0].adm_no)
-            } else {
-                setChildren([])
             }
             setLoading(false)
         }
@@ -69,33 +65,23 @@ export default function ParentDashboard() {
         if (!selectedChildId) return
 
         async function fetchProgress() {
-            const { data } = await supabase
-                .from("hifz_logs")
-                .select("*")
-                .eq("student_id", selectedChildId)
-                .order("entry_date", { ascending: false })
-
-            if (data) {
-                const hifzLogs = data as ExtendedHifzLog[]
-                setLogs(hifzLogs)
-
-                // Calculate Progress
-                // Need a simple map for Surah Name -> ID if data stores names.
-                // For standard names, we might need a robust map.
-                // For now, passing a dummy mapper that assumes 1-1 mapping if logs store ID, or trying to parse.
-                // If logs store "Al-Fatihah", we fail without a map.
-                // Let's assume logs store Surah Number in `surah_name` as string "1" for this prototype or we generated it so.
-                // Actually the EntryForm stores values like "1", "2" (as string) into `surah_name`.
-                const progressVal = calculateProgress(hifzLogs)
-                setProgress(progressVal)
-            }
+            try {
+                const res = await api.get('/hifz/logs', { params: { student_id: selectedChildId } })
+                if (res.data.success) {
+                    const hifzLogs = res.data.logs as ExtendedHifzLog[]
+                    setLogs(hifzLogs)
+                    const progressVal = calculateProgress(hifzLogs)
+                    setProgress(progressVal)
+                }
+            } catch (e) { console.error(e) }
         }
 
         fetchProgress()
     }, [selectedChildId])
 
     const handleLogout = async () => {
-        await supabase.auth.signOut()
+        try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
+        document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push("/login")
     }
 

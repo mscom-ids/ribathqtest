@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 const formSchema = z.object({
     name: z.string().min(2),
@@ -76,24 +76,24 @@ export default function EditStudentPage() {
         const file = e.target.files[0]
         setPhotoUploading(true)
 
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${fileName}`
+        const formData = new FormData()
+        formData.append('avatar', file)
 
         try {
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file)
+            // Note: api handles the JWT and correct base URL seamlessly
+            const res = await api.post('/upload/avatar', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            })
 
-            if (uploadError) {
-                throw uploadError
+            if (res.data.success) {
+                // Return path should be accessible relative to the domain (e.g. /public/avatars/avatar-123.jpg)
+                // We'll construct full URL if backend doesn't, but relative might work based on next.config
+                setPhotoUrl(process.env.NEXT_PUBLIC_API_URL + res.data.filePath)
+            } else {
+                throw new Error(res.data.error || "Upload failed")
             }
-
-            const { data } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath)
-
-            setPhotoUrl(data.publicUrl)
 
         } catch (error: any) {
             console.error("Upload error:", error)
@@ -108,17 +108,16 @@ export default function EditStudentPage() {
     const handleDeleteLog = async (logId: string) => {
         if (!confirm("Are you sure you want to delete this entry?")) return
 
-        const { error } = await supabase
-            .from("hifz_logs")
-            .delete()
-            .eq("id", logId)
-
-        if (error) {
+        try {
+            const res = await api.delete(`/hifz/logs/${logId}`)
+            if (res.data.success) {
+                setHifzLogs(prev => prev.filter(l => l.id !== logId))
+                alert("Entry deleted successfully")
+            } else {
+                alert(`Failed to delete: ${res.data.error}`)
+            }
+        } catch (error: any) {
             alert(`Failed to delete: ${error.message}`)
-        } else {
-            // Remove from state immediately
-            setHifzLogs(prev => prev.filter(l => l.id !== logId))
-            alert("Entry deleted successfully")
         }
     }
 
@@ -126,56 +125,55 @@ export default function EditStudentPage() {
         async function loadData() {
             setFetching(true)
             // 1. Load Staff (Usthads + Vice Principal)
-            const { data: staffData } = await supabase
-                .from("staff")
-                .select("id, name")
-                .in('role', ['staff', 'vice_principal'])
-                .order("name")
-
-            if (staffData) setStaff(staffData)
+            try {
+                const staffRes = await api.get('/staff')
+                if (staffRes.data.success) {
+                    setStaff(staffRes.data.staff)
+                }
+            } catch (error) {
+                console.error("Failed to load staff", error)
+            }
 
             // 2. Load Student
-            const { data: student, error } = await supabase
-                .from("students")
-                .select("*")
-                .eq("adm_no", id)
-                .single()
-
-            if (error) {
+            try {
+                const studentRes = await api.get(`/students/${id}`)
+                if (studentRes.data.success) {
+                    const student = studentRes.data.student
+                    form.reset({
+                        name: student.name,
+                        dob: student.dob || student.date_of_birth, // handle snake_case mapped fields
+                        address: student.address_line || student.address || "",
+                        father_name: student.father_name || student.parent_name || "",
+                        email: student.email || "",
+                        batch_year: student.batch_year || "",
+                        standard: student.school_standard || student.hifz_standard || student.madrassa_standard || "",
+                        assigned_usthad_id: student.assigned_usthad_id || "unassigned"
+                    })
+                    if (student.photo_url) {
+                        setPhotoUrl(student.photo_url)
+                    }
+                } else {
+                    alert("Student not found")
+                    router.push("/admin/students")
+                    return
+                }
+            } catch (error) {
                 console.error("Error fetching student:", error)
                 alert("Student not found")
                 router.push("/admin/students")
                 return
             }
 
-            if (student) {
-                // Reset form with values
-                form.reset({
-                    name: student.name,
-                    dob: student.dob,
-                    address: student.address || "",
-                    father_name: student.father_name || "",
-                    email: student.email || "",
-                    batch_year: student.batch_year || "",
-                    standard: student.standard || "",
-                    assigned_usthad_id: student.assigned_usthad_id || "unassigned"
-                })
-                if (student.photo_url) {
-                    setPhotoUrl(student.photo_url)
-                }
-            }
 
             // 3. Load Hifz Logs
-            const { data: logs } = await supabase
-                .from("hifz_logs")
-                .select(`
-                    *,
-                    staff:usthad_id (name)
-                `)
-                .eq("student_id", id)
-                .order("entry_date", { ascending: false })
-
-            if (logs) setHifzLogs(logs)
+            try {
+                const logsRes = await api.get('/hifz/logs', { params: { student_id: id } })
+                if (logsRes.data.success) {
+                    setHifzLogs(logsRes.data.logs)
+                }
+            } catch (error) {
+                console.error("Failed to fetch logs", error)
+            }
 
             setFetching(false)
         }
@@ -197,19 +195,16 @@ export default function EditStudentPage() {
             photo_url: photoUrl
         }
 
-        const { error } = await supabase
-            .from("students")
-            .update(updates)
-            .eq("adm_no", id)
-
-        setLoading(false)
-
-        if (error) {
+        try {
+            const res = await api.put(`/students/${id}`, updates)
+            if (res.data.success) {
+                alert("Student details updated successfully")
+            } else {
+                alert(`Failed to update student: ${res.data.error}`)
+            }
+        } catch (error: any) {
             console.error("Update Student Error:", error)
-            alert(`Failed to update student: ${JSON.stringify(error, null, 2)}`)
-        } else {
-            alert("Student details updated successfully")
-            // router.push("/admin/students") // Stay on page to allow editing
+            alert(`Failed to update student: ${error.message}`)
         }
     }
 

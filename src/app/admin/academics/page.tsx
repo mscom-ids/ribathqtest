@@ -37,7 +37,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { Checkbox } from "@/components/ui/checkbox"
 
 // Schema
@@ -91,16 +91,12 @@ export default function AcademicsPage() {
 
     async function loadSessions() {
         setLoading(true)
-        const { data, error } = await supabase
-            .from("academic_sessions")
-            .select("*")
-            .order("start_time")
-
-        if (error) {
-            console.error("Error loading sessions:", error)
-            alert("Failed to load sessions")
-        } else {
-            setSessions(data as any)
+        try {
+            const res = await api.get('/academics/sessions')
+            if (res.data.success) setSessions(res.data.sessions || [])
+            else alert('Failed to load sessions')
+        } catch (err) {
+            console.error('Error loading sessions:', err)
         }
         setLoading(false)
     }
@@ -146,47 +142,37 @@ export default function AcademicsPage() {
             standards: values.standards && values.standards.length > 0 ? values.standards : null
         }
 
-        let error;
+        try {
+            let res
+            if (editingSession) {
+                res = await api.put(`/academics/sessions/${editingSession.id}`, payload)
+            } else {
+                res = await api.post('/academics/sessions', payload)
+            }
 
-        if (editingSession) {
-            const { error: updateError } = await supabase
-                .from("academic_sessions")
-                .update(payload)
-                .eq("id", editingSession.id)
-            error = updateError
-        } else {
-            const { error: insertError } = await supabase
-                .from("academic_sessions")
-                .insert([payload])
-            error = insertError
-        }
-
-        if (error) {
-            console.error(error)
-            alert("Failed to save session")
-        } else {
-            setDialogOpen(false)
-            setEditingSession(null)
-            form.reset({
-                name: "",
-                type: "Hifz",
-                start_time: "",
-                end_time: "",
-                days: [0, 1, 2, 3, 4, 5, 6],
-            })
-            loadSessions()
+            if (res.data.success) {
+                setDialogOpen(false)
+                setEditingSession(null)
+                form.reset({ name: "", type: "Hifz", start_time: "", end_time: "", days: [0, 1, 2, 3, 4, 5, 6] })
+                loadSessions()
+            } else {
+                alert('Failed to save session: ' + res.data.error)
+            }
+        } catch (err: any) {
+            console.error(err)
+            alert('Failed to save session: ' + err.message)
         }
     }
 
     async function deleteSession(id: string) {
         if (!confirm("Are you sure? This will delete the session definition.")) return
 
-        const { error } = await supabase.from("academic_sessions").delete().eq("id", id)
-        if (error) {
-            console.error(error)
+        try {
+            const res = await api.delete(`/academics/sessions/${id}`)
+            if (res.data.success) setSessions(sessions.filter(s => s.id !== id))
+            else alert("Failed to delete session")
+        } catch {
             alert("Failed to delete session")
-        } else {
-            setSessions(sessions.filter(s => s.id !== id))
         }
     }
 

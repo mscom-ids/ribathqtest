@@ -30,7 +30,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { toast } from "sonner"
 
 const leaveSchema = z.object({
@@ -69,37 +69,13 @@ export function LeaveModal({ open, onOpenChange, onSuccess }: LeaveModalProps) {
         
         // Fetch eligible students
         const fetchStudents = async () => {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const { data: profile } = await supabase
-                .from("profiles")
-                .select("role")
-                .eq("id", user.id)
-                .single()
-
-            const isAdminRole = ["admin", "principal", "vice_principal"].includes(profile?.role || "")
-
-            let query = supabase.from("students").select("adm_no, name, standard").eq("status", "active").order("name")
-            
-            // If not admin, RLS handles it conceptually, 
-            // but we explicitly filter to ensure the combobox only shows assigned students
-            if (!isAdminRole) {
-                // Get staff ID
-                const { data: staff } = await supabase
-                    .from("staff")
-                    .select("id")
-                    .eq("profile_id", user.id)
-                    .single()
-
-                if (staff) {
-                    query = query.eq("assigned_usthad_id", staff.id)
+            try {
+                const res = await api.get('/leaves/eligible-students')
+                if (res.data.success) {
+                    setStudents(res.data.students)
                 }
-            }
-
-            const { data, error } = await query
-            if (!error && data) {
-                setStudents(data)
+            } catch (err) {
+                console.error("Failed to load eligible students", err)
             }
         }
         
@@ -109,45 +85,37 @@ export function LeaveModal({ open, onOpenChange, onSuccess }: LeaveModalProps) {
 
     const onSubmit = async (values: LeaveFormValues) => {
         setLoading(true)
-        const { data: { user } } = await supabase.auth.getUser()
         
         // Convert local datetime to ISO aware string
         const start = new Date(values.start_datetime).toISOString()
         const end = new Date(values.end_datetime).toISOString()
 
-        let error = null;
-
-        if (values.student_id === "ALL") {
-            const inserts = students.map(s => ({
-                student_id: s.adm_no,
-                leave_type: values.leave_type,
-                start_datetime: start,
-                end_datetime: end,
+        try {
+            let payload: any = {
+                type: values.leave_type,
+                start_date: start,
+                end_date: end,
                 reason: values.reason,
-                approved_by: user?.id,
                 status: "approved"
-            }))
-            const res = await supabase.from("student_leaves").insert(inserts)
-            error = res.error
-        } else {
-            const res = await supabase.from("student_leaves").insert({
-                student_id: values.student_id,
-                leave_type: values.leave_type,
-                start_datetime: start,
-                end_datetime: end,
-                reason: values.reason,
-                approved_by: user?.id,
-                status: "approved"
-            })
-            error = res.error
-        }
+            }
 
-        if (error) {
+            if (values.student_id === "ALL") {
+                payload.student_ids = students.map(s => s.adm_no)
+            } else {
+                payload.student_id = values.student_id
+            }
+
+            const res = await api.post("/leaves", payload)
+            
+            if (res.data.success) {
+                toast.success("Leave Authorized Successfully")
+                onSuccess()
+                onOpenChange(false)
+            } else {
+                toast.error("Failed to authorize leave", { description: res.data.error })
+            }
+        } catch (error: any) {
             toast.error("Failed to authorize leave", { description: error.message })
-        } else {
-            toast.success("Leave Authorized Successfully")
-            onSuccess()
-            onOpenChange(false)
         }
         setLoading(false)
     }

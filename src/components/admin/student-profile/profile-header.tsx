@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { type Student } from "@/app/admin/students/page"
 import { differenceInYears } from "date-fns"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { getCompletedJuzList, type HifzLog } from "@/lib/hifz-progress"
 import { JuzDetailsDialog } from "./juz-details-dialog"
 import {
@@ -35,12 +35,10 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
     useEffect(() => {
         if (!isAdmin) return
         async function fetchStaff() {
-            const { data } = await supabase
-                .from("staff")
-                .select("id, name")
-                .eq("is_active", true)
-                .order("name")
-            if (data) setStaffList(data)
+            try {
+                const res = await api.get('/staff')
+                if (res.data.success) setStaffList(res.data.staff || [])
+            } catch (e) { console.error(e) }
         }
         fetchStaff()
     }, [isAdmin])
@@ -48,42 +46,39 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
     useEffect(() => {
         async function fetchProgress() {
             if (!student?.adm_no) return
-
-            // Fetch only necessary fields for completion calculation
-            const { data } = await supabase
-                .from("hifz_logs")
-                .select("id, student_id, mode, surah_name, start_v, end_v, entry_date")
-                .eq("student_id", student.adm_no)
-                .eq("mode", "New Verses")
-
-            if (data) {
-                // Cast to HifzLog (fields match enough for calculation)
-                const logs = data as unknown as HifzLog[]
-                const completed = getCompletedJuzList(logs)
-                setCompletedJuz(completed)
-            }
+            try {
+                const res = await api.get('/hifz/logs', { params: { student_id: student.adm_no, mode: 'New Verses' } })
+                if (res.data.success) {
+                    const logs = res.data.logs as unknown as HifzLog[]
+                    const completed = getCompletedJuzList(logs)
+                    setCompletedJuz(completed)
+                }
+            } catch (e) { console.error(e) }
             setLoading(false)
         }
         fetchProgress()
     }, [student.adm_no])
 
     const changeStatus = async (newStatus: string) => {
-        const { error } = await supabase.from("students").update({ status: newStatus }).eq("adm_no", student.adm_no)
-        if (!error) setCurrentStatus(newStatus)
+        try {
+            const res = await api.put(`/students/${student.adm_no}`, { status: newStatus })
+            if (res.data.success) setCurrentStatus(newStatus)
+        } catch (e) { console.error(e) }
     }
 
     const changeMentor = async (staffId: string | null) => {
         setChangingMentor(true)
-        const { error } = await supabase
-            .from("students")
-            .update({ assigned_usthad_id: staffId })
-            .eq("adm_no", student.adm_no)
-        if (!error) {
-            const mentor = staffList.find(s => s.id === staffId)
-            setCurrentMentor(mentor?.name || null)
-            onMentorChanged?.()
-        } else {
-            alert("Failed to change mentor: " + error.message)
+        try {
+            const res = await api.put(`/students/${student.adm_no}`, { assigned_usthad_id: staffId })
+            if (res.data.success) {
+                const mentor = staffList.find(s => s.id === staffId)
+                setCurrentMentor(mentor?.name || null)
+                onMentorChanged?.()
+            } else {
+                alert("Failed to change mentor")
+            }
+        } catch (e: any) {
+            alert("Failed to change mentor: " + e.message)
         }
         setChangingMentor(false)
     }

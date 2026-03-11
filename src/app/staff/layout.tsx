@@ -8,7 +8,7 @@ import { LayoutDashboard, CalendarCheck, FileText, Menu, X, LogOut, BookOpen, Do
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { ModeToggle } from "@/components/mode-toggle"
 
 export default function StaffLayout({
@@ -28,27 +28,23 @@ export default function StaffLayout({
 
     useEffect(() => {
         async function loadStaffProfile() {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
+            try {
+                const res = await api.get('/staff/me')
+                if (!res.data.success) {
+                    router.push("/login")
+                    return
+                }
+                setStaffName(res.data.staff.name || "")
+            } catch (e) {
                 router.push("/login")
-                return
-            }
-
-            const { data: staff } = await supabase
-                .from("staff")
-                .select("name")
-                .eq("profile_id", user.id)
-                .single()
-
-            if (staff) {
-                setStaffName(staff.name)
             }
         }
         loadStaffProfile()
     }, [router])
 
     const handleSignOut = async () => {
-        await supabase.auth.signOut()
+        try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
+        document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push("/login")
     }
 

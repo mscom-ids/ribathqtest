@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { type Student } from "@/app/admin/students/page"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
 import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, eachDayOfInterval, startOfWeek, addDays, getDay } from "date-fns"
 import { Button } from "@/components/ui/button"
@@ -69,31 +69,35 @@ export function ProgressTab({ student }: { student: Student }) {
 
             // Fetch last 60 days of logs (to cover current month + some context)
             const [logsRes, attendRes] = await Promise.all([
-                supabase
-                    .from("hifz_logs")
-                    .select("*") // fetching all columns for better calculation
-                    .eq("student_id", student.adm_no)
-                    .gte("entry_date", subDays(today, 60).toISOString())
-                    .order("entry_date", { ascending: true }),
-                supabase
-                    .from("attendance")
-                    .select("date, session_id, status, department")
-                    .eq("student_id", student.adm_no)
-                    .gte("date", monthStartStr)
-                    .lte("date", monthEndStr),
+                api.get("/hifz/logs", {
+                    params: {
+                        student_id: student.adm_no,
+                        start_date: subDays(today, 60).toISOString(),
+                        end_date: today.toISOString()
+                    }
+                }),
+                api.get("/academics/attendance", {
+                    params: {
+                        student_id: student.adm_no,
+                        start_date: monthStartStr,
+                        end_date: monthEndStr,
+                        department: 'Hifz'
+                    }
+                }),
             ])
 
-            const logs = logsRes.data || []
-            setAllLogs(logs.filter(l => {
+            const logs = logsRes.data?.logs || []
+            setAllLogs(logs.filter((l: any) => {
                 const d = new Date(l.entry_date)
                 return d >= startOfCurrentMonth && d <= endOfCurrentMonth
             }))
-            setAttendanceRecords(attendRes.data || [])
+            // Map the unified attendance array from the backend API: { date, status, department, session_id }
+            setAttendanceRecords(attendRes.data?.data || [])
 
             if (logs.length > 0) {
                 // 1. Process Chart Data (Last 30 Days)
-                const last30Days = logs.filter(l => new Date(l.entry_date) >= subDays(today, 30))
-                const processed = last30Days.map(log => ({
+                const last30Days = logs.filter((l: any) => new Date(l.entry_date) >= subDays(today, 30))
+                const processed = last30Days.map((log: any) => ({
                     date: format(new Date(log.entry_date), 'dd/MM'),
                     rating: log.rating,
                     mode: log.mode,
@@ -106,7 +110,7 @@ export function ProgressTab({ student }: { student: Student }) {
                 setData(processed)
 
                 // 2. Calculate Monthly Stats
-                const currentMonthLogs = logs.filter(l =>
+                const currentMonthLogs = logs.filter((l: any) =>
                     isWithinInterval(new Date(l.entry_date), { start: startOfCurrentMonth, end: endOfCurrentMonth })
                 )
 
@@ -121,7 +125,7 @@ export function ProgressTab({ student }: { student: Student }) {
                 // For now, let's use the max juz seen in the logs we have. Ideally we'd query `max(juz)` from DB.
                 // Or better, let's fetch the max juz separately to be accurate.
 
-                currentMonthLogs.forEach(log => {
+                currentMonthLogs.forEach((log: any) => {
                     const pages = (log.page_end - log.page_start + 1) || 0
 
                     if (log.mode === 'New Verses') {
@@ -156,15 +160,13 @@ export function ProgressTab({ student }: { student: Student }) {
             }
 
             // Fetch Total Juz (Max Juz)
-            const { data: maxJuzData } = await supabase
-                .from("hifz_logs")
-                .select("juz")
-                .eq("student_id", student.adm_no)
-                .order("juz", { ascending: false })
-                .limit(1)
-
-            if (maxJuzData && maxJuzData.length > 0) {
-                setMonthlyStats(prev => ({ ...prev, totalJuz: maxJuzData[0].juz }))
+            try {
+                const maxJuzRes = await api.get(`/hifz/logs/max-juz/${student.adm_no}`)
+                if (maxJuzRes.data?.success) {
+                    setMonthlyStats(prev => ({ ...prev, totalJuz: maxJuzRes.data.max_juz }))
+                }
+            } catch (err) {
+                console.error("Failed to fetch max juz", err)
             }
 
             setLoading(false)
@@ -201,7 +203,7 @@ export function ProgressTab({ student }: { student: Student }) {
 
                 // Get attendance for this day (any Hifz session)
                 const hifzAttendance = attendanceRecords.filter(
-                    r => r.date === dateStr && r.department === "hifz"
+                    (r: any) => format(new Date(r.date), "yyyy-MM-dd") === dateStr && r.department?.toLowerCase() === "hifz"
                 )
                 const isPresent = hifzAttendance.some(r => r.status === "Present")
                 const isAbsent = hifzAttendance.some(r => r.status === "Absent")

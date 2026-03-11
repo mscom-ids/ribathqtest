@@ -20,7 +20,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 type Exam = {
     id: string
@@ -58,14 +58,15 @@ export default function ExamDetailsPage({ params }: { params: Promise<{ id: stri
 
     async function loadData() {
         setLoading(true)
-        // Load Exam
-        const { data: e } = await supabase.from("exams").select("*").eq("id", id).single()
-        if (e) setExam(e)
-
-        // Load Subjects
-        const { data: s } = await supabase.from("exam_subjects").select("*").eq("exam_id", id).order("created_at")
-        if (s) setSubjects(s as any)
-
+        try {
+            const res = await api.get(`/exams/${id}`)
+            if (res.data.success) {
+                setExam(res.data.exam)
+                setSubjects(res.data.subjects)
+            }
+        } catch (error) {
+            console.error("Failed to load exam details", error)
+        }
         setLoading(false)
     }
 
@@ -73,20 +74,23 @@ export default function ExamDetailsPage({ params }: { params: Promise<{ id: stri
         if (!newSubjectName) return
         setAddingSubject(true)
 
-        const { error } = await supabase.from("exam_subjects").insert({
-            exam_id: id,
-            name: newSubjectName,
-            max_marks: newSubjectMax,
-            min_marks: Math.round(newSubjectMax * 0.4), // Default 40% pass
-            standard: newSubjectStandard === "All" ? null : newSubjectStandard
-        })
+        try {
+            const res = await api.post(`/exams/${id}/subjects`, {
+                name: newSubjectName,
+                max_marks: newSubjectMax,
+                min_marks: Math.round(newSubjectMax * 0.4), // Default 40% pass
+                standard: newSubjectStandard === "All" ? null : newSubjectStandard
+            })
 
-        if (error) {
+            if (res.data.success) {
+                setNewSubjectName("")
+                setNewSubjectMax(100)
+                loadData()
+            } else {
+                alert("Failed to add subject: " + res.data.error)
+            }
+        } catch (error: any) {
             alert(error.message)
-        } else {
-            setNewSubjectName("")
-            setNewSubjectMax(100)
-            loadData()
         }
         setAddingSubject(false)
     }
@@ -94,11 +98,15 @@ export default function ExamDetailsPage({ params }: { params: Promise<{ id: stri
     async function handleDeleteSubject(subjectId: string) {
         if (!confirm("Are you sure? This will delete all marks for this subject.")) return
 
-        const { error } = await supabase.from("exam_subjects").delete().eq("id", subjectId)
-        if (error) {
+        try {
+            const res = await api.delete(`/exams/subjects/${subjectId}`)
+            if (res.data.success) {
+                loadData()
+            } else {
+                alert("Failed to delete subject: " + res.data.error)
+            }
+        } catch (error: any) {
             alert(error.message)
-        } else {
-            loadData()
         }
     }
 
@@ -106,15 +114,15 @@ export default function ExamDetailsPage({ params }: { params: Promise<{ id: stri
         const action = isActive ? "Reopen" : "Complete";
         if (!confirm(`Are you sure you want to ${action} this exam?`)) return
 
-        const { error } = await supabase
-            .from("exams")
-            .update({ is_active: isActive })
-            .eq("id", id)
-
-        if (error) {
+        try {
+            const res = await api.patch(`/exams/${id}/status`, { is_active: isActive })
+            if (res.data.success) {
+                loadData()
+            } else {
+                alert("Failed to update status: " + res.data.error)
+            }
+        } catch (error: any) {
             alert("Failed to update status: " + error.message)
-        } else {
-            loadData()
         }
     }
 

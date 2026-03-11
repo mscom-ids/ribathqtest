@@ -16,7 +16,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { LeaveModal } from "@/app/admin/leaves/leave-modal"
 import type { StudentLeave } from "@/app/admin/leaves/page"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,25 +31,13 @@ export default function StaffLeavesPage() {
 
     const fetchLeaves = async () => {
         setLoading(true)
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        // Fetch leaves but only for students assigned to this staff member.
-        // The RLS policy also enforces this, but being explicit is good practice.
-        const { data, error } = await supabase
-            .from("student_leaves")
-            .select(`
-                *,
-                student:students!inner(name, standard, adm_no)
-            `)
-            .eq("student.assigned_usthad_id", user.id)
-            .order("created_at", { ascending: false })
-
-        if (error) {
-            console.error("Error fetching leaves:", error)
-        } else if (data) {
-            // @ts-ignore
-            setLeaves(data)
+        try {
+            const res = await api.get('/staff/me/leaves')
+            if (res.data.success) {
+                setLeaves(res.data.leaves || [])
+            }
+        } catch (err) {
+            console.error("Error fetching leaves:", err)
         }
         setLoading(false)
     }

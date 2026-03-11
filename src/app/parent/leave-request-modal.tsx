@@ -31,7 +31,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { toast } from "sonner"
 
 const leaveRequestSchema = z.object({
@@ -69,21 +69,25 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
         const start = new Date(values.start_datetime).toISOString()
         const end = new Date(values.end_datetime).toISOString()
 
-        const { error } = await supabase.from("student_leaves").insert({
-            student_id: studentId,
-            leave_type: values.leave_type,
-            start_datetime: start,
-            end_datetime: end,
-            reason: values.reason,
-            status: "pending" // Explicitly set as pending
-        })
+        try {
+            const res = await api.post('/parent/leaves', {
+                student_id: studentId,
+                leave_type: values.leave_type,
+                start_datetime: start,
+                end_datetime: end,
+                reason: values.reason,
+                status: "pending"
+            })
 
-        if (error) {
-            toast.error("Failed to submit request", { description: error.message })
-        } else {
-            toast.success("Leave Request Submitted")
-            form.reset()
-            onOpenChange(false)
+            if (res.data.success) {
+                toast.success("Leave Request Submitted")
+                form.reset()
+                onOpenChange(false)
+            } else {
+                toast.error("Failed to submit request", { description: res.data.error })
+            }
+        } catch (err: any) {
+            toast.error("Failed to submit request", { description: err.message })
         }
         setLoading(false)
     }

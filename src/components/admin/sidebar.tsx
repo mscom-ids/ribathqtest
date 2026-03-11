@@ -22,7 +22,7 @@ import {
     DoorOpen,
     Landmark
 } from "lucide-react"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -96,7 +96,11 @@ export function AdminSidebar() {
     ]
 
     const handleLogout = async () => {
-        await supabase.auth.signOut()
+        try {
+            await api.post('/auth/logout')
+        } catch (e) { /* ignore */ }
+        // Clear cookie and redirect
+        document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push("/login")
     }
 
@@ -114,10 +118,8 @@ export function AdminSidebar() {
                         {/* Mobile Menu Toggle */}
                         <div className="block md:hidden">
                             <Sheet>
-                                <SheetTrigger asChild>
-                                    <button className="text-slate-400 hover:text-white p-2 -ml-2 rounded-lg transition-colors focus:outline-none">
-                                        <Menu className="h-6 w-6" />
-                                    </button>
+                                <SheetTrigger className="text-slate-400 hover:text-white p-2 -ml-2 rounded-lg transition-colors focus:outline-none">
+                                    <Menu className="h-6 w-6" />
                                 </SheetTrigger>
                                 <SheetContent side="left" className="w-72 bg-[#0f1420] border-r border-slate-800 p-0 flex flex-col">
                                     <SheetHeader className="p-6 border-b border-slate-800 text-left">

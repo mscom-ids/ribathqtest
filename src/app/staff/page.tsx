@@ -9,7 +9,7 @@ import { format, startOfDay, endOfDay } from "date-fns"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 
 // Extended Student Type to match StudentProfileView requirements
@@ -51,123 +51,24 @@ export default function StaffDashboard() {
 
     async function loadStudents() {
         setLoading(true)
-        // 1. Get current user (Usthad)
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            router.push("/login")
-            return
-        }
-
-        // 2. Fetch staff profile ID 
-        // We only need ID here for query, name is handled by Layout
-        const { data: staff } = await supabase
-            .from("staff")
-            .select("id")
-            .eq("profile_id", user.id)
-            .single()
-
-        if (!staff) {
-            console.error("Staff profile not found")
-            setLoading(false)
-            return
-        }
-
-        // 3. Fetch assigned students with MORE details for profile view
-        const { data: myStudents, error } = await supabase
-            .from("students")
-            .select(`
-                adm_no, 
-                name, 
-                photo_url, 
-                batch_year, 
-                standard, 
-                dob,
-                assigned_usthad:assigned_usthad_id(name)
-            `)
-            .eq("assigned_usthad_id", staff.id)
-            .order("name")
-
-        if (myStudents && myStudents.length > 0) {
-            // 4. Fetch today's logs for these students
+        try {
+            // 1. Get my staff profile
+            const profileRes = await api.get('/staff/me')
+            if (!profileRes.data.success) {
+                router.push("/login")
+                return
+            }
+            const staffId = profileRes.data.staff.id
             const todayDate = format(new Date(), "yyyy-MM-dd")
-            const studentIds = myStudents.map(s => s.adm_no)
 
-            // Fetch Hifz Logs
-            const { data: logs, error: logsError } = await supabase
-                .from("hifz_logs")
-                .select("student_id, mode, start_page, end_page, start_v, end_v, juz_portion, juz_number, entry_date")
-                .in("student_id", studentIds)
-                .eq("entry_date", todayDate)
-
-            if (logsError) console.error("Logs fetch error:", logsError)
-
-            // Fetch Attendance
-            const todayStart = startOfDay(new Date()).toISOString()
-            const todayEnd = endOfDay(new Date()).toISOString()
-
-            const { data: attendance, error: attError } = await supabase
-                .from("attendance")
-                .select("student_id, status")
-                .in("student_id", studentIds)
-                .gte("date", todayStart)
-                .lte("date", todayEnd)
-
-            if (attError) console.error("Attendance fetch error:", attError)
-
-            // Merge Data
-            const enrichedStudents = myStudents.map(student => {
-                const sLogs = logs?.filter(l => l.student_id === student.adm_no) || []
-                const sAtt = attendance?.find(a => a.student_id === student.adm_no)
-
-                let hifzPages = 0
-                let revPages = 0
-                let juzCount = 0
-
-                sLogs.forEach(log => {
-                    const pageStart = log.start_page || 0
-                    const pageEnd = log.end_page || 0
-
-                    if (log.mode === 'New Verses') {
-                        hifzPages += 0.5
-                    } else if (log.mode === 'Recent Revision') {
-                        if (pageStart && pageEnd) {
-                            revPages += (pageEnd - pageStart + 1)
-                        } else {
-                            revPages += 0
-                        }
-                    } else if (log.mode === 'Juz Revision') {
-                        if (log.juz_portion === 'Full') {
-                            juzCount += 1
-                        } else if (log.juz_portion === '1st Half' || log.juz_portion === '2nd Half') {
-                            juzCount += 0.5
-                        } else if (log.juz_portion?.startsWith('Q')) {
-                            juzCount += 0.25
-                        } else {
-                            juzCount += 1
-                        }
-                    }
-                })
-
-                return {
-                    ...student,
-                    today_stats: sLogs.length > 0 || sAtt ? {
-                        hifz: parseFloat(hifzPages.toFixed(1)),
-                        revision: revPages,
-                        juz: parseFloat(juzCount.toFixed(1)),
-                        attendance: sAtt?.status || 'Pending'
-                    } : undefined
-                }
-            })
-
-            // Cast cast assigned_usthad correctly 
-            const typedStudents: Student[] = enrichedStudents.map(s => ({
-                ...s,
-                assigned_usthad: Array.isArray(s.assigned_usthad) ? s.assigned_usthad[0] : s.assigned_usthad
-            })) as Student[]
-
-            setStudents(typedStudents)
-        } else {
-            setStudents([])
+            // 2. Get my assigned students + today's stats
+            const studentsRes = await api.get('/staff/me/students', { params: { date: todayDate } })
+            if (studentsRes.data.success) {
+                const students: Student[] = studentsRes.data.students || []
+                setStudents(students)
+            }
+        } catch (err) {
+            console.error('Failed to load students:', err)
         }
         setLoading(false)
     }

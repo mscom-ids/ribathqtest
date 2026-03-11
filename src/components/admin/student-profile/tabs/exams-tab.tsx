@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { type Student } from "@/app/admin/students/page"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import {
     Table,
@@ -50,32 +50,25 @@ export function ExamsTab({ student }: { student: Student }) {
     async function loadData() {
         setLoading(true)
 
-        // 1. Fetch all exams (simple list)
-        const { data: examsData } = await supabase
-            .from("exams")
-            .select("*")
-            .order("start_date", { ascending: false })
+        try {
+            // 1. Fetch all exams
+            const examsRes = await api.get('/exams')
+            if (examsRes.data.success) setExams(examsRes.data.exams || [])
 
-        if (examsData) setExams(examsData as any)
+            // 2. Fetch all subjects
+            const subjectsRes = await api.get('/exams/subjects')
+            if (subjectsRes.data.success) setSubjects(subjectsRes.data.subjects || [])
 
-        // 2. Fetch all subjects
-        const { data: subjectsData } = await supabase
-            .from("exam_subjects")
-            .select("*")
+            // 3. Fetch results for this student
+            const resultsRes = await api.get('/exams/results', { params: { student_id: student.adm_no } })
+            if (resultsRes.data.success) setResults(resultsRes.data.results || [])
 
-        if (subjectsData) setSubjects(subjectsData as any)
-
-        // 3. Fetch results for this student
-        const { data: resultsData } = await supabase
-            .from("exam_results")
-            .select("*")
-            .eq("student_id", student.adm_no)
-
-        if (resultsData) setResults(resultsData as any)
-
-        // Expand the most recent exam by default
-        if (examsData && examsData.length > 0) {
-            setExpandedExamIds(new Set([examsData[0].id]))
+            // Expand the most recent exam by default
+            if (examsRes.data.exams?.length > 0) {
+                setExpandedExamIds(new Set([examsRes.data.exams[0].id]))
+            }
+        } catch (err) {
+            console.error('Failed to load exam data', err)
         }
 
         setLoading(false)

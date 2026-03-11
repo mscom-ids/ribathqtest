@@ -17,7 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 type Exam = { id: string; title: string, department: string }
 type Subject = { id: string; name: string; max_marks: number; standard?: string | null }
@@ -75,14 +75,19 @@ export default function MarkEntryPage({ params }: { params: Promise<{ id: string
 
     async function loadExamData() {
         setLoading(true)
-        const { data: e } = await supabase.from("exams").select("*").eq("id", id).single()
-        setExam(e)
-
-        const { data: s } = await supabase.from("exam_subjects").select("*").eq("exam_id", id).order("created_at")
-        if (s) {
-            setAllSubjects(s as any)
-            setFilteredSubjects(s as any)
-            if (s.length > 0) setSelectedSubjectId(s[0].id)
+        try {
+            const res = await api.get(`/exams/${id}`)
+            if (res.data.success) {
+                setExam(res.data.exam)
+                const s = res.data.subjects
+                if (s) {
+                    setAllSubjects(s)
+                    setFilteredSubjects(s)
+                    if (s.length > 0) setSelectedSubjectId(s[0].id)
+                }
+            }
+        } catch (error) {
+            console.error("Failed to load exam data", error)
         }
         setLoading(false)
     }
@@ -90,40 +95,45 @@ export default function MarkEntryPage({ params }: { params: Promise<{ id: string
     async function loadStudentsAndResults() {
         if (!selectedSubjectId) return
         setLoading(true)
-
-        // 1. Fetch Students
-        let query = supabase.from("students").select(`adm_no, name, ${stdColumn}`).order("name")
-
-        if (selectedStandard !== "all") {
-            query = query.eq(stdColumn, selectedStandard)
-        } else {
-            const subject = allSubjects.find(s => s.id === selectedSubjectId)
-            if (subject?.standard) {
-                query = query.eq(stdColumn, subject.standard)
+        try {
+            // Determine the standard to query for based on the selection or the subject's locked standard
+            let queryStandard = selectedStandard
+            if (queryStandard === "all") {
+                const subject = allSubjects.find(s => s.id === selectedSubjectId)
+                if (subject?.standard) {
+                    queryStandard = subject.standard
+                }
             }
-        }
 
-        const { data: sData } = await query
-
-        if (sData) {
-            setStudents(sData as any)
-
-            // 2. Fetch Existing Results for these students & subject
-            const { data: rData } = await supabase
-                .from("exam_results")
-                .select("student_id, marks_obtained, remarks")
-                .eq("exam_id", id)
-                .eq("subject_id", selectedSubjectId)
-
-            // Map results
-            const initialMarks: Record<string, { marks: string; remarks: string }> = {}
-            rData?.forEach((r: any) => {
-                initialMarks[r.student_id] = {
-                    marks: r.marks_obtained.toString(),
-                    remarks: r.remarks || ""
+            // 1. Fetch Students
+            const studentsRes = await api.get(`/exams/students`, {
+                params: {
+                    department,
+                    standard: queryStandard
                 }
             })
-            setMarksMap(initialMarks)
+
+            if (studentsRes.data.success) {
+                setStudents(studentsRes.data.students)
+
+                // 2. Fetch Existing Results
+                const marksRes = await api.get(`/exams/${id}/marks`, {
+                    params: { subject_id: selectedSubjectId }
+                })
+                
+                if (marksRes.data.success) {
+                    const initialMarks: Record<string, { marks: string; remarks: string }> = {}
+                    marksRes.data.marks.forEach((r: any) => {
+                        initialMarks[r.student_id] = {
+                            marks: r.marks_obtained.toString(),
+                            remarks: r.remarks || ""
+                        }
+                    })
+                    setMarksMap(initialMarks)
+                }
+            }
+        } catch (error) {
+            console.error("Failed to load students and results", error)
         }
         setLoading(false)
     }
@@ -151,19 +161,16 @@ export default function MarkEntryPage({ params }: { params: Promise<{ id: string
     async function handleSave() {
         setSaving(true)
         const updates: any[] = []
-        const { data: { user } } = await supabase.auth.getUser()
 
         // Prepare upserts
         students.forEach(student => {
             const entry = marksMap[student.adm_no]
             if (entry && entry.marks !== "") {
                 updates.push({
-                    exam_id: id,
                     subject_id: selectedSubjectId,
                     student_id: student.adm_no,
                     marks_obtained: parseFloat(entry.marks),
-                    remarks: entry.remarks || null,
-                    grader_id: user?.id
+                    remarks: entry.remarks || null
                 })
             }
         })
@@ -173,14 +180,18 @@ export default function MarkEntryPage({ params }: { params: Promise<{ id: string
             return
         }
 
-        const { error } = await supabase.from("exam_results").upsert(updates, { onConflict: "student_id, subject_id" })
+        try {
+            const res = await api.post(`/exams/${id}/marks`, { updates })
+            if (res.data.success) {
+                alert("Marks saved successfully!")
+            } else {
+                alert("Error saving: " + res.data.error)
+            }
+        } catch (error: any) {
+            alert("Error saving: " + error.message)
+        }
 
         setSaving(false)
-        if (error) {
-            alert("Error saving: " + error.message)
-        } else {
-            alert("Marks saved successfully!")
-        }
     }
 
     if (loading && !exam) return <div className="h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>

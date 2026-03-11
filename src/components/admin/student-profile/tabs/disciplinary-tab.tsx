@@ -32,7 +32,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 interface DisciplinaryRecord {
     id: string
@@ -63,16 +63,11 @@ export function DisciplinaryTab({ student }: { student: Student }) {
 
     async function loadRecords() {
         setLoading(true)
-        const { data, error } = await supabase
-            .from("disciplinary_records")
-            .select("*")
-            .eq("student_id", student.adm_no)
-            .order("action_date", { ascending: false })
-
-        if (error) {
+        try {
+            const res = await api.get('/students/disciplinary', { params: { student_id: student.adm_no } })
+            if (res.data.success) setRecords(res.data.records || [])
+        } catch (error) {
             console.error("Error loading disciplinary records:", error)
-        } else {
-            setRecords(data as DisciplinaryRecord[])
         }
         setLoading(false)
     }
@@ -82,24 +77,23 @@ export function DisciplinaryTab({ student }: { student: Student }) {
 
         setSubmitting(true)
         try {
-            const { error } = await supabase
-                .from("disciplinary_records")
-                .insert({
-                    student_id: student.adm_no,
-                    title,
-                    description,
-                    severity,
-                    points,
-                    action_date: new Date().toISOString().split('T')[0],
-                    status: 'Pending'
-                })
+            const res = await api.post('/students/disciplinary', {
+                student_id: student.adm_no,
+                title,
+                description,
+                severity,
+                points,
+                action_date: new Date().toISOString().split('T')[0],
+                status: 'Pending'
+            })
 
-            if (error) throw error
-
-            setOpen(false)
-            resetForm()
-            loadRecords()
-
+            if (res.data.success) {
+                setOpen(false)
+                resetForm()
+                loadRecords()
+            } else {
+                throw new Error(res.data.error)
+            }
         } catch (error: any) {
             alert("Failed to save record: " + error.message)
         } finally {
@@ -110,15 +104,15 @@ export function DisciplinaryTab({ student }: { student: Student }) {
     async function handleDelete(id: string) {
         if (!confirm("Are you sure you want to delete this record?")) return
 
-        const { error } = await supabase
-            .from("disciplinary_records")
-            .delete()
-            .eq("id", id)
-
-        if (error) {
+        try {
+            const res = await api.delete(`/students/disciplinary/${id}`)
+            if (res.data.success) {
+                loadRecords()
+            } else {
+                alert("Failed to delete")
+            }
+        } catch {
             alert("Failed to delete")
-        } else {
-            loadRecords()
         }
     }
 

@@ -29,7 +29,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type Student = {
@@ -68,17 +68,12 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
     useEffect(() => {
         async function loadSessions() {
             setLoading(true)
-            // Filter sessions specifically for the current department
-            const { data } = await supabase
-                .from("academic_sessions")
-                .select("*")
-                .eq("is_active", true)
-                .eq("type", departmentName) // Assume session type maps to Department
-                .order("start_time")
-
-            if (data) {
-                setAllSessions(data as any)
-            }
+            try {
+                const res = await api.get(`/academics/sessions?department=${departmentName}`)
+                if (res.data.success) {
+                    setAllSessions(res.data.sessions)
+                }
+            } catch (err) { console.error(err) }
             setLoading(false)
         }
         loadSessions()
@@ -88,13 +83,10 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
         async function loadPolicy() {
             if (!date) return
             const dateStr = format(date, "yyyy-MM-dd")
-            const { data } = await supabase
-                .from("academic_calendar")
-                .select("*")
-                .eq("date", dateStr)
-                .single()
-
-            setPolicy(data || null)
+            try {
+                const res = await api.get(`/academics/calendar/${dateStr}`)
+                setPolicy(res.data.calendar || null)
+            } catch (err) { console.error(err) }
         }
         loadPolicy()
     }, [date])
@@ -183,43 +175,37 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
             // Check if all relevant standards are on leave
             const leaveStds = (policy as any)?.leave_standards as string[] | undefined
 
-            // Important: We need to pull the specific department standard column.
-            const standardColumn = `${department.toLowerCase()}_standard`;
-
-            // We select the department-specific standard but alias it to `standard` so the existing UI code works
-            let query = supabase.from("students").select(`adm_no, name, standard:${standardColumn}`).order("name")
-
             const currentSession = allSessions.find(s => s.id === selectedSessionId)
 
-            if (selectedStandard !== "All") {
-                // Exact match when a specific filter is chosen from the dropdown
-                query = query.eq(standardColumn, selectedStandard)
-            } else {
-                // If "All Classes" is selected, we must ensure they are at least enrolled in THIS department,
-                // AND they belong to the specific standards allowed for THIS session
-                query = query.not(standardColumn, 'is', null)
+            let allowedStandardsToSend: string[] | undefined = undefined
 
+            if (selectedStandard === "All") {
                 if (selectedSessionId && policy?.session_overrides && policy.session_overrides[selectedSessionId] && policy.session_overrides[selectedSessionId].length > 0) {
-                    query = query.in(standardColumn, policy.session_overrides[selectedSessionId])
+                    allowedStandardsToSend = policy.session_overrides[selectedSessionId]
                 }
                 else if (currentSession && currentSession.standards && currentSession.standards.length > 0) {
-                    // Filter down to only standards valid for this session
-                    query = query.in(standardColumn, currentSession.standards)
+                    allowedStandardsToSend = currentSession.standards
                 }
                 else if (policy?.allowed_standards && policy.allowed_standards.length > 0) {
-                    query = query.in(standardColumn, policy.allowed_standards)
+                    allowedStandardsToSend = policy.allowed_standards
                 }
             }
 
-            const { data } = await query
-            if (data) {
-                // Filter out students whose standard is on leave
-                let filtered = data as any[]
-                if (leaveStds && leaveStds.length > 0) {
-                    filtered = filtered.filter((s: any) => !leaveStds.includes(s.standard))
+            try {
+                const res = await api.post("/academics/attendance/students", {
+                    department: departmentName,
+                    standard: selectedStandard,
+                    allowed_standards: allowedStandardsToSend
+                })
+
+                if (res.data.success) {
+                    let filtered = res.data.students
+                    if (leaveStds && leaveStds.length > 0) {
+                        filtered = filtered.filter((s: any) => !leaveStds.includes(s.standard))
+                    }
+                    setStudents(filtered)
                 }
-                setStudents(filtered)
-            }
+            } catch (err) { console.error(err) }
         }
 
         if (selectedSessionId) {
@@ -234,21 +220,18 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
 
         async function loadAttendance() {
             const dateStr = format(date, "yyyy-MM-dd")
-            const { data } = await supabase
-                .from("attendance")
-                .select("student_id, status")
-                .eq("date", dateStr)
-                .eq("session_id", selectedSessionId)
-                // Filter by department
-                .eq("department", departmentName)
-
-            const map: Record<string, any> = {}
-            if (data) {
-                data.forEach((r: any) => {
-                    map[r.student_id] = r.status
+            try {
+                const res = await api.get(`/academics/attendance`, {
+                    params: { date: dateStr, session_id: selectedSessionId, department: departmentName }
                 })
-            }
-            setAttendance(map)
+                const map: Record<string, any> = {}
+                if (res.data.success && res.data.data) {
+                    res.data.data.forEach((r: any) => {
+                        map[r.student_id] = r.status
+                    })
+                }
+                setAttendance(map)
+            } catch (err) { console.error(err) }
         }
         loadAttendance()
     }, [selectedSessionId, date, departmentName])
@@ -272,41 +255,25 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
         setSaving(true)
         const dateStr = format(date, "yyyy-MM-dd")
 
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            setSaving(false)
-            return
-        }
-
-        const { data: staff } = await supabase
-            .from('staff')
-            .select('id')
-            .eq('email', user.email)
-            .single()
-
-        const recorderId = staff?.id || user.id
-
         const upsertData = students.map(s => ({
             student_id: s.adm_no,
             date: dateStr,
             session_id: selectedSessionId,
             status: attendance[s.adm_no] || "Present",
-            recorded_by: recorderId,
-            department: departmentName // Save to new department column
+            department: departmentName 
+            // recorded_by is automatically added by the backend via JWT token
         }))
 
-        // Note: The onConflict clause needs to match the unique constraint in the database.
-        // Assuming (student_id, date, session_id, department) is the new unique key, or DB relies on internal ID.
-        // For simplicity, we just pass the data and trust RLS/unique constraints.
-        const { error } = await supabase
-            .from("attendance")
-            .upsert(upsertData, { onConflict: 'student_id,date,session_id' })
-
-        if (error) {
-            console.error("Save Error:", error)
-            alert(`Failed to save attendance: ${error.message || JSON.stringify(error)}`)
-        } else {
-            alert("Attendance saved successfully!")
+        try {
+            const res = await api.post("/academics/attendance", { attendanceData: upsertData })
+            if (res.data.success) {
+                alert("Attendance saved successfully!")
+            } else {
+                alert(`Failed to save attendance: ${res.data.error}`)
+            }
+        } catch (err: any) {
+            console.error("Save Error:", err)
+            alert(`Failed to save attendance: ${err.message || 'Unknown error'}`)
         }
         setSaving(false)
     }

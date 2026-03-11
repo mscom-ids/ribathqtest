@@ -8,7 +8,7 @@ import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 type Exam = {
     id: string
@@ -33,15 +33,12 @@ export default function ExamsPage({ params }: { params: Promise<{ department: st
 
     async function loadExams() {
         setLoading(true)
-        const { data, error } = await supabase
-            .from("exams")
-            .select("*")
-            .eq("department", departmentName)
-            .order("start_date", { ascending: false })
-
-        if (data) {
-            setExams(data as any)
-        } else {
+        try {
+            const res = await api.get('/exams', { params: { department: departmentName } });
+            if (res.data.success) {
+                setExams(res.data.exams)
+            }
+        } catch (error) {
             console.error(error)
         }
         setLoading(false)

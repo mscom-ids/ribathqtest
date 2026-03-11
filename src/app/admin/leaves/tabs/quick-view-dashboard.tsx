@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, LogOut, BookOpen, Hotel, Activity, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts"
 import { format, subDays } from "date-fns"
 
@@ -24,28 +24,24 @@ export function QuickViewDashboard() {
         const fetchDashboardData = async () => {
             setLoading(true)
 
-            // 1. Get total active students
-            const { count: totalStudents } = await supabase
-                .from("students")
-                .select("*", { count: "exact", head: true })
-                .eq("status", "active")
-                
-            // 2. Get active leaves
-            const { data: activeLeaves } = await supabase
-                .from("student_leaves")
-                .select("*")
-                .in("status", ["approved", "outside"])
-                
             let outsideCount = 0
             let studyLeaveCount = 0
             let sickRoomCount = 0
-            
-            const illnessMap: Record<string, number> = {}
 
-            if (activeLeaves) {
-                activeLeaves.forEach(leave => {
+            try {
+                const [studentsRes, leavesRes] = await Promise.all([
+                    api.get('/students', { params: { status: 'active' } }),
+                    api.get('/leaves')
+                ])
+
+                const totalStudents = studentsRes.data?.students?.length || 0;
+                const activeLeaves = leavesRes.data?.leaves?.filter((l: any) => ["approved", "outside"].includes(l.status)) || [];
+                
+                const illnessMap: Record<string, number> = {}
+
+                activeLeaves.forEach((leave: any) => {
                     if (leave.status === "outside") outsideCount++
-                    if (leave.leave_type === "internal") {
+                    if (leave.type === "internal") {
                         if (leave.reason?.toLowerCase().includes("study")) studyLeaveCount++
                         else sickRoomCount++
                         
@@ -56,22 +52,24 @@ export function QuickViewDashboard() {
                         }
                     }
                 })
-            }
 
-            setStats({
-                totalStudents: totalStudents || 0,
-                outside: outsideCount,
-                studyLeave: studyLeaveCount,
-                sickRoom: sickRoomCount
-            })
-            
-            // 3. Format Pie Chart Data from illnessMap (top 5)
-            const sortedPie = Object.entries(illnessMap)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5)
-                .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
+                setStats({
+                    totalStudents,
+                    outside: outsideCount,
+                    studyLeave: studyLeaveCount,
+                    sickRoom: sickRoomCount
+                })
                 
-            setPieData(sortedPie.length > 0 ? sortedPie : [{ name: "No Data", value: 1 }])
+                // 3. Format Pie Chart Data from illnessMap (top 5)
+                const sortedPie = Object.entries(illnessMap)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
+                    
+                setPieData(sortedPie.length > 0 ? sortedPie : [{ name: "No Data", value: 1 }])
+            } catch (error) {
+                console.error("Failed to load dashboard data", error)
+            }
             
             // 4. Generate last 7 days line chart data (mocked slightly until historical data accumulates)
             const history = []

@@ -27,7 +27,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 const formSchema = z.object({
     adm_no: z.string().min(1, "Admission number is required"),
@@ -52,24 +52,20 @@ export default function CreateStudentPage() {
 
     useEffect(() => {
         async function loadStaff() {
-            const { data } = await supabase
-                .from("staff")
-                .select("id, name")
-                .in('role', ['staff', 'vice_principal'])
-                .order("name")
-            if (data) setStaff(data)
+            try {
+                const res = await api.get("/students/staff")
+                if (res.data.success) {
+                    setStaff(res.data.staff)
+                }
+            } catch (err) { console.error(err) }
         }
         async function loadNextId() {
-            const { data } = await supabase
-                .from("students")
-                .select("adm_no")
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .single()
-            if (data && data.adm_no?.startsWith("R")) {
-                const num = parseInt(data.adm_no.substring(1))
-                if (!isNaN(num)) setSuggestedId(`R${String(num + 1).padStart(3, '0')}`)
-            }
+            try {
+                const res = await api.get("/students/next-id")
+                if (res.data.success) {
+                    setSuggestedId(res.data.nextId)
+                }
+            } catch (err) { console.error(err) }
         }
         loadStaff()
         loadNextId()
@@ -93,39 +89,9 @@ export default function CreateStudentPage() {
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
 
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        if (!e.target.files || e.target.files.length === 0) {
-            return
-        }
-        const file = e.target.files[0]
-        setPhotoUploading(true)
-
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${fileName}`
-
-        try {
-            // 1. Upload to Supabase Storage (requires 'avatars' bucket)
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file)
-
-            if (uploadError) {
-                throw uploadError
-            }
-
-            // 2. Get Public URL
-            const { data } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath)
-
-            setPhotoUrl(data.publicUrl)
-
-        } catch (error: any) {
-            console.error("Upload error:", error)
-            alert(`Photo upload failed: ${error.message || "Unknown error"}.\n\nEnsure 'avatars' bucket exists in Supabase Storage.`)
-        } finally {
-            setPhotoUploading(false)
-        }
+        // Disabled for now since we moved away from Supabase Storage BaaS.
+        // Requires a custom Express photo upload endpoint with multer.
+        alert("Photo uploading is currently disabled while migrating off Supabase BaaS. This will be re-enabled soon via a custom API endpoint.");
     }
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -134,44 +100,31 @@ export default function CreateStudentPage() {
 
         const admNo = values.adm_no.trim()
 
-        // Check for duplicate
-        const { data: existing } = await supabase
-            .from("students")
-            .select("adm_no")
-            .eq("adm_no", admNo)
-            .maybeSingle()
+        try {
+            const response = await api.post("/students", {
+                admission_number: admNo,
+                full_name: values.name,
+                date_of_birth: values.dob || null,
+                address: values.address || null,
+                parent_name: values.father_name || null,
+                email: values.email || null,
+                batch_year: values.batch_year,
+                class: values.standard, 
+                assigned_usthad_id: values.assigned_usthad_id || null,
+                photo_url: photoUrl,
+                status: "active"
+            })
 
-        if (existing) {
-            setIdError(`ID "${admNo}" already exists. Choose another.`)
-            setLoading(false)
-            return
-        }
-
-        const { error } = await supabase.from("students").insert({
-            adm_no: admNo,
-            name: values.name,
-            dob: values.dob || null,
-            address: values.address || null,
-            father_name: values.father_name || null,
-            email: values.email || null,
-            batch_year: values.batch_year,
-            standard: values.standard,
-            assigned_usthad_id: values.assigned_usthad_id || null,
-            photo_url: photoUrl,
-            status: "active"
-        })
-
-        setLoading(false)
-
-        if (error) {
-            console.error("Create Student Error:", error)
-            if (error.code === "23505") {
-                setIdError(`ID "${admNo}" already exists (constraint). Choose another.`)
+            if (response.data.success) {
+               router.push("/admin/students")
             } else {
-                alert(`Failed to create student: ${JSON.stringify(error, null, 2)}`)
+               setIdError(response.data.error || "Failed to create student")
             }
-        } else {
-            router.push("/admin/students")
+        } catch (error: any) {
+            console.error("Create Student Error:", error)
+            setIdError(error.response?.data?.error || "Failed to create student")
+        } finally {
+            setLoading(false)
         }
     }
 

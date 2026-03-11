@@ -17,7 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { LeaveModal } from "./leave-modal"
 import { MovementModal } from "./movement-modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -47,19 +47,15 @@ export default function AdminLeavesPage() {
 
     const fetchLeaves = async () => {
         setLoading(true)
-        const { data, error } = await supabase
-            .from("student_leaves")
-            .select(`
-                *,
-                student:students (name, standard, adm_no)
-            `)
-            .order("created_at", { ascending: false })
-
-        if (error) {
+        try {
+            const res = await api.get('/leaves')
+            if (res.data.success) {
+                setLeaves(res.data.leaves)
+            } else {
+                console.error("Error fetching leaves:", res.data.error)
+            }
+        } catch (error) {
             console.error("Error fetching leaves:", error)
-        } else if (data) {
-            // @ts-ignore
-            setLeaves(data)
         }
         setLoading(false)
     }
@@ -79,30 +75,30 @@ export default function AdminLeavesPage() {
     const leaveRequests = filteredLeaves.filter(l => l.status === "pending")
 
     const handleApprove = async (leave: StudentLeave) => {
-        const { error } = await supabase
-            .from("student_leaves")
-            .update({ status: "approved" })
-            .eq("id", leave.id)
-        
-        if (error) {
+        try {
+            const res = await api.put(`/leaves/${leave.id}/status`, { status: "approved" })
+            if (res.data.success) {
+                toast.success("Leave request approved")
+                fetchLeaves()
+            } else {
+                toast.error("Failed to approve leave request")
+            }
+        } catch (err) {
             toast.error("Failed to approve leave request")
-        } else {
-            toast.success("Leave request approved")
-            fetchLeaves()
         }
     }
 
     const handleReject = async (leave: StudentLeave) => {
-        const { error } = await supabase
-            .from("student_leaves")
-            .update({ status: "rejected" })
-            .eq("id", leave.id)
-        
-        if (error) {
+        try {
+            const res = await api.put(`/leaves/${leave.id}/status`, { status: "rejected" })
+            if (res.data.success) {
+                toast.success("Leave request rejected")
+                fetchLeaves()
+            } else {
+                toast.error("Failed to reject leave request")
+            }
+        } catch (err) {
             toast.error("Failed to reject leave request")
-        } else {
-            toast.success("Leave request rejected")
-            fetchLeaves()
         }
     }
 

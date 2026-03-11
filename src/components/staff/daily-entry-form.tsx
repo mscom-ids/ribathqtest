@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { SURAH_LIST } from "@/lib/data/surah-list"
 type Surah = { id: number; name: string; totalVerses: number };
 const typedSurahList = SURAH_LIST as Surah[];
@@ -125,41 +125,36 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
     useEffect(() => {
         async function loadData() {
-            const { data: s } = await supabase.from("students").select("adm_no, name, assigned_usthad_id").eq("adm_no", studentId).single()
-            if (s) {
-                setStudent(s)
-                setAssignedUsthadId(s.assigned_usthad_id)
-            }
-
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+            // Load student info
+            try {
+                const sRes = await api.get(`/students/${studentId}`)
+                if (sRes.data.success) {
+                    setStudent(sRes.data.student)
+                    setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
+                }
+            } catch (e) { console.error(e) }
 
             const logIdParam = searchParams.get("log_id")
             let existingLog = null
 
-            if (logIdParam) {
-                const { data } = await supabase.from("hifz_logs").select("*").eq("id", logIdParam).single()
-                existingLog = data
-            } else {
-                const date = form.getValues("date")
-                const session = form.getValues("session")
-                const mode = form.getValues("mode")
+            try {
+                if (logIdParam) {
+                    const res = await api.get(`/hifz/logs/${logIdParam}`)
+                    if (res.data.success) existingLog = res.data.log
+                } else {
+                    const date = form.getValues("date")
+                    const session = form.getValues("session")
+                    const mode = form.getValues("mode")
 
-                const { data } = await supabase
-                    .from("hifz_logs")
-                    .select("*")
-                    .eq("student_id", studentId)
-                    .eq("entry_date", date)
-                    .eq("session_type", session)
-                    .eq("mode", mode)
-                    .limit(1)
-                    .maybeSingle()
-                existingLog = data
-            }
+                    const res = await api.get('/hifz/logs', {
+                        params: { student_id: studentId, entry_date: date, session_type: session, mode, limit: 1 }
+                    })
+                    if (res.data.success && res.data.logs?.length > 0) existingLog = res.data.logs[0]
+                }
+            } catch (e) { console.error(e) }
 
             if (existingLog) {
                 setLogId(existingLog.id)
-                // Need to map SURAH name to ID for the new form schema
                 let surahId = undefined;
                 if (existingLog.surah_name) {
                     const matched = SURAH_LIST.find(s => s.name === existingLog.surah_name);
@@ -205,46 +200,36 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         if (!mounted) return
         async function reloadLog() {
             const logIdParam = searchParams.get("log_id")
-            if (logIdParam) return // Don't re-fetch if editing a specific log
+            if (logIdParam) return
 
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const { data } = await supabase
-                .from("hifz_logs")
-                .select("*")
-                .eq("student_id", studentId)
-                .eq("entry_date", watchedDate)
-                .eq("session_type", watchedSession)
-                .eq("mode", watchedMode)
-                .limit(1)
-                .maybeSingle()
-
-            if (data) {
-                setLogId(data.id)
-                let surahId = undefined;
-                if (data.surah_name) {
-                    const matched = SURAH_LIST.find(s => s.name === data.surah_name);
-                    surahId = matched?.id;
-                }
-                form.reset({
-                    date: data.entry_date,
-                    session: data.session_type as any,
-                    mode: data.mode as any,
-                    new_verses: [{
-                        surah_id: surahId,
-                        start_v: data.start_v || undefined,
-                        end_v: data.end_v || undefined
-                    }],
-                    start_page: data.start_page,
-                    end_page: data.end_page,
-                    juz_number: data.juz_number,
-                    juz_portion: data.juz_portion as any,
-                    rating: data.rating || 3
+            try {
+                const res = await api.get('/hifz/logs', {
+                    params: { student_id: studentId, entry_date: watchedDate, session_type: watchedSession, mode: watchedMode, limit: 1 }
                 })
-            } else {
-                setLogId(null)
-            }
+                const data = res.data.success && res.data.logs?.length > 0 ? res.data.logs[0] : null
+
+                if (data) {
+                    setLogId(data.id)
+                    let surahId = undefined;
+                    if (data.surah_name) {
+                        const matched = SURAH_LIST.find(s => s.name === data.surah_name);
+                        surahId = matched?.id;
+                    }
+                    form.reset({
+                        date: data.entry_date,
+                        session: data.session_type as any,
+                        mode: data.mode as any,
+                        new_verses: [{ surah_id: surahId, start_v: data.start_v || undefined, end_v: data.end_v || undefined }],
+                        start_page: data.start_page,
+                        end_page: data.end_page,
+                        juz_number: data.juz_number,
+                        juz_portion: data.juz_portion as any,
+                        rating: data.rating || 3
+                    })
+                } else {
+                    setLogId(null)
+                }
+            } catch (e) { console.error(e) }
         }
         reloadLog()
     }, [watchedDate, watchedSession, watchedMode])
@@ -252,20 +237,19 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const onSubmit = async (values: FormValues) => {
         setLoading(true)
 
-        const { data: { user } } = await supabase.auth.getUser()
-        const { data: profile } = await supabase.from("profiles").select("role").eq("id", user?.id).single()
-        const { data: staff } = await supabase.from("staff").select("id").eq("profile_id", user?.id).single()
-
-        if (!staff) {
-            alert("Error: You seem to be logged out or not a staff member.")
-            setLoading(false)
-            return
-        }
-
-        let targetUsthadId = staff.id
-        if (["admin", "principal", "vice_principal"].includes(profile?.role || "") && assignedUsthadId) {
-            targetUsthadId = assignedUsthadId
-        }
+        // Get my staff profile to know usthad_id
+        let targetUsthadId = null
+        try {
+            const profileRes = await api.get('/staff/me')
+            if (profileRes.data.success) {
+                const staff = profileRes.data.staff
+                targetUsthadId = staff.id
+                // Admins use the student's assigned usthad instead
+                if (['admin', 'principal', 'vice_principal'].includes(staff.role || '') && assignedUsthadId) {
+                    targetUsthadId = assignedUsthadId
+                }
+            }
+        } catch (e) { console.error('Could not get staff profile:', e) }
 
         const commonData = {
             student_id: studentId,
@@ -276,59 +260,48 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             rating: values.rating
         }
 
-        let logError = null;
+        try {
+            if (values.mode === "New Verses") {
+                const recordsToInsert = values.new_verses.map(v => ({
+                    ...commonData,
+                    surah_name: SURAH_LIST.find(s => s.id === v.surah_id)?.name || null,
+                    start_v: v.start_v,
+                    end_v: v.end_v,
+                    start_page: null, end_page: null, juz_number: null, juz_portion: null
+                }))
 
-        if (values.mode === "New Verses") {
-            // Bulk insert multiple records
-            const recordsToInsert = values.new_verses.map(v => ({
-                ...commonData,
-                surah_name: SURAH_LIST.find(s => s.id === v.surah_id)?.name || null,
-                start_v: v.start_v,
-                end_v: v.end_v,
-                start_page: null, end_page: null, juz_number: null, juz_portion: null
-            }))
-
-            if (logId) {
-                // Update the specific log
-                const { error } = await supabase.from("hifz_logs").update(recordsToInsert[0]).eq("id", logId)
-                logError = error
-                // If they added extra surahs while editing, insert the rest as new logs
-                if (!error && recordsToInsert.length > 1) {
-                    const { error: insertError } = await supabase.from("hifz_logs").insert(recordsToInsert.slice(1))
-                    logError = insertError || logError
+                if (logId) {
+                    await api.put(`/hifz/logs/${logId}`, recordsToInsert[0])
+                    if (recordsToInsert.length > 1) {
+                        await api.post('/hifz/logs/bulk', { logs: recordsToInsert.slice(1) })
+                    }
+                } else {
+                    await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
                 }
             } else {
-                const { error } = await supabase.from("hifz_logs").insert(recordsToInsert)
-                logError = error
+                const singleData = {
+                    ...commonData,
+                    surah_name: null, start_v: null, end_v: null,
+                    start_page: values.mode === "Recent Revision" ? values.start_page : null,
+                    end_page: values.mode === "Recent Revision" ? values.end_page : null,
+                    juz_number: values.mode === "Juz Revision" ? values.juz_number : null,
+                    juz_portion: values.mode === "Juz Revision" ? values.juz_portion : null,
+                }
+                if (logId) {
+                    await api.put(`/hifz/logs/${logId}`, singleData)
+                } else {
+                    await api.post('/hifz/logs', singleData)
+                }
             }
-        } else {
-            // Other modes are single records
-            const singleData = {
-                ...commonData,
-                surah_name: null, start_v: null, end_v: null,
-                start_page: values.mode === "Recent Revision" ? values.start_page : null,
-                end_page: values.mode === "Recent Revision" ? values.end_page : null,
-                juz_number: values.mode === "Juz Revision" ? values.juz_number : null,
-                juz_portion: values.mode === "Juz Revision" ? values.juz_portion : null,
-            }
-            if (logId) {
-                const { error } = await supabase.from("hifz_logs").update(singleData).eq("id", logId)
-                logError = error
-            } else {
-                const { error } = await supabase.from("hifz_logs").insert(singleData)
-                logError = error
-            }
-        }
 
-        if (logError) {
-            alert(`Failed to save log: ${logError.message}`)
-        } else {
             if (returnTo) {
                 router.push(returnTo)
             } else {
                 alert("Saved successfully!")
                 form.setValue("new_verses", [{ surah_id: undefined, start_v: undefined, end_v: undefined }])
             }
+        } catch (err: any) {
+            alert(`Failed to save log: ${err?.response?.data?.error || err.message}`)
         }
         setLoading(false)
     }
@@ -338,18 +311,18 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         if (!confirm("Are you sure you want to delete this specific entry?")) return
 
         setLoading(true)
-        const { error } = await supabase.from("hifz_logs").delete().eq("id", logId)
-        setLoading(false)
-        if (error) {
-            alert("Error deleting: " + error.message)
-        } else {
+        try {
+            await api.delete(`/hifz/logs/${logId}`)
             alert("Entry deleted.")
             if (returnTo) {
                 router.push(returnTo)
             } else {
                 setLogId(null)
             }
+        } catch (err: any) {
+            alert("Error deleting: " + err?.response?.data?.error || err.message)
         }
+        setLoading(false)
     }
 
     const isOldDate = isBefore(new Date(form.watch("date")), minDate)

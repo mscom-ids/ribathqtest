@@ -32,8 +32,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { supabase } from "@/lib/auth"
-import { createStaffUser, archiveStaff, restoreStaff } from "@/actions/staff-auth"
+import api from "@/lib/api"
 
 type StaffRole = "admin" | "principal" | "vice_principal" | "controller" | "staff" | "usthad" | "teacher"
 
@@ -73,8 +72,14 @@ export default function StaffPage() {
     }, [])
 
     async function loadStaff() {
-        const { data } = await supabase.from("staff").select("*").order("name")
-        if (data) setStaff(data)
+        try {
+            const res = await api.get('/staff')
+            if (res.data.success) {
+                setStaff(res.data.staff || [])
+            }
+        } catch (error) {
+            console.error("Failed to load staff", error)
+        }
         setLoading(false)
     }
 
@@ -82,36 +87,34 @@ export default function StaffPage() {
         if (!confirm("Are you sure you want to archive this staff member? This will remove their login access, but preserve their historical records.")) return
 
         setLoading(true)
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
-        if (!token) { alert("Authentication error. Please log in again."); setLoading(false); return; }
-
-        const result = await archiveStaff(id, token)
-        if (result.error) {
-            alert(`Failed to archive staff: ${result.error}`)
-            setLoading(false)
-        } else {
-            setStaff(staff.map(s => s.id === id ? { ...s, is_active: false, profile_id: null } : s))
-            setLoading(false)
+        try {
+            const result = await api.put(`/staff/${id}/archive`)
+            if (result.data.success) {
+                setStaff(staff.map(s => s.id === id ? { ...s, is_active: false, profile_id: null } : s))
+            } else {
+                alert(`Failed to archive staff: ${result.data.error}`)
+            }
+        } catch (error: any) {
+            alert(`Failed to archive staff: ${error.message}`)
         }
+        setLoading(false)
     }
 
     async function handleRestoreStaff(id: string) {
         if (!confirm("Are you sure you want to restore this staff member?")) return
 
         setLoading(true)
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
-        if (!token) { alert("Authentication error. Please log in again."); setLoading(false); return; }
-
-        const result = await restoreStaff(id, token)
-        if (result.error) {
-            alert(`Failed to restore staff: ${result.error}`)
-            setLoading(false)
-        } else {
-            setStaff(staff.map(s => s.id === id ? { ...s, is_active: true } : s))
-            setLoading(false)
+        try {
+            const result = await api.put(`/staff/${id}/restore`)
+            if (result.data.success) {
+                setStaff(staff.map(s => s.id === id ? { ...s, is_active: true } : s))
+            } else {
+                alert(`Failed to restore staff: ${result.data.error}`)
+            }
+        } catch (error: any) {
+            alert(`Failed to restore staff: ${error.message}`)
         }
+        setLoading(false)
     }
 
     const handleCreateLogin = async () => {
@@ -123,27 +126,17 @@ export default function StaffPage() {
 
         setCreatingLogin(true)
         try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData.session?.access_token;
-            if (!token) throw new Error("Authentication error. Please log in again.");
-
-            const result = await createStaffUser({
-                email: selectedStaff.email,
-                name: selectedStaff.name,
-                role: selectedStaff.role,
-                password: newPassword,
-                existingStaffId: selectedStaff.id,
-                phone: selectedStaff.phone || undefined,
-                token: token
+            const result = await api.post(`/staff/${selectedStaff.id}/login`, {
+                password: newPassword
             })
 
-            if (result.error) {
-                alert("Error: " + result.error)
-            } else {
+            if (result.data.success) {
                 alert("Login created successfully!")
                 setLoginDialogOpen(false)
                 setNewPassword("")
                 loadStaff() // Refresh to update profile_id
+            } else {
+                alert("Error: " + result.data.error)
             }
         } catch (e: any) {
             alert("Failed: " + e.message)
@@ -156,24 +149,19 @@ export default function StaffPage() {
         if (!selectedStaff) return
         setSaving(true)
         try {
-            const { error } = await supabase
-                .from("staff")
-                .update({
-                    name: editForm.name,
-                    role: editForm.role,
-                    phone: editForm.phone || null
-                })
-                .eq("id", selectedStaff.id)
+            const res = await api.put(`/staff/${selectedStaff.id}`, {
+                name: editForm.name,
+                role: editForm.role,
+                phone: editForm.phone || null
+            })
 
-            if (error) throw error
-
-            // If linked to profile, update profile name/role too?
-            // For now, let's keep it simple and just update staff record.
-            // Ideally, we server-side update both, but simple update is fine.
-
-            alert("Staff updated successfully")
-            setEditDialogOpen(false)
-            loadStaff()
+            if (res.data.success) {
+                alert("Staff updated successfully")
+                setEditDialogOpen(false)
+                loadStaff()
+            } else {
+                throw new Error(res.data.error)
+            }
         } catch (error: any) {
             console.error(error)
             alert("Failed to update: " + error.message)

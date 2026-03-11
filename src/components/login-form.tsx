@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { supabase, getRedirectPathForRole } from "@/lib/auth"
+import api from "@/lib/api"
+import Cookies from "js-cookie"
+import { getRedirectPathForRole } from "@/lib/auth"
 
 const formSchema = z.object({
     email: z.string().email(),
@@ -33,33 +35,29 @@ export default function LoginForm() {
         setError(null)
 
         try {
-            const { data, error: authError } = await supabase.auth.signInWithPassword({
+            // Import api dynamically or at the top. Wait, we need to import `api` and `js-cookie`.
+            // Let's assume they are imported at the top, I will fix the imports in the next step.
+            const response = await api.post('/auth/login', {
                 email: values.email,
                 password: values.password,
             })
 
-            if (authError) {
-                throw new Error(authError.message)
-            }
-
-            if (data.user) {
-                // Fetch profile to get role
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', data.user.id)
-                    .single()
-
+            if (response.data.success && response.data.token) {
+                // Set the token in a cookie so the Next.js middleware and future API requests can see it
+                Cookies.set('auth_token', response.data.token, { expires: 7 })
+                
+                const profile = response.data.user
                 if (profile) {
                     const path = getRedirectPathForRole(profile.role)
                     router.push(path)
                 } else {
-                    // Fallback if profile missing (shouldn't happen with correct seed)
                     setError("Profile not found. Contact Admin.")
                 }
+            } else {
+                setError("Failed to login")
             }
         } catch (err: any) {
-            setError(err.message || "Failed to login")
+            setError(err.response?.data?.error || err.message || "Failed to login")
         } finally {
             setLoading(false)
         }

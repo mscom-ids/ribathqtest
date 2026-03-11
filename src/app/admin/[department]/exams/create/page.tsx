@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 
 const formSchema = z.object({
     title: z.string().min(2, "Title must be at least 2 characters"),
@@ -40,20 +40,25 @@ export default function CreateExamPage({ params }: { params: Promise<{ departmen
     async function onSubmit(values: FormValues) {
         setLoading(true)
 
-        const { error } = await supabase.from("exams").insert({
-            title: values.title,
-            department: departmentName, // Assign department automatically based on route
-            type: departmentName,       // Temporary fallback to satisfy older database constraint
-            start_date: values.start_date,
-            end_date: values.end_date || null,
-            is_active: true
-        })
+        try {
+            const res = await api.post("/exams", {
+                title: values.title,
+                department: departmentName, // Assign department automatically based on route
+                type: departmentName,       // Temporary fallback to satisfy older database constraint
+                start_date: values.start_date,
+                end_date: values.end_date || null,
+                is_active: true
+            })
 
-        if (error) {
+            if (!res.data.success) {
+                alert("Error creating exam: " + res.data.error)
+                setLoading(false)
+            } else {
+                router.push(`/admin/${department}/exams`)
+            }
+        } catch (error: any) {
             alert("Error creating exam: " + error.message)
             setLoading(false)
-        } else {
-            router.push(`/admin/${department}/exams`)
         }
     }
 

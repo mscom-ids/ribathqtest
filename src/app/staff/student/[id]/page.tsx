@@ -6,7 +6,7 @@ import { ArrowLeft, Plus } from "lucide-react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 import type { Student } from "@/app/admin/students/page"
 
@@ -25,54 +25,29 @@ export default function StaffStudentProfilePage() {
             setLoading(true)
             try {
                 // 1. Fetch Student Details
-                const { data: studentData, error: studentError } = await supabase
-                    .from("students")
-                    .select(`
-                        adm_no, 
-                        name, 
-                        batch_year, 
-                        standard,
-                        photo_url,
-                        dob,
-                        assigned_usthad:assigned_usthad_id(name)
-                    `)
-                    .eq("adm_no", studentId)
-                    .single()
-
-                if (studentError) {
-                    console.error("Error fetching student:", studentError)
+                const studentRes = await api.get(`/students/${studentId}`)
+                if (!studentRes.data.success) {
                     router.push("/staff")
                     return
                 }
+                const studentData = studentRes.data.student
 
-                // 2. Fetch Hifz Logs for Progress Calculation (Juz Revision Count)
-                const { data: logsData, error: logsError } = await supabase
-                    .from("hifz_logs")
-                    .select("juz_number, juz_portion")
-                    .eq("student_id", studentId)
-                    .eq("mode", "Juz Revision")
+                // 2. Fetch Hifz Logs for Progress Calculation (Unique Juz covered)
+                const logsRes = await api.get('/hifz/logs', {
+                    params: { student_id: studentId, mode: 'Juz Revision' }
+                })
 
-                if (logsError) console.error("Error fetching logs:", logsError)
-
-                // Calculate Progress (Unique Juz covered)
                 const completedJuz = new Set<number>()
-                if (logsData) {
-                    logsData.forEach(log => {
-                        if (log.juz_number) {
-                            completedJuz.add(log.juz_number)
-                        }
+                if (logsRes.data.success && logsRes.data.logs) {
+                    logsRes.data.logs.forEach((log: any) => {
+                        if (log.juz_number) completedJuz.add(log.juz_number)
                     })
                 }
 
-                const studentWithProgress = {
-                    ...studentData,
-                    progress: completedJuz.size
-                } as unknown as Student
-
-                setStudent(studentWithProgress)
-
+                setStudent({ ...studentData, progress: completedJuz.size } as unknown as Student)
             } catch (error) {
                 console.error("Error loading profile:", error)
+                router.push("/staff")
             } finally {
                 setLoading(false)
             }

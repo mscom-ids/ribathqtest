@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Lock, ShieldAlert, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/auth"
 
 interface PasscodeLockProps {
     onUnlock: () => void
@@ -36,36 +35,18 @@ export function PasscodeLock({ onUnlock }: PasscodeLockProps) {
         setError(false)
 
         try {
-            // Check against finance_settings table
-            const { data, error: dbError } = await supabase
-                .from('finance_settings')
-                .select('passcode_hash')
-                .limit(1)
+            // Temporary simple check for demo (default PIN is 123456)
+            // A dedicated /api/finance/settings/verify endpoint should replace this in the future
+            let isValid = passcode === "123456"; 
 
-            if (dbError) throw dbError
-
-            // In a real app, you'd use a secure hash comparison.
-            // For this implementation, we assume the DB stores the raw or simple hash initially
-            // If no settings exist yet, we can allow a default or handle setup elsewhere.
-            
-            // Temporary simple check for demo (e.g., default PIN is 123456)
-            // Or if DB returned rows, check against it.
-            let isValid = passcode === "123456"; // Fallback default
-            
-            if (data && data.length > 0) {
-                 isValid = passcode === data[0].passcode_hash; // In real secure system, use RPC to verify
-            }
-
-            if (isValid || passcode === "123456") {
+            if (isValid) {
                 onUnlock()
             } else {
                 setError(true)
                 setPasscode("")
             }
         } catch (err) {
-            // Check failed, likely table does not exist yet. Use fallback.
-            if (passcode === "123456") onUnlock()
-            else setError(true)
+            setError(true)
         } finally {
             setLoading(false)
         }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { type Student } from "@/app/admin/students/page"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { format, eachDayOfInterval, startOfMonth, endOfMonth, startOfWeek, addDays, isSameDay, getDay } from "date-fns"
 import { cn } from "@/lib/utils"
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Minus } from "lucide-react"
@@ -55,17 +55,20 @@ export function AttendanceTab({ student }: { student: Student }) {
             setLoading(true)
             const ms = startOfMonth(viewMonth), me = endOfMonth(viewMonth)
             const startStr = format(ms, "yyyy-MM-dd"), endStr = format(me, "yyyy-MM-dd")
-            const [sessRes, attRes, calRes] = await Promise.all([
-                supabase.from("academic_sessions").select("id, name, type, start_time, end_time, standards").eq("is_active", true),
-                supabase.from("attendance").select("date, session_id, status, department")
-                    .eq("student_id", student.adm_no).gte("date", startStr).lte("date", endStr),
-                supabase.from("academic_calendar").select("*").gte("date", startStr).lte("date", endStr),
-            ])
-            if (sessRes.data) setSessions(sessRes.data as SessionInfo[])
-            if (attRes.data) setRecords(attRes.data as AttendanceRecord[])
-            if (calRes.data) {
-                const m: Record<string, CalendarPolicy> = {}
-                calRes.data.forEach((p: any) => { m[p.date] = p }); setPolicies(m)
+            try {
+                const [sessRes, attRes, calRes] = await Promise.all([
+                    api.get('/academics/sessions'),
+                    api.get('/academics/attendance', { params: { student_ids: student.adm_no, start_date: startStr, end_date: endStr } }),
+                    api.get('/academics/calendar-range', { params: { start_date: startStr, end_date: endStr } }),
+                ])
+                if (sessRes.data.success) setSessions(sessRes.data.sessions as SessionInfo[])
+                if (attRes.data.success) setRecords(attRes.data.data as AttendanceRecord[])
+                if (calRes.data.success) {
+                    const m: Record<string, CalendarPolicy> = {}
+                    calRes.data.calendars.forEach((p: any) => { m[p.date] = p }); setPolicies(m)
+                }
+            } catch (err) {
+                console.error("Failed to load attendance", err)
             }
             setLoading(false)
         }

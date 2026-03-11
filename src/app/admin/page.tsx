@@ -17,7 +17,7 @@ import {
     XCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { format } from "date-fns"
 import {
     BarChart,
@@ -54,26 +54,22 @@ export default function AdminDashboardPage() {
     useEffect(() => {
         async function loadStats() {
             setLoading(true)
-            const { data: studentData } = await supabase.from("students").select("status")
-
-            let students = 0, active = 0, complete = 0, dropout = 0;
-
-            if (studentData) {
-                students = studentData.length;
-                studentData.forEach(s => {
-                    const st = s.status?.toLowerCase() || 'active'; // Default to active if null
-                    if (st.includes('drop')) dropout++;
-                    else if (st.includes('complet')) complete++;
-                    else active++;
-                });
+            try {
+                const res = await api.get('/students', { params: { status: 'all' } })
+                if (res.data.success) {
+                    const studentData: any[] = res.data.students || []
+                    let students = studentData.length, active = 0, complete = 0, dropout = 0;
+                    studentData.forEach((s: any) => {
+                        const st = (s.status || 'active').toLowerCase()
+                        if (st.includes('drop')) dropout++
+                        else if (st.includes('complet')) complete++
+                        else active++
+                    })
+                    setStats({ students, active, complete, dropout })
+                }
+            } catch (err) {
+                console.error('Failed to load dashboard stats', err)
             }
-
-            setStats({
-                students,
-                active,
-                complete,
-                dropout
-            })
             setLoading(false)
         }
         loadStats()

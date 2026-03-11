@@ -32,7 +32,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/auth"
+import api from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 
 type StudentMonthlyStats = {
@@ -91,65 +91,40 @@ export default function MonthlyReportsPage() {
             const reportMonthDate = format(date, 'yyyy-MM-01')
 
             // 1. Fetch Students with Usthad details
-            let studentsData: any[] | null = null
+            let students: any[] = []
             try {
-                const { data, error } = await supabase
-                    .from("students")
-                    .select(`
-                    adm_no, 
-                    name, 
-                    standard,
-                    assigned_usthad:assigned_usthad_id(name, phone)
-                `)
-                    .order('adm_no')
-                if (error) throw error
-                studentsData = data
-            } catch (firstError: any) {
-                console.warn("Retrying student fetch without phone column:", firstError.message)
-                const { data, error } = await supabase
-                    .from("students")
-                    .select(`
-                        adm_no, 
-                        name, 
-                        standard,
-                        assigned_usthad:assigned_usthad_id(name)
-                    `)
-                    .order('adm_no')
-
-                if (error) throw error
-                studentsData = data
-                setSchemaWarning(true)
+                const res = await api.get('/hifz/students');
+                if (res.data.success) students = res.data.students;
+            } catch (err: any) {
+                console.error("Failed to load students:", err)
             }
 
-            const students = studentsData || []
-
             // 2. Fetch Hifz Logs for the Selected Month (Auto Data)
-            const { data: logs, error: logsError } = await supabase
-                .from("hifz_logs")
-                .select("*")
-                .gte("entry_date", start)
-                .lte("entry_date", end)
-
-            if (logsError) throw logsError
+            let logs: any[] = []
+            try {
+                const res = await api.get('/hifz/logs', { params: { start_date: start, end_date: end } })
+                if (res.data.success) logs = res.data.logs;
+            } catch (err) {
+                console.error("Failed to load hifz logs:", err)
+            }
 
             // 3. Fetch Manual Reports for the Selected Month
-            const { data: manualReports, error: manualError } = await supabase
-                .from("monthly_reports")
-                .select("*")
-                .eq("report_month", reportMonthDate)
-
-            // If table doesn't exist yet, manualReports might be null or error. 
-            // We can ignore error if it's "relation does not exist" but best to just log.
-            if (manualError && !manualError.message.includes("relation")) {
-                console.error("Manual report fetch error:", manualError)
+            let manualReports: any[] = []
+            try {
+                const res = await api.get('/hifz/monthly-reports', { params: { report_month: reportMonthDate } })
+                if (res.data.success) manualReports = res.data.reports;
+            } catch (err) {
+                console.error("Failed to load manual reports:", err)
             }
 
             // 4. Fetch Attendance Summary (Auto Data)
-            const { data: attendance, error: attError } = await supabase
-                .from("attendance")
-                .select("student_id, status")
-                .gte("date", start)
-                .lte("date", end)
+            let attendance: any[] = []
+            try {
+                const res = await api.get('/academics/attendance', { params: { start_date: start, end_date: end, department: 'Hifz' } })
+                if (res.data.success) attendance = res.data.data;
+            } catch (err) {
+                console.error("Failed to load attendance:", err)
+            }
 
             // Process Data
             const processed = students.map((s: any) => {
@@ -161,8 +136,8 @@ export default function MonthlyReportsPage() {
                         adm_no: s.adm_no,
                         name: s.name,
                         standard: s.standard,
-                        usthad_name: s.assigned_usthad?.name || "Unassigned",
-                        usthad_phone: s.assigned_usthad?.phone || "",
+                        usthad_name: s.usthad_name || "Unassigned",
+                        usthad_phone: s.usthad_phone || "",
                         hifz_pages: Number(manualRecord.hifz_pages),
                         recent_pages: Number(manualRecord.recent_pages),
                         juz_revision: Number(manualRecord.juz_revision),
@@ -210,8 +185,8 @@ export default function MonthlyReportsPage() {
                     adm_no: s.adm_no,
                     name: s.name,
                     standard: s.standard,
-                    usthad_name: s.assigned_usthad?.name || "Unassigned",
-                    usthad_phone: s.assigned_usthad?.phone || "",
+                    usthad_name: s.usthad_name || "Unassigned",
+                    usthad_phone: s.usthad_phone || "",
                     hifz_pages: parseFloat(hifzPages.toFixed(1)),
                     recent_pages: recentPages,
                     juz_revision: parseFloat((juzRevPages / 20).toFixed(1)),
@@ -280,21 +255,18 @@ _Generated from Ma'din Ribathul Quran ERP_
         try {
             const reportMonthDate = format(new Date(selectedMonth), 'yyyy-MM-01')
 
-            const { error } = await supabase
-                .from("monthly_reports")
-                .upsert({
-                    student_id: editingStudent.adm_no,
-                    report_month: reportMonthDate,
-                    hifz_pages: editForm.hifz_pages,
-                    recent_pages: editForm.recent_pages,
-                    juz_revision: editForm.juz_revision,
-                    total_juz: editForm.total_juz,
-                    grade: editForm.grade,
-                    attendance: editForm.attendance,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'student_id, report_month' })
+            const res = await api.post("/hifz/monthly-reports", {
+                student_id: editingStudent.adm_no,
+                report_month: reportMonthDate,
+                hifz_pages: editForm.hifz_pages,
+                recent_pages: editForm.recent_pages,
+                juz_revision: editForm.juz_revision,
+                total_juz: editForm.total_juz,
+                grade: editForm.grade,
+                attendance: editForm.attendance,
+            });
 
-            if (error) throw error
+            if (!res.data.success) throw new Error(res.data.error);
 
             setIsDialogOpen(false)
             loadReportData() // Refresh

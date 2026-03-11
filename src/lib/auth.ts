@@ -1,23 +1,16 @@
-
-import { supabase } from '@/lib/supabaseClient'
+import api from '@/lib/api'
 
 export async function getUserRole() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-    if (error || !data) return null
-    return data.role
+    try {
+        const response = await api.get('/auth/me')
+        if (response.data && response.data.success && response.data.user) {
+            return response.data.user.role
+        }
+        return null
+    } catch (err) {
+        return null
+    }
 }
-
-// Re-export supabase for convenience if needed, or components should just import from lib/supabaseClient
-// But to keep existing code working if it imports supabase from here:
-export { supabase }
 
 export const getRedirectPathForRole = (role: string) => {
     switch (role) {
