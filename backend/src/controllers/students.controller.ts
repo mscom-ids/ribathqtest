@@ -54,20 +54,42 @@ export const getStudentById = async (req: Request, res: Response) => {
 
 export const createStudent = async (req: Request, res: Response) => {
   try {
-    const studentData = req.body;
+    const data = req.body;
     
-    // We explicitly list the columns to avoid SQL injection via object mapping
-    const columns = ['adm_no', 'name', 'date_of_birth', 'gender', 'school_standard', 'hifz_standard', 'madrassa_standard', 'status', 'parent_name', 'parent_phone', 'address_line', 'assigned_usthad_id'];
+    // Map the incoming frontend fields to the actual database columns.
+    // Ensure we handle both legacy/frontend keys AND verbatim backend keys just in case.
+    const mappedStudent = {
+      adm_no: data.admission_number || data.adm_no,
+      name: data.full_name || data.name,
+      dob: data.date_of_birth || data.dob,
+      address: data.address_line || data.address,
+      father_name: data.parent_name || data.father_name,
+      phone: data.parent_phone || data.phone,
+      email: data.email,
+      batch_year: data.batch_year,
+      standard: data.class || data.standard,
+      assigned_usthad_id: data.assigned_usthad_id === "unassigned" ? null : data.assigned_usthad_id,
+      photo_url: data.photo_url,
+      status: data.status || 'active'
+    };
     
-    const values = [];
-    const placeholders = [];
-    const insertCols = [];
+    // We explicitly list the columns to avoid SQL injection
+    const validColumns = [
+      'adm_no', 'name', 'dob', 'address', 'father_name', 'phone', 
+      'email', 'batch_year', 'standard', 'assigned_usthad_id', 
+      'photo_url', 'status'
+    ];
+    
+    const values: any[] = [];
+    const placeholders: string[] = [];
+    const insertCols: string[] = [];
     
     let paramCount = 1;
-    for (const col of columns) {
-      if (studentData[col] !== undefined) {
+    for (const col of validColumns) {
+      // Use standard Object mapping, allowing nulls but excluding undefined mapping
+      if (mappedStudent[col as keyof typeof mappedStudent] !== undefined) {
         insertCols.push(col);
-        values.push(studentData[col]);
+        values.push(mappedStudent[col as keyof typeof mappedStudent]);
         placeholders.push(`$${paramCount}`);
         paramCount++;
       }

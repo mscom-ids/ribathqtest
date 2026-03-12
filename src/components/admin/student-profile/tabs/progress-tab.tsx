@@ -101,11 +101,11 @@ export function ProgressTab({ student }: { student: Student }) {
                     date: format(new Date(log.entry_date), 'dd/MM'),
                     rating: log.rating,
                     mode: log.mode,
-                    details: log.mode === 'New Verses'
-                        ? `${getArabic(log.surah_name)} ${log.start_v ? `(${log.start_v}-${log.end_v})` : log.verses ? `(${log.verses})` : ''}`
-                        : log.mode === 'Recent Revision'
-                            ? `${getArabic(log.surah_name)}`
-                            : `Juz ${log.juz} (Pg ${log.page_start}-${log.page_end})`
+                                        details: log.mode === 'New Verses' || log.mode === 'Recent Revision'
+                        ? (log.surah_name 
+                            ? `${getArabic(log.surah_name)} ${log.start_v ? `(${log.start_v}-${log.end_v})` : ''}` 
+                            : `Pages ${log.start_page}-${log.end_page}`)
+                        : `Juz ${log.juz_number || '?'} (${log.juz_portion || 'Full'})`
                 }))
                 setData(processed)
 
@@ -128,15 +128,20 @@ export function ProgressTab({ student }: { student: Student }) {
                 currentMonthLogs.forEach((log: any) => {
                     const pages = (log.page_end - log.page_start + 1) || 0
 
-                    if (log.mode === 'New Verses') {
+                    if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
                         const surahId = getSurahId(log.surah_name || "");
+                        let calculated = 0;
                         if (surahId && log.start_v && log.end_v) {
-                            hifzPages += calculatePages(surahId, log.start_v, surahId, log.end_v);
+                            calculated = calculatePages(surahId, log.start_v, surahId, log.end_v);
                         } else {
-                            hifzPages += (log.page_start === log.page_end) ? 0.5 : pages;
+                            calculated = (log.start_page === log.end_page) ? 0.5 : pages;
                         }
-                    } else if (log.mode === 'Recent Revision') {
-                        recentRevisionPages += pages
+
+                        if (log.mode === 'New Verses') {
+                            hifzPages += calculated;
+                        } else {
+                            recentRevisionPages += calculated;
+                        }
                     } else if (log.mode === 'Juz Revision') {
                         juzRevisionPages += pages
                     }

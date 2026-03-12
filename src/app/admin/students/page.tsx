@@ -85,6 +85,7 @@ export default function StudentsPage() {
 
                 const merged = (studentsData as any).map((s: any) => ({
                     ...s,
+                    dob: s.dob || s.date_of_birth,
                     progress: 0 // Will populate after parallel request if needed
                 }))
                 

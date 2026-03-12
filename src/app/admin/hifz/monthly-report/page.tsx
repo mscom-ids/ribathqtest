@@ -4,6 +4,9 @@ import { useEffect, useState } from "react"
 import { format, startOfMonth, endOfMonth, isSameMonth } from "date-fns"
 import { Search, Share2, Loader2, FileText, Download, Calendar, Edit2, Save } from "lucide-react"
 
+import { getSurahId } from "@/lib/hifz-progress"
+import { calculatePages } from "@/lib/quran-pages"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -161,14 +164,24 @@ export default function MonthlyReportsPage() {
 
                 studentLogs.forEach(log => {
                     const pages = (log.page_end - log.page_start + 1) || 0
-                    if (log.mode === 'New Verses') {
-                        hifzPages += (log.page_start === log.page_end) ? 0.5 : pages
-                        if (log.juz > maxJuzInMonth) maxJuzInMonth = log.juz
-                    } else if (log.mode === 'Recent Revision') {
-                        recentPages += pages
+                    if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
+                        const surahId = getSurahId(log.surah_name || "");
+                        let calculated = 0;
+                        if (surahId && log.start_v && log.end_v) {
+                            calculated = calculatePages(surahId, log.start_v, surahId, log.end_v);
+                        } else {
+                            calculated = (log.start_page === log.end_page) ? 0.5 : pages;
+                        }
+
+                        if (log.mode === 'New Verses') {
+                            hifzPages += calculated;
+                            if (log.juz_number > maxJuzInMonth) maxJuzInMonth = log.juz_number;
+                        } else {
+                            recentPages += calculated;
+                        }
                     } else if (log.mode === 'Juz Revision') {
                         juzRevPages += pages
-                        if (log.juz > maxJuzInMonth) maxJuzInMonth = log.juz
+                        if (log.juz_number > maxJuzInMonth) maxJuzInMonth = log.juz_number;
                     }
 
                     if (log.rating) {

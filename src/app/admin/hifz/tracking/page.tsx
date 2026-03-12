@@ -117,10 +117,12 @@ export default function HifzTrackingPage() {
 
     // Format log display
     const formatLogDisplay = (log: HifzLog) => {
-        if (log.mode === "New Verses") {
-            return `${log.surah_name} ${log.start_v}-${log.end_v}`
-        } else if (log.mode === "Recent Revision") {
-            return `Pages ${log.start_page}-${log.end_page}`
+        if (log.mode === "New Verses" || log.mode === "Recent Revision") {
+            if (log.surah_name) {
+                return `${log.surah_name} ${log.start_v}-${log.end_v}`
+            } else if (log.start_page) {
+                return `Pages ${log.start_page}-${log.end_page}`
+            }
         } else if (log.mode === "Juz Revision") {
             return `Juz ${log.juz_number} (${log.juz_portion})`
         }
@@ -263,29 +265,51 @@ export default function HifzTrackingPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {logs.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {logs.map((log) => (
-                                                                    <div key={log.id} className="flex items-center gap-1 group bg-slate-50 dark:bg-slate-900 border rounded pr-1 shadow-sm">
-                                                                        <Link href={`/staff/entry/${log.student_id}?log_id=${log.id}&returnTo=/admin/hifz/tracking`} className="flex items-center gap-1 pl-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-l transition-colors">
-                                                                            <span className={cn("px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider", getModeColor(log.mode))}>
-                                                                                {log.mode === "New Verses" ? "New" : log.mode === "Recent Revision" ? "Recent" : "Juz"}
-                                                                            </span>
-                                                                            <span className="text-xs text-muted-foreground font-medium pr-1 hover:text-foreground hover:underline decoration-dotted underline-offset-2">
-                                                                                {formatLogDisplay(log)}
-                                                                            </span>
-                                                                        </Link>
-                                                                        <button
-                                                                            onClick={() => handleDeleteLog(log.id)}
-                                                                            className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                                                                            title="Delete Entry"
-                                                                        >
-                                                                            <X className="w-3 h-3" />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
+                                                        {logs.length > 0 ? (() => {
+                                                            const newVerses = logs.filter(l => l.mode === "New Verses");
+                                                            const recentRevisions = logs.filter(l => l.mode === "Recent Revision");
+                                                            const juzRevisions = logs.filter(l => l.mode === "Juz Revision");
+
+                                                            const renderLogBadge = (log: HifzLog) => (
+                                                                <div key={log.id} className="flex items-center gap-1 group bg-slate-50 dark:bg-slate-900 border rounded pr-1 shadow-sm w-fit">
+                                                                    <Link href={`/staff/entry/${log.student_id}?log_id=${log.id}&returnTo=/admin/hifz/tracking`} className="flex items-center gap-1 pl-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-l transition-colors">
+                                                                        <span className={cn("px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider", getModeColor(log.mode))}>
+                                                                            {log.mode === "New Verses" ? "New" : log.mode === "Recent Revision" ? "Recent" : "Juz"}
+                                                                        </span>
+                                                                        <span className="text-xs text-muted-foreground font-medium pr-1 hover:text-foreground hover:underline decoration-dotted underline-offset-2">
+                                                                            {formatLogDisplay(log)}
+                                                                        </span>
+                                                                    </Link>
+                                                                    <button
+                                                                        onClick={() => handleDeleteLog(log.id)}
+                                                                        className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                                                                        title="Delete Entry"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            );
+
+                                                            return (
+                                                                <div className="flex gap-3 items-start">
+                                                                    {newVerses.length > 0 && (
+                                                                        <div className="flex flex-col gap-1.5">
+                                                                            {newVerses.map(renderLogBadge)}
+                                                                        </div>
+                                                                    )}
+                                                                    {recentRevisions.length > 0 && (
+                                                                        <div className="flex flex-col gap-1.5">
+                                                                            {recentRevisions.map(renderLogBadge)}
+                                                                        </div>
+                                                                    )}
+                                                                    {juzRevisions.length > 0 && (
+                                                                        <div className="flex flex-col gap-1.5">
+                                                                            {juzRevisions.map(renderLogBadge)}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })() : (
                                                             <span className="text-gray-400">No entry</span>
                                                         )}
                                                     </TableCell>

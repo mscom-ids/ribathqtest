@@ -43,6 +43,7 @@ type Staff = {
     role: StaffRole
     phone: string | null
     profile_id: string | null
+    password_hash?: string | null
     is_active?: boolean
 }
 
@@ -371,7 +372,7 @@ export default function StaffPage() {
                                                         <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 mt-1">
                                                             Archived
                                                         </Badge>
-                                                    ) : !s.profile_id && (
+                                                    ) : !s.password_hash && (
                                                         <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
                                                             No Login
                                                         </Badge>
@@ -407,7 +408,7 @@ export default function StaffPage() {
                                             <div className="flex items-center justify-end gap-2">
                                                 {activeTab === "active" ? (
                                                     <>
-                                                        {!s.profile_id && (
+                                                        {!s.password_hash && (
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"

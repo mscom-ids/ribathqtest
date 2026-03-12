@@ -23,7 +23,7 @@ export const getNextStudentId = async (req: Request, res: Response) => {
 export const getStaff = async (req: Request, res: Response) => {
     try {
         const result = await db.query(
-            `SELECT id, name FROM profiles WHERE role IN ('staff', 'vice_principal') ORDER BY name`
+            `SELECT id, name FROM staff WHERE role IN ('staff', 'usthad', 'vice_principal', 'teacher') AND is_active = true ORDER BY name`
         );
         res.json({ success: true, staff: result.rows });
     } catch (err) {

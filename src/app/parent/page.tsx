@@ -162,9 +162,10 @@ export default function ParentDashboard() {
                                                     <span className="text-xs text-muted-foreground">{log.entry_date}</span>
                                                 </div>
                                                 <p className="text-sm mt-1">
-                                                    {log.mode === 'New Verses' ? `Surah ${log.surah_name}: ${log.start_v} - ${log.end_v}` :
-                                                        log.mode === 'Juz Revision' ? log.juz_part :
-                                                            'Revision Session'}
+                                                    {log.mode === 'New Verses' || log.mode === 'Recent Revision' 
+                                                        ? (log.surah_name ? `Surah ${log.surah_name}: ${log.start_v} - ${log.end_v}` : `Pages ${log.start_page}-${log.end_page}`)
+                                                        : log.mode === 'Juz Revision' ? `Juz ${log.juz_number || '?'} ${(log as any).juz_portion || log.juz_part || ''}` 
+                                                        : 'Revision Session'}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-1 capitalize">{log.session_type}</p>
                                             </div>

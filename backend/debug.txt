@@ -1,0 +1,18 @@
+Line 66: let paramCount = 1;
+Line 69: query += ` AND \${standardColumn} = ${paramCount}`;
+Line 71: paramCount++;
+Line 73: const placeholders = allowed_standards.map((_, i) => `${paramCount + i}`).join(',');
+Line 94: let paramCount = 1;
+Line 97: query += ` AND date = $${paramCount}`;
+Line 99: paramCount++;
+Line 101: query += ` AND date >= $${paramCount} AND date <= $${paramCount + 1}`;
+Line 103: paramCount += 2;
+Line 109: query += ` AND session_id = $${paramCount}`;
+Line 111: paramCount++;
+Line 115: query += ` AND department = $${paramCount}`;
+Line 117: paramCount++;
+Line 123: const placeholders = ids.map((_, i) => `$${paramCount + i}`).join(',');
+Line 126: paramCount += ids.length;
+Line 155: let paramCount = 1;
+Line 167: placeholders.push(`(${paramCount}, $\${paramCount+1}, $\${paramCount+2}, $\${paramCount+3}, $\${paramCount+4}, $\${paramCount+5})`);
+Line 168: paramCount += 6;

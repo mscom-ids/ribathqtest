@@ -126,7 +126,7 @@ export default function StaffAttendancePage() {
                 if (sessionsData) setSessions(sessionsData as SessionInfo[])
 
                 // Load assigned students
-                const { data: { students: studentsData } } = await api.get(`/staff/students?staff_id=${staff.id}`);
+                const { data: { students: studentsData } } = await api.get('/staff/me/students');
 
                 if (studentsData) setStudents(studentsData)
 

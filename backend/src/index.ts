@@ -22,7 +22,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static files for avatars
-app.use('/public', express.static(path.join(__dirname, '../../public')));
+app.use('/public', express.static(path.join(__dirname, '../public')));
 
 // Routes
 app.use('/api/auth', authRoutes);

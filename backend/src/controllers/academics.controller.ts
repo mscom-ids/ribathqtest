@@ -52,6 +52,7 @@ export const getCalendarRange = async (req: Request, res: Response) => {
 };
 
 export const getStudentsForAttendance = async (req: Request, res: Response) => {
+    let query = '';
     try {
         const { department, standard, allowed_standards } = req.body;
         // The frontend passes department name like 'Hifz' or 'School' or 'Madrassa'
@@ -59,29 +60,33 @@ export const getStudentsForAttendance = async (req: Request, res: Response) => {
         if (!department || typeof department !== 'string') {
             return res.status(400).json({ success: false, error: 'Department is required' });
         }
-        const standardColumn = `\${department.toLowerCase()}_standard`;
+        const standardColumn = `${department.toLowerCase()}_standard`;
         
-        let query = `SELECT adm_no, name, \${standardColumn} as standard FROM students WHERE status = 'active' AND \${standardColumn} IS NOT NULL`;
+        query = `SELECT adm_no, name, ${standardColumn} as standard FROM students WHERE status = 'active' AND ${standardColumn} IS NOT NULL`;
         const params: any[] = [];
         let paramCount = 1;
 
         if (standard && standard !== 'All') {
-            query += ` AND \${standardColumn} = $\${paramCount}`;
+            query += ` AND ${standardColumn} = $${paramCount}`;
             params.push(standard);
             paramCount++;
         } else if (allowed_standards && Array.isArray(allowed_standards) && allowed_standards.length > 0) {
-            const placeholders = allowed_standards.map((_, i) => `$\${paramCount + i}`).join(',');
-            query += ` AND \${standardColumn} IN (\${placeholders})`;
+            const placeholders = allowed_standards.map((_, i) => `$${paramCount + i}`).join(',');
+            query += ` AND ${standardColumn} IN (${placeholders})`;
             params.push(...allowed_standards);
         }
         
         query += ' ORDER BY name';
+        
+        console.log('QUERY IS:', query);
+        console.log('PARAMS ARE:', params);
 
         const result = await db.query(query, params);
         res.json({ success: true, students: result.rows });
-    } catch (err) {
+    } catch (err: any) {
         console.error('Error fetching students for attendance:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
+        // Include `query` here but `query` is out of scope if declared inside `try`! Wait, `query` is declared inside `try` block so it is available in catch.
+        res.status(500).json({ success: false, error: err.message, query });
     }
 };
 
@@ -164,7 +169,7 @@ export const upsertAttendance = async (req: Request, res: Response) => {
             const recorded_by = row.recorded_by || recorderId;
             
             values.push(student_id, date, session_id, status, recorded_by, department);
-            placeholders.push(`($\${paramCount}, $\${paramCount+1}, $\${paramCount+2}, $\${paramCount+3}, $\${paramCount+4}, $\${paramCount+5})`);
+            placeholders.push(`(${paramCount}, ${paramCount+1}, ${paramCount+2}, ${paramCount+3}, ${paramCount+4}, ${paramCount+5})`);
             paramCount += 6;
         }
         

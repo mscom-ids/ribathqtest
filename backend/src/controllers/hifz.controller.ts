@@ -9,8 +9,8 @@ export const getHifzStudents = async (req: Request, res: Response) => {
                 s.name, 
                 s.standard,
                 s.hifz_standard, 
-                s.current_surah, 
-                s.current_juz,
+                (SELECT surah_name FROM hifz_logs WHERE student_id = s.adm_no AND mode = 'New Verses' ORDER BY entry_date DESC LIMIT 1) as current_surah, 
+                (SELECT juz_number FROM hifz_logs WHERE student_id = s.adm_no AND mode = 'Juz Revision' ORDER BY entry_date DESC LIMIT 1) as current_juz,
                 st.name as usthad_name,
                 st.phone as usthad_phone
              FROM students s
@@ -20,9 +20,9 @@ export const getHifzStudents = async (req: Request, res: Response) => {
             ['active']
         );
         res.json({ success: true, students: result.rows });
-    } catch (err) {
+    } catch (err: any) {
         console.error('Error fetching hifz students:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 

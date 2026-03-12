@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { type Student } from "@/app/admin/students/page"
@@ -9,7 +10,7 @@ import { JuzDetailsDialog } from "./juz-details-dialog"
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, RotateCcw, CheckCircle, UserX, ChevronDown, UserCog } from "lucide-react"
+import { MoreHorizontal, RotateCcw, CheckCircle, UserX, ChevronDown, UserCog, Pencil } from "lucide-react"
 
 interface ProfileHeaderProps {
     student: Student
@@ -165,6 +166,15 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
                                 </span>
                             )}
 
+                            {isAdmin && (
+                                <Link href={`/admin/students/${student.adm_no}`}>
+                                    <Button variant="outline" size="sm" className="h-6 px-3 gap-1.5 ml-1 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white rounded-full">
+                                        <Pencil className="h-3 w-3" />
+                                        <span className="text-[10px] uppercase tracking-wider font-bold">Edit</span>
+                                    </Button>
+                                </Link>
+                            )}
+
                             {!loading && (
                                 <JuzDetailsDialog
                                     completedJuz={completedJuz}
@@ -212,7 +222,9 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
                             <span className="text-slate-500">Age:</span>
                             <span className="text-slate-200 font-medium">
                                 {/* Accurate age calculation */}
-                                {differenceInYears(new Date(), new Date(student.dob))} Years
+                                {student.dob && !isNaN(new Date(student.dob).getTime()) 
+                                    ? `${differenceInYears(new Date(), new Date(student.dob))} Years` 
+                                    : "N/A"}
                             </span>
                         </div>
                     </div>

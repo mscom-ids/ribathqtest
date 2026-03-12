@@ -89,8 +89,10 @@ export default function EditStudentPage() {
 
             if (res.data.success) {
                 // Return path should be accessible relative to the domain (e.g. /public/avatars/avatar-123.jpg)
-                // We'll construct full URL if backend doesn't, but relative might work based on next.config
-                setPhotoUrl(process.env.NEXT_PUBLIC_API_URL + res.data.filePath)
+                // We construct the full URL by stripping /api from the NEXT_PUBLIC_API_URL
+                const backendBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+                const fullUrl = backendBase + res.data.filePath;
+                setPhotoUrl(fullUrl)
             } else {
                 throw new Error(res.data.error || "Upload failed")
             }
@@ -141,7 +143,7 @@ export default function EditStudentPage() {
                     const student = studentRes.data.student
                     form.reset({
                         name: student.name,
-                        dob: student.dob || student.date_of_birth, // handle snake_case mapped fields
+                        dob: (student.dob || student.date_of_birth) ? new Date(student.dob || student.date_of_birth).toISOString().split('T')[0] : "",
                         address: student.address_line || student.address || "",
                         father_name: student.father_name || student.parent_name || "",
                         email: student.email || "",
@@ -205,6 +207,8 @@ export default function EditStudentPage() {
         } catch (error: any) {
             console.error("Update Student Error:", error)
             alert(`Failed to update student: ${error.message}`)
+        } finally {
+            setLoading(false)
         }
     }
 

@@ -89,9 +89,33 @@ export default function CreateStudentPage() {
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
 
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        // Disabled for now since we moved away from Supabase Storage BaaS.
-        // Requires a custom Express photo upload endpoint with multer.
-        alert("Photo uploading is currently disabled while migrating off Supabase BaaS. This will be re-enabled soon via a custom API endpoint.");
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        setPhotoUploading(true);
+
+        const formData = new FormData();
+        formData.append('avatar', file);
+
+        try {
+            const res = await api.post('/upload/avatar', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            if (res.data.success) {
+                // The backend returns a relative url like `/public/avatars/avatar-xxx.jpg`
+                // Build the full absolute path so the NextJS image strictly loads from the active backend server
+                const backendBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+                const fullUrl = backendBase + res.data.filePath;
+                setPhotoUrl(fullUrl);
+            } else {
+                alert("Failed to upload photo: " + res.data.error);
+            }
+        } catch (error: any) {
+            console.error("Photo upload error:", error);
+            alert("Upload failed: " + (error.response?.data?.error || error.message));
+        } finally {
+            setPhotoUploading(false);
+        }
     }
 
     async function onSubmit(values: z.infer<typeof formSchema>) {

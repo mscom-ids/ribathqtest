@@ -54,7 +54,7 @@ const formSchema = z.object({
     // Common
     rating: optionalNumMin1,
 }).superRefine((data, ctx) => {
-    if (data.mode === "New Verses") {
+    if (data.mode === "New Verses" || data.mode === "Recent Revision") {
         data.new_verses.forEach((entry, index) => {
             if (!entry.surah_id) {
                 ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Surah is required", path: ["new_verses", index, "surah_id"] })
@@ -75,13 +75,8 @@ const formSchema = z.object({
             if (!entry.start_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "start_v"] })
             if (!entry.end_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "end_v"] })
         })
-    } else if (data.mode === "Recent Revision") {
-        if (!data.start_page) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Start page is required", path: ["start_page"] })
-        if (!data.end_page) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End page is required", path: ["end_page"] })
-        if (data.start_page && data.end_page && data.start_page > data.end_page) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End page must be >= start page", path: ["end_page"] })
-        }
-    } else if (data.mode === "Juz Revision") {
+
+    } else {
         if (!data.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_number"] })
         if (!data.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_portion"] })
     }
@@ -147,7 +142,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     const mode = form.getValues("mode")
 
                     const res = await api.get('/hifz/logs', {
-                        params: { student_id: studentId, entry_date: date, session_type: session, mode, limit: 1 }
+                        params: { student_id: studentId, date: date, session_type: session, mode, limit: 1 }
                     })
                     if (res.data.success && res.data.logs?.length > 0) existingLog = res.data.logs[0]
                 }
@@ -162,7 +157,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 }
 
                 form.reset({
-                    date: existingLog.entry_date,
+                    date: existingLog.entry_date ? format(new Date(existingLog.entry_date), 'yyyy-MM-dd') : format(today, 'yyyy-MM-dd'),
                     session: existingLog.session_type as any,
                     mode: existingLog.mode as any,
                     new_verses: [{
@@ -204,7 +199,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             try {
                 const res = await api.get('/hifz/logs', {
-                    params: { student_id: studentId, entry_date: watchedDate, session_type: watchedSession, mode: watchedMode, limit: 1 }
+                    params: { student_id: studentId, date: watchedDate, session_type: watchedSession, mode: watchedMode, limit: 1 }
                 })
                 const data = res.data.success && res.data.logs?.length > 0 ? res.data.logs[0] : null
 
@@ -216,7 +211,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         surahId = matched?.id;
                     }
                     form.reset({
-                        date: data.entry_date,
+                        date: data.entry_date ? format(new Date(data.entry_date), 'yyyy-MM-dd') : watchedDate,
                         session: data.session_type as any,
                         mode: data.mode as any,
                         new_verses: [{ surah_id: surahId, start_v: data.start_v || undefined, end_v: data.end_v || undefined }],
@@ -261,7 +256,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         }
 
         try {
-            if (values.mode === "New Verses") {
+            if (values.mode === "New Verses" || values.mode === "Recent Revision") {
                 const recordsToInsert = values.new_verses.map(v => ({
                     ...commonData,
                     surah_name: SURAH_LIST.find(s => s.id === v.surah_id)?.name || null,
@@ -282,10 +277,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 const singleData = {
                     ...commonData,
                     surah_name: null, start_v: null, end_v: null,
-                    start_page: values.mode === "Recent Revision" ? values.start_page : null,
-                    end_page: values.mode === "Recent Revision" ? values.end_page : null,
-                    juz_number: values.mode === "Juz Revision" ? values.juz_number : null,
-                    juz_portion: values.mode === "Juz Revision" ? values.juz_portion : null,
+                    start_page: null,
+                    end_page: null,
+                    juz_number: values.juz_number,
+                    juz_portion: values.juz_portion,
                 }
                 if (logId) {
                     await api.put(`/hifz/logs/${logId}`, singleData)
@@ -361,7 +356,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                         <FormItem>
                                             <FormLabel className="text-xs text-gray-400">Date</FormLabel>
                                             <FormControl>
-                                                <Input type="date" {...field} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
+                                                <Input type="date" {...field} className="bg-[#1e1e1e] border-gray-700" />
                                             </FormControl>
                                         </FormItem>
                                     )}
@@ -411,7 +406,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                             </FormControl>
                                             <SelectContent>
                                                 <SelectItem value="New Verses">New Verses</SelectItem>
-                                                <SelectItem value="Recent Revision">Recent Revision (Sabaq Para)</SelectItem>
+                                                <SelectItem value="Recent Revision">Recent Revision</SelectItem>
                                                 <SelectItem value="Juz Revision">Juz Revision (Amak)</SelectItem>
                                             </SelectContent>
                                         </Select>
@@ -420,7 +415,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                             />
 
                             {/* New Verses Mode - Multiple Surahs */}
-                            {form.watch("mode") === "New Verses" && (
+                            {(form.watch("mode") === "New Verses" || form.watch("mode") === "Recent Revision") && (
                                 <div className="space-y-4">
                                     {versesFields.map((field, index) => (
                                         <div key={field.id} className="p-4 border-l-2 border-emerald-500 bg-emerald-950/10 rounded-r-lg relative group">
@@ -507,40 +502,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                             <PlusCircle size={16} className="mr-2" /> Add another Surah
                                         </Button>
                                     )}
-                                </div>
-                            )}
-
-                            {/* Recent Revision Mode - Page Based */}
-                            {form.watch("mode") === "Recent Revision" && (
-                                <div className="space-y-4 p-4 border-l-2 border-blue-500 bg-blue-950/10 rounded-r-lg">
-                                    <div className="flex gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="start_page"
-                                            render={({ field }) => (
-                                                <FormItem className="flex-1">
-                                                    <FormLabel className="text-xs text-gray-400">Start Page</FormLabel>
-                                                    <FormControl>
-                                                        <Input type="number" placeholder="1" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="end_page"
-                                            render={({ field }) => (
-                                                <FormItem className="flex-1">
-                                                    <FormLabel className="text-xs text-gray-400">End Page</FormLabel>
-                                                    <FormControl>
-                                                        <Input type="number" placeholder="5" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700" />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
                                 </div>
                             )}
 
@@ -635,16 +596,23 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         </CardContent>
                     </Card>
 
-                    <div className="flex gap-4">
-                        {logId && (
-                            <Button type="button" variant="destructive" className="h-12 flex-1 max-w-[120px]" onClick={handleDelete} disabled={loading || isOldDate}>
-                                Delete
-                            </Button>
+                    <div className="flex flex-col gap-4">
+                        {isOldDate && (
+                            <p className="text-red-400 text-sm text-center font-medium bg-red-400/10 py-2 rounded-lg border border-red-400/20">
+                                Notice: Data entry is locked for dates older than 7 days.
+                            </p>
                         )}
-                        <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-12 font-bold transition-all shadow-lg shadow-emerald-900/40" disabled={loading || isOldDate}>
-                            {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                            {logId ? "Update Record" : "Save Progress"}
-                        </Button>
+                        <div className="flex gap-4">
+                            {logId && (
+                                <Button type="button" variant="destructive" className="h-12 flex-1 max-w-[120px]" onClick={handleDelete} disabled={loading || isOldDate}>
+                                    Delete
+                                </Button>
+                            )}
+                            <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-12 font-bold transition-all shadow-lg shadow-emerald-900/40" disabled={loading || isOldDate}>
+                                {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                                {logId ? "Update Record" : "Save Progress"}
+                            </Button>
+                        </div>
                     </div>
                 </form>
             </Form>

@@ -83,35 +83,9 @@ export const createStaffLogin = async (req: Request, res: Response) => {
             // 1. Get staff info
             const staffRes = await client.query('SELECT name, email, role, phone FROM staff WHERE id = $1', [id]);
             if (staffRes.rows.length === 0) throw new Error("Staff not found");
-            const staff = staffRes.rows[0];
 
-            // 2. Insert into users / profiles (assuming users table for JWT auth)
-            // If users table is not ready, we will store auth data directly in profiles. 
-            // In a real migration, we'd have a users table.
-            let userId;
-            try {
-                const userInsert = await client.query(
-                    'INSERT INTO users (email, password_hash, full_name, role, phone_number) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-                    [staff.email, hashedPassword, staff.name, staff.role, staff.phone]
-                );
-                userId = userInsert.rows[0].id;
-            } catch (err: any) {
-                // Ignore if users table doesn't exist yet, we will fallback to updating 'profiles' if needed.
-                // But let's assume 'users' exists because auth.controller.ts uses it!
-                if (err.code === '42P01') { 
-                    // users table does not exist, use profiles
-                    const profileInsert = await client.query(
-                        'INSERT INTO profiles (id, full_name, role, password_hash) VALUES (uuid_generate_v4(), $1, $2, $3) RETURNING id',
-                        [staff.name, staff.role, hashedPassword]
-                    );
-                    userId = profileInsert.rows[0].id;
-                } else {
-                    throw err;
-                }
-            }
-
-            // 3. Link staff to user
-            await client.query('UPDATE staff SET profile_id = $1 WHERE id = $2', [userId, id]);
+            // Update the staff record with the new password
+            await client.query('UPDATE staff SET password_hash = $1 WHERE id = $2', [hashedPassword, id]);
 
             await client.query('COMMIT');
             res.json({ success: true });
@@ -185,55 +159,25 @@ export const updateStaffProfile = async (req: Request, res: Response) => {
 };
 
 export const createStaff = async (req: Request, res: Response) => {
-    const client = await db.getClient();
     try {
         const { name, email, role, phone, password } = req.body;
-        await client.query('BEGIN');
         
-        // 1. Create Staff record
-        const staffInsert = await client.query(
-            'INSERT INTO staff (name, email, role, phone) VALUES ($1, $2, $3, $4) RETURNING id',
-            [name, email, role, phone]
-        );
-        const staffId = staffInsert.rows[0].id;
-        
-        // 2. Create Login logic (similar to createStaffLogin)
+        let hashedPassword = null;
         if (password) {
             const bcrypt = require('bcrypt');
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, salt);
-            
-            let userId;
-            try {
-                const userInsert = await client.query(
-                    'INSERT INTO users (email, password_hash, full_name, role, phone_number) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-                    [email, hashedPassword, name, role, phone]
-                );
-                userId = userInsert.rows[0].id;
-            } catch (err: any) {
-                if (err.code === '42P01') {
-                    const profileInsert = await client.query(
-                        'INSERT INTO profiles (id, full_name, role, password_hash) VALUES (uuid_generate_v4(), $1, $2, $3) RETURNING id',
-                        [name, role, hashedPassword]
-                    );
-                    userId = profileInsert.rows[0].id;
-                } else {
-                    throw err;
-                }
-            }
-            
-            // 3. Link profile id back to staff
-            await client.query('UPDATE staff SET profile_id = $1 WHERE id = $2', [userId, staffId]);
+            hashedPassword = await bcrypt.hash(password, salt);
         }
-
-        await client.query('COMMIT');
-        res.json({ success: true, staffId });
+        
+        const staffInsert = await db.query(
+            'INSERT INTO staff (name, email, role, phone, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [name, email, role, phone, hashedPassword]
+        );
+        
+        res.json({ success: true, staffId: staffInsert.rows[0].id });
     } catch (err: any) {
-        await client.query('ROLLBACK');
         console.error("Failed to create staff:", err);
         res.status(500).json({ success: false, error: err.message });
-    } finally {
-        client.release();
     }
 };
 
