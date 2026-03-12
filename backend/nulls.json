@@ -1,0 +1,78 @@
+[
+  {
+    "column_name": "assigned_usthad_id",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "created_at",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "dob",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "custom_monthly_fee",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "father_name",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mother_name",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "phone",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "email",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_no",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "batch_year",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "standard",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "hifz_standard",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_standard",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "madrassa_standard",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "status",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aadhar",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "name",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "photo_url",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "address",
+    "is_nullable": "YES"
+  }
+]

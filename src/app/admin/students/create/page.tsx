@@ -36,7 +36,7 @@ const formSchema = z.object({
     address: z.string().optional(),
     father_name: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
-    batch_year: z.string(),
+    batch_year: z.string().optional().or(z.literal('')),
     standard: z.string(),
     assigned_usthad_id: z.string().optional(),
 })
@@ -80,7 +80,7 @@ export default function CreateStudentPage() {
             address: "",
             father_name: "",
             email: "",
-            batch_year: new Date().getFullYear().toString(),
+            batch_year: "",
             standard: "Hifz",
         },
     })
@@ -132,7 +132,7 @@ export default function CreateStudentPage() {
                 address: values.address || null,
                 parent_name: values.father_name || null,
                 email: values.email || null,
-                batch_year: values.batch_year,
+                batch_year: values.batch_year || null,
                 class: values.standard, 
                 assigned_usthad_id: values.assigned_usthad_id || null,
                 photo_url: photoUrl,
