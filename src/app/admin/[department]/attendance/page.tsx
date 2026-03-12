@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Check, X, Search, Users, CalendarCheck, Clock } from "lucide-react"
+import { Calendar as CalendarIcon, Check, X, Users, CalendarCheck, Info } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -28,24 +28,24 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-type Student = {
-    adm_no: string
-    name: string
-    standard: string
-}
-
-type Session = {
+type ClassEvent = {
     id: string
-    name: string
+    class_id: string
+    class_name: string
+    type: string
     start_time: string
     end_time: string
-    type: "Hifz" | "School" | "Madrassa"
-    days_of_week?: number[]
-    standards?: string[]
+    status: string
+}
+
+type EnrolledStudent = {
+    student_id: string
+    student_name: string
+    photo_url: string
 }
 
 export default function AttendancePage({ params }: { params: Promise<{ department: string }> }) {
@@ -53,191 +53,88 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
     const departmentName = department.charAt(0).toUpperCase() + department.slice(1);
 
     const [date, setDate] = useState<Date>(new Date())
-    const [selectedStandard, setSelectedStandard] = useState<string>("All")
-    const [selectedSessionId, setSelectedSessionId] = useState<string>("")
+    const [events, setEvents] = useState<ClassEvent[]>([])
+    const [selectedEventId, setSelectedEventId] = useState<string>("")
+    const [selectedEventObj, setSelectedEventObj] = useState<ClassEvent | null>(null)
 
-    const [students, setStudents] = useState<Student[]>([])
-    const [allSessions, setAllSessions] = useState<Session[]>([])
-    const [filteredSessions, setFilteredSessions] = useState<Session[]>([])
+    const [students, setStudents] = useState<EnrolledStudent[]>([])
     const [attendance, setAttendance] = useState<Record<string, "Present" | "Absent" | "Leave">>({})
 
-    const [loading, setLoading] = useState(false)
+    const [loadingEvents, setLoadingEvents] = useState(false)
+    const [loadingStudents, setLoadingStudents] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [policy, setPolicy] = useState<any>(null)
 
+    // Load available events for the selected date and department
     useEffect(() => {
-        async function loadSessions() {
-            setLoading(true)
-            try {
-                const res = await api.get(`/academics/sessions?department=${departmentName}`)
-                if (res.data.success) {
-                    setAllSessions(res.data.sessions)
-                }
-            } catch (err) { console.error(err) }
-            setLoading(false)
-        }
-        loadSessions()
-    }, [departmentName])
-
-    useEffect(() => {
-        async function loadPolicy() {
+        async function loadEvents() {
             if (!date) return
+            setLoadingEvents(true)
             const dateStr = format(date, "yyyy-MM-dd")
             try {
-                const res = await api.get(`/academics/calendar/${dateStr}`)
-                setPolicy(res.data.calendar || null)
-            } catch (err) { console.error(err) }
-        }
-        loadPolicy()
-    }, [date])
-
-    useEffect(() => {
-        if (!date || allSessions.length === 0) {
-            setFilteredSessions([])
-            return
-        }
-
-        if (policy?.is_holiday) {
-            setFilteredSessions([])
-            setSelectedSessionId("")
-            return
-        }
-
-        const dayIndex = policy?.effective_day_of_week ?? date.getDay()
-
-        let relevant = allSessions.filter(s => {
-            const dayMatch = !s.days_of_week || s.days_of_week.length === 0 || s.days_of_week.includes(dayIndex)
-
-            let typeMatch = true
-            let allowedTypes: string[] | null = null
-
-            if (policy?.allowed_session_types && policy.allowed_session_types.length > 0) {
-                allowedTypes = policy.allowed_session_types
-            } else {
-                // Infer allowed types based on implicit day mode
-                const dayOfWeek = date.getDay()
-                let mode = "Normal"
-                if (dayOfWeek === 5) mode = "Friday"
-                if (dayOfWeek === 0 || dayOfWeek === 6) mode = "Weekday"
-
-                if (mode === "Friday") allowedTypes = ["School"]
-                else if (mode === "Weekday") allowedTypes = ["Hifz", "Madrassa"]
-                else if (mode === "Normal") allowedTypes = ["Hifz", "School"]
-            }
-
-            if (allowedTypes && allowedTypes.length > 0) {
-                typeMatch = allowedTypes.includes(s.type)
-            }
-
-            let stdMatch = true
-            if (policy?.allowed_standards && policy.allowed_standards.length > 0 && s.standards && s.standards.length > 0) {
-                const hasOverlap = s.standards.some((st: string) => policy.allowed_standards.includes(st))
-                if (!hasOverlap) stdMatch = false
-            }
-
-            let uiStdMatch = true
-            if (selectedStandard !== "All") {
-                if (s.standards && s.standards.length > 0) {
-                    uiStdMatch = s.standards.includes(selectedStandard)
-                } else {
-                    // If session has no specific standards, it applies to all in that department
-                    uiStdMatch = true
-                }
-            }
-
-            // Filter out cancelled sessions
-            const cancelledSessions = policy?.cancelled_sessions as Record<string, any> | undefined
-            if (cancelledSessions && cancelledSessions[s.id]) {
-                return false
-            }
-
-            return dayMatch && typeMatch && stdMatch && uiStdMatch
-        })
-
-        setFilteredSessions(relevant)
-
-        if (relevant.length > 0) {
-            if (!relevant.find(s => s.id === selectedSessionId)) {
-                setSelectedSessionId(relevant[0].id)
-            }
-        } else {
-            setSelectedSessionId("")
-        }
-    }, [date, allSessions, selectedStandard, policy, selectedSessionId])
-
-    useEffect(() => {
-        async function loadStudents() {
-            if (policy?.is_holiday) {
-                setStudents([])
-                return
-            }
-
-            // Check if all relevant standards are on leave
-            const leaveStds = (policy as any)?.leave_standards as string[] | undefined
-
-            const currentSession = allSessions.find(s => s.id === selectedSessionId)
-
-            let allowedStandardsToSend: string[] | undefined = undefined
-
-            if (selectedStandard === "All") {
-                if (selectedSessionId && policy?.session_overrides && policy.session_overrides[selectedSessionId] && policy.session_overrides[selectedSessionId].length > 0) {
-                    allowedStandardsToSend = policy.session_overrides[selectedSessionId]
-                }
-                else if (currentSession && currentSession.standards && currentSession.standards.length > 0) {
-                    allowedStandardsToSend = currentSession.standards
-                }
-                else if (policy?.allowed_standards && policy.allowed_standards.length > 0) {
-                    allowedStandardsToSend = policy.allowed_standards
-                }
-            }
-
-            try {
-                const res = await api.post("/academics/attendance/students", {
-                    department: departmentName,
-                    standard: selectedStandard,
-                    allowed_standards: allowedStandardsToSend
-                })
-
+                const res = await api.get(`/classes/events?date=${dateStr}`)
                 if (res.data.success) {
-                    let filtered = res.data.students
-                    if (leaveStds && leaveStds.length > 0) {
-                        filtered = filtered.filter((s: any) => !leaveStds.includes(s.standard))
+                    const deptEvents = res.data.data.filter((e: ClassEvent) => e.type === departmentName)
+                    setEvents(deptEvents)
+                    if (deptEvents.length > 0) {
+                        setSelectedEventId(deptEvents[0].id)
+                        setSelectedEventObj(deptEvents[0])
+                    } else {
+                        setSelectedEventId("")
+                        setSelectedEventObj(null)
                     }
-                    setStudents(filtered)
                 }
             } catch (err) { console.error(err) }
+            setLoadingEvents(false)
         }
-
-        if (selectedSessionId) {
-            loadStudents()
-        } else {
-            setStudents([])
-        }
-    }, [selectedStandard, selectedSessionId, allSessions, policy, department])
+        loadEvents()
+    }, [date, departmentName])
 
     useEffect(() => {
-        if (!selectedSessionId || !date) return
+        if (!selectedEventId) {
+            setStudents([])
+            setAttendance({})
+            return
+        }
+        
+        const ev = events.find(e => e.id === selectedEventId)
+        setSelectedEventObj(ev || null)
 
-        async function loadAttendance() {
-            const dateStr = format(date, "yyyy-MM-dd")
+        async function loadStudentsAndAttendance() {
+            if (!ev) return
+            setLoadingStudents(true)
             try {
-                const res = await api.get(`/academics/attendance`, {
-                    params: { date: dateStr, session_id: selectedSessionId, department: departmentName }
-                })
+                // 1. Fetch Students enrolled in this class
+                const [enrollRes, attRes] = await Promise.all([
+                    api.get(`/classes/enrollments?class_id=${ev.class_id}`),
+                    api.get(`/academics/attendance`, { 
+                        params: { class_event_id: ev.id, department: departmentName } 
+                    })
+                ])
+
+                if (enrollRes.data.success) {
+                    setStudents(enrollRes.data.data || [])
+                }
+                
+                // 2. Map existing attendance
                 const map: Record<string, any> = {}
-                if (res.data.success && res.data.data) {
-                    res.data.data.forEach((r: any) => {
+                if (attRes.data.success && attRes.data.data) {
+                    attRes.data.data.forEach((r: any) => {
                         map[r.student_id] = r.status
                     })
                 }
                 setAttendance(map)
+                
             } catch (err) { console.error(err) }
+            setLoadingStudents(false)
         }
-        loadAttendance()
-    }, [selectedSessionId, date, departmentName])
+        
+        loadStudentsAndAttendance()
+    }, [selectedEventId, events, departmentName])
 
 
     const toggleStatus = (studentId: string) => {
+        if (selectedEventObj?.status === 'cancelled') return
+        
         setAttendance(prev => {
             const current = prev[studentId]
             let next: "Present" | "Absent" | "Leave" = "Present"
@@ -252,22 +149,28 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
     }
 
     async function saveAttendance() {
+        if (!selectedEventObj) return
         setSaving(true)
         const dateStr = format(date, "yyyy-MM-dd")
 
         const upsertData = students.map(s => ({
-            student_id: s.adm_no,
+            student_id: s.student_id,
             date: dateStr,
-            session_id: selectedSessionId,
-            status: attendance[s.adm_no] || "Present",
+            session_id: null,
+            class_event_id: selectedEventObj.id,
+            status: attendance[s.student_id] || "Present",
             department: departmentName 
-            // recorded_by is automatically added by the backend via JWT token
         }))
 
         try {
             const res = await api.post("/academics/attendance", { attendanceData: upsertData })
             if (res.data.success) {
                 alert("Attendance saved successfully!")
+                // Optionally mark the event as completed if not already
+                if (selectedEventObj.status === 'scheduled') {
+                    await api.patch(`/classes/events/${selectedEventObj.id}/status`, { status: 'completed' })
+                    setSelectedEventObj(prev => prev ? { ...prev, status: 'completed' } : null)
+                }
             } else {
                 alert(`Failed to save attendance: ${res.data.error}`)
             }
@@ -279,8 +182,9 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
     }
 
     const markAll = (status: "Present" | "Absent") => {
+        if (selectedEventObj?.status === 'cancelled') return
         const newMap = { ...attendance }
-        students.forEach(s => newMap[s.adm_no] = status)
+        students.forEach(s => newMap[s.student_id] = status)
         setAttendance(newMap)
     }
 
@@ -293,80 +197,40 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">{departmentName} Attendance</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Mark daily attendance for {departmentName} students.</p>
+                    <p className="text-slate-500 mt-1">Mark daily attendance for specific class events.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => markAll("Present")} className="border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => markAll("Present")} 
+                        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        disabled={!selectedEventId || selectedEventObj?.status === 'cancelled'}
+                    >
                         <Check className="mr-2 h-4 w-4" /> Mark All Present
                     </Button>
                     <Button
-                        className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/30"
+                        className="bg-gradient-to-r from-[#4f46e5] to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-lg"
                         onClick={saveAttendance}
-                        disabled={saving}
+                        disabled={saving || !selectedEventId || selectedEventObj?.status === 'cancelled'}
                     >
                         {saving ? "Saving..." : "Save Attendance"}
                     </Button>
                 </div>
             </div>
 
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="border-none shadow-lg bg-white dark:bg-[#1a2234]">
-                    <CardContent className="p-5">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                                <Users className="h-6 w-6 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Total Students</p>
-                                <p className="text-2xl font-bold text-slate-900 dark:text-white">{students.length}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-lg bg-white dark:bg-[#1a2234]">
-                    <CardContent className="p-5">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                <CalendarCheck className="h-6 w-6 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Present</p>
-                                <p className="text-2xl font-bold text-emerald-600">{presentCount}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-none shadow-lg bg-white dark:bg-[#1a2234]">
-                    <CardContent className="p-5">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-lg shadow-red-500/30">
-                                <X className="h-6 w-6 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Absent</p>
-                                <p className="text-2xl font-bold text-red-600">{absentCount}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Filter Bar */}
-            <Card className="border-none shadow-lg bg-white dark:bg-[#1a2234]">
+            <Card className="border-none shadow-sm bg-white">
                 <CardContent className="p-4">
-                    <div className="flex flex-col md:flex-row gap-4">
-                        <div className="flex flex-col space-y-1.5">
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                        <div className="flex flex-col space-y-1.5 w-full md:w-auto">
                             <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Date</label>
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button
                                         variant={"outline"}
                                         className={cn(
-                                            "w-[200px] justify-start text-left font-normal",
-                                            !date && "text-muted-foreground",
-                                            policy?.is_holiday && "border-red-500 text-red-600 bg-red-50"
+                                            "w-[200px] justify-start text-left font-normal bg-slate-50",
+                                            !date && "text-muted-foreground"
                                         )}
                                     >
                                         <CalendarIcon className="mr-2 h-4 w-4" />
@@ -382,84 +246,144 @@ export default function AttendancePage({ params }: { params: Promise<{ departmen
                                     />
                                 </PopoverContent>
                             </Popover>
-                            {policy?.is_holiday && <Badge variant="destructive" className="w-fit">{policy.description || "Holiday"}</Badge>}
-                            {policy?.effective_day_of_week !== undefined && policy?.effective_day_of_week !== null && (
-                                <Badge variant="outline" className="w-fit text-blue-600 border-blue-200">Following {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][policy.effective_day_of_week]} Schedule</Badge>
-                            )}
                         </div>
 
-                        <div className="flex flex-col space-y-1.5 min-w-[200px]">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Session</label>
-                            <Select value={selectedSessionId} onValueChange={setSelectedSessionId} disabled={filteredSessions.length === 0}>
-                                <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-none">
-                                    <SelectValue placeholder={filteredSessions.length === 0 ? "No Sessions Today" : "Select Session"} />
+                        <div className="flex flex-col space-y-1.5 flex-1 min-w-[250px]">
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Scheduled Class Event</label>
+                            <Select value={selectedEventId} onValueChange={setSelectedEventId} disabled={loadingEvents || events.length === 0}>
+                                <SelectTrigger className="bg-slate-50 border-slate-200">
+                                    <SelectValue placeholder={
+                                        loadingEvents ? "Loading..." : 
+                                        events.length === 0 ? "No classes scheduled for this date" : 
+                                        "Select Class"
+                                    } />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {filteredSessions.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>
-                                            {s.name} ({s.start_time?.slice(0, 5)} - {s.end_time?.slice(0, 5)})
+                                    {events.map(e => (
+                                        <SelectItem key={e.id} value={e.id}>
+                                            {e.class_name} ({e.start_time.slice(0, 5)} - {e.end_time.slice(0, 5)})
+                                            {e.status === 'completed' ? ' ✓' : ''}
+                                            {e.status === 'cancelled' ? ' ✕' : ''}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        <div className="flex flex-col space-y-1.5 min-w-[200px]">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Class / Standard</label>
-                            <Select value={selectedStandard} onValueChange={setSelectedStandard}>
-                                <SelectTrigger className="bg-slate-50 dark:bg-slate-800 border-none">
-                                    <SelectValue placeholder="Filter Class" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="All">All Classes</SelectItem>
-                                    <SelectItem value="Hifz">Hifz</SelectItem>
-                                    <SelectItem value="5th">5th</SelectItem>
-                                    <SelectItem value="6th">6th</SelectItem>
-                                    <SelectItem value="7th">7th</SelectItem>
-                                    <SelectItem value="8th">8th</SelectItem>
-                                    <SelectItem value="9th">9th</SelectItem>
-                                    <SelectItem value="10th">10th</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        
+                        {selectedEventObj && (
+                            <div className="ml-auto flex gap-2 pt-4">
+                                {selectedEventObj.status === 'scheduled' && <Badge variant="secondary" className="bg-slate-100">Scheduled</Badge>}
+                                {selectedEventObj.status === 'completed' && <Badge className="bg-emerald-500">Completed</Badge>}
+                                {selectedEventObj.status === 'cancelled' && <Badge variant="destructive">Cancelled</Badge>}
+                            </div>
+                        )}
                     </div>
                 </CardContent>
             </Card>
 
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-none shadow-sm bg-white">
+                    <CardContent className="p-5">
+                        <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-xl bg-blue-50 flex items-center justify-center">
+                                <Users className="h-6 w-6 text-blue-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500">Enrolled Students</p>
+                                <p className="text-2xl font-bold text-slate-900">{students.length}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border-none shadow-sm bg-white">
+                    <CardContent className="p-5">
+                        <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center">
+                                <CalendarCheck className="h-6 w-6 text-emerald-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500">Present Today</p>
+                                <p className="text-2xl font-bold text-emerald-600">{presentCount}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border-none shadow-sm bg-white">
+                    <CardContent className="p-5">
+                        <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-xl bg-rose-50 flex items-center justify-center">
+                                <X className="h-6 w-6 text-rose-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500">Absent / Leave</p>
+                                <p className="text-2xl font-bold text-rose-600">{students.length > 0 ? students.length - presentCount : 0}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
             {/* Attendance Table */}
-            <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-[#1a2234]">
+            <Card className="border-none shadow-sm overflow-hidden bg-white">
                 <Table>
-                    <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                    <TableHeader className="bg-slate-50">
                         <TableRow>
-                            <TableHead className="pl-6">ADM NO</TableHead>
-                            <TableHead>Student Name</TableHead>
-                            <TableHead>Class</TableHead>
+                            <TableHead className="pl-6 w-16">Profile</TableHead>
+                            <TableHead>Student</TableHead>
                             <TableHead className="text-center w-[200px]">Status</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {loading && <TableRow><TableCell colSpan={4} className="text-center h-32"><div className="flex items-center justify-center gap-2"><div className="h-5 w-5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin"></div>Loading...</div></TableCell></TableRow>}
-                        {!loading && students.length === 0 && <TableRow><TableCell colSpan={4} className="text-center h-32 text-slate-500"><Users className="h-8 w-8 mx-auto mb-2 text-slate-300" />{filteredSessions.length === 0 ? "No sessions scheduled for this date." : "No students found for this selection."}</TableCell></TableRow>}
+                        {loadingStudents && (
+                            <TableRow><TableCell colSpan={3} className="text-center h-32"><div className="flex items-center justify-center gap-2"><div className="h-5 w-5 rounded-full border-2 border-[#4f46e5] border-t-transparent animate-spin"></div>Loading Students...</div></TableCell></TableRow>
+                        )}
+                        {!loadingStudents && events.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={3} className="text-center h-48 text-slate-500">
+                                    <Info className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                                    No classes scheduled for {format(date, "MMMM d, yyyy")}.<br/>
+                                    <span className="text-sm text-slate-400">Head to the Academic Calendar to generate events for this day.</span>
+                                </TableCell>
+                            </TableRow>
+                        )}
+                        {!loadingStudents && events.length > 0 && !selectedEventId && (
+                            <TableRow><TableCell colSpan={3} className="text-center h-32 text-slate-500">Select a class event to mark attendance.</TableCell></TableRow>
+                        )}
+                        {!loadingStudents && selectedEventId && students.length === 0 && (
+                            <TableRow><TableCell colSpan={3} className="text-center h-32 text-slate-500">No students are enrolled in this class configuration.</TableCell></TableRow>
+                        )}
 
-                        {students.map((s, idx) => {
-                            const status = attendance[s.adm_no] || "Present"
+                        {students.map((s) => {
+                            const status = attendance[s.student_id] || "Present"
+                            const isCancelled = selectedEventObj?.status === 'cancelled'
                             return (
-                                <TableRow key={s.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors" onClick={() => toggleStatus(s.adm_no)}>
-                                    <TableCell className="font-mono text-xs text-slate-500 pl-6">{s.adm_no}</TableCell>
-                                    <TableCell className="font-medium text-slate-900 dark:text-white">{s.name}</TableCell>
-                                    <TableCell><Badge variant="outline" className="font-normal">{s.standard}</Badge></TableCell>
+                                <TableRow key={s.student_id} className={`hover:bg-slate-50 transition-colors ${!isCancelled ? 'cursor-pointer' : 'opacity-70'}`} onClick={() => toggleStatus(s.student_id)}>
+                                    <TableCell className="pl-6">
+                                        <Avatar className="h-10 w-10 border shadow-sm">
+                                            <AvatarImage src={s.photo_url || ''} />
+                                            <AvatarFallback className="bg-slate-100 font-semibold text-slate-500">
+                                                {s.student_name.charAt(0)}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="font-semibold text-slate-800">{s.student_name}</div>
+                                        <div className="font-mono text-xs text-slate-400">ADM: {s.student_id}</div>
+                                    </TableCell>
                                     <TableCell className="text-center">
                                         <div className="flex items-center justify-center">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
+                                                disabled={isCancelled}
                                                 className={cn(
-                                                    "w-28 h-9 font-bold transition-all rounded-full",
-                                                    status === "Present" && "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400",
-                                                    status === "Absent" && "bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400",
-                                                    status === "Leave" && "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400",
+                                                    "w-28 h-9 font-bold transition-all rounded-full border",
+                                                    status === "Present" && "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200",
+                                                    status === "Absent" && "bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200",
+                                                    status === "Leave" && "bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200",
                                                 )}
-                                                onClick={(e) => { e.stopPropagation(); toggleStatus(s.adm_no) }}
+                                                onClick={(e) => { e.stopPropagation(); toggleStatus(s.student_id) }}
                                             >
                                                 {status.toUpperCase()}
                                             </Button>

@@ -112,7 +112,7 @@ export default function FinanceSettingsTab() {
     return (
         <div className="space-y-6 max-w-5xl animate-in fade-in duration-500">
             {/* Fee Plans */}
-            <Card className="bg-[#121624] border-slate-800/60 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
+            <Card className="bg-white border-slate-100 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400">
                         <IndianRupee className="h-5 w-5" />
@@ -121,10 +121,10 @@ export default function FinanceSettingsTab() {
                 </div>
                 <p className="text-sm text-slate-400 mb-8 pl-13">Configure historical and current standard fee amounts. The latest plan effective before today is used for monthly fee generation.</p>
                 
-                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-800/60 shadow-inner">
-                    <Input type="number" placeholder="Amount (₹)" value={newFpAmount} onChange={e => setNewFpAmount(e.target.value)} className="bg-[#121624] border-slate-700 focus-visible:ring-emerald-500/50 flex-1" />
-                    <Input type="date" value={newFpDate} onChange={e => setNewFpDate(e.target.value)} className="bg-[#121624] border-slate-700 flex-1" />
-                    <Input placeholder="Label (e.g. 2024 Base)" value={newFpLabel} onChange={e => setNewFpLabel(e.target.value)} className="bg-[#121624] border-slate-700 flex-1" />
+                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-100 shadow-inner">
+                    <Input type="number" placeholder="Amount (₹)" value={newFpAmount} onChange={e => setNewFpAmount(e.target.value)} className="bg-white border-slate-700 focus-visible:ring-emerald-500/50 flex-1" />
+                    <Input type="date" value={newFpDate} onChange={e => setNewFpDate(e.target.value)} className="bg-white border-slate-700 flex-1" />
+                    <Input placeholder="Label (e.g. 2024 Base)" value={newFpLabel} onChange={e => setNewFpLabel(e.target.value)} className="bg-white border-slate-700 flex-1" />
                     <Button onClick={handleAddFeePlan} disabled={fpAdding} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-900/20 w-full sm:w-auto">
                         {fpAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 mr-2" />Add Plan</>}
                     </Button>
@@ -141,7 +141,7 @@ export default function FinanceSettingsTab() {
                 ) : (
                     <div className="space-y-3">
                         {feePlans.map((plan, i) => (
-                            <div key={plan.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${i === 0 ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[#1a2234] border-slate-800/60 hover:border-slate-700'}`}>
+                            <div key={plan.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${i === 0 ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[#1a2234] border-slate-100 hover:border-slate-200'}`}>
                                 <div className="flex items-center gap-4 sm:gap-6">
                                     <div>
                                         <p className={`text-lg font-bold ${i === 0 ? 'text-emerald-400' : 'text-white'}`}>₹{Number(plan.amount).toLocaleString()}<span className="text-sm font-medium text-slate-500">/month</span></p>
@@ -162,7 +162,7 @@ export default function FinanceSettingsTab() {
             </Card>
 
             {/* Charge Categories */}
-            <Card className="bg-[#121624] border-slate-800/60 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
+            <Card className="bg-white border-slate-100 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400">
                         <Tag className="h-5 w-5" />
@@ -171,9 +171,9 @@ export default function FinanceSettingsTab() {
                 </div>
                 <p className="text-sm text-slate-400 mb-8 pl-13">Manage categories for additional student charges (Medical, Laundry, Store, etc.).</p>
                 
-                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-800/60 shadow-inner">
-                    <Input placeholder="Category name" value={newCatName} onChange={e => setNewCatName(e.target.value)} className="bg-[#121624] border-slate-700 focus-visible:ring-blue-500/50 flex-1" />
-                    <Input placeholder="Description (optional)" value={newCatDesc} onChange={e => setNewCatDesc(e.target.value)} className="bg-[#121624] border-slate-700 focus-visible:ring-blue-500/50 flex-[2]" />
+                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-100 shadow-inner">
+                    <Input placeholder="Category name" value={newCatName} onChange={e => setNewCatName(e.target.value)} className="bg-white border-slate-700 focus-visible:ring-blue-500/50 flex-1" />
+                    <Input placeholder="Description (optional)" value={newCatDesc} onChange={e => setNewCatDesc(e.target.value)} className="bg-white border-slate-700 focus-visible:ring-blue-500/50 flex-[2]" />
                     <Button onClick={handleAddCategory} disabled={catAdding} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-900/20 w-full sm:w-auto">
                         {catAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 mr-2" />Add Category</>}
                     </Button>
@@ -189,7 +189,7 @@ export default function FinanceSettingsTab() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {categories.map(cat => (
-                            <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${cat.is_active ? 'bg-[#1a2234] border-slate-800/60 hover:border-slate-700' : 'bg-transparent border-slate-800/30 opacity-50'}`}>
+                            <div key={cat.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${cat.is_active ? 'bg-[#1a2234] border-slate-100 hover:border-slate-200' : 'bg-transparent border-slate-800/30 opacity-50'}`}>
                                 <div>
                                     <p className="text-sm font-bold text-white">{cat.name}</p>
                                     {cat.description && <p className="text-xs font-medium text-slate-500 mt-1">{cat.description}</p>}
@@ -204,7 +204,7 @@ export default function FinanceSettingsTab() {
             </Card>
 
             {/* Payment Accounts */}
-            <Card className="bg-[#121624] border-slate-800/60 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
+            <Card className="bg-white border-slate-100 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
                 <div className="flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400">
                         <Building2 className="h-5 w-5" />
@@ -213,13 +213,13 @@ export default function FinanceSettingsTab() {
                 </div>
                 <p className="text-sm text-slate-400 mb-8 pl-13">Setup valid receivers for UPI and Bank payments.</p>
                 
-                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-800/60 shadow-inner">
-                    <Input placeholder="Account holder name" value={newAccHolder} onChange={e => setNewAccHolder(e.target.value)} className="bg-[#121624] border-slate-700 focus-visible:ring-amber-500/50 flex-1" />
-                    <select value={newAccType} onChange={e => setNewAccType(e.target.value)} className="bg-[#121624] border border-slate-700 rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500/50">
+                <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#1a2234] p-4 rounded-xl border border-slate-100 shadow-inner">
+                    <Input placeholder="Account holder name" value={newAccHolder} onChange={e => setNewAccHolder(e.target.value)} className="bg-white border-slate-700 focus-visible:ring-amber-500/50 flex-1" />
+                    <select value={newAccType} onChange={e => setNewAccType(e.target.value)} className="bg-white border border-slate-700 rounded-md px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500/50">
                         <option value="upi">UPI</option>
                         <option value="bank">Bank</option>
                     </select>
-                    <Input placeholder="UPI ID or Bank details" value={newAccDetails} onChange={e => setNewAccDetails(e.target.value)} className="bg-[#121624] border-slate-700 focus-visible:ring-amber-500/50 flex-[2]" />
+                    <Input placeholder="UPI ID or Bank details" value={newAccDetails} onChange={e => setNewAccDetails(e.target.value)} className="bg-white border-slate-700 focus-visible:ring-amber-500/50 flex-[2]" />
                     <Button onClick={handleAddAccount} disabled={accAdding} className="bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-900/20 w-full sm:w-auto">
                         {accAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="h-4 w-4 mr-2" />Add Account</>}
                     </Button>
@@ -235,7 +235,7 @@ export default function FinanceSettingsTab() {
                 ) : (
                     <div className="space-y-3">
                         {accounts.map(acc => (
-                            <div key={acc.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${acc.is_active ? 'bg-[#1a2234] border-slate-800/60 hover:border-slate-700' : 'bg-transparent border-slate-800/30 opacity-50'}`}>
+                            <div key={acc.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-sm ${acc.is_active ? 'bg-[#1a2234] border-slate-100 hover:border-slate-200' : 'bg-transparent border-slate-800/30 opacity-50'}`}>
                                 <div className="flex items-center gap-4">
                                     <div className={`h-10 w-10 rounded-full flex items-center justify-center text-xs font-bold ${acc.account_type === 'upi' ? 'text-purple-400 bg-purple-500/10' : 'text-blue-400 bg-blue-500/10'}`}>
                                         {acc.account_type.toUpperCase()}
@@ -258,7 +258,7 @@ export default function FinanceSettingsTab() {
             <Card className="bg-rose-950/10 border-rose-900/30 shadow-sm rounded-xl overflow-hidden p-6 sm:p-8">
                 <h3 className="text-lg font-bold text-rose-400 mb-2">Security</h3>
                 <p className="text-sm text-slate-400 mb-6">Change the Finance access passcode required to view these pages.</p>
-                <button className="px-5 py-2.5 bg-[#1a2234] text-white border border-slate-800 hover:bg-slate-800 hover:border-slate-700 rounded-lg text-sm font-medium transition-all shadow-sm">
+                <button className="px-5 py-2.5 bg-[#1a2234] text-white border border-slate-800 hover:bg-slate-800 hover:border-slate-200 rounded-lg text-sm font-medium transition-all shadow-sm">
                     Change Passcode
                 </button>
             </Card>

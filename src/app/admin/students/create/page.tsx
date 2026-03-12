@@ -32,12 +32,12 @@ import api from "@/lib/api"
 const formSchema = z.object({
     adm_no: z.string().min(1, "Admission number is required"),
     name: z.string().min(2),
-    dob: z.string(),
+    dob: z.string().optional(),
     address: z.string().optional(),
     father_name: z.string().optional(),
     email: z.string().email().optional().or(z.literal('')),
     batch_year: z.string().optional().or(z.literal('')),
-    standard: z.string(),
+    standard: z.string().optional(),
     assigned_usthad_id: z.string().optional(),
 })
 
@@ -129,12 +129,12 @@ export default function CreateStudentPage() {
                 admission_number: admNo,
                 full_name: values.name,
                 date_of_birth: values.dob || null,
-                address: values.address || null,
+                address_line: values.address || null,
                 parent_name: values.father_name || null,
                 email: values.email || null,
                 batch_year: values.batch_year || null,
-                class: values.standard, 
-                assigned_usthad_id: values.assigned_usthad_id || null,
+                class: values.standard || null,
+                assigned_usthad_id: values.assigned_usthad_id === "unassigned" ? null : values.assigned_usthad_id,
                 photo_url: photoUrl,
                 status: "active"
             })

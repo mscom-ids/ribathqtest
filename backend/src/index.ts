@@ -11,6 +11,7 @@ import hifzRoutes from './routes/hifz.routes';
 import examsRoutes from './routes/exams.routes';
 import uploadRoutes from './routes/upload.routes';
 import parentRoutes from './routes/parent.routes';
+import classesRoutes from './routes/classes.routes';
 import path from 'path';
 
 dotenv.config();
@@ -35,6 +36,7 @@ app.use('/api/hifz', hifzRoutes);
 app.use('/api/exams', examsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/parent', parentRoutes);
+app.use('/api/classes', classesRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend is running' });

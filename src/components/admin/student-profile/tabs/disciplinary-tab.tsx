@@ -67,7 +67,7 @@ export function DisciplinaryTab({ student }: { student: Student }) {
             const res = await api.get('/students/disciplinary', { params: { student_id: student.adm_no } })
             if (res.data.success) setRecords(res.data.records || [])
         } catch (error) {
-            console.error("Error loading disciplinary records:", error)
+            console.warn("Error loading disciplinary records (endpoint may not exist):", error)
         }
         setLoading(false)
     }
@@ -134,7 +134,7 @@ export function DisciplinaryTab({ student }: { student: Student }) {
     }
 
     return (
-        <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-800">
+        <Card className="border-none shadow-sm bg-white border border-slate-100">
             <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                 <div>
                     <CardTitle className="text-lg font-bold flex items-center gap-2">

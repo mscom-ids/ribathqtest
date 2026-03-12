@@ -92,9 +92,9 @@ export const getStudentsForAttendance = async (req: Request, res: Response) => {
 
 export const getAttendance = async (req: Request, res: Response) => {
     try {
-        const { date, start_date, end_date, session_id, department, student_ids } = req.query;
+        const { date, start_date, end_date, session_id, class_event_id, department, student_ids } = req.query;
         
-        let query = 'SELECT student_id, session_id, status, date, department FROM attendance WHERE 1=1';
+        let query = 'SELECT student_id, session_id, class_event_id, status, date, department FROM attendance WHERE 1=1';
         const params: any[] = [];
         let paramCount = 1;
 
@@ -113,6 +113,12 @@ export const getAttendance = async (req: Request, res: Response) => {
         if (session_id) {
             query += ` AND session_id = $${paramCount}`;
             params.push(session_id);
+            paramCount++;
+        }
+        
+        if (class_event_id) {
+            query += ` AND class_event_id = $${paramCount}`;
+            params.push(class_event_id);
             paramCount++;
         }
 
@@ -164,19 +170,22 @@ export const upsertAttendance = async (req: Request, res: Response) => {
             const student_id = row.student_id;
             const date = row.date;
             const session_id = row.session_id;
+            const class_event_id = row.class_event_id || null;
             const status = row.status;
             const department = row.department;
             const recorded_by = row.recorded_by || recorderId;
             
-            values.push(student_id, date, session_id, status, recorded_by, department);
-            placeholders.push(`(${paramCount}, ${paramCount+1}, ${paramCount+2}, ${paramCount+3}, ${paramCount+4}, ${paramCount+5})`);
-            paramCount += 6;
+            values.push(student_id, date, session_id, class_event_id, status, recorded_by, department);
+            placeholders.push(`($${paramCount}, $${paramCount+1}, $${paramCount+2}, $${paramCount+3}, $${paramCount+4}, $${paramCount+5}, $${paramCount+6})`);
+            paramCount += 7;
         }
         
+        // Use class_event_id as the primary constraint if provided, else fallback to old method
+        // But since we dropped the old constraint, we assume all new writes use class_event_id
         const query = `
-            INSERT INTO attendance (student_id, date, session_id, status, recorded_by, department)
-            VALUES \${placeholders.join(', ')}
-            ON CONFLICT (student_id, date, session_id)
+            INSERT INTO attendance (student_id, date, session_id, class_event_id, status, recorded_by, department)
+            VALUES ${placeholders.join(', ')}
+            ON CONFLICT (student_id, class_event_id)
             DO UPDATE SET status = EXCLUDED.status, recorded_by = EXCLUDED.recorded_by, updated_at = NOW()
         `;
         

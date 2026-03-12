@@ -143,7 +143,7 @@ export function QuickViewDashboard() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-2">
+                <Card className="md:col-span-2 bg-white border border-slate-100 shadow-sm">
                     <CardHeader>
                         <CardTitle className="text-lg">Students Active Leave Summary (Last 7 Days)</CardTitle>
                     </CardHeader>
@@ -163,7 +163,7 @@ export function QuickViewDashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="bg-white border border-slate-100 shadow-sm">
                     <CardHeader>
                         <CardTitle className="text-lg">Most Reported Illnesses</CardTitle>
                     </CardHeader>

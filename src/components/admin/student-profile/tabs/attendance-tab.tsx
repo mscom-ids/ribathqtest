@@ -148,9 +148,9 @@ export function AttendanceTab({ student }: { student: Student }) {
     if (loading) return <div className="text-center py-12 text-slate-400">Loading attendance data...</div>
 
     const deptColors = {
-        Hifz: { text: "text-emerald-400", bg: "bg-emerald-950/30", border: "border-emerald-800", bar: "bg-emerald-500", badge: "border-emerald-600 text-emerald-400" },
-        School: { text: "text-blue-400", bg: "bg-blue-950/30", border: "border-blue-800", bar: "bg-blue-500", badge: "border-blue-600 text-blue-400" },
-        Madrassa: { text: "text-purple-400", bg: "bg-purple-950/30", border: "border-purple-800", bar: "bg-purple-500", badge: "border-purple-600 text-purple-400" },
+        Hifz: { text: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", bar: "bg-emerald-500", badge: "border-emerald-400 text-emerald-600" },
+        School: { text: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200", bar: "bg-blue-500", badge: "border-blue-400 text-blue-600" },
+        Madrassa: { text: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200", bar: "bg-violet-500", badge: "border-violet-400 text-violet-600" },
     }
 
     return (
@@ -182,16 +182,16 @@ export function AttendanceTab({ student }: { student: Student }) {
                                     <div key={i} className="space-y-1">
                                         <div className="flex items-center justify-between text-sm">
                                             <div className="flex items-center gap-2">
-                                                <span className="font-medium text-slate-200">{s.name}</span>
+                                                <span className="font-medium text-slate-700">{s.name}</span>
                                                 <span className="text-[10px] text-slate-500">{s.time}</span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-slate-300 font-semibold">{s.present}</span>
+                                                <span className="text-slate-700 font-semibold">{s.present}</span>
                                                 <span className="text-slate-500">/{s.total}</span>
                                                 <span className={cn("text-xs font-bold", c.text)}>({sPct}%)</span>
                                             </div>
                                         </div>
-                                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                             <div className={cn("h-full rounded-full transition-all", c.bar)}
                                                 style={{ width: `${sPct}%` }} />
                                         </div>
@@ -205,12 +205,12 @@ export function AttendanceTab({ student }: { student: Student }) {
 
             {/* View Toggle + Month Navigation */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-0.5">
+                <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-0.5">
                     <Button size="sm" variant={viewMode === "weekly" ? "default" : "ghost"}
-                        className={cn("h-7 text-xs", viewMode === "weekly" && "bg-slate-600")}
+                        className={cn("h-7 text-xs text-slate-600", viewMode === "weekly" && "bg-white shadow-sm text-slate-800")}
                         onClick={() => setViewMode("weekly")}>Weekly</Button>
                     <Button size="sm" variant={viewMode === "monthly" ? "default" : "ghost"}
-                        className={cn("h-7 text-xs", viewMode === "monthly" && "bg-emerald-600")}
+                        className={cn("h-7 text-xs text-slate-600", viewMode === "monthly" && "bg-white shadow-sm text-slate-800")}
                         onClick={() => setViewMode("monthly")}>Monthly</Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -227,7 +227,7 @@ export function AttendanceTab({ student }: { student: Student }) {
             </div>
 
             {/* 30-Day Session Calendar (with session names inside cells) */}
-            <Card className="border-none shadow-sm bg-slate-900/50">
+            <Card className="border-none shadow-sm bg-white border border-slate-100">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">30-Day Session Calendar</CardTitle>
                     <CardDescription>Each day cell shows all sessions. Click a day to see detail.</CardDescription>
@@ -239,17 +239,17 @@ export function AttendanceTab({ student }: { student: Student }) {
                             const isToday = isSameDay(day, new Date())
                             const isSel = selectedDay && isSameDay(day, selectedDay)
 
-                            let cellBg = "bg-slate-800/40 border-slate-700"
-                            if (cell.type === "holiday") cellBg = "bg-red-900/30 border-red-800"
-                            else if (cell.type === "leave") cellBg = "bg-amber-900/30 border-amber-800"
+                            let cellBg = "bg-slate-50 border-slate-200"
+                            if (cell.type === "holiday") cellBg = "bg-red-50 border-red-200"
+                            else if (cell.type === "leave") cellBg = "bg-amber-50 border-amber-200"
                             else {
                                 const allP = cell.sessions.every(s => s.status === "Present")
                                 const anyA = cell.sessions.some(s => s.status === "Absent")
                                 const anyP = cell.sessions.some(s => s.status === "Present")
                                 if (cell.sessions.length > 0) {
-                                    if (allP) cellBg = "bg-emerald-900/30 border-emerald-800"
-                                    else if (anyA && anyP) cellBg = "bg-orange-900/25 border-orange-800"
-                                    else if (anyA) cellBg = "bg-red-900/25 border-red-800"
+                                    if (allP) cellBg = "bg-emerald-50 border-emerald-200"
+                                    else if (anyA && anyP) cellBg = "bg-orange-50 border-orange-200"
+                                    else if (anyA) cellBg = "bg-red-50 border-red-200"
                                 }
                             }
 
@@ -258,11 +258,11 @@ export function AttendanceTab({ student }: { student: Student }) {
                                     className={cn(
                                         "cursor-pointer rounded-lg border p-1.5 transition-all min-h-[70px]",
                                         cellBg,
-                                        isSel && "ring-2 ring-white/60",
+                                        isSel && "ring-2 ring-indigo-400",
                                         isToday && "ring-1 ring-emerald-400"
                                     )}>
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className={cn("text-xs font-bold", isToday ? "text-emerald-400" : "text-white/80")}>
+                                        <span className={cn("text-xs font-bold", isToday ? "text-emerald-600" : "text-slate-700")}>
                                             {format(day, "d")}
                                         </span>
                                         <span className="text-[8px] text-slate-500">{format(day, "EEE")}</span>
@@ -280,7 +280,7 @@ export function AttendanceTab({ student }: { student: Student }) {
                                                             s.status === "Absent" ? "bg-red-400" :
                                                                 s.status === "Leave" ? "bg-amber-400" : "bg-slate-500"
                                                     )} />
-                                                    <span className="text-slate-300 truncate">{s.name.replace("SCHOOL ", "").replace("MADRASA ", "").replace("CLASS ", "C")}</span>
+                                                    <span className="text-slate-600 truncate">{s.name.replace("SCHOOL ", "").replace("MADRASA ", "").replace("CLASS ", "C")}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -294,7 +294,7 @@ export function AttendanceTab({ student }: { student: Student }) {
                     </div>
 
                     {/* Legend */}
-                    <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-slate-800 text-[10px] text-slate-400 justify-center">
+                    <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-slate-200 text-[10px] text-slate-500 justify-center">
                         <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-400" /> Present</span>
                         <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-400" /> Absent</span>
                         <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" /> Leave</span>
@@ -306,7 +306,7 @@ export function AttendanceTab({ student }: { student: Student }) {
 
             {/* Weekly Session Breakdown (table view) */}
             {viewMode === "weekly" && (
-                <Card className="border-none shadow-sm bg-slate-900/50">
+                <Card className="border-none shadow-sm bg-white border border-slate-100">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base">
                             Weekly Breakdown
@@ -318,7 +318,7 @@ export function AttendanceTab({ student }: { student: Student }) {
                     <CardContent className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b border-slate-700">
+                                <tr className="border-b border-slate-200">
                                     <th className="text-left py-2 px-2 text-xs text-slate-400 font-medium min-w-[160px]">Session</th>
                                     {weekDays.map(d => (
                                         <th key={d.toISOString()} className={cn(
@@ -326,7 +326,7 @@ export function AttendanceTab({ student }: { student: Student }) {
                                             isSameDay(d, new Date()) ? "text-emerald-400" : "text-slate-400"
                                         )}>
                                             <div>{format(d, "EEE")}</div>
-                                            <div className="font-bold text-white/80">{format(d, "d")}</div>
+                                            <div className="font-bold text-slate-700">{format(d, "d")}</div>
                                         </th>
                                     ))}
                                 </tr>
@@ -338,13 +338,13 @@ export function AttendanceTab({ student }: { student: Student }) {
                                     const c = deptColors[dept]
                                     return deptSess.map((session, idx) => (
                                         <tr key={session.id} className={cn(
-                                            "border-b border-slate-800/50",
-                                            idx === 0 && "border-t-2 border-t-slate-600"
+                                            "border-b border-slate-100",
+                                            idx === 0 && "border-t-2 border-t-slate-300"
                                         )}>
                                             <td className="py-2 px-2">
                                                 <div className="flex items-center gap-2">
                                                     {idx === 0 && <Badge variant="outline" className={cn("text-[9px] px-1.5", c.badge)}>{dept}</Badge>}
-                                                    <span className="text-xs font-medium text-slate-200">{session.name}</span>
+                                                    <span className="text-xs font-medium text-slate-700">{session.name}</span>
                                                 </div>
                                             </td>
                                             {weekDays.map(day => {
@@ -376,7 +376,7 @@ export function AttendanceTab({ student }: { student: Student }) {
 
             {/* Day Detail */}
             {selectedDay && (
-                <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-700">
+                <Card className="border-none shadow-sm bg-white border border-slate-100">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-base">{format(selectedDay, "EEEE, MMMM d, yyyy")}</CardTitle>
                     </CardHeader>
@@ -389,7 +389,7 @@ export function AttendanceTab({ student }: { student: Student }) {
                             return (
                                 <div className="space-y-2">
                                     {cell.sessions.map((s, i) => (
-                                        <div key={i} className="flex items-center justify-between border-b border-slate-800 pb-1.5 last:border-0">
+                                        <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-1.5 last:border-0">
                                             <div className="flex items-center gap-2">
                                                 <Badge variant="outline" className={cn("text-[9px]", deptColors[s.dept as keyof typeof deptColors]?.badge)}>{s.dept}</Badge>
                                                 <span className="text-sm">{s.name}</span>

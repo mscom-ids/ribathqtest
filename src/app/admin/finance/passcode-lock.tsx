@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Lock, ShieldAlert, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -51,6 +51,25 @@ export function PasscodeLock({ onUnlock }: PasscodeLockProps) {
             setLoading(false)
         }
     }
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (loading) return
+            
+            if (e.key >= '0' && e.key <= '9') {
+                handleNumberClick(e.key)
+            } else if (e.key === 'Backspace') {
+                handleDelete()
+            } else if (e.key === 'Enter') {
+                if (passcode.length === 6) {
+                    handleSubmit()
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [passcode, loading])
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh]">

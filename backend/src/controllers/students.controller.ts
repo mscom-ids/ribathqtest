@@ -5,7 +5,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
   try {
     const { search, class: className, status } = req.query;
     
-    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, mother_name, photo_url FROM students WHERE 1=1';
+    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, comprehensive_details FROM students WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
@@ -16,14 +16,22 @@ export const getAllStudents = async (req: Request, res: Response) => {
     }
 
     if (className && className !== 'all') {
-      // The schema only has a single "standard" column
       query += ` AND standard = $${paramCount}`;
       params.push(className);
       paramCount++;
     }
 
-    // Since the schema doesn't have a 'status' column, we ignore the status filter for now
-    // (If user wants status filtering later, they need to add 'status' to the students table)
+    if (status) {
+      if (status === 'alumni') {
+         query += ` AND status IN ('completed', 'dropout', 'stopped', 'higher_education')`;
+      } else if (status !== 'all') {
+         query += ` AND status = $${paramCount}`;
+         params.push(status);
+         paramCount++;
+      }
+    } else {
+      query += ` AND status = 'active'`;
+    }
 
     query += ' ORDER BY name ASC';
 
@@ -70,14 +78,15 @@ export const createStudent = async (req: Request, res: Response) => {
       standard: data.class || data.standard,
       assigned_usthad_id: data.assigned_usthad_id === "unassigned" ? null : data.assigned_usthad_id,
       photo_url: data.photo_url,
-      status: data.status || 'active'
+      status: data.status || 'active',
+      comprehensive_details: data.comprehensive_details || {}
     };
     
     // We explicitly list the columns to avoid SQL injection
     const validColumns = [
       'adm_no', 'name', 'dob', 'address', 'father_name', 'phone', 
       'email', 'batch_year', 'standard', 'assigned_usthad_id', 
-      'photo_url', 'status'
+      'photo_url', 'status', 'comprehensive_details'
     ];
     
     const values: any[] = [];
@@ -128,7 +137,12 @@ export const updateStudent = async (req: Request, res: Response) => {
     let paramCount = 1;
 
     for (const key of keys) {
-      setClauses.push(`${key} = $${paramCount}`);
+      if (key === 'comprehensive_details') {
+        // Deep merge the new JSON inside Postgres so we don't accidentally overwrite other saved tabs
+        setClauses.push(`${key} = COALESCE(students.${key}, '{}'::jsonb) || $${paramCount}::jsonb`);
+      } else {
+        setClauses.push(`${key} = $${paramCount}`);
+      }
       values.push(updateData[key]);
       paramCount++;
     }
@@ -150,8 +164,8 @@ export const updateStudent = async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, student: result.rows[0] });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error updating student:', err);
-    res.status(500).json({ success: false, error: 'Failed to update student' });
+    res.status(500).json({ success: false, error: err.message || 'Failed to update student' });
   }
 };

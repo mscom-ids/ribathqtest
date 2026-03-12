@@ -78,8 +78,8 @@ export default function MonthlyFeesTab() {
     const monthLabel = now.toLocaleString('default', { month: 'long', year: 'numeric' })
 
     return (
-        <Card className="bg-[#121624] border-slate-800/60 shadow-sm rounded-xl overflow-hidden animate-in fade-in duration-500">
-            <div className="p-6 sm:px-8 border-b border-slate-800/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <Card className="bg-white border-slate-100 shadow-sm rounded-xl overflow-hidden animate-in fade-in duration-500">
+            <div className="p-6 sm:px-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h3 className="text-xl font-bold text-white tracking-tight">Monthly Fee Records — {monthLabel}</h3>
                     <p className="text-sm text-slate-400 mt-1">Manage monthly fee allocations for all students.</p>
@@ -123,19 +123,19 @@ export default function MonthlyFeesTab() {
                 ) : (
                     <div className="space-y-6">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6">
-                            <div className="bg-[#1a2234] border border-slate-800/60 rounded-xl p-4 text-center shadow-sm">
+                            <div className="bg-[#1a2234] border border-slate-100 rounded-xl p-4 text-center shadow-sm">
                                 <p className="text-3xl font-extrabold text-blue-400 mb-1">{fees.length}</p>
                                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Students</p>
                             </div>
-                            <div className="bg-[#1a2234] border border-slate-800/60 rounded-xl p-4 text-center shadow-sm">
+                            <div className="bg-[#1a2234] border border-slate-100 rounded-xl p-4 text-center shadow-sm">
                                 <p className="text-3xl font-extrabold text-emerald-400 mb-1">{fees.filter(f => f.status === 'paid').length}</p>
                                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Paid</p>
                             </div>
-                            <div className="bg-[#1a2234] border border-slate-800/60 rounded-xl p-4 text-center shadow-sm">
+                            <div className="bg-[#1a2234] border border-slate-100 rounded-xl p-4 text-center shadow-sm">
                                 <p className="text-3xl font-extrabold text-amber-400 mb-1">{fees.filter(f => f.status === 'partial').length}</p>
                                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Partial</p>
                             </div>
-                            <div className="bg-[#1a2234] border border-slate-800/60 rounded-xl p-4 text-center shadow-sm">
+                            <div className="bg-[#1a2234] border border-slate-100 rounded-xl p-4 text-center shadow-sm">
                                 <p className="text-3xl font-extrabold text-red-400 mb-1">{fees.filter(f => f.status === 'pending' || f.status === 'overdue').length}</p>
                                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Pending</p>
                             </div>
@@ -143,7 +143,7 @@ export default function MonthlyFeesTab() {
 
                         <div className="space-y-3">
                             {fees.map((fee) => (
-                                <div key={fee.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#1a2234] border border-slate-800/60 hover:border-slate-700 hover:bg-[#1d273b] transition-all gap-4 shadow-sm">
+                                <div key={fee.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#1a2234] border border-slate-100 hover:border-slate-200 hover:bg-[#1d273b] transition-all gap-4 shadow-sm">
                                     <div className="flex items-center gap-4">
                                         <div className="h-10 w-10 rounded-full bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-300 shadow-inner">
                                             {(fee.students?.name || fee.student_id).charAt(0).toUpperCase()}

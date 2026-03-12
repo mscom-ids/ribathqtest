@@ -1,7 +1,7 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Building2, IndianRupee, Wallet, Banknote, Smartphone, Landmark, Loader2 } from "lucide-react"
+import { Building2, IndianRupee, Wallet, Banknote, Smartphone, Landmark } from "lucide-react"
 import { useEffect, useState } from "react"
 import { getFinanceDashboardData } from "../../financeActions"
 
@@ -38,9 +38,9 @@ export default function FeeDashboardTab() {
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Month Header */}
             <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">{monthLabel} — Fee Overview</h3>
+                <h3 className="text-lg font-semibold text-slate-800">{monthLabel} — Fee Overview</h3>
                 {!loading && data.expected > 0 && (
-                    <span className={`text-sm font-medium px-3 py-1 rounded-full ${collectionPct >= 80 ? 'bg-emerald-500/10 text-emerald-400' : collectionPct >= 50 ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'}`}>
+                    <span className={`text-sm font-medium px-3 py-1 rounded-full ${collectionPct >= 80 ? 'bg-emerald-50 text-emerald-600' : collectionPct >= 50 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>
                         {collectionPct}% Collected
                     </span>
                 )}
@@ -48,49 +48,49 @@ export default function FeeDashboardTab() {
 
             {/* Main Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-indigo-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">Expected Fees</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">Expected Fees</p>
                             {loading ? (
-                                <div className="h-9 w-24 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-9 w-24 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-3xl font-extrabold text-white tracking-tight">₹{data.expected.toLocaleString()}</h3>
+                                <h3 className="text-3xl font-extrabold text-slate-800 tracking-tight">₹{data.expected.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-blue-500/10 text-blue-400 rounded-lg">
+                        <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                             <Building2 className="h-5 w-5" />
                         </div>
                     </div>
                 </Card>
 
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-emerald-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">Fees Collected</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">Fees Collected</p>
                             {loading ? (
-                                <div className="h-9 w-24 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-9 w-24 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-3xl font-extrabold text-emerald-400 tracking-tight">₹{data.collected.toLocaleString()}</h3>
+                                <h3 className="text-3xl font-extrabold text-emerald-600 tracking-tight">₹{data.collected.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                        <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
                             <IndianRupee className="h-5 w-5" />
                         </div>
                     </div>
                 </Card>
 
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-red-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-start">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">Total Pending</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">Total Pending</p>
                             {loading ? (
-                                <div className="h-9 w-24 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-9 w-24 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-3xl font-extrabold text-rose-400 tracking-tight">₹{data.pending.toLocaleString()}</h3>
+                                <h3 className="text-3xl font-extrabold text-rose-600 tracking-tight">₹{data.pending.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-rose-500/10 text-rose-400 rounded-lg">
+                        <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
                             <Wallet className="h-5 w-5" />
                         </div>
                     </div>
@@ -99,9 +99,9 @@ export default function FeeDashboardTab() {
 
             {/* Collection Progress Bar */}
             {!loading && data.expected > 0 && (
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 rounded-xl">
-                    <p className="text-sm font-medium text-slate-400 mb-4 tracking-wide">Collection Progress</p>
-                    <div className="w-full bg-slate-800/50 rounded-full h-3 overflow-hidden">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 rounded-xl">
+                    <p className="text-sm font-medium text-slate-500 mb-4 tracking-wide">Collection Progress</p>
+                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
                         <div
                             className="h-full rounded-full transition-all duration-1000 ease-out bg-gradient-to-r from-emerald-500 to-emerald-400"
                             style={{ width: `${Math.min(collectionPct, 100)}%` }}
@@ -116,49 +116,49 @@ export default function FeeDashboardTab() {
 
             {/* Payment Method Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-emerald-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-center">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">Cash</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">Cash</p>
                             {loading ? (
-                                <div className="h-7 w-20 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-7 w-20 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-2xl font-bold text-emerald-400">₹{data.cashCollected.toLocaleString()}</h3>
+                                <h3 className="text-2xl font-bold text-emerald-600">₹{data.cashCollected.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-slate-800/50 text-slate-300 rounded-full">
+                        <div className="p-3 bg-emerald-50 text-emerald-600 rounded-full">
                             <Banknote className="h-5 w-5" />
                         </div>
                     </div>
                 </Card>
 
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-purple-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-center">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">UPI</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">UPI</p>
                             {loading ? (
-                                <div className="h-7 w-20 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-7 w-20 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-2xl font-bold text-purple-400">₹{data.upiCollected.toLocaleString()}</h3>
+                                <h3 className="text-2xl font-bold text-purple-600">₹{data.upiCollected.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-slate-800/50 text-slate-300 rounded-full">
+                        <div className="p-3 bg-purple-50 text-purple-600 rounded-full">
                             <Smartphone className="h-5 w-5" />
                         </div>
                     </div>
                 </Card>
 
-                <Card className="bg-[#121624] border-slate-800/60 shadow-sm p-6 hover:border-slate-700 transition-all rounded-xl">
+                <Card className="bg-white border border-slate-100 shadow-sm p-6 hover:border-blue-200 hover:shadow-md transition-all rounded-xl">
                     <div className="flex justify-between items-center">
                         <div>
-                            <p className="text-sm font-medium text-slate-400 tracking-wide mb-1">Bank Transfer</p>
+                            <p className="text-sm font-medium text-slate-500 tracking-wide mb-1">Bank Transfer</p>
                             {loading ? (
-                                <div className="h-7 w-20 bg-slate-800/50 animate-pulse rounded mt-1" />
+                                <div className="h-7 w-20 bg-slate-100 animate-pulse rounded mt-1" />
                             ) : (
-                                <h3 className="text-2xl font-bold text-blue-400">₹{data.bankCollected.toLocaleString()}</h3>
+                                <h3 className="text-2xl font-bold text-blue-600">₹{data.bankCollected.toLocaleString()}</h3>
                             )}
                         </div>
-                        <div className="p-3 bg-slate-800/50 text-slate-300 rounded-full">
+                        <div className="p-3 bg-blue-50 text-blue-600 rounded-full">
                             <Landmark className="h-5 w-5" />
                         </div>
                     </div>

@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Plus, Search, MoreHorizontal, LayoutGrid, List, GraduationCap, Users, Filter, ChevronLeft } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -22,6 +23,7 @@ import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import api from "@/lib/api"
 import { StudentCard } from "@/components/admin/student-card"
@@ -38,6 +40,7 @@ export type Student = {
     assigned_usthad: { name: string } | null
     progress?: number
     status?: string
+    comprehensive_details?: any
 }
 
 function calculateAge(dob: string) {
@@ -52,14 +55,20 @@ function calculateAge(dob: string) {
     return age
 }
 
-export default function StudentsPage() {
+function StudentsPageContent() {
+    const searchParams = useSearchParams()
+    const filterFromUrl = searchParams.get('filter') as "all" | "active" | "completed" | "dropout" | null
     const [students, setStudents] = useState<Student[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [search, setSearch] = useState("")
-    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "dropout">("all")
+    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "dropout">(filterFromUrl || "all")
     const [isMobileView, setIsMobileView] = useState(false)
     const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        if (filterFromUrl) setStatusFilter(filterFromUrl)
+    }, [filterFromUrl])
 
     // Handle screen resize to track mobile view
     useEffect(() => {
@@ -173,7 +182,7 @@ export default function StudentsPage() {
 
                 {/* Left Panel - Student List: hidden on mobile when a student is selected */}
                 <div className={`
-                    lg:w-[380px] flex flex-col gap-4 bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex-shrink-0
+                    lg:w-[380px] flex flex-col gap-4 bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
                     ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex w-full'}
                 `}>
 
@@ -188,21 +197,7 @@ export default function StudentsPage() {
                                 className="pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus-visible:ring-emerald-500"
                             />
                         </div>
-                        {/* Status Filter Tabs */}
-                        <div className="flex gap-1 text-[10px]">
-                            {(["all", "active", "completed", "dropout"] as const).map(st => (
-                                <button key={st} onClick={() => setStatusFilter(st)}
-                                    className={`px-2 py-1 rounded-md capitalize transition-all ${statusFilter === st
-                                        ? st === "active" ? "bg-emerald-900/50 text-emerald-400 border border-emerald-700"
-                                            : st === "completed" ? "bg-blue-900/50 text-blue-400 border border-blue-700"
-                                                : st === "dropout" ? "bg-red-900/50 text-red-400 border border-red-700"
-                                                    : "bg-slate-700 text-white border border-slate-600"
-                                        : "text-slate-400 hover:text-white hover:bg-slate-800"
-                                        }`}>
-                                    {st} ({statusCounts[st]})
-                                </button>
-                            ))}
-                        </div>
+                        {/* Status filters migrated to Alumni section */}
                         <div className="flex items-center justify-between text-xs text-slate-500">
                             <span>Showing {filtered.length} students</span>
                         </div>
@@ -270,11 +265,13 @@ export default function StudentsPage() {
                                             </div>
                                         </div>
 
-                                        {/* Status Indicator */}
-                                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${(student.status || 'active') === 'active' ? 'bg-emerald-500' :
-                                            student.status === 'completed' ? 'bg-blue-500' :
-                                                student.status === 'dropout' ? 'bg-red-500' : 'bg-slate-500'
-                                            }`} title={`Status: ${student.status || 'active'}`} />
+                                        {/* Status Indicator Only */}
+                                        <div className="ml-auto flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${(student.status || 'active') === 'active' ? 'bg-emerald-500' :
+                                                student.status === 'completed' ? 'bg-blue-500' :
+                                                    student.status === 'dropout' ? 'bg-red-500' : 'bg-slate-500'
+                                                }`} title={`Status: ${student.status || 'active'}`} />
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -323,6 +320,18 @@ export default function StudentsPage() {
                 </div>
             </div>
         </div>
+    )
+}
+
+export default function StudentsPage() {
+    return (
+        <Suspense fallback={
+            <div className="h-full flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+            </div>
+        }>
+            <StudentsPageContent />
+        </Suspense>
     )
 }
 

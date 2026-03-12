@@ -30,8 +30,8 @@ export default function PaymentsTab() {
     }, [])
 
     return (
-        <Card className="bg-[#121624] border-slate-800/60 shadow-sm rounded-xl overflow-hidden animate-in fade-in duration-500">
-            <div className="p-6 sm:px-8 border-b border-slate-800/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <Card className="bg-white border-slate-100 shadow-sm rounded-xl overflow-hidden animate-in fade-in duration-500">
+            <div className="p-6 sm:px-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h3 className="text-xl font-bold text-white tracking-tight">Payment Records</h3>
                     <p className="text-sm text-slate-400 mt-1">Record new payments and view payment history.</p>

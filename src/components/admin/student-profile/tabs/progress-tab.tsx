@@ -50,7 +50,7 @@ export function ProgressTab({ student }: { student: Student }) {
         juzRevisionJuz: 0,
         totalJuz: 0,
         grade: "NO GRADE",
-        attendance: "0/0" // Placeholder
+        attendance: "0/0"
     })
     const [loading, setLoading] = useState(true)
     const [allLogs, setAllLogs] = useState<any[]>([])
@@ -67,7 +67,6 @@ export function ProgressTab({ student }: { student: Student }) {
             const monthStartStr = format(startOfCurrentMonth, "yyyy-MM-dd")
             const monthEndStr = format(endOfCurrentMonth, "yyyy-MM-dd")
 
-            // Fetch last 60 days of logs (to cover current month + some context)
             const [logsRes, attendRes] = await Promise.all([
                 api.get("/hifz/logs", {
                     params: {
@@ -91,25 +90,22 @@ export function ProgressTab({ student }: { student: Student }) {
                 const d = new Date(l.entry_date)
                 return d >= startOfCurrentMonth && d <= endOfCurrentMonth
             }))
-            // Map the unified attendance array from the backend API: { date, status, department, session_id }
             setAttendanceRecords(attendRes.data?.data || [])
 
             if (logs.length > 0) {
-                // 1. Process Chart Data (Last 30 Days)
                 const last30Days = logs.filter((l: any) => new Date(l.entry_date) >= subDays(today, 30))
                 const processed = last30Days.map((log: any) => ({
                     date: format(new Date(log.entry_date), 'dd/MM'),
                     rating: log.rating,
                     mode: log.mode,
-                                        details: log.mode === 'New Verses' || log.mode === 'Recent Revision'
-                        ? (log.surah_name 
-                            ? `${getArabic(log.surah_name)} ${log.start_v ? `(${log.start_v}-${log.end_v})` : ''}` 
+                    details: log.mode === 'New Verses' || log.mode === 'Recent Revision'
+                        ? (log.surah_name
+                            ? `${getArabic(log.surah_name)} ${log.start_v ? `(${log.start_v}-${log.end_v})` : ''}`
                             : `Pages ${log.start_page}-${log.end_page}`)
                         : `Juz ${log.juz_number || '?'} (${log.juz_portion || 'Full'})`
                 }))
                 setData(processed)
 
-                // 2. Calculate Monthly Stats
                 const currentMonthLogs = logs.filter((l: any) =>
                     isWithinInterval(new Date(l.entry_date), { start: startOfCurrentMonth, end: endOfCurrentMonth })
                 )
@@ -120,14 +116,8 @@ export function ProgressTab({ student }: { student: Student }) {
                 let totalRatings = 0
                 let ratingCount = 0
 
-                // Find max juz ever recorded (approximation for Total Hifz)
-                // We'll scan ALL logs passed (60 days) + maybe check student record if available?
-                // For now, let's use the max juz seen in the logs we have. Ideally we'd query `max(juz)` from DB.
-                // Or better, let's fetch the max juz separately to be accurate.
-
                 currentMonthLogs.forEach((log: any) => {
                     const pages = (log.page_end - log.page_start + 1) || 0
-
                     if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
                         const surahId = getSurahId(log.surah_name || "");
                         let calculated = 0;
@@ -136,7 +126,6 @@ export function ProgressTab({ student }: { student: Student }) {
                         } else {
                             calculated = (log.start_page === log.end_page) ? 0.5 : pages;
                         }
-
                         if (log.mode === 'New Verses') {
                             hifzPages += calculated;
                         } else {
@@ -145,26 +134,22 @@ export function ProgressTab({ student }: { student: Student }) {
                     } else if (log.mode === 'Juz Revision') {
                         juzRevisionPages += pages
                     }
-
                     if (log.rating) {
                         totalRatings += log.rating
                         ratingCount++
                     }
                 })
 
-                // Grade Calculation
                 const avgRating = ratingCount > 0 ? (totalRatings / ratingCount).toFixed(1) : "NO GRADE"
-
                 setMonthlyStats(prev => ({
                     ...prev,
                     hifzPages: parseFloat(hifzPages.toFixed(2)),
                     recentRevisionPages,
-                    juzRevisionJuz: parseFloat((juzRevisionPages / 20).toFixed(2)), // 20 pages = 1 Juz
+                    juzRevisionJuz: parseFloat((juzRevisionPages / 20).toFixed(2)),
                     grade: avgRating.toString()
                 }))
             }
 
-            // Fetch Total Juz (Max Juz)
             try {
                 const maxJuzRes = await api.get(`/hifz/logs/max-juz/${student.adm_no}`)
                 if (maxJuzRes.data?.success) {
@@ -179,20 +164,17 @@ export function ProgressTab({ student }: { student: Student }) {
         loadHifzData()
     }, [student.adm_no, reportMonth])
 
-    // Generate weekly report data
     const weeklyReport = useMemo(() => {
         const monthStart = startOfMonth(reportMonth)
         const monthEnd = endOfMonth(reportMonth)
         const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
-        // Group days into weeks (Sun-Thu = active, Fri-Sat = off for some)
         const weeks: { days: Date[]; weekNum: number }[] = []
         let currentWeek: Date[] = []
         let weekNum = 1
 
         allDays.forEach((day, i) => {
             currentWeek.push(day)
-            // End of week on Thursday (4) or last day of month
             if (getDay(day) === 4 || i === allDays.length - 1) {
                 weeks.push({ days: [...currentWeek], weekNum })
                 currentWeek = []
@@ -200,35 +182,31 @@ export function ProgressTab({ student }: { student: Student }) {
             }
         })
 
-        // Process each week
         return weeks.map(week => {
             const dayRows = week.days.map(day => {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayOfWeek = getDay(day)
 
-                // Get attendance for this day (any Hifz session)
                 const hifzAttendance = attendanceRecords.filter(
                     (r: any) => format(new Date(r.date), "yyyy-MM-dd") === dateStr && r.department?.toLowerCase() === "hifz"
                 )
-                const isPresent = hifzAttendance.some(r => r.status === "Present")
-                const isAbsent = hifzAttendance.some(r => r.status === "Absent")
+                const isPresent = hifzAttendance.some((r: any) => r.status === "Present")
+                const isAbsent = hifzAttendance.some((r: any) => r.status === "Absent")
 
-                // Get hifz logs for this day
-                const dayLogs = allLogs.filter(l => format(new Date(l.entry_date), "yyyy-MM-dd") === dateStr)
+                const dayLogs = allLogs.filter((l: any) => format(new Date(l.entry_date), "yyyy-MM-dd") === dateStr)
+                const newVerses = dayLogs.filter((l: any) => l.mode === "New Verses")
+                const recentRev = dayLogs.filter((l: any) => l.mode === "Recent Revision")
+                const juzRev = dayLogs.filter((l: any) => l.mode === "Juz Revision")
 
-                const newVerses = dayLogs.filter(l => l.mode === "New Verses")
-                const recentRev = dayLogs.filter(l => l.mode === "Recent Revision")
-                const juzRev = dayLogs.filter(l => l.mode === "Juz Revision")
-
-                const newVersesText = newVerses.map(l =>
+                const newVersesText = newVerses.map((l: any) =>
                     `${getArabic(l.surah_name)} ${l.start_v ? `(${l.start_v}-${l.end_v})` : l.verses ? `(${l.verses})` : l.page_start ? `P${l.page_start}-${l.page_end}` : ''}`
                 ).join(", ")
 
-                const recentRevText = recentRev.map(l =>
+                const recentRevText = recentRev.map((l: any) =>
                     `${getArabic(l.surah_name)} ${l.page_start ? `P${l.page_start}-${l.page_end}` : ""}`
                 ).join(", ")
 
-                const juzRevText = juzRev.map(l =>
+                const juzRevText = juzRev.map((l: any) =>
                     `J${l.juz || "?"} P${l.page_start}-${l.page_end}`
                 ).join(", ")
 
@@ -252,7 +230,6 @@ export function ProgressTab({ student }: { student: Student }) {
                 }
             })
 
-            // Weekly summary
             const presentDays = dayRows.filter(d => d.attendance === "P").length
             const totalNew = dayRows.filter(d => d.newVersesText).length
             const totalRecent = dayRows.filter(d => d.recentRevText).length
@@ -264,13 +241,13 @@ export function ProgressTab({ student }: { student: Student }) {
 
     return (
         <div className="space-y-6">
-            {/* ======== WEEKLY HIFZ REPORT (Arabic Report Card Style) ======== */}
-            <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-800">
+            {/* ======== WEEKLY HIFZ REPORT ======== */}
+            <Card className="border-none shadow-sm bg-white border border-slate-100">
                 <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                         <div>
-                            <CardTitle className="text-base text-slate-100">Weekly Hifz Report</CardTitle>
-                            <CardDescription className="text-slate-400">Monthly breakdown by week — Arabic report card style</CardDescription>
+                            <CardTitle className="text-base text-slate-800">Weekly Hifz Report</CardTitle>
+                            <CardDescription className="text-slate-500">Monthly breakdown by week — Arabic report card style</CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button size="icon" variant="outline" className="h-7 w-7"
@@ -293,66 +270,64 @@ export function ProgressTab({ student }: { student: Student }) {
                     ) : (
                         <div className="space-y-4">
                             {weeklyReport.map((week) => (
-                                <div key={week.weekNum} className="border border-slate-700 rounded-lg overflow-hidden">
+                                <div key={week.weekNum} className="border border-slate-200 rounded-xl overflow-hidden">
                                     <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="bg-slate-800/60">
-                                                <th className="text-left py-2 px-3 text-emerald-400 font-semibold text-xs" colSpan={6}>
+                                            <tr className="bg-indigo-50">
+                                                <th className="text-left py-2 px-3 text-indigo-600 font-bold text-xs" colSpan={5}>
                                                     Week {week.weekNum}
                                                 </th>
                                             </tr>
-                                            <tr className="bg-slate-800/30 text-xs text-slate-400">
-                                                <th className="py-1.5 px-3 text-left font-medium w-[80px]">Date</th>
-                                                <th className="py-1.5 px-2 text-left font-medium">حفظ يومي (New Hifz)</th>
-                                                <th className="py-1.5 px-2 text-left font-medium">تسميع (Revision)</th>
-                                                <th className="py-1.5 px-2 text-left font-medium">مراجعة (Juz Rev)</th>
-                                                <th className="py-1.5 px-2 text-center font-medium w-[40px]">⭐</th>
+                                            <tr className="bg-slate-50 text-xs text-slate-500">
+                                                <th className="py-1.5 px-3 text-left font-semibold w-[80px]">Date</th>
+                                                <th className="py-1.5 px-2 text-left font-semibold">حفظ يومي (New Hifz)</th>
+                                                <th className="py-1.5 px-2 text-left font-semibold">تسميع (Revision)</th>
+                                                <th className="py-1.5 px-2 text-left font-semibold">مراجعة (Juz Rev)</th>
+                                                <th className="py-1.5 px-2 text-center font-semibold w-[40px]">⭐</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {week.days.map((day) => (
                                                 <tr key={day.dateStr} className={cn(
-                                                    "border-t border-slate-800/50 transition-colors",
-                                                    day.isFriday && "bg-orange-950/10",
-                                                    day.isWeekend && "bg-purple-950/10",
-                                                    day.hasLogs && "bg-emerald-950/5"
+                                                    "border-t border-slate-100 transition-colors",
+                                                    day.isFriday && "bg-orange-50/50",
+                                                    day.isWeekend && "bg-purple-50/50",
+                                                    day.hasLogs && "bg-emerald-50/30"
                                                 )}>
                                                     <td className="py-1.5 px-3">
                                                         <div className="text-xs">
-                                                            <span className="font-medium text-white/80">{day.dayNum}</span>
-                                                            <span className="text-slate-500 ml-1">{format(day.date, "EEE")}</span>
+                                                            <span className="font-bold text-slate-800">{day.dayNum}</span>
+                                                            <span className="text-slate-400 ml-1">{format(day.date, "EEE")}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-blue-300 max-w-[150px] truncate" title={day.newVersesText}>
-                                                        {day.newVersesText || <span className="text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 text-xs text-blue-600 max-w-[150px] truncate" title={day.newVersesText}>
+                                                        {day.newVersesText || <span className="text-slate-300">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-orange-300 max-w-[150px] truncate" title={day.recentRevText}>
-                                                        {day.recentRevText || <span className="text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 text-xs text-orange-600 max-w-[150px] truncate" title={day.recentRevText}>
+                                                        {day.recentRevText || <span className="text-slate-300">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-emerald-300 max-w-[150px] truncate" title={day.juzRevText}>
-                                                        {day.juzRevText || <span className="text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 text-xs text-emerald-600 max-w-[150px] truncate" title={day.juzRevText}>
+                                                        {day.juzRevText || <span className="text-slate-300">—</span>}
                                                     </td>
                                                     <td className="py-1.5 px-2 text-center">
                                                         {day.rating ? (
-                                                            <span className={cn(
-                                                                "text-xs font-bold",
-                                                                Number(day.rating) >= 4 ? "text-emerald-400" :
-                                                                    Number(day.rating) >= 3 ? "text-yellow-400" : "text-red-400"
+                                                            <span className={cn("text-xs font-bold",
+                                                                Number(day.rating) >= 4 ? "text-emerald-600" :
+                                                                    Number(day.rating) >= 3 ? "text-yellow-600" : "text-red-500"
                                                             )}>
                                                                 {day.rating}
                                                             </span>
                                                         ) : (
-                                                            <span className="text-slate-600 text-xs">—</span>
+                                                            <span className="text-slate-300 text-xs">—</span>
                                                         )}
                                                     </td>
                                                 </tr>
                                             ))}
-                                            {/* Weekly Summary Row */}
-                                            <tr className="bg-slate-800/40 border-t border-slate-600 font-medium text-xs">
-                                                <td className="py-2 px-3 text-slate-300">Summary</td>
-                                                <td className="py-2 px-2 text-blue-400">{week.summary.totalNew} entries</td>
-                                                <td className="py-2 px-2 text-orange-400">{week.summary.totalRecent} entries</td>
-                                                <td className="py-2 px-2 text-emerald-400">{week.summary.totalJuz} entries</td>
+                                            <tr className="bg-slate-50 border-t border-slate-200 font-semibold text-xs">
+                                                <td className="py-2 px-3 text-slate-600">Summary</td>
+                                                <td className="py-2 px-2 text-blue-600">{week.summary.totalNew} entries</td>
+                                                <td className="py-2 px-2 text-orange-600">{week.summary.totalRecent} entries</td>
+                                                <td className="py-2 px-2 text-emerald-600">{week.summary.totalJuz} entries</td>
                                                 <td className="py-2 px-2"></td>
                                             </tr>
                                         </tbody>
@@ -365,40 +340,36 @@ export function ProgressTab({ student }: { student: Student }) {
             </Card>
 
             {/* Monthly Status Card */}
-            <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-800">
+            <Card className="border-none shadow-sm bg-white border border-slate-100">
                 <CardHeader>
-                    <CardTitle className="text-base text-slate-100">Monthly Status ({format(reportMonth, 'MMMM yyyy')})</CardTitle>
-                    <CardDescription className="text-slate-400">Track record for the current month</CardDescription>
+                    <CardTitle className="text-base text-slate-800">Monthly Status ({format(reportMonth, 'MMMM yyyy')})</CardTitle>
+                    <CardDescription className="text-slate-500">Track record for the current month</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-                            <p className="text-sm text-slate-400 mb-1">Hifz (Pages)</p>
-                            <p className="text-2xl font-bold text-blue-400">{monthlyStats.hifzPages}</p>
-                            <p className="text-xs text-slate-500 mt-1">ഹിഫ്ളാക്കിയ പേജ്</p>
+                        <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+                            <p className="text-sm text-slate-500 mb-1">Hifz (Pages)</p>
+                            <p className="text-2xl font-black text-blue-600">{monthlyStats.hifzPages}</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-                            <p className="text-sm text-slate-400 mb-1">Recent Revision (Pages)</p>
-                            <p className="text-2xl font-bold text-orange-400">{monthlyStats.recentRevisionPages}</p>
-                            <p className="text-xs text-slate-500 mt-1">പഴയ പാഠം</p>
+                        <div className="p-4 rounded-xl bg-orange-50 border border-orange-100">
+                            <p className="text-sm text-slate-500 mb-1">Recent Revision (Pages)</p>
+                            <p className="text-2xl font-black text-orange-600">{monthlyStats.recentRevisionPages}</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-                            <p className="text-sm text-slate-400 mb-1">Juz Revision (Juz)</p>
-                            <p className="text-2xl font-bold text-emerald-400">{monthlyStats.juzRevisionJuz}</p>
-                            <p className="text-xs text-slate-500 mt-1">ആവർത്തനം</p>
+                        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                            <p className="text-sm text-slate-500 mb-1">Juz Revision (Juz)</p>
+                            <p className="text-2xl font-black text-emerald-600">{monthlyStats.juzRevisionJuz}</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-                            <p className="text-sm text-slate-400 mb-1">Total Hifz (Juz)</p>
-                            <p className="text-2xl font-bold text-purple-400">{monthlyStats.totalJuz}</p>
-                            <p className="text-xs text-slate-500 mt-1">ആകെ ഹിഫ്ളാക്കിയ ജുസ്അ്</p>
+                        <div className="p-4 rounded-xl bg-purple-50 border border-purple-100">
+                            <p className="text-sm text-slate-500 mb-1">Total Hifz (Juz)</p>
+                            <p className="text-2xl font-black text-purple-600">{monthlyStats.totalJuz}</p>
                         </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center">
-                        <div className="text-sm text-slate-400">
-                            Attendance: <span className="text-slate-200 font-medium">{monthlyStats.attendance}</span>
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                        <div className="text-sm text-slate-500">
+                            Attendance: <span className="text-slate-800 font-bold">{monthlyStats.attendance}</span>
                         </div>
-                        <div className="text-sm text-slate-400">
-                            Grade: <span className={`font-bold ${monthlyStats.grade === 'NO GRADE' ? 'text-slate-500' : Number(monthlyStats.grade) >= 4 ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                        <div className="text-sm text-slate-500">
+                            Grade: <span className={`font-black ${monthlyStats.grade === 'NO GRADE' ? 'text-slate-400' : Number(monthlyStats.grade) >= 4 ? 'text-emerald-600' : 'text-yellow-600'}`}>
                                 {monthlyStats.grade}
                             </span>
                         </div>
@@ -406,85 +377,32 @@ export function ProgressTab({ student }: { student: Student }) {
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-800">
+            <Card className="border-none shadow-sm bg-white border border-slate-100">
                     <CardHeader>
-                        <CardTitle className="text-base text-slate-100">Performance Trend (Last 30 Days)</CardTitle>
-                        <CardDescription className="text-slate-400">Daily proficiency ratings</CardDescription>
+                        <CardTitle className="text-base text-slate-800">Recent Activity</CardTitle>
+                        <CardDescription className="text-slate-500">Latest Hifz entries</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[250px] w-full">
-                            {loading ? (
-                                <div className="h-full flex items-center justify-center text-slate-400">Loading...</div>
-                            ) : data.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-slate-400">No data available</div>
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={data}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
-                                        <XAxis
-                                            dataKey="date"
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                            domain={[0, 5]}
-                                            ticks={[1, 2, 3, 4, 5]}
-                                        />
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', color: '#f8fafc' }}
-                                            itemStyle={{ color: '#1eb182' }}
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="rating"
-                                            stroke="#10b981"
-                                            strokeWidth={2}
-                                            dot={{ fill: '#10b981', r: 4 }}
-                                            activeDot={{ r: 6 }}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-sm bg-slate-900/50 border border-slate-800">
-                    <CardHeader>
-                        <CardTitle className="text-base text-slate-100">Recent Activity</CardTitle>
-                        <CardDescription className="text-slate-400">Latest Hifz entries</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             {loading ? (
                                 <div className="text-center text-slate-400">Loading...</div>
                             ) : data.length === 0 ? (
                                 <div className="text-center text-slate-400">No recent activity</div>
                             ) : (
-                                // Use slice on a reversed copy to show newest first, limiting to 5
                                 [...data].reverse().slice(0, 5).map((item, i) => (
-                                    <div key={i} className="flex items-center justify-between text-sm p-2 hover:bg-slate-800/30 rounded-lg transition-colors">
+                                    <div key={i} className="flex items-center justify-between text-sm p-3 bg-slate-50 hover:bg-indigo-50 rounded-xl transition-colors">
                                         <div className="flex items-center gap-3">
-                                            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${item.mode === 'New Verses' ? 'bg-blue-500' :
-                                                item.mode === 'Recent Revision' ? 'bg-orange-500' : 'bg-emerald-500'
-                                                }`} />
+                                            <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${item.mode === 'New Verses' ? 'bg-blue-500' : item.mode === 'Recent Revision' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
                                             <div>
-                                                <span className="text-slate-200 font-medium block">{item.mode}</span>
-                                                <span className="text-slate-400 text-xs block mt-0.5">{item.details}</span>
+                                                <span className="text-slate-800 font-semibold block">{item.mode}</span>
+                                                <span className="text-slate-500 text-xs block mt-0.5">{item.details}</span>
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
-                                            <span className={`font-bold ${item.rating >= 4 ? 'text-emerald-500' : item.rating >= 3 ? 'text-yellow-500' : 'text-red-500'}`}>
+                                            <span className={`font-bold text-sm ${item.rating >= 4 ? 'text-emerald-600' : item.rating >= 3 ? 'text-yellow-600' : 'text-red-500'}`}>
                                                 {item.rating}/5
                                             </span>
-                                            <span className="text-slate-500 text-[10px]">{item.date}</span>
+                                            <span className="text-slate-400 text-[10px]">{item.date}</span>
                                         </div>
                                     </div>
                                 ))
@@ -492,7 +410,6 @@ export function ProgressTab({ student }: { student: Student }) {
                         </div>
                     </CardContent>
                 </Card>
-            </div>
         </div>
     )
 }

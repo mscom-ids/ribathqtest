@@ -5,324 +5,240 @@ import { usePathname } from "next/navigation"
 import {
     LayoutDashboard,
     GraduationCap,
+    Users,
+    UserCheck,
     UserCog,
     LogOut,
     Calendar,
-    Settings,
     BookOpen,
-    ClipboardList,
-    Moon,
-    Sun,
-    Bell,
-    Building2,
-    BookMarked,
+    Landmark,
     School,
-    Menu,
-    ChevronDown,
+    BookMarked,
     DoorOpen,
-    Landmark
+    ChevronDown,
+    ChevronRight,
+    ChevronLeft,
+    Settings,
 } from "lucide-react"
 import api from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetTrigger,
-} from "@/components/ui/sheet"
+
+type NavItem = {
+    href: string
+    label: string
+    icon: React.ElementType
+    children?: { href: string; label: string }[]
+}
 
 export function AdminSidebar() {
     const pathname = usePathname()
     const router = useRouter()
-    const [isDark, setIsDark] = useState(false)
-    const [expandedDept, setExpandedDept] = useState<string | null>(null)
+    const [isExpanded, setIsExpanded] = useState(false)
+    const [openGroups, setOpenGroups] = useState<string[]>([])
 
-    const mainLinks = [
+    const mainLinks: NavItem[] = [
         { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-        { href: "/admin/students", label: "Students", icon: GraduationCap },
-        { href: "/admin/staff", label: "Staff", icon: UserCog },
-        { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
-        { href: "/admin/calendar", label: "Calendar", icon: Calendar },
-    ]
-
-    const departments = [
+        { href: "/admin/students", label: "Students", icon: Users },
+        { href: "/admin/alumni", label: "Alumni", icon: GraduationCap },
         {
-            name: "Finance",
-            icon: Landmark,
-            links: [
+            href: "/admin/finance", label: "Finance", icon: Landmark,
+            children: [
                 { href: "/admin/finance/dashboard", label: "Dashboard" },
+                { href: "/admin/finance/payments", label: "Fee Collection" },
                 { href: "/admin/finance/monthly-fees", label: "Monthly Fees" },
                 { href: "/admin/finance/student-ledger", label: "Student Ledger" },
-                { href: "/admin/finance/payments", label: "Payments" },
                 { href: "/admin/finance/salary", label: "Salary" },
-                { href: "/admin/finance/settings", label: "Settings" },
             ]
         },
         {
-            name: "Hifz",
-            icon: BookOpen,
-            links: [
-                { href: "/admin/hifz/tracking", label: "Hifz Tracking" },
-                { href: "/admin/hifz/attendance", label: "Attendance" },
-                { href: "/admin/hifz/exams", label: "Exams" },
-                { href: "/admin/hifz/monthly-report", label: "Monthly Report" },
+            href: "/admin/madrassa", label: "Madrasa", icon: BookMarked,
+            children: [
+                { href: "/admin/madrassa/attendance", label: "Attendance" },
+                { href: "/admin/madrassa/exams", label: "Exams" },
             ]
         },
         {
-            name: "School",
-            icon: School,
-            links: [
+            href: "/admin/school", label: "School", icon: School,
+            children: [
                 { href: "/admin/school/attendance", label: "Attendance" },
                 { href: "/admin/school/exams", label: "Exams" },
             ]
         },
         {
-            name: "Madrassa",
-            icon: BookMarked,
-            links: [
-                { href: "/admin/madrassa/attendance", label: "Attendance" },
-                { href: "/admin/madrassa/exams", label: "Exams" },
+            href: "/admin/hifz", label: "Hifz", icon: BookOpen,
+            children: [
+                { href: "/admin/hifz/tracking", label: "Daily Tracking" },
+                { href: "/admin/hifz/monthly-report", label: "Monthly Report" },
+                { href: "/admin/hifz/attendance", label: "Attendance" },
+                { href: "/admin/hifz/exams", label: "Exams" },
             ]
-        }
+        },
+        { href: "/admin/staff", label: "Staff", icon: UserCog },
+        { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+        { href: "/admin/calendar", label: "Events", icon: Calendar },
+        {
+            href: "/admin/setup", label: "Setup", icon: Settings,
+            children: [
+                { href: "/admin/setup/academic-years", label: "Academic Years" },
+                { href: "/admin/setup/classes", label: "Classes" },
+            ]
+        },
     ]
 
     const handleLogout = async () => {
-        try {
-            await api.post('/auth/logout')
-        } catch (e) { /* ignore */ }
-        // Clear cookie and redirect
+        try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
         document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push("/login")
     }
 
-    const toggleDarkMode = () => {
-        setIsDark(!isDark)
-        document.documentElement.classList.toggle("dark")
+    const toggleGroup = (href: string) => {
+        setOpenGroups(prev =>
+            prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href]
+        )
     }
 
+    const isGroupActive = (item: NavItem) => {
+        if (item.href === "/admin") return pathname === "/admin"
+        if (item.children) {
+            return item.children.some(child => pathname.startsWith(child.href)) || pathname.startsWith(item.href)
+        }
+        return pathname.startsWith(item.href)
+    }
+
+    const isGroupOpen = (href: string) => openGroups.includes(href)
+
     return (
-        <div className="w-full flex flex-col">
-            <nav className="w-full bg-[#0f1420] border-b border-slate-800 sticky top-0 z-50">
-                <div className="flex items-center justify-between px-6 h-16">
-                    {/* Logo & Global Links */}
-                    <div className="flex items-center gap-3 md:gap-6">
-                        {/* Mobile Menu Toggle */}
-                        <div className="block md:hidden">
-                            <Sheet>
-                                <SheetTrigger className="text-slate-400 hover:text-white p-2 -ml-2 rounded-lg transition-colors focus:outline-none">
-                                    <Menu className="h-6 w-6" />
-                                </SheetTrigger>
-                                <SheetContent side="left" className="w-72 bg-[#0f1420] border-r border-slate-800 p-0 flex flex-col">
-                                    <SheetHeader className="p-6 border-b border-slate-800 text-left">
-                                        <SheetTitle className="text-white flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/30">
-                                                I
-                                            </div>
-                                            RQP ERP
-                                        </SheetTitle>
-                                    </SheetHeader>
+        <aside
+            data-expanded={isExpanded}
+            className={cn(
+                "peer fixed left-4 z-40 hidden md:flex flex-col",
+                "bg-[#5a60f5] text-white",
+                "shadow-[4px_0_30px_rgba(90,96,245,0.35)]",
+                "rounded-[20px] h-fit min-h-[50vh] max-h-[calc(100vh-64px)] top-1/2 -translate-y-1/2",
+                "transition-all duration-300 ease-in-out overflow-hidden",
+                isExpanded ? "w-[172px]" : "w-[52px]"
+            )}
+        >
+            {/* Navigation */}
+            <nav className={cn(
+                "flex-1 overflow-y-auto py-3 space-y-0.5",
+                isExpanded ? "px-3" : "px-2"
+            )}>
+                {mainLinks.map((link) => {
+                    const active = isGroupActive(link)
+                    const hasChildren = !!(link.children && link.children.length > 0)
+                    const isOpen = isGroupOpen(link.href)
 
-                                    <div className="overflow-y-auto flex-1 p-4 space-y-6">
-                                        {/* Main Links */}
-                                        <div className="space-y-1">
-                                            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">Main Navigation</h3>
-                                            {mainLinks.map((link) => {
-                                                const Icon = link.icon
-                                                const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href))
-
-                                                return (
-                                                    <Link key={link.href} href={link.href}>
-                                                        <div
-                                                            className={cn(
-                                                                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                                                                isActive
-                                                                    ? "bg-emerald-500/10 text-emerald-400"
-                                                                    : "text-slate-400 hover:text-white hover:bg-white/5"
-                                                            )}
-                                                        >
-                                                            <Icon className="h-5 w-5" />
-                                                            <span>{link.label}</span>
-                                                        </div>
-                                                    </Link>
-                                                )
-                                            })}
-                                        </div>
-
-                                        {/* Departments */}
-                                        <div className="space-y-1">
-                                            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">Departments</h3>
-                                            {departments.map((dept) => {
-                                                const DeptIcon = dept.icon;
-                                                const isDeptActive = pathname.startsWith(`/admin/${dept.name.toLowerCase()}`)
-                                                const defaultHref = dept.links[0]?.href || "#"
-
-                                                return (
-                                                    <Link
-                                                        key={dept.name}
-                                                        href={defaultHref}
-                                                        className={cn(
-                                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                                                            isDeptActive
-                                                                ? "bg-blue-500/10 text-blue-400"
-                                                                : "text-slate-400 hover:text-white hover:bg-white/5"
-                                                        )}
-                                                    >
-                                                        <DeptIcon className="h-5 w-5" />
-                                                        <span>{dept.name}</span>
-                                                    </Link>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                </SheetContent>
-                            </Sheet>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-emerald-500/30">
-                                I
-                            </div>
-                            <div className="hidden lg:block">
-                                <h2 className="text-base font-bold text-white tracking-tight">RQP ERP</h2>
-                            </div>
-                        </div>
-
-                        {/* Main Global Navigation Links */}
-                        <div className="hidden md:flex items-center gap-1 border-l border-slate-800 pl-4">
-                            {mainLinks.map((link) => {
-                                const Icon = link.icon
-                                const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href))
-
-                                return (
-                                    <Link key={link.href} href={link.href}>
-                                        <div
-                                            className={cn(
-                                                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                                                isActive
-                                                    ? "bg-emerald-500/20 text-emerald-400"
-                                                    : "text-slate-400 hover:text-white hover:bg-white/5"
-                                            )}
-                                        >
-                                            <Icon className="h-4 w-4" />
-                                            <span>{link.label}</span>
-                                        </div>
-                                    </Link>
-                                )
-                            })}
-
-                            {/* Department Top-Level Links */}
-                            <div className="flex items-center gap-1 ml-2 border-l border-slate-800 pl-2">
-                                {departments.map((dept) => {
-                                    const DeptIcon = dept.icon;
-                                    const isDeptActive = pathname.startsWith(`/admin/${dept.name.toLowerCase()}`)
-                                    // Determine the default route for the department when clicked
-                                    const defaultHref = dept.links[0]?.href || "#"
-
-                                    return (
-                                        <Link
-                                            key={dept.name}
-                                            href={defaultHref}
-                                            className={cn(
-                                                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 focus:outline-none",
-                                                isDeptActive
-                                                    ? "bg-blue-500/20 text-blue-400"
-                                                    : "text-slate-300 hover:text-white hover:bg-white/5"
-                                            )}
-                                        >
-                                            <DeptIcon className="h-4 w-4" />
-                                            <span>{dept.name}</span>
-                                        </Link>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right side Profile & Actions */}
-                    <div className="flex items-center gap-2 md:gap-4">
-                        <button
-                            title="Toggle Mode"
-                            className="text-slate-400 hover:text-white hover:bg-white/5 h-9 w-9 rounded-lg flex items-center justify-center transition-colors"
-                            onClick={toggleDarkMode}
-                        >
-                            {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                        </button>
-
-                        <div className="h-8 w-px bg-slate-800 mx-1 hidden sm:block"></div>
-
-                        {/* Profile Dropdown */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button className="flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-white/5 transition-colors focus:outline-none">
-                                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-blue-500 to-emerald-500 flex items-center justify-center text-white font-medium text-sm shadow-inner overflow-hidden">
-                                        <div className="h-full w-full bg-black/20 flex items-center justify-center">
-                                            AD
-                                        </div>
-                                    </div>
-                                    <div className="hidden sm:block text-left">
-                                        <p className="text-sm font-medium text-slate-200 leading-none">Admin User</p>
-                                        <p className="text-[10px] text-slate-500 mt-1">Administrator</p>
-                                    </div>
-                                    <ChevronDown className="h-4 w-4 text-slate-500 ml-1" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 bg-[#0f1420] border-slate-800 text-slate-300">
-                                <DropdownMenuItem className="hover:bg-slate-800 hover:text-white cursor-pointer focus:bg-slate-800 py-2">
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    <span>System Settings</span>
-                                </DropdownMenuItem>
-                                <div className="h-px bg-slate-800 my-1 mx-2"></div>
-                                <DropdownMenuItem
-                                    className="text-red-400 hover:bg-red-500/10 hover:text-red-300 cursor-pointer focus:bg-red-500/10 py-2"
-                                    onClick={handleLogout}
+                    return (
+                        <div key={link.href}>
+                            {hasChildren ? (
+                                <button
+                                    onClick={() => {
+                                        if (!isExpanded) setIsExpanded(true)
+                                        toggleGroup(link.href)
+                                    }}
+                                    title={!isExpanded ? link.label : undefined}
+                                    className={cn(
+                                        "relative w-full flex items-center rounded-[14px] transition-all duration-200",
+                                        isExpanded ? "px-3 py-2.5 gap-3" : "flex-col justify-center py-3 px-1",
+                                        active
+                                            ? "bg-white text-[#4f46e5] shadow-sm"
+                                            : "text-blue-100 hover:bg-white/10 hover:text-white"
+                                    )}
                                 >
-                                    <LogOut className="mr-2 h-4 w-4" />
-                                    <span>Sign out</span>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
+                                    <link.icon className={cn(
+                                        "shrink-0 h-[18px] w-[18px] transition-colors",
+                                        active ? "text-[#5a60f5]" : "text-blue-100"
+                                    )} />
+                                    {isExpanded && (
+                                        <>
+                                            <span className="flex-1 text-left text-xs font-bold uppercase tracking-wider">{link.label}</span>
+                                            {isOpen
+                                                ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                                                : <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                                            }
+                                        </>
+                                    )}
+                                </button>
+                            ) : (
+                                <Link
+                                    href={link.href}
+                                    title={!isExpanded ? link.label : undefined}
+                                    className={cn(
+                                        "relative w-full flex items-center rounded-[14px] transition-all duration-200",
+                                        isExpanded ? "px-3 py-2.5 gap-3" : "flex-col justify-center py-3 px-1",
+                                        active
+                                            ? "bg-white text-[#4f46e5] shadow-sm"
+                                            : "text-blue-100 hover:bg-white/10 hover:text-white"
+                                    )}
+                                >
+                                    <link.icon className={cn(
+                                        "shrink-0 h-[18px] w-[18px] transition-colors",
+                                        active ? "text-[#5a60f5]" : "text-blue-100"
+                                    )} />
+                                    {isExpanded && (
+                                        <span className="flex-1 text-left text-xs font-bold uppercase tracking-wider">{link.label}</span>
+                                    )}
+                                </Link>
+                            )}
+
+                            {/* Sub-menu: only when expanded AND open */}
+                            {hasChildren && isExpanded && isOpen && (
+                                <div className="mt-0.5 ml-3 space-y-0.5 border-l border-white/20 pl-3">
+                                    {link.children!.map(child => {
+                                        const childActive = pathname === child.href || pathname.startsWith(child.href + '?') || pathname.startsWith(child.href + '/')
+                                        return (
+                                            <Link
+                                                key={child.href}
+                                                href={child.href}
+                                                className={cn(
+                                                    "block py-1.5 px-2 rounded-lg text-[11px] font-semibold transition-colors",
+                                                    childActive
+                                                        ? "bg-white/20 text-white"
+                                                        : "text-blue-200 hover:text-white hover:bg-white/10"
+                                                )}
+                                            >
+                                                {child.label}
+                                            </Link>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )
+                })}
             </nav>
 
-            {/* Sub-Navbar for Active Department */}
-            {departments.map(dept => {
-                const isDeptActive = pathname.startsWith(`/admin/${dept.name.toLowerCase()}`)
-                if (!isDeptActive) return null;
+            {/* Bottom: Expand toggle + Logout */}
+            <div className="shrink-0 border-t border-white/10 py-3 flex flex-col items-center gap-2 px-2">
+                <button
+                    onClick={() => setIsExpanded(prev => !prev)}
+                    className={cn(
+                        "flex items-center justify-center p-2 rounded-xl transition-colors bg-white/10 hover:bg-white/20 text-white w-full",
+                        isExpanded ? "gap-2 px-3" : ""
+                    )}
+                    title={isExpanded ? "Collapse" : "Expand"}
+                >
+                    {isExpanded
+                        ? <><ChevronLeft className="h-4 w-4" /><span className="text-[10px] font-bold">Collapse</span></>
+                        : <ChevronRight className="h-4 w-4" />
+                    }
+                </button>
 
-                return (
-                    <div key={`subnav-${dept.name}`} className="bg-[#0f1420] border-b border-slate-800/80 px-4 md:px-6 py-2 overflow-x-auto">
-                        <div className="max-w-[1600px] mx-auto flex items-center gap-6">
-                            {dept.links.map(link => {
-                                const isActive = pathname === link.href;
-                                return (
-                                    <Link
-                                        key={link.href}
-                                        href={link.href}
-                                        className={cn(
-                                            "text-sm font-medium whitespace-nowrap transition-colors pb-1 border-b-2",
-                                            isActive
-                                                ? "text-emerald-400 border-emerald-400"
-                                                : "text-slate-400 border-transparent hover:text-slate-200 hover:border-slate-600"
-                                        )}
-                                    >
-                                        {link.label}
-                                    </Link>
-                                )
-                            })}
-                        </div>
-                    </div>
-                )
-            })}
-        </div>
+                <button
+                    onClick={handleLogout}
+                    className={cn(
+                        "flex items-center justify-center p-2 rounded-xl transition-colors bg-white/5 hover:bg-red-500/30 text-red-200 hover:text-white w-full",
+                        isExpanded ? "gap-2 px-3" : ""
+                    )}
+                    title="Log Out"
+                >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    {isExpanded && <span className="text-[10px] font-bold">Logout</span>}
+                </button>
+            </div>
+        </aside>
     )
 }
