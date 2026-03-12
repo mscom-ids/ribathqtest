@@ -105,10 +105,19 @@ export const getMonthlyFeesForCurrentMonth = async (req: Request, res: Response)
 export const getActiveStudents = async (req: Request, res: Response) => {
     try {
         const result = await db.query(
-            `SELECT adm_no, name, batch_year, standard, photo_url, dob as date_of_birth, status 
-             FROM students WHERE status = 'active' ORDER BY adm_no ASC`
+            `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.photo_url, s.dob as date_of_birth, s.status,
+                    s.assigned_usthad_id, st.name as usthad_name
+             FROM students s
+             LEFT JOIN staff st ON s.assigned_usthad_id = st.id
+             WHERE s.status = 'active' ORDER BY s.adm_no ASC`
         );
-        res.json({ success: true, data: result.rows });
+        
+        const formattedData = result.rows.map(row => ({
+            ...row,
+            assigned_usthad: row.usthad_name ? { name: row.usthad_name } : null
+        }));
+
+        res.json({ success: true, data: formattedData });
     } catch (error: any) {
         console.error('Error fetching students:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch students' });

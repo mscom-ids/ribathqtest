@@ -104,7 +104,7 @@ export default function StudentsPage() {
                 setStudents(merged)
 
             } catch (error: any) {
-                console.error("Error loading students:", JSON.stringify(error, null, 2))
+                console.error("Error loading students:", error.message || error)
             } finally {
                 setLoading(false)
             }

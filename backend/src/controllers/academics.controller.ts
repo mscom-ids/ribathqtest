@@ -94,11 +94,11 @@ export const getAttendance = async (req: Request, res: Response) => {
         let paramCount = 1;
 
         if (date) {
-            query += ` AND date = $\${paramCount}`;
+            query += ` AND date = $${paramCount}`;
             params.push(date);
             paramCount++;
         } else if (start_date && end_date) {
-            query += ` AND date >= $\${paramCount} AND date <= $\${paramCount + 1}`;
+            query += ` AND date >= $${paramCount} AND date <= $${paramCount + 1}`;
             params.push(start_date, end_date);
             paramCount += 2;
         } else {
@@ -106,13 +106,13 @@ export const getAttendance = async (req: Request, res: Response) => {
         }
 
         if (session_id) {
-            query += ` AND session_id = $\${paramCount}`;
+            query += ` AND session_id = $${paramCount}`;
             params.push(session_id);
             paramCount++;
         }
 
         if (department) {
-            query += ` AND department = $\${paramCount}`;
+            query += ` AND department = $${paramCount}`;
             params.push(department);
             paramCount++;
         }
@@ -120,8 +120,8 @@ export const getAttendance = async (req: Request, res: Response) => {
         if (student_ids && typeof student_ids === 'string') {
             const ids = student_ids.split(',');
             if (ids.length > 0) {
-                const placeholders = ids.map((_, i) => `$\${paramCount + i}`).join(',');
-                query += ` AND student_id IN (\${placeholders})`;
+                const placeholders = ids.map((_, i) => `$${paramCount + i}`).join(',');
+                query += ` AND student_id IN (${placeholders})`;
                 params.push(...ids);
                 paramCount += ids.length;
             }
@@ -129,9 +129,9 @@ export const getAttendance = async (req: Request, res: Response) => {
         
         const result = await db.query(query, params);
         res.json({ success: true, data: result.rows });
-    } catch (err) {
+    } catch (err: any) {
         console.error('Error fetching attendance:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 
