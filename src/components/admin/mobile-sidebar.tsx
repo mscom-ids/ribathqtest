@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut } from "lucide-react"
 import { useEffect } from "react"
+import Cookies from "js-cookie"
+import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const navLinks = [
@@ -27,6 +29,14 @@ interface MobileSidebarProps {
 
 export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
     const pathname = usePathname()
+    const router = useRouter()
+
+    const handleLogout = async () => {
+        try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
+        Cookies.remove('auth_token')
+        onClose()
+        router.push('/login')
+    }
 
     // Close on route change
     useEffect(() => { onClose() }, [pathname])
@@ -95,9 +105,18 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                     })}
                 </nav>
 
-                {/* Footer */}
-                <div className="p-4 border-t border-white/10 text-xs text-blue-200 text-center">
-                    Ribathul Quran Admin
+                {/* Footer and Logout */}
+                <div className="p-4 border-t border-white/10 flex flex-col gap-2">
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-white/10 hover:bg-red-500/80 text-white transition-colors font-semibold"
+                    >
+                        <LogOut className="h-4 w-4" />
+                        Logout
+                    </button>
+                    <div className="text-[10px] text-blue-200 text-center mt-2 opacity-70">
+                        Ribathul Quran Admin
+                    </div>
                 </div>
             </aside>
         </>

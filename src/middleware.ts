@@ -13,6 +13,27 @@ export async function middleware(request: NextRequest) {
     currentPath.startsWith('/staff') || 
     currentPath.startsWith('/parent');
 
+  // If user is already logged in and visits /login or /, redirect to their portal
+  if (currentPath === '/login' || currentPath === '/') {
+    const token = request.cookies.get('auth_token');
+    if (token?.value) {
+      try {
+        const payloadBase64 = token.value.split('.')[1];
+        if (payloadBase64) {
+          const decodedPayload = JSON.parse(atob(payloadBase64));
+          const userRole = decodedPayload.role;
+          if (userRole === 'admin' || userRole === 'vice_principal' || userRole === 'principal' || userRole === 'controller') {
+              return NextResponse.redirect(new URL('/admin', request.url));
+          }
+          if (userRole === 'staff') return NextResponse.redirect(new URL('/staff', request.url));
+          if (userRole === 'parent') return NextResponse.redirect(new URL('/parent', request.url));
+        }
+      } catch (e) {
+        // bad token, just let them see the login page
+      }
+    }
+  }
+
   if (isProtectedRoute) {
     // Check if our custom auth_token cookie exists
     const token = request.cookies.get('auth_token');
