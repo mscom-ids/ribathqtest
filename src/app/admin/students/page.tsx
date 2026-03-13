@@ -84,49 +84,85 @@ function StudentsPageContent() {
         return () => window.removeEventListener('resize', handleResize)
     }, [])
 
+    // ── Shared refresh function ─────────────────────────────────────────────
+    const refreshStudents = async (showLoading = false) => {
+        if (showLoading) setLoading(true)
+        try {
+            const res = await getActiveStudents()
+            if (!res.success || !res.data) return
+
+            const merged = (res.data as any).map((s: any) => ({
+                ...s,
+                dob: s.dob || s.date_of_birth,
+                progress: 0
+            }))
+
+            // Preserve existing hifz progress values
+            merged.forEach((s: any) => {
+                const existing = students.find(st => st.adm_no === s.adm_no)
+                if (existing) s.progress = existing.progress || 0
+            })
+
+            setStudents(merged)
+
+            // Keep selected student in sync — deselect if transferred away
+            setSelectedStudent(prev => {
+                if (!prev) return null
+                const still = merged.find((s: any) => s.adm_no === prev.adm_no)
+                return still ?? null
+            })
+        } catch (err: any) {
+            console.error('Error refreshing students:', err.message || err)
+        } finally {
+            if (showLoading) setLoading(false)
+        }
+    }
+
+    // ── Initial load (with hifz progress) ────────────────────────────────────
     useEffect(() => {
-        async function loadData() {
+        async function initialLoad() {
             setLoading(true)
             try {
                 const res = await getActiveStudents()
                 if (!res.success || !res.data) throw new Error(res.error || 'Failed to load')
-                const studentsData = res.data
-
-                const merged = (studentsData as any).map((s: any) => ({
+                const merged = (res.data as any).map((s: any) => ({
                     ...s,
                     dob: s.dob || s.date_of_birth,
-                    progress: 0 // Will populate after parallel request if needed
+                    progress: 0
                 }))
-                
-                // Fetch progress from new API wrapper
+
                 try {
                     const progRes = await api.get('/hifz/progress-summary')
                     if (progRes.data.success && progRes.data.progressMap) {
                         const pMap = progRes.data.progressMap
-                        merged.forEach((s: any) => {
-                            s.progress = pMap[s.adm_no] || 0
-                        })
+                        merged.forEach((s: any) => { s.progress = pMap[s.adm_no] || 0 })
                     }
-                } catch (e) {
-                    // Ignore hifz progress errors if not module active
-                }
+                } catch (_) { /* hifz progress is optional */ }
 
                 setStudents(merged)
-
             } catch (error: any) {
-                console.error("Error loading students:", error.message || error)
+                console.error('Error loading students:', error.message || error)
             } finally {
                 setLoading(false)
             }
         }
-        loadData()
+        initialLoad()
     }, [])
 
-    // Filter students by search and status
+    // ── Auto-poll every 30 s to sync across devices/browsers ─────────────────
+    useEffect(() => {
+        const interval = setInterval(() => { refreshStudents() }, 30_000)
+        return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [students])
+
+    // ── Filter students by search and status ─────────────────────────────────
     const filtered = students.filter(s => {
         const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
             s.adm_no.toLowerCase().includes(search.toLowerCase())
-        const matchStatus = statusFilter === "all" || (s.status || "active") === statusFilter
+        // Treat null/undefined status as 'active'
+        const effectiveStatus = s.status || 'active'
+        const matchStatus = statusFilter === 'all' || effectiveStatus === statusFilter
         return matchSearch && matchStatus
     })
 
@@ -299,38 +335,19 @@ function StudentsPageContent() {
                         </div>
                     )}
 
-                    {/* We need to pass the selected student to a detail view component */}
+                    {/* Student Profile View */}
                     <StudentProfileView student={selectedStudent} onStudentUpdated={async (newStatus?: string) => {
-                        // Optimistic Update: instantly update the local state for immediate UI feedback
+                        // Optimistic update: instantly reflect the change in local state
                         if (newStatus && selectedStudent) {
-                            setStudents(prev => prev.map(s => s.adm_no === selectedStudent.adm_no ? { ...s, status: newStatus } : s))
+                            // Update local status immediately
+                            setStudents(prev => prev.map(s =>
+                                s.adm_no === selectedStudent.adm_no ? { ...s, status: newStatus } : s
+                            ))
                             setSelectedStudent(prev => prev ? { ...prev, status: newStatus } : null)
                         }
 
-                        // Always refetch fresh data from server (cache: no-store is now set)
-                        try {
-                            const res = await getActiveStudents()
-                            if (res.success && res.data) {
-                                const merged = (res.data as any).map((s: any) => ({
-                                    ...s,
-                                    dob: s.dob || s.date_of_birth,
-                                    progress: students.find(st => st.adm_no === s.adm_no)?.progress || 0
-                                }))
-                                setStudents(merged)
-                                // Update or deselect the selected student
-                                if (selectedStudent) {
-                                    const updated = merged.find((s: any) => s.adm_no === selectedStudent.adm_no)
-                                    if (updated) {
-                                        setSelectedStudent(updated)
-                                    } else {
-                                        // Student was transferred out of active — deselect them
-                                        setSelectedStudent(null)
-                                    }
-                                }
-                            }
-                        } catch (e) {
-                            console.error("Failed to refresh students", e)
-                        }
+                        // Full server sync (cache: no-store ensures fresh data)
+                        await refreshStudents()
                     }} />
                 </div>
             </div>
