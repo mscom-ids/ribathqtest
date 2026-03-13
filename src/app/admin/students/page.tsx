@@ -197,7 +197,7 @@ function StudentsPageContent() {
 
 
     return (
-        <div className="h-[calc(100dvh-90px)] lg:h-[calc(100vh-100px)] flex flex-col gap-4">
+        <div className="h-full flex flex-col gap-4 overflow-hidden">
             {/* Header — hidden on mobile when a student profile is active */}
             <div className={`flex-col sm:flex-row justify-between items-start sm:items-center gap-4 flex-shrink-0 ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex'}`}>
                 <div>
@@ -218,8 +218,8 @@ function StudentsPageContent() {
 
                 {/* Left Panel - Student List: hidden on mobile when a student is selected */}
                 <div className={`
-                    lg:w-[380px] flex flex-col gap-4 bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
-                    ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex w-full'}
+                    lg:w-[380px] flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
+                    ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex w-full h-full overflow-hidden'}
                 `}>
 
                     {/* Search & Filter */}

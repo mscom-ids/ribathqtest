@@ -7,12 +7,10 @@ export function TopHeader() {
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full border-b border-slate-100/50 pb-4 animate-in fade-in duration-500">
             {/* Left side: School Branding */}
             <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
-                    <School className="h-6 w-6" />
-                </div>
+                <img src="/logo.png" alt="Ribathul Quran Logo" className="h-12 w-12 object-contain" />
                 <div>
                     <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                        Ribathul Quran
+                        Ma'din Ribathul Quran
                     </h2>
                 </div>
             </div>
