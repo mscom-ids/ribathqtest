@@ -300,21 +300,36 @@ function StudentsPageContent() {
                     )}
 
                     {/* We need to pass the selected student to a detail view component */}
-                    <StudentProfileView student={selectedStudent} onStudentUpdated={async () => {
-                        const res = await getActiveStudents()
-                        const studentsData = res.data
-                        
-                        if (studentsData) {
-                            const merged = (studentsData as any).map((s: any) => ({
-                                ...s,
-                                progress: students.find(st => st.adm_no === s.adm_no)?.progress || 0
-                            }))
-                            setStudents(merged)
-                            // Update the selected student too
-                            if (selectedStudent) {
-                                const updated = merged.find((s: any) => s.adm_no === selectedStudent.adm_no)
-                                if (updated) setSelectedStudent(updated)
+                    <StudentProfileView student={selectedStudent} onStudentUpdated={async (newStatus?: string) => {
+                        // Optimistic Update: instantly update the local state for immediate UI feedback
+                        if (newStatus && selectedStudent) {
+                            setStudents(prev => prev.map(s => s.adm_no === selectedStudent.adm_no ? { ...s, status: newStatus } : s))
+                            setSelectedStudent(prev => prev ? { ...prev, status: newStatus } : null)
+                        }
+
+                        // Always refetch fresh data from server (cache: no-store is now set)
+                        try {
+                            const res = await getActiveStudents()
+                            if (res.success && res.data) {
+                                const merged = (res.data as any).map((s: any) => ({
+                                    ...s,
+                                    dob: s.dob || s.date_of_birth,
+                                    progress: students.find(st => st.adm_no === s.adm_no)?.progress || 0
+                                }))
+                                setStudents(merged)
+                                // Update or deselect the selected student
+                                if (selectedStudent) {
+                                    const updated = merged.find((s: any) => s.adm_no === selectedStudent.adm_no)
+                                    if (updated) {
+                                        setSelectedStudent(updated)
+                                    } else {
+                                        // Student was transferred out of active — deselect them
+                                        setSelectedStudent(null)
+                                    }
+                                }
                             }
+                        } catch (e) {
+                            console.error("Failed to refresh students", e)
                         }
                     }} />
                 </div>

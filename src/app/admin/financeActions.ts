@@ -152,7 +152,10 @@ export async function getMonthlyFeesForCurrentMonth() {
 
 export async function getActiveStudents() {
     try {
-        const res = await fetch(`${API_URL}/finance/active-students`, { headers: await getAuthHeaders() });
+        const res = await fetch(`${API_URL}/finance/active-students`, { 
+            headers: await getAuthHeaders(),
+            cache: 'no-store'
+        });
         const result = await res.json();
         return result;
     } catch (error: any) {

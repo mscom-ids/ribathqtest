@@ -22,7 +22,7 @@ import { RotateCcw, CheckCircle, UserX, ChevronDown, UserCog, Eye } from "lucide
 interface ProfileHeaderProps {
     student: Student
     onMentorChanged?: () => void
-    onStatusChanged?: () => void
+    onStatusChanged?: (newStatus: string) => void
     isAdmin?: boolean
 }
 
@@ -93,7 +93,7 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
             const res = await api.put(`/students/${student.adm_no}`, { status: newStatus })
             if (res.data.success) {
                 setCurrentStatus(newStatus)
-                onStatusChanged?.()
+                onStatusChanged?.(newStatus)
             }
         } catch (e) { console.error(e) }
     }
@@ -118,7 +118,7 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
             if (res.data.success) {
                 setCurrentStatus(transferType)
                 setTransferModalOpen(false)
-                onStatusChanged?.()
+                onStatusChanged?.(transferType)
             }
         } catch (e) {
             console.error("Failed to transfer student", e)

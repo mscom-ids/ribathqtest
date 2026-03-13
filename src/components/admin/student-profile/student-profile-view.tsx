@@ -11,7 +11,7 @@ import { ExamsTab } from "./tabs/exams-tab"
 
 interface StudentProfileViewProps {
     student: Student | null
-    onStudentUpdated?: () => void
+    onStudentUpdated?: (newStatus?: string) => void
     isAdmin?: boolean
 }
 
@@ -32,8 +32,8 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
             <ProfileHeader 
                 student={student} 
-                onMentorChanged={onStudentUpdated} 
-                onStatusChanged={onStudentUpdated}
+                onMentorChanged={() => onStudentUpdated?.()} 
+                onStatusChanged={(status) => onStudentUpdated?.(status)}
                 isAdmin={isAdmin} 
             />
 
