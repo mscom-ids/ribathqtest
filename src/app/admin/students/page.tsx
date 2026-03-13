@@ -62,7 +62,7 @@ function StudentsPageContent() {
     const [loading, setLoading] = useState(true)
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [search, setSearch] = useState("")
-    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "dropout">(filterFromUrl || "all")
+    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "dropout">(filterFromUrl || "active")
     const [isMobileView, setIsMobileView] = useState(false)
     const [mounted, setMounted] = useState(false)
 

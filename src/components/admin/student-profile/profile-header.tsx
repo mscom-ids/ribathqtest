@@ -22,12 +22,13 @@ import { RotateCcw, CheckCircle, UserX, ChevronDown, UserCog, Eye } from "lucide
 interface ProfileHeaderProps {
     student: Student
     onMentorChanged?: () => void
+    onStatusChanged?: () => void
     isAdmin?: boolean
 }
 
 type StaffOption = { id: string; name: string }
 
-export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: ProfileHeaderProps) {
+export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdmin = true }: ProfileHeaderProps) {
     const [completedJuz, setCompletedJuz] = useState<number[]>([])
     const [loading, setLoading] = useState(true)
     const [currentStatus, setCurrentStatus] = useState(student.status || "active")
@@ -90,7 +91,10 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
 
         try {
             const res = await api.put(`/students/${student.adm_no}`, { status: newStatus })
-            if (res.data.success) setCurrentStatus(newStatus)
+            if (res.data.success) {
+                setCurrentStatus(newStatus)
+                onStatusChanged?.()
+            }
         } catch (e) { console.error(e) }
     }
 
@@ -114,6 +118,7 @@ export function ProfileHeader({ student, onMentorChanged, isAdmin = true }: Prof
             if (res.data.success) {
                 setCurrentStatus(transferType)
                 setTransferModalOpen(false)
+                onStatusChanged?.()
             }
         } catch (e) {
             console.error("Failed to transfer student", e)

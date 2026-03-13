@@ -30,7 +30,12 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-            <ProfileHeader student={student} onMentorChanged={onStudentUpdated} isAdmin={isAdmin} />
+            <ProfileHeader 
+                student={student} 
+                onMentorChanged={onStudentUpdated} 
+                onStatusChanged={onStudentUpdated}
+                isAdmin={isAdmin} 
+            />
 
             <div className="space-y-6">
                 {/* Basic Details Card */}

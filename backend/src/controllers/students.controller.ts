@@ -122,6 +122,9 @@ export const createStudent = async (req: Request, res: Response) => {
 export const updateStudent = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Student ID is required' });
+    }
     const updateData = req.body;
     
     // Safety check - don't allow updating ID
