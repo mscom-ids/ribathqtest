@@ -44,7 +44,13 @@ export default function LoginForm() {
 
             if (response.data.success && response.data.token) {
                 // Set the token in a cookie so the Next.js middleware and future API requests can see it
-                Cookies.set('auth_token', response.data.token, { expires: 7 })
+                // Make sure it persists for mobile phones across app restarts
+                Cookies.set('auth_token', response.data.token, { 
+                    expires: 365, 
+                    secure: process.env.NODE_ENV === 'production',
+                    sameSite: 'lax',
+                    path: '/'
+                })
                 
                 const profile = response.data.user
                 if (profile) {
