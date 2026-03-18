@@ -62,7 +62,7 @@ function StatCard({
             <div className={`rounded-2xl p-5 flex flex-col justify-between h-full min-h-[130px] hover:shadow-lg transition-all duration-200 cursor-pointer border ${
                 dark
                     ? "border-transparent text-white"
-                    : "bg-white border-[#e8ede9] text-[#1a1a1a]"
+                    : "bg-white dark:bg-[#1a1f2e] border-[#e8ede9] dark:border-[#2a2f3e] text-[#1a1a1a] dark:text-[#e0e0e0]"
             }`}
             style={dark ? { background: 'linear-gradient(160deg, #1a3d2a 0%, #264f37 50%, #2d6b45 100%)' } : undefined}
             >
@@ -73,7 +73,7 @@ function StatCard({
                     </div>
                 </div>
                 <div>
-                    <p className={`text-[32px] font-black leading-none ${dark ? "text-white" : "text-[#1a1a1a]"}`}>{value}</p>
+                    <p className={`text-[32px] font-black leading-none ${dark ? "text-white" : "text-[#1a1a1a] dark:text-[#e0e0e0]"}`}>{value}</p>
                     {sub && (
                         <p className={`text-[10px] font-semibold mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${dark ? "bg-white/10 text-[#7de0a8]" : "bg-[#eaf4ee] text-[#2d6b45]"}`}>
                             <CheckCircle2 className="h-3 w-3" /> {sub}
@@ -140,15 +140,15 @@ export default function AdminDashboardPage() {
     const n = (v: number) => loading ? '—' : v
 
     return (
-        <div className="space-y-6 pb-10 text-[#1a1a1a]">
+        <div className="space-y-6 pb-10 text-[#1a1a1a] dark:text-[#e0e0e0]">
 
             {/* ── Page header — Donezo style ──────────────────────────────── */}
-            <div className="flex items-end justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-black text-[#1a1a1a] leading-tight">Dashboard</h1>
-                    <p className="text-[13px] text-[#9ca3af] mt-1">{dateInfo.dayStr}, {dateInfo.dateStr} · Welcome back to Ma'din Admin Portal.</p>
+                    <h1 className="text-[28px] font-black text-[#1a1a1a] dark:text-[#e0e0e0] leading-tight">Dashboard</h1>
+                    <p className="text-[13px] text-[#9ca3af] mt-1">{dateInfo.dayStr}, {dateInfo.dateStr} · Welcome back to Admin Portal.</p>
                 </div>
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
                     <Link href="/admin/students/create"
                         className="inline-flex items-center gap-2 bg-[#1a3d2a] hover:bg-[#2d6b45] text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-md shadow-[#1a3d2a]/20 transition-all hover:scale-105 active:scale-95">
                         <Plus className="h-4 w-4" /> Add Student
@@ -161,7 +161,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* ── Stat cards — first card dark green ─────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard label="Total Students"  value={n(stats.students)} dark href="/admin/students" />
                 <StatCard label="Active Students" value={n(stats.active)}   href="/admin/students?status=active" />
                 <StatCard label="Graduates"        value={n(stats.complete)} href="/admin/alumni" />
@@ -178,7 +178,7 @@ export default function AdminDashboardPage() {
                     <Card className="p-6">
                         <div className="flex items-center justify-between mb-4">
                             <div>
-                                <h3 className="text-[15px] font-bold text-[#1a1a1a]">Student Analytics</h3>
+                                <h3 className="text-[15px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Student Analytics</h3>
                                 <p className="text-[11px] text-[#9ca3af] mt-0.5">Weekly attendance performance</p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -206,19 +206,19 @@ export default function AdminDashboardPage() {
                     {/* Team tasks — like Donezo's Team Collaboration card */}
                     <Card className="p-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-[15px] font-bold text-[#1a1a1a]">Pending Tasks</h3>
+                            <h3 className="text-[15px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Pending Tasks</h3>
                             <button className="text-[11px] font-bold text-[#2d6b45] border border-[#c8e6d4] bg-[#eaf4ee] px-3 py-1.5 rounded-lg hover:bg-[#d4f0df] transition">
                                 + Add Task
                             </button>
                         </div>
                         <div className="space-y-3">
                             {tasks.map((t, i) => (
-                                <div key={i} className="flex items-center justify-between py-2 border-b border-[#f5f5f5] last:border-0">
+                                <div key={i} className="flex items-center justify-between py-2 border-b border-[#f5f5f5] dark:border-[#2a2f3e] last:border-0">
                                     <div className="flex items-center gap-3">
                                         <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-[11px] font-bold" style={{ background: t.color }}>
                                             {t.label[0]}
                                         </div>
-                                        <p className="text-[12px] font-semibold text-[#333]">{t.label}</p>
+                                        <p className="text-[12px] font-semibold text-[#333] dark:text-[#d0d0d0]">{t.label}</p>
                                     </div>
                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{
                                         background: t.status === 'Completed' ? '#eaf4ee' : t.status === 'In Progress' ? '#e8f4fd' : '#fefce8',
@@ -236,15 +236,15 @@ export default function AdminDashboardPage() {
                     <Card className="p-5">
                         <h3 className="text-[13px] font-bold text-[#9ca3af] uppercase tracking-widest mb-3">Reminders</h3>
                         <div className="space-y-3">
-                            <div className="p-3 rounded-xl bg-[#f7f9f7] border border-[#e8ede9]">
-                                <p className="text-[13px] font-bold text-[#1a1a1a]">Staff Meeting</p>
+                            <div className="p-3 rounded-xl bg-[#f7f9f7] dark:bg-[#232838] border border-[#e8ede9] dark:border-[#2a2f3e]">
+                                <p className="text-[13px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Staff Meeting</p>
                                 <p className="text-[11px] text-[#9ca3af] mt-0.5">Today · 10:00 am – 11:30 am</p>
                                 <button className="mt-3 w-full flex items-center justify-center gap-2 bg-[#1a3d2a] hover:bg-[#2d6b45] text-white text-[11px] font-bold py-2 rounded-lg transition-colors">
                                     <Play className="h-3 w-3" /> Start Meeting
                                 </button>
                             </div>
-                            <div className="p-3 rounded-xl bg-[#f7f9f7] border border-[#e8ede9]">
-                                <p className="text-[13px] font-bold text-[#1a1a1a]">Fee Submission Deadline</p>
+                            <div className="p-3 rounded-xl bg-[#f7f9f7] dark:bg-[#232838] border border-[#e8ede9] dark:border-[#2a2f3e]">
+                                <p className="text-[13px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Fee Submission Deadline</p>
                                 <p className="text-[11px] text-[#9ca3af] mt-0.5">Mar 25, 2026</p>
                             </div>
                         </div>
@@ -259,12 +259,12 @@ export default function AdminDashboardPage() {
                         <div className="space-y-1">
                             {quickLinks.map(({ href, label, desc, color }) => (
                                 <Link key={href} href={href}
-                                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f7f9f7] transition-colors group">
+                                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f7f9f7] dark:hover:bg-[#232838] transition-colors group">
                                     <div className="h-6 w-6 rounded-lg shrink-0 flex items-center justify-center" style={{ background: color + '30' }}>
                                         <div className="h-2 w-2 rounded-full" style={{ background: color }} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-[12px] font-bold text-[#1a1a1a] group-hover:text-[#1a3d2a] truncate transition-colors">{label}</p>
+                                        <p className="text-[12px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0] group-hover:text-[#1a3d2a] dark:group-hover:text-[#7de0a8] truncate transition-colors">{label}</p>
                                         <p className="text-[10px] text-[#9ca3af] truncate">{desc}</p>
                                     </div>
                                     <ArrowUpRight className="h-3.5 w-3.5 text-[#e8ede9] group-hover:text-[#2d6b45] shrink-0 transition-colors" />

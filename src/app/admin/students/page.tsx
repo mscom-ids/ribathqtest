@@ -212,43 +212,43 @@ function StudentsPageContent() {
             </div>
 
             {/* ── Stat Summary Cards ─────────────────────────────────────── */}
-            <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0 ${mounted && isMobileView && selectedStudent ? 'hidden' : ''}`}>
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer"
+            <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0 ${mounted && isMobileView && selectedStudent ? 'hidden' : ''}`}>
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-2xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-shadow cursor-pointer"
                     onClick={() => setStatusFilter('active')}>
                     <div className="h-10 w-10 rounded-full bg-[#eaf4ee] flex items-center justify-center shrink-0">
                         <Users className="h-5 w-5 text-[#1a3d2a]" />
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Active</p>
-                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.active}</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] dark:text-white leading-none">{loading ? '—' : statusCounts.active}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-2xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-shadow cursor-pointer">
                     <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
                         <Users className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">On Campus</p>
-                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.active}</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] dark:text-white leading-none">{loading ? '—' : statusCounts.active}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-2xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-shadow cursor-pointer">
                     <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
                         <Filter className="h-5 w-5 text-amber-600" />
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">On Leave</p>
-                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">0</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] dark:text-white leading-none">0</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer"
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-2xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-shadow cursor-pointer"
                     onClick={() => setStatusFilter('all')}>
                     <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
                         <LayoutGrid className="h-5 w-5 text-amber-600" />
                     </div>
                     <div>
                         <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Total</p>
-                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.all}</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] dark:text-white leading-none">{loading ? '—' : statusCounts.all}</p>
                     </div>
                 </div>
             </div>
@@ -260,7 +260,7 @@ function StudentsPageContent() {
 
                 {/* Left Panel - Student List: hidden on mobile when a student is selected */}
                 <div className={`
-                    lg:w-[420px] xl:w-[480px] 2xl:w-[540px] flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
+                    lg:w-[420px] xl:w-[480px] 2xl:w-[540px] flex flex-col bg-white dark:bg-[#1e2538] rounded-xl border border-slate-200 dark:border-[#2a3348] shadow-sm flex-shrink-0
                     ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex w-full h-full overflow-hidden'}
                 `}>
 

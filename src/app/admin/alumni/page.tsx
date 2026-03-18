@@ -141,57 +141,57 @@ export default function AlumniPage() {
     return (
         <div className="space-y-6">
             {/* Top Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 flex items-center gap-4 shadow-sm">
                     <div className="h-12 w-12 rounded-lg bg-[#0066ff] text-white flex items-center justify-center flex-shrink-0">
                         <BadgeCheck className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Completed</div>
-                        <div className="text-2xl font-bold text-slate-800">{stats.completed}</div>
+                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Completed</div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.completed}</div>
                     </div>
                 </div>
 
-                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm">
+                <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 flex items-center gap-4 shadow-sm">
                     <div className="h-12 w-12 rounded-lg bg-[#008f6b] text-white flex items-center justify-center flex-shrink-0">
                         <ThumbsDown className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dropout</div>
-                        <div className="text-2xl font-bold text-slate-800">{stats.dropout}</div>
+                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Dropout</div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.dropout}</div>
                     </div>
                 </div>
 
-                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm">
+                <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 flex items-center gap-4 shadow-sm">
                     <div className="h-12 w-12 rounded-lg bg-[#ff9800] text-white flex items-center justify-center flex-shrink-0">
                         <Landmark className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Higher Education</div>
-                        <div className="text-2xl font-bold text-slate-800">{stats.higher_education}</div>
+                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Higher Education</div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.higher_education}</div>
                     </div>
                 </div>
 
-                <div className="bg-white border rounded-xl p-4 flex items-center gap-4 shadow-sm">
+                <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 flex items-center gap-4 shadow-sm">
                     <div className="h-12 w-12 rounded-lg bg-[#e3242b] text-white flex items-center justify-center flex-shrink-0">
                         <Ban className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Stopped</div>
-                        <div className="text-2xl font-bold text-slate-800">{stats.stopped}</div>
+                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stopped</div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.stopped}</div>
                     </div>
                 </div>
             </div>
 
             {/* Header Controls */}
-            <div className="bg-white border rounded-xl p-4 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-xl font-bold text-slate-800">Alumni</h1>
-                    <div className="flex bg-slate-50 rounded-lg p-1 border">
-                        <Button variant="ghost" size="sm" className="h-8 gap-2 hover:bg-white text-slate-600">
+            <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <h1 className="text-xl font-bold text-slate-800 dark:text-white w-full sm:w-auto">Alumni</h1>
+                    <div className="flex w-full sm:w-auto bg-slate-50 dark:bg-slate-900 rounded-lg p-1 border border-slate-200 dark:border-[#2a3348]">
+                        <Button variant="ghost" size="sm" className="h-8 gap-2 flex-1 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300">
                             <Printer className="h-4 w-4" /> Print
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-8 gap-2 hover:bg-white text-slate-600">
+                        <Button variant="ghost" size="sm" className="h-8 gap-2 flex-1 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300">
                             <FileDown className="h-4 w-4" /> Export
                         </Button>
                     </div>
@@ -200,10 +200,10 @@ export default function AlumniPage() {
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-end pt-2">
                     <div className="flex items-center gap-3 w-full md:w-auto">
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px] bg-white h-10">
+                            <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-[#1a1f2e] border-slate-200 dark:border-[#2a3348] text-slate-800 dark:text-slate-200 h-10">
                                 <SelectValue placeholder="Select Status" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="bg-white dark:bg-[#1a1f2e] border-slate-200 dark:border-[#2a3348] text-slate-800 dark:text-slate-200">
                                 <SelectItem value="all">Select Status (All)</SelectItem>
                                 <SelectItem value="completed">Completed</SelectItem>
                                 <SelectItem value="dropout">Dropout</SelectItem>
@@ -216,7 +216,7 @@ export default function AlumniPage() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input 
                                 placeholder="Search alumni" 
-                                className="pl-9 h-10"
+                                className="pl-9 h-10 bg-white dark:bg-[#1a1f2e] border-slate-200 dark:border-[#2a3348] text-slate-800 dark:text-slate-200"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -226,10 +226,10 @@ export default function AlumniPage() {
             </div>
 
             {/* Data Table */}
-            <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-[#f8fafc] text-slate-500 font-semibold border-b">
+            <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl shadow-sm overflow-hidden auto-cols-auto">
+                <div className="overflow-x-auto min-w-full">
+                    <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead className="bg-[#f8fafc] dark:bg-[#232838] text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-[#2a3348]">
                             <tr>
                                 <th className="px-6 py-4">#</th>
                                 <th className="px-6 py-4">Name</th>
@@ -242,11 +242,11 @@ export default function AlumniPage() {
                                 <th className="px-6 py-4 text-center">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-[#2a3348]">
                             {loading ? (
-                                <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">Loading alumni records...</td></tr>
+                                <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500 dark:text-slate-400 hover:bg-transparent">Loading alumni records...</td></tr>
                             ) : filteredAlumni.length === 0 ? (
-                                <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500">No records found.</td></tr>
+                                <tr><td colSpan={9} className="px-6 py-10 text-center text-slate-500 dark:text-slate-400 hover:bg-transparent">No records found.</td></tr>
                             ) : (
                                 filteredAlumni.map((student, idx) => (
                                     <tr key={student.adm_no} className="hover:bg-slate-50 transition-colors">

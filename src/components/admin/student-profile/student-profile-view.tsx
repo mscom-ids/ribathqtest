@@ -19,11 +19,11 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
     if (!student) {
         return (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4 min-h-[400px]">
-                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center">
+                <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-[#232838] flex items-center justify-center">
                     <Book className="h-8 w-8 opacity-50" />
                 </div>
-                <p className="font-medium text-slate-500">Select a student to view details</p>
-                <p className="text-sm text-slate-400">Choose a student from the list on the left</p>
+                <p className="font-medium text-slate-500 dark:text-slate-400">Select a student to view details</p>
+                <p className="text-sm text-slate-400 dark:text-slate-500">Choose a student from the list on the left</p>
             </div>
         )
     }
@@ -39,27 +39,27 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
 
             <div className="space-y-6">
                 {/* Basic Details Card */}
-                <Card className="border border-slate-100 shadow-sm bg-white">
-                    <CardHeader className="pb-3 border-b border-slate-100">
-                        <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Basic Details</CardTitle>
+                <Card className="border border-slate-100 dark:border-[#2a3348] shadow-sm bg-white dark:bg-[#1e2538]">
+                    <CardHeader className="pb-3 border-b border-slate-100 dark:border-[#2a3348]">
+                        <CardTitle className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Basic Details</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-5">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                             <div>
                                 <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Date of Birth</label>
-                                <p className="font-medium text-slate-800">{student.dob || "N/A"}</p>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{student.dob || "N/A"}</p>
                             </div>
                             <div>
                                 <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Gender</label>
-                                <p className="font-medium text-slate-800">{(student as any).gender || "N/A"}</p>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).gender || "N/A"}</p>
                             </div>
                             <div>
                                 <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Blood Group</label>
-                                <p className="font-medium text-slate-800">{(student as any).blood_group || "N/A"}</p>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).blood_group || "N/A"}</p>
                             </div>
                             <div>
                                 <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Religion</label>
-                                <p className="font-medium text-slate-800">{(student as any).religion || "Islam"}</p>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).religion || "Islam"}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -68,7 +68,7 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
                 {/* Tabs Section */}
                 <div>
                     <Tabs defaultValue="progress" className="w-full">
-                        <TabsList className="w-full justify-start border-b border-slate-200 rounded-none h-auto p-0 bg-transparent flex flex-wrap gap-x-2 md:gap-x-4 gap-y-0">
+                        <TabsList className="w-full justify-start border-b border-slate-200 dark:border-[#2a3348] rounded-none h-auto p-0 bg-transparent flex flex-wrap gap-x-2 md:gap-x-4 gap-y-0">
                             <TabsTrigger
                                 value="progress"
                                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:text-indigo-700 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"

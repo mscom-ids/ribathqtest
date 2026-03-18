@@ -88,7 +88,7 @@ function isItemActive(item: NavEntry, pathname: string): boolean {
     return false
 }
 
-export function AdminSidebar() {
+export function AdminSidebar({ mobileOpen, onClose }: { mobileOpen?: boolean; onClose?: () => void }) {
     const pathname = usePathname()
     const router = useRouter()
     const [user, setUser] = useState({ name: 'Admin', role: 'Administrator' })
@@ -134,11 +134,11 @@ export function AdminSidebar() {
                         className={cn(
                             "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all relative group",
                             active
-                                ? "bg-[#eaf4ee] text-[#1a3d2a] font-bold"
-                                : "text-[#6b7280] hover:bg-[#f5f9f6] hover:text-[#1a3d2a]"
+                                ? "bg-[#eaf4ee] dark:bg-[#1a3d2a]/30 text-[#1a3d2a] dark:text-[#7de0a8] font-bold"
+                                : "text-[#6b7280] dark:text-[#9ca3af] hover:bg-[#f5f9f6] dark:hover:bg-[#232838] hover:text-[#1a3d2a] dark:hover:text-[#e0e0e0]"
                         )}>
-                        {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#1a3d2a]" />}
-                        <item.icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-[#1a3d2a]" : "text-[#9ca3af]")} />
+                        {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#1a3d2a] dark:bg-[#7de0a8]" />}
+                        <item.icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-[#1a3d2a] dark:text-[#7de0a8]" : "text-[#9ca3af]")} />
                         <span className="flex-1 text-left">{item.label}</span>
                         <ChevronDown className={cn("h-3.5 w-3.5 text-[#9ca3af] transition-transform duration-200", isOpen && "rotate-180")} />
                     </button>
@@ -154,8 +154,8 @@ export function AdminSidebar() {
                                     className={cn(
                                         "flex items-center gap-2 pl-10 pr-3 py-2 rounded-lg text-[12px] font-medium transition-all ml-1",
                                         childActive
-                                            ? "text-[#1a3d2a] bg-[#eaf4ee] font-bold"
-                                            : "text-[#9ca3af] hover:text-[#1a3d2a] hover:bg-[#f5f9f6]"
+                                            ? "text-[#1a3d2a] dark:text-[#7de0a8] bg-[#eaf4ee] dark:bg-[#1a3d2a]/20 font-bold"
+                                            : "text-[#9ca3af] hover:text-[#1a3d2a] dark:hover:text-[#e0e0e0] hover:bg-[#f5f9f6] dark:hover:bg-[#232838]"
                                     )}>
                                     <span className={cn(
                                         "w-1.5 h-1.5 rounded-full shrink-0",
@@ -177,11 +177,11 @@ export function AdminSidebar() {
                 className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all relative group",
                     active
-                        ? "bg-[#eaf4ee] text-[#1a3d2a] font-bold"
-                        : "text-[#6b7280] hover:bg-[#f5f9f6] hover:text-[#1a3d2a]"
+                        ? "bg-[#eaf4ee] dark:bg-[#1a3d2a]/30 text-[#1a3d2a] dark:text-[#7de0a8] font-bold"
+                        : "text-[#6b7280] dark:text-[#9ca3af] hover:bg-[#f5f9f6] dark:hover:bg-[#232838] hover:text-[#1a3d2a] dark:hover:text-[#e0e0e0]"
                 )}>
-                {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#1a3d2a]" />}
-                <simpleItem.icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-[#1a3d2a]" : "text-[#9ca3af]")} />
+                {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-[#1a3d2a] dark:bg-[#7de0a8]" />}
+                <simpleItem.icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-[#1a3d2a] dark:text-[#7de0a8]" : "text-[#9ca3af]")} />
                 <span className="flex-1">{simpleItem.label}</span>
                 {simpleItem.badge != null && (
                     <span className="text-[10px] font-bold bg-[#e6f4eb] text-[#1a3d2a] px-1.5 py-0.5 rounded-full leading-none">{simpleItem.badge}</span>
@@ -191,14 +191,25 @@ export function AdminSidebar() {
     }
 
     return (
-        <aside className="fixed left-0 top-0 bottom-0 w-[220px] z-40 bg-white border-r border-[#e8ede9] flex flex-col">
+        <>
+            {/* Mobile Overlay */}
+            {mobileOpen && (
+                <div 
+                    className="fixed inset-0 z-40 bg-[#111520]/60 backdrop-blur-sm lg:hidden transition-opacity" 
+                    onClick={onClose} 
+                />
+            )}
+            <aside className={cn(
+                "fixed left-0 top-0 bottom-0 w-[220px] z-50 bg-white dark:bg-[#1a1f2e] border-r border-[#e8ede9] dark:border-[#2a2f3e] flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0",
+                mobileOpen ? "translate-x-0" : "-translate-x-full"
+            )}>
 
             {/* ── Logo ──────────────────────────────────────────────────── */}
             <div className="h-[76px] px-4 flex items-center gap-2 shrink-0">
                 <img src="/logo.png" alt="Ribathul Quran" className="h-[56px] w-[56px] rounded-full object-cover shrink-0" />
                 <div className="leading-none">
-                    <p className="text-[13px] font-semibold text-[#2c3e50] tracking-[0.08em] uppercase" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Ribathul</p>
-                    <p className="text-[13px] font-semibold text-[#2c3e50] tracking-[0.08em] uppercase" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Quran</p>
+                    <p className="text-[13px] font-semibold text-[#2c3e50] dark:text-[#e0e0e0] tracking-[0.08em] uppercase" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Ribathul</p>
+                    <p className="text-[13px] font-semibold text-[#2c3e50] dark:text-[#e0e0e0] tracking-[0.08em] uppercase" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>Quran</p>
                 </div>
             </div>
 
@@ -221,13 +232,14 @@ export function AdminSidebar() {
                 <div className="space-y-0.5">
                     {generalLinks.map(item => renderItem(item))}
                     <button onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-[#6b7280] hover:bg-rose-50 hover:text-rose-500 transition-all">
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-[#6b7280] hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-500 transition-all">
                         <LogOut className="h-[18px] w-[18px] shrink-0" />
                         <span>Logout</span>
                     </button>
                 </div>
             </nav>
 
-        </aside>
+            </aside>
+        </>
     )
 }
