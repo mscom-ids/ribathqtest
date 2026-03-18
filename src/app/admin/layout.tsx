@@ -10,7 +10,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="pl-[220px] flex flex-col min-h-screen">
                 <TopNav />
                 <main className="flex-1 pt-[60px]">
-                    <div className="max-w-[1400px] mx-auto px-6 py-7">
+                    <div className="px-6 py-7">
                         {children}
                     </div>
                 </main>

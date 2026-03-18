@@ -260,7 +260,7 @@ function StudentsPageContent() {
 
                 {/* Left Panel - Student List: hidden on mobile when a student is selected */}
                 <div className={`
-                    lg:w-[380px] flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
+                    lg:w-[420px] xl:w-[480px] 2xl:w-[540px] flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm flex-shrink-0
                     ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex w-full h-full overflow-hidden'}
                 `}>
 
