@@ -301,11 +301,16 @@ export default function EditStudentPage() {
                             )}
                         </div>
                         <div>
-                            <div className="flex items-center gap-3 mb-1">
+                            <div className="flex flex-wrap items-center gap-3 mb-1">
                                 <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{studentData?.name || 'Loading Student...'}</h1>
                                 <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-md">
                                     {id}
                                 </span>
+                                {studentData?.status && studentData.status !== 'active' && (
+                                    <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-md capitalize border border-amber-200">
+                                        {studentData.status.replace('_', ' ')}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
                                 <span>{studentData?.standard || 'Unassigned Class'}</span>

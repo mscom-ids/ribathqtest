@@ -293,7 +293,7 @@ export default function AlumniPage() {
                                                     <UserPlus className="h-5 w-5" />
                                                 </button>
                                                 <Link 
-                                                    href={`/admin/students/profile/${student.adm_no}`}
+                                                    href={`/admin/students/${student.adm_no}`}
                                                     title="View Details" 
                                                     className="text-slate-400 hover:text-slate-800 transition-colors"
                                                 >

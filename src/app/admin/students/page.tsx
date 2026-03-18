@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Plus, Search, MoreHorizontal, LayoutGrid, List, GraduationCap, Users, Filter, ChevronLeft } from "lucide-react"
+import { Plus, Search, MoreHorizontal, LayoutGrid, List, GraduationCap, Users, Filter, ChevronLeft, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -197,7 +197,7 @@ function StudentsPageContent() {
 
 
     return (
-        <div className="h-full flex flex-col gap-4 overflow-hidden">
+        <div className="h-[calc(100vh-60px)] flex flex-col gap-4 overflow-hidden">
             {/* Header — hidden on mobile when a student profile is active */}
             <div className={`flex-col sm:flex-row justify-between items-start sm:items-center gap-4 flex-shrink-0 ${mounted && isMobileView && selectedStudent ? 'hidden' : 'flex'}`}>
                 <div>
@@ -209,6 +209,48 @@ function StudentsPageContent() {
                         <Plus className="mr-2 h-4 w-4" /> Add Student
                     </Button>
                 </Link>
+            </div>
+
+            {/* ── Stat Summary Cards ─────────────────────────────────────── */}
+            <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0 ${mounted && isMobileView && selectedStudent ? 'hidden' : ''}`}>
+                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => setStatusFilter('active')}>
+                    <div className="h-10 w-10 rounded-full bg-[#eaf4ee] flex items-center justify-center shrink-0">
+                        <Users className="h-5 w-5 text-[#1a3d2a]" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Active</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.active}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer">
+                    <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                        <Users className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">On Campus</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.active}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer">
+                    <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                        <Filter className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">On Leave</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">0</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 bg-white rounded-2xl border border-[#e8ede9] p-4 hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => setStatusFilter('all')}>
+                    <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                        <LayoutGrid className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-wider">Total</p>
+                        <p className="text-[22px] font-black text-[#1a1a1a] leading-none">{loading ? '—' : statusCounts.all}</p>
+                    </div>
+                </div>
             </div>
 
             {/* Main Content Area - Split View */}

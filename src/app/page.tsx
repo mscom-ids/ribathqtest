@@ -1,55 +1,54 @@
-
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, BookOpen } from "lucide-react"
 
 export default function Home() {
     return (
-        <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
-            {/* Left Column: Content */}
-            <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-8 lg:p-16 relative">
-                <div className="text-center space-y-6 max-w-lg">
-                    <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 rounded-2xl flex items-center justify-center mb-6">
-                        <BookOpen className="w-8 h-8 text-emerald-700 dark:text-emerald-400" />
+        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+            {/* Background Image */}
+            <div className="absolute inset-0 z-0">
+                <img
+                    src="/landing-photo.png"
+                    alt="Ma'din Ribathul Quran Campus"
+                    className="absolute inset-0 w-full h-full object-cover"
+                />
+                {/* Dark overlay to make text readable */}
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            </div>
+
+            {/* Content Foreground */}
+            <div className="relative z-10 flex flex-col items-center justify-center p-6 w-full">
+                <div className="text-center space-y-8 max-w-2xl bg-white/10 dark:bg-black/20 backdrop-blur-md p-10 md:p-14 rounded-3xl border border-white/20 shadow-2xl">
+                    <div className="mx-auto w-24 h-24 mb-6 relative rounded-2xl overflow-hidden shadow-lg shadow-emerald-900/50 border-2 border-white/20">
+                        <img 
+                            src="/logo.png" 
+                            alt="Logo"
+                            className="absolute inset-0 w-full h-full object-contain"
+                        />
                     </div>
 
-                    <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-emerald-900 dark:text-emerald-50">
-                        MA'DIN RIBATHUL QURAN
+                    <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white drop-shadow-sm">
+                        MA'DIN RIBATHUL<br className="hidden md:block" /> QURAN
                     </h1>
 
-                    <p className="text-lg text-muted-foreground">
+                    <p className="text-lg md:text-xl text-slate-200 font-medium">
                         The complete management system for MA'DIN RIBATHUL QURAN.
-                        Track progress, manage attendance, and streamline administration.
+                        Manage attendance, track progress, and streamline administration.
                     </p>
 
-                    <div className="pt-8">
+                    <div className="pt-6">
                         <Link href="/login">
-                            <Button size="lg" className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-8 py-6 text-lg">
-                                Login to Portal <ArrowRight className="ml-2 w-5 h-5" />
+                            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-full px-10 py-7 text-lg shadow-xl shadow-emerald-900/30 transition-all hover:scale-105 active:scale-95 border-none">
+                                Login to Portal <ArrowRight className="ml-3 w-6 h-6" />
                             </Button>
                         </Link>
                     </div>
                 </div>
-
-                <footer className="absolute bottom-6 text-sm text-muted-foreground">
-                    &copy; {new Date().getFullYear()} MA'DIN RIBATHUL QURAN. All rights reserved.
-                </footer>
             </div>
 
-            {/* Right Column: Image */}
-            <div className="hidden lg:block lg:w-1/2 relative bg-emerald-900">
-                 {/* 
-                   We use a standard img tag with object-cover so it behaves like a background 
-                   but is more accessible and easier for Next.js to optionally optimize.
-                 */}
-                 <img 
-                    src="/landing-photo.jpeg" 
-                    alt="Ma'din Ribathul Quran Campus"
-                    className="absolute inset-0 w-full h-full object-cover"
-                 />
-                 {/* Optional gradient overlay to make it look premium */}
-                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-emerald-900/20 mix-blend-multiply" />
-            </div>
+            <footer className="absolute bottom-6 w-full text-center text-sm text-slate-300 font-medium tracking-wide z-10">
+                &copy; {new Date().getFullYear()} MA'DIN RIBATHUL QURAN. All rights reserved.
+            </footer>
         </div>
     )
 }

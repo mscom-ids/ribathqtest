@@ -35,9 +35,9 @@ export const getAllStudents = async (req: Request, res: Response) => {
 
     query += ' ORDER BY name ASC';
 
-
     const result = await db.query(query, params);
     res.json({ success: true, students: result.rows });
+
   } catch (err) {
     console.error('Error fetching students:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch students' });

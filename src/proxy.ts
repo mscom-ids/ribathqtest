@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // For the middleware, checking for the existence of the token is usually enough to redirect,
 // but the actual API will cryptographically verify the token.
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
   
   // Protect /admin, /staff, /parent routes

@@ -147,34 +147,111 @@ export const getAllStaff = async (req: Request, res: Response) => {
 export const updateStaffProfile = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, role, phone } = req.body;
+        const updateData = req.body;
+        delete updateData.id; // Safety
+
+        const allowedFields = ['name', 'role', 'phone', 'email', 'photo_url', 'address', 'place', 'phone_contacts', 'staff_id'];
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let paramCount = 1;
+
+        for (const key of Object.keys(updateData)) {
+            if (allowedFields.includes(key)) {
+                setClauses.push(`${key} = $${paramCount}`);
+                
+                let val = updateData[key];
+                // pg driver needs JSON arrays to be stringified for JSONB columns
+                if (key === 'phone_contacts' && Array.isArray(val)) {
+                    val = JSON.stringify(val);
+                }
+                
+                values.push(val);
+                paramCount++;
+            }
+        }
+
+        if (setClauses.length === 0) {
+            return res.status(400).json({ success: false, error: 'No valid fields to update' });
+        }
+
+        values.push(id);
         const result = await db.query(
-            'UPDATE staff SET name = $1, role = $2, phone = $3 WHERE id = $4 RETURNING *',
-            [name, role, phone, id]
+            `UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+            values
         );
         res.json({ success: true, staff: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to update' });
+    } catch (err: any) {
+        console.error('Update Staff Error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to update' });
     }
 };
 
 export const createStaff = async (req: Request, res: Response) => {
     try {
-        const { name, email, role, phone, password } = req.body;
+        const { name, email, role, phone, password, photo_url, address, place, phone_contacts, join_year, join_month, staff_id } = req.body;
         
+        if (!name || name.trim().length === 0) {
+            return res.status(400).json({ success: false, error: 'Name is required' });
+        }
+
         let hashedPassword = null;
         if (password) {
             const bcrypt = require('bcrypt');
             const salt = await bcrypt.genSalt(10);
             hashedPassword = await bcrypt.hash(password, salt);
         }
-        
+
+        const selectedRole = role || 'usthad';
+        let finalStaffId = staff_id || null;
+
+        if (selectedRole === 'usthad' || selectedRole === 'vice_principal') {
+            const currentYear = new Date().getFullYear().toString();
+            const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+            const yearStr = join_year || currentYear;
+            const monthStr = String(join_month || currentMonth).padStart(2, '0');
+            
+            // Count total mentors/VPs to get sequence number
+            const countRes = await db.query("SELECT COUNT(*) FROM staff WHERE role IN ('usthad', 'vice_principal')");
+            const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(2, '0');
+            finalStaffId = `SR${seq}-${yearStr}-${monthStr}`;
+        }
+
+        const columns = ['name', 'role', 'staff_id'];
+        const values: any[] = [name.trim(), selectedRole, finalStaffId];
+        let paramCount = 4;
+
+        const optionalFields: Record<string, any> = {
+            email: email || `dummy-${Date.now()}@example.com`,
+            phone: phone || null,
+            password_hash: hashedPassword,
+            photo_url: photo_url || null,
+            address: address || null,
+            place: place || null,
+            phone_contacts: phone_contacts || [],
+        };
+
+        for (const [col, val] of Object.entries(optionalFields)) {
+            if (val !== null && val !== undefined) {
+                columns.push(col);
+                
+                let insertVal = val;
+                // Stringify JSON array for pg driver
+                if (col === 'phone_contacts' && Array.isArray(insertVal)) {
+                    insertVal = JSON.stringify(insertVal);
+                }
+                
+                values.push(insertVal);
+                paramCount++;
+            }
+        }
+
+        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
         const staffInsert = await db.query(
-            'INSERT INTO staff (name, email, role, phone, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-            [name, email, role, phone, hashedPassword]
+            `INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+            values
         );
         
-        res.json({ success: true, staffId: staffInsert.rows[0].id });
+        res.json({ success: true, staffId: staffInsert.rows[0].id, staff: staffInsert.rows[0] });
     } catch (err: any) {
         console.error("Failed to create staff:", err);
         res.status(500).json({ success: false, error: err.message });
