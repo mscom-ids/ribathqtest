@@ -33,7 +33,11 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
     const [loading, setLoading] = useState(true)
     const [currentStatus, setCurrentStatus] = useState(student.status || "active")
     const [staffList, setStaffList] = useState<StaffOption[]>([])
-    const [currentMentor, setCurrentMentor] = useState(student.assigned_usthad?.name || null)
+    
+    // Mentor states
+    const [hifzMentor, setHifzMentor] = useState(student.hifz_mentor?.name || student.assigned_usthad?.name || null)
+    const [schoolMentor, setSchoolMentor] = useState(student.school_mentor?.name || null)
+    const [madrasaMentor, setMadrasaMentor] = useState(student.madrasa_mentor?.name || null)
     const [changingMentor, setChangingMentor] = useState(false)
 
     // Transfer Modal State
@@ -45,12 +49,16 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
 
     // Mentor Modal State
     const [mentorModalOpen, setMentorModalOpen] = useState(false)
-    const [selectedMentorId, setSelectedMentorId] = useState<string | null>(null)
+    const [selectedHifzId, setSelectedHifzId] = useState<string | null>(null)
+    const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null)
+    const [selectedMadrasaId, setSelectedMadrasaId] = useState<string | null>(null)
 
     useEffect(() => {
         setCurrentStatus(student.status || "active")
-        setCurrentMentor(student.assigned_usthad?.name || null)
-    }, [student.status, student.assigned_usthad])
+        setHifzMentor(student.hifz_mentor?.name || student.assigned_usthad?.name || null)
+        setSchoolMentor(student.school_mentor?.name || null)
+        setMadrasaMentor(student.madrasa_mentor?.name || null)
+    }, [student.status, student.hifz_mentor, student.school_mentor, student.madrasa_mentor, student.assigned_usthad])
 
     useEffect(() => {
         if (!isAdmin) return
@@ -126,33 +134,47 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
         }
     }
 
-    const changeMentor = async (staffId: string | null) => {
+    const changeMentors = async () => {
         setChangingMentor(true)
         try {
-            const res = await api.put(`/students/${student.adm_no}`, { assigned_usthad_id: staffId })
+            const hId = selectedHifzId === "none" ? null : selectedHifzId
+            const sId = selectedSchoolId === "none" ? null : selectedSchoolId
+            const mId = selectedMadrasaId === "none" ? null : selectedMadrasaId
+            
+            const payload = {
+                hifz_mentor_id: hId,
+                school_mentor_id: sId,
+                madrasa_mentor_id: mId
+            }
+            const res = await api.put(`/students/${student.adm_no}`, payload)
             if (res.data.success) {
-                const mentor = staffList.find(s => s.id === staffId)
-                setCurrentMentor(mentor?.name || null)
+                setHifzMentor(staffList.find(s => s.id === hId)?.name || null)
+                setSchoolMentor(staffList.find(s => s.id === sId)?.name || null)
+                setMadrasaMentor(staffList.find(s => s.id === mId)?.name || null)
                 onMentorChanged?.()
+                setMentorModalOpen(false)
             } else {
-                alert("Failed to change mentor")
+                alert("Failed to change mentors")
             }
         } catch (e: any) {
-            alert("Failed to change mentor: " + e.message)
+            alert("Failed to change mentors: " + e.message)
         }
         setChangingMentor(false)
     }
 
     const openMentorModal = () => {
-        // Pre-select current mentor if it exists in staffList
-        const currentMentorObj = staffList.find(s => s.name === currentMentor)
-        setSelectedMentorId(currentMentorObj ? currentMentorObj.id : "none")
+        setSelectedHifzId(staffList.find(s => s.name === hifzMentor)?.id || "none")
+        setSelectedSchoolId(staffList.find(s => s.name === schoolMentor)?.id || "none")
+        setSelectedMadrasaId(staffList.find(s => s.name === madrasaMentor)?.id || "none")
         setMentorModalOpen(true)
     }
 
-    const handleConfirmMentor = () => {
-        changeMentor(selectedMentorId === "none" ? null : selectedMentorId)
-        setMentorModalOpen(false)
+    const getMentorsText = () => {
+        let count = 0;
+        if (hifzMentor) count++;
+        if (schoolMentor) count++;
+        if (madrasaMentor) count++;
+        return count === 0 ? "No Mentors" : `${count}/3 Mentors Assigned`;
     }
 
     const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
@@ -242,14 +264,15 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
                         <button 
                             className="bg-white text-slate-600 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-slate-50 transition flex items-center gap-1"
                             onClick={openMentorModal}
+                            disabled={changingMentor}
                         >
                             <UserCog className="h-3 w-3 text-slate-400" />
-                            {changingMentor ? "Updating..." : currentMentor || "No Mentor"}
+                            {changingMentor ? "Updating..." : getMentorsText()}
                         </button>
                     ) : (
                         <span className="bg-white text-slate-600 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm flex items-center gap-1">
                             <UserCog className="h-3 w-3 text-slate-400" />
-                            {currentMentor || "No Mentor"}
+                            {getMentorsText()}
                         </span>
                     )}
                 </div>
@@ -335,18 +358,56 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
             <Dialog open={mentorModalOpen} onOpenChange={setMentorModalOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>Assign Mentor</DialogTitle>
+                        <DialogTitle>Assign Mentors</DialogTitle>
                         <DialogDescription>
-                            Select a faculty member to be the mentor for {student.name}.
+                            Select faculty members to mentor {student.name} across different classes.
                         </DialogDescription>
                     </DialogHeader>
                     
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label>Select Mentor</Label>
+                            <Label>Hifz Mentor</Label>
                             <Select 
-                                value={selectedMentorId || "none"} 
-                                onValueChange={(val) => setSelectedMentorId(val)}
+                                value={selectedHifzId || "none"} 
+                                onValueChange={(val) => setSelectedHifzId(val)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a mentor..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none" className="text-red-500 font-medium">Unassign Mentor</SelectItem>
+                                    {staffList.map(s => (
+                                        <SelectItem key={s.id} value={s.id} className="font-medium text-slate-700">
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>School Mentor</Label>
+                            <Select 
+                                value={selectedSchoolId || "none"} 
+                                onValueChange={(val) => setSelectedSchoolId(val)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a mentor..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none" className="text-red-500 font-medium">Unassign Mentor</SelectItem>
+                                    {staffList.map(s => (
+                                        <SelectItem key={s.id} value={s.id} className="font-medium text-slate-700">
+                                            {s.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Madrasa Mentor</Label>
+                            <Select 
+                                value={selectedMadrasaId || "none"} 
+                                onValueChange={(val) => setSelectedMadrasaId(val)}
                             >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select a mentor..." />
@@ -365,8 +426,8 @@ export function ProfileHeader({ student, onMentorChanged, onStatusChanged, isAdm
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setMentorModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleConfirmMentor} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6">
-                            Confirm Mentor
+                        <Button onClick={changeMentors} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6" disabled={changingMentor}>
+                            {changingMentor ? "Saving..." : "Confirm Mentors"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

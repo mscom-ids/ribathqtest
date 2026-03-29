@@ -1,0 +1,24 @@
+﻿[dotenv@17.3.1] injecting env (2) from .env -- tip: ≡ƒ¢á∩╕Å  run anywhere with `dotenvx run -- yourcommand`
+=== RLS STATUS ===
+Staff table RLS: { relname: 'staff', relrowsecurity: true, relforcerowsecurity: false }
+
+=== RLS POLICIES ===
+  Policy: Admin Manage Staff
+    permissive: PERMISSIVE
+    roles: {public}
+    cmd: ALL
+    qual: is_admin_or_principal()
+    with_check: null
+  Policy: Public Read Staff
+    permissive: PERMISSIVE
+    roles: {public}
+    cmd: SELECT
+    qual: true
+    with_check: null
+
+=== CURRENT USER/ROLE ===
+{ current_user: 'postgres', current_setting: 'none' }
+
+=== PROFILES RLS ===
+  Policy: Authenticated users read own profile | cmd: SELECT | qual: (auth.uid() IS NOT NULL)
+  Policy: Users can see their own profile | cmd: SELECT | qual: (auth.uid() = id)

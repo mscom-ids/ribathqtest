@@ -19,12 +19,14 @@ export const getRedirectPathForRole = (role: string) => {
         case 'vice_principal':
             return '/admin'
         case 'controller':
-            return '/admin' // Redirect controller to admin for now or their own portal
+            return '/admin'
         case 'staff':
+        case 'usthad':
+        case 'mentor':
             return '/staff'
         case 'parent':
             return '/parent'
         default:
-            return '/'
+            return '/staff' // Default to staff portal instead of homepage
     }
 }

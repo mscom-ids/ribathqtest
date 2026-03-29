@@ -1,0 +1,66 @@
+﻿[dotenv@17.3.1] injecting env (2) from .env -- tip: ≡ƒöÉ prevent building .env in docker: https://dotenvx.com/prebuild
+
+=== attendance_schedules ===
+  id (uuid) nullable=NO
+  class_type (character varying) nullable=NO
+  standards (jsonb) nullable=NO
+  day_of_week (integer) nullable=NO
+  start_time (time without time zone) nullable=NO
+  end_time (time without time zone) nullable=NO
+  duration_mins (integer) nullable=YES
+  mentor_id (uuid) nullable=YES
+  created_at (timestamp with time zone) nullable=YES
+  academic_year_id (uuid) nullable=YES
+  name (character varying) nullable=YES
+  rows: 0
+
+=== attendance_marks ===
+  id (uuid) nullable=NO
+  schedule_id (uuid) nullable=YES
+  date (date) nullable=NO
+  marked_by (uuid) nullable=YES
+  created_at (timestamp with time zone) nullable=YES
+  updated_at (timestamp with time zone) nullable=YES
+  rows: 0
+
+=== student_attendance_marks ===
+  id (uuid) nullable=NO
+  schedule_id (uuid) nullable=YES
+  student_id (character varying) nullable=YES
+  date (date) nullable=NO
+  status (character varying) nullable=YES
+  marked_by (uuid) nullable=YES
+  created_at (timestamp with time zone) nullable=YES
+  rows: 0
+
+=== attendance_cancellations ===
+  id (uuid) nullable=NO
+  schedule_id (uuid) nullable=YES
+  date (date) nullable=NO
+  reason (text) nullable=NO
+  cancelled_by (uuid) nullable=YES
+  created_at (timestamp with time zone) nullable=YES
+  rows: 0
+
+=== academic_breaks ===
+  id (uuid) nullable=NO
+  academic_year_id (uuid) nullable=YES
+  type (character varying) nullable=NO
+  name (character varying) nullable=NO
+  start_time (time without time zone) nullable=NO
+  end_time (time without time zone) nullable=NO
+  created_at (timestamp with time zone) nullable=YES
+  rows: 3
+
+=== academic_years ===
+  id (uuid) nullable=NO
+  name (text) nullable=NO
+  start_date (date) nullable=NO
+  end_date (date) nullable=NO
+  is_current (boolean) nullable=YES
+  is_locked (boolean) nullable=YES
+  promotion_window_open (boolean) nullable=YES
+  created_at (timestamp with time zone) nullable=NO
+  rows: 1
+
+=== SAMPLE SCHEDULES ===

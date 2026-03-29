@@ -1,78 +1,68 @@
 import { NextResponse, type NextRequest } from 'next/server';
-// We don't use jsonwebtoken library here because Next.js middleware runs on the Edge runtime 
-// which doesn't support the raw crypto modules that jsonwebtoken uses out of the box.
-// For the middleware, checking for the existence of the token is usually enough to redirect,
-// but the actual API will cryptographically verify the token.
 
-export async function proxy(request: NextRequest) {
+// Next.js middleware runs on the Edge runtime — no Node.js crypto.
+// We decode the JWT payload (base64) to read the role, but actual
+// cryptographic verification happens in the Express backend.
+
+const ADMIN_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const STAFF_ROLES = ['staff', 'usthad', 'mentor'];
+
+function decodeTokenRole(tokenValue: string): string | null {
+  try {
+    const payloadBase64 = tokenValue.split('.')[1];
+    if (!payloadBase64) return null;
+    const decoded = JSON.parse(atob(payloadBase64));
+    return decoded.role || null;
+  } catch {
+    return null;
+  }
+}
+
+function getPortalForRole(role: string): string {
+  if (ADMIN_ROLES.includes(role)) return '/admin';
+  if (STAFF_ROLES.includes(role)) return '/staff';
+  if (role === 'parent') return '/parent';
+  return '/staff'; // safe default
+}
+
+export function proxy(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
-  
-  // Protect /admin, /staff, /parent routes
-  const isProtectedRoute = 
-    currentPath.startsWith('/admin') || 
-    currentPath.startsWith('/staff') || 
-    currentPath.startsWith('/parent');
+  const token = request.cookies.get('auth_token');
+  const role = token?.value ? decodeTokenRole(token.value) : null;
 
-  // If user is already logged in and visits /login or /, redirect to their portal
+  // ── Logged-in user visits /login or / → send them to their portal ──
   if (currentPath === '/login' || currentPath === '/') {
-    const token = request.cookies.get('auth_token');
-    if (token?.value) {
-      try {
-        const payloadBase64 = token.value.split('.')[1];
-        if (payloadBase64) {
-          const decodedPayload = JSON.parse(atob(payloadBase64));
-          const userRole = decodedPayload.role;
-          if (userRole === 'admin' || userRole === 'vice_principal' || userRole === 'principal' || userRole === 'controller') {
-              return NextResponse.redirect(new URL('/admin', request.url));
-          }
-          if (userRole === 'staff') return NextResponse.redirect(new URL('/staff', request.url));
-          if (userRole === 'parent') return NextResponse.redirect(new URL('/parent', request.url));
-        }
-      } catch (e) {
-        // bad token, just let them see the login page
-      }
+    if (role) {
+      return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
     }
+    return NextResponse.next();
   }
 
-  if (isProtectedRoute) {
-    // Check if our custom auth_token cookie exists
-    const token = request.cookies.get('auth_token');
+  // ── Protected routes: /admin, /staff, /parent ──
+  const isProtected =
+    currentPath.startsWith('/admin') ||
+    currentPath.startsWith('/staff') ||
+    currentPath.startsWith('/parent');
 
-    if (!token?.value) {
-      // No token found, redirect to login
-      const url = request.nextUrl.clone();
-      url.pathname = '/login';
-      return NextResponse.redirect(url);
-    }
-    
-    try {
-        const payloadBase64 = token.value.split('.')[1];
-        if (payloadBase64) {
-             const decodedPayload = JSON.parse(atob(payloadBase64));
-             const userRole = decodedPayload.role;
-             
-             // Enforce Role-Based Access Control
-             if (currentPath.startsWith('/admin') && userRole !== 'admin') {
-                 return NextResponse.redirect(new URL('/login', request.url));
-             }
-             if (currentPath.startsWith('/staff') && userRole !== 'staff' && userRole !== 'admin') {
-                 return NextResponse.redirect(new URL('/login', request.url));
-             }
-             if (currentPath.startsWith('/parent') && userRole !== 'parent') {
-                 return NextResponse.redirect(new URL('/login', request.url));
-             }
-        } else {
-             throw new Error("Invalid token format");
-        }
-    } catch (e) {
-        // If the token is malformed, force a re-login
-        const url = request.nextUrl.clone();
-        url.pathname = '/login';
-        // Clear the bad cookie
-        const response = NextResponse.redirect(url);
-        response.cookies.delete('auth_token');
-        return response;
-    }
+  if (!isProtected) return NextResponse.next();
+
+  // No token at all → login
+  if (!token?.value || !role) {
+    const response = NextResponse.redirect(new URL('/login', request.url));
+    if (token?.value) response.cookies.delete('auth_token'); // malformed token
+    return response;
+  }
+
+  // ── Role-based access ──
+  if (currentPath.startsWith('/admin') && !ADMIN_ROLES.includes(role)) {
+    // Wrong portal — redirect to their correct portal, NOT to login
+    return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
+  }
+  if (currentPath.startsWith('/staff') && !STAFF_ROLES.includes(role) && !ADMIN_ROLES.includes(role)) {
+    return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
+  }
+  if (currentPath.startsWith('/parent') && role !== 'parent') {
+    return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
 
   return NextResponse.next();
@@ -80,14 +70,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - api (Next.js API routes if any)
-     * Feel free to modify this pattern to include more paths.
-     */
     '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

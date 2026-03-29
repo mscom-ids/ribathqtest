@@ -29,12 +29,15 @@ import { cn } from "@/lib/utils"
 type SessionInfo = {
     id: string
     name: string
-    type: "Hifz" | "School" | "Madrassa"
+    class_type: string
     start_time: string | null
     end_time: string | null
-    days_of_week: number[] | null
+    day_of_week: number
     standards: string[] | null
-    is_active: boolean
+    student_count?: number
+    effective_from: string
+    effective_until: string | null
+    is_deleted: boolean
 }
 
 type Student = {
@@ -61,26 +64,22 @@ type SessionRow = {
     markedCount: number
 }
 
-function getImplicitMode(dow: number) {
-    return dow === 5 ? "Friday" : (dow === 0 || dow === 6) ? "Weekday" : "Normal"
-}
-
-function getAllowedTypes(mode: string): string[] {
-    if (mode === "Friday") return ["School"]
-    if (mode === "Weekday") return ["Hifz", "Madrassa"]
-    return ["Hifz", "School"]
-}
-
 export default function StaffAttendancePage() {
     const [staffId, setStaffId] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<string>("staff")
     const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-    const [sessions, setSessions] = useState<SessionInfo[]>([])
     const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
     const [students, setStudents] = useState<Student[]>([])
+    const [sessionStudents, setSessionStudents] = useState<Student[]>([])
     const [policy, setPolicy] = useState<CalendarPolicy | null>(null)
     const [loading, setLoading] = useState(true)
     const [loadingSessions, setLoadingSessions] = useState(false)
+    const [currentTime, setCurrentTime] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 10000)
+        return () => clearInterval(timer)
+    }, [])
 
     // Modal state
     const [modalOpen, setModalOpen] = useState(false)
@@ -91,11 +90,14 @@ export default function StaffAttendancePage() {
     const [lockedLeaves, setLockedLeaves] = useState<Record<string, string>>({})
 
     const router = useRouter()
+    const todayStr = format(currentTime, "yyyy-MM-dd")
     const dateStr = format(selectedDate, "yyyy-MM-dd")
 
-    // Calculate edit window
-    const daysDiff = differenceInDays(new Date(), selectedDate)
-    const maxEditDays = userRole === "staff" ? 7 : 30
+    // Calculate edit window using date strings to avoid timezone drift
+    const diffTime = new Date(todayStr).getTime() - new Date(dateStr).getTime();
+    const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    const maxEditDays = userRole === "staff" ? 3 : 30
     const isEditable = daysDiff >= 0 && daysDiff <= maxEditDays
     const isFutureDate = daysDiff < 0
 
@@ -112,18 +114,15 @@ export default function StaffAttendancePage() {
                 // Get staff ID
                 const { data: { staff } } = await api.get('/staff/me');
 
+                // If staff profile misses or auth fails
                 if (!staff) {
                     toast.error("Staff profile not found")
                     setLoading(false)
+                    router.push("/login")
                     return
                 }
 
                 setStaffId(staff.id)
-
-                // Load all active sessions
-                const { data: { sessions: sessionsData } } = await api.get('/academics/sessions');
-
-                if (sessionsData) setSessions(sessionsData as SessionInfo[])
 
                 // Load assigned students
                 const { data: { students: studentsData } } = await api.get('/staff/me/students');
@@ -131,7 +130,8 @@ export default function StaffAttendancePage() {
                 if (studentsData) setStudents(studentsData)
 
             } catch (error) {
-                console.error("Auth init error:", error)
+                console.warn("Auth init error:", error)
+                router.push("/login")
             } finally {
                 setLoading(false)
             }
@@ -139,62 +139,53 @@ export default function StaffAttendancePage() {
         init()
     }, [router])
 
-    // Load sessions for the selected date
+    // Load sessions for the selected date — now reads from attendance_schedules
     const loadDateSessions = useCallback(async () => {
-        if (!staffId || sessions.length === 0) return
+        if (!staffId) return
         setLoadingSessions(true)
 
-        // Load calendar policy for this date
         try {
+            // Load calendar policy for this date
             const { data: { calendar: policyData } } = await api.get(`/academics/calendar/${dateStr}`);
-
             const pol = policyData as CalendarPolicy | null
             setPolicy(pol)
 
-            // Determine which sessions are active today
-            const dayOfWeek = selectedDate.getDay()
-            const mode = pol?.day_mode || getImplicitMode(dayOfWeek)
-            const allowedTypes = pol?.allowed_session_types || getAllowedTypes(mode)
             const cancelledMap = pol?.cancelled_sessions || {}
 
-            const activeSessions = sessions.filter(s => {
-                // Day of week check
-                if (s.days_of_week && s.days_of_week.length > 0 && !s.days_of_week.includes(dayOfWeek)) {
-                    return false
-                }
-                // Type check
-                if (!allowedTypes.includes(s.type)) return false
-                return true
-            })
+            // Load schedules active on this date (date-effective filtering done server-side)
+            const { data: { data: schedulesData } } = await api.get('/attendance/schedules-for-date', {
+                params: { date: dateStr }
+            });
+
+            const activeSessions: SessionInfo[] = (schedulesData || []).map((s: any) => ({
+                ...s,
+                name: s.name || `${s.class_type} Class`,
+            }))
 
             // Load attendance records for all students on this date
-            const studentIds = students.map(s => s.adm_no)
-            if (studentIds.length === 0) {
-                setSessionRows(activeSessions.map(s => ({
-                    session: s,
-                    status: cancelledMap[s.id] ? "cancelled" as const : "pending" as const,
-                    studentCount: 0,
-                    markedCount: 0,
-                })))
+            if (students.length === 0) {
+                setSessionRows([])
                 setLoadingSessions(false)
                 return
             }
 
-            const { data: { data: attendanceData } } = await api.get(`/academics/attendance`, {
-                params: { date: dateStr, student_ids: studentIds.join(',') }
+            // Check which schedules already have attendance marks
+            const { data: dashData } = await api.get('/attendance/dashboard', {
+                params: { start_date: dateStr, end_date: dateStr }
             });
+            const marks = dashData?.marks || []
+            const markedScheduleIds = new Set(marks.map((m: any) => m.schedule_id))
 
             // Build session rows
             const rows: SessionRow[] = activeSessions.map(session => {
                 const isCancelled = !!cancelledMap[session.id]
-                const sessionAttendance = (attendanceData || []).filter((a: any) => a.session_id === session.id)
-                const markedCount = sessionAttendance.length
+                const isMarked = markedScheduleIds.has(session.id)
 
                 return {
                     session,
-                    status: isCancelled ? "cancelled" : markedCount > 0 ? "marked" : "pending",
-                    studentCount: students.length,
-                    markedCount,
+                    status: isCancelled ? "cancelled" : isMarked ? "marked" : "pending",
+                    studentCount: session.student_count || 0,
+                    markedCount: isMarked ? (session.student_count || 0) : 0,
                 }
             })
 
@@ -204,25 +195,58 @@ export default function StaffAttendancePage() {
         } finally {
             setLoadingSessions(false)
         }
-    }, [staffId, sessions, students, dateStr, selectedDate])
+    }, [staffId, students, dateStr])
 
     useEffect(() => { loadDateSessions() }, [loadDateSessions])
+
+    // Auto-open marking modal if session param is in URL
+    useEffect(() => {
+        if (!loadingSessions && sessionRows.length > 0 && typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const targetSessionId = params.get('session');
+            if (targetSessionId) {
+                const targetRow = sessionRows.find(r => r.session.id === targetSessionId);
+                if (targetRow && !modalOpen) {
+                    // Check if it's locked based on our new logic
+                    const isFuture = daysDiff < 0;
+
+                    if (!isEditable || isFuture || targetRow.status === "cancelled") {
+                        toast.error("Attendance for this session is locked or unavailable.");
+                    } else {
+                        // Start opening the modal logic
+                        openMarkingModal(targetRow.session);
+                    }
+                    // Clear the query string so we don't keep re-opening
+                    const newUrl = window.location.pathname;
+                    window.history.replaceState({}, '', newUrl);
+                }
+            }
+        }
+    }, [loadingSessions, sessionRows, daysDiff, isEditable])
 
     // Open attendance marking modal
     const openMarkingModal = async (session: SessionInfo) => {
         setActiveSession(session)
-
-        // Load existing attendance for this session + date
-        const studentIds = students.map(s => s.adm_no)
         
         try {
-            const { data: { data: existingAtt } } = await api.get(`/academics/attendance`, {
-                params: { date: dateStr, session_id: session.id, student_ids: studentIds.join(',') }
+            // Load existing student attendance marks for this schedule + date
+            const { data: stuData } = await api.get('/attendance/students', {
+                params: { schedule_id: session.id, date: dateStr }
             });
+            const scheduleStudents = stuData?.students || []
+            const studentIds = scheduleStudents.map((s: Student) => s.adm_no)
+            setSessionStudents(scheduleStudents)
 
-            // Load active leaves for these students (currently "outside")
-            const { data: { leaves: activeLeaves } } = await api.get(`/leaves`, {
-                params: { status: 'outside', student_ids: studentIds.join(',') }
+            if (studentIds.length === 0) {
+                setLockedLeaves({})
+                setAttendanceMap({})
+                setModalOpen(true)
+                return
+            }
+
+            // Load active leaves for these students
+            const { data: { leaves: activeLeaves } } = await api.get(`/leaves/active`, {
+                params: { student_ids: studentIds.join(',') }
             });
 
             const locks: Record<string, string> = {}
@@ -231,22 +255,34 @@ export default function StaffAttendancePage() {
             }
             setLockedLeaves(locks)
 
-        // Build map: default to Present for unmarked
-        const map: Record<string, "Present" | "Absent" | "Leave"> = {}
-        students.forEach(s => { 
-            if (locks[s.adm_no]) {
-                map[s.adm_no] = "Leave"
-            } else {
-                map[s.adm_no] = "Present" 
-            }
-        })
-            if (existingAtt) {
-                existingAtt.forEach((a: any) => { 
-                    if (!locks[a.student_id]) {
-                        map[a.student_id] = a.status 
-                    }
-                })
-            }
+            // Load existing marks for this date + schedule
+            const { data: dashData } = await api.get('/attendance/dashboard', {
+                params: { start_date: dateStr, end_date: dateStr }
+            });
+
+            // Build map: default to Present for unmarked
+            const map: Record<string, "Present" | "Absent" | "Leave"> = {}
+            scheduleStudents.forEach((s: Student) => { 
+                if (locks[s.adm_no]) {
+                    map[s.adm_no] = "Leave"
+                } else {
+                    map[s.adm_no] = "Present" 
+                }
+            })
+
+            // Check student_attendance_marks for existing data
+            try {
+                const { data: { data: existingAtt } } = await api.get(`/academics/attendance`, {
+                    params: { date: dateStr, session_id: session.id, student_ids: studentIds.join(',') }
+                });
+                if (existingAtt) {
+                    existingAtt.forEach((a: any) => { 
+                        if (!locks[a.student_id]) {
+                            map[a.student_id] = a.status 
+                        }
+                    })
+                }
+            } catch { /* no existing marks */ }
 
             setAttendanceMap(map)
             setModalOpen(true)
@@ -269,24 +305,25 @@ export default function StaffAttendancePage() {
         })
     }
 
-    // Save attendance
+    // Save attendance — uses the new /attendance/mark endpoint
     const saveAttendance = async () => {
         if (!activeSession || !staffId) return
         setSaving(true)
 
-        const upsertData = students.map(s => ({
+        const student_marks = sessionStudents.map(s => ({
             student_id: s.adm_no,
-            date: dateStr,
-            session_id: activeSession.id,
             status: attendanceMap[s.adm_no] || "Present",
-            department: activeSession.type // Fulfill schema requirements
         }))
 
         try {
-            const { data } = await api.post("/academics/attendance", { attendanceData: upsertData });
+            const { data } = await api.post("/attendance/mark", {
+                schedule_id: activeSession.id,
+                date: dateStr,
+                student_marks
+            });
             if (!data.success) throw new Error(data.error);
             
-            toast.success(`Attendance saved for ${upsertData.length} students`)
+            toast.success(`Attendance saved for ${student_marks.length} students`)
             setModalOpen(false)
             loadDateSessions() // Refresh the table
         } catch (error: any) {
@@ -297,13 +334,17 @@ export default function StaffAttendancePage() {
         }
     }
 
-    // Cancel class for this date
+    // Cancel class for this date — uses /attendance/cancel
     const cancelClass = async () => {
         if (!activeSession) return
         setCancelling(true)
 
         try {
-            const res = await api.post("/staff/cancel-session", { date: dateStr, session_id: activeSession.id });
+            const res = await api.post("/attendance/cancel", {
+                schedule_id: activeSession.id,
+                date: dateStr,
+                reason: 'Cancelled by mentor'
+            });
             if (!res.data.success) throw new Error(res.data.error);
 
             toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
@@ -319,7 +360,7 @@ export default function StaffAttendancePage() {
     // Mark all students with a status
     const markAll = (status: "Present" | "Absent" | "Leave") => {
         const map: Record<string, "Present" | "Absent" | "Leave"> = {}
-        students.forEach(s => { 
+        sessionStudents.forEach(s => { 
             if (lockedLeaves[s.adm_no]) {
                 map[s.adm_no] = "Leave"
             } else {
@@ -350,7 +391,7 @@ export default function StaffAttendancePage() {
         switch (status) {
             case "Present": return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-700"
             case "Absent": return "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700"
-            case "Leave": return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-400 dark:border-blue-700"
+            case "Leave": return "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700"
             default: return "bg-slate-100 text-slate-700"
         }
     }
@@ -371,30 +412,32 @@ export default function StaffAttendancePage() {
     const leaveCount = Object.values(attendanceMap).filter(s => s === "Leave").length
 
     return (
-        <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+        <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
             {/* Header with Date Picker */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <CalendarIcon className="h-6 w-6 text-emerald-600" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/5" />
+                <div className="absolute -bottom-12 -left-6 w-32 h-32 rounded-full bg-white/5" />
+                <div className="relative">
+                    <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 text-white">
+                        <CalendarIcon className="h-6 w-6 text-blue-200" />
                         Attendance Marking
                     </h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-blue-100 mt-1">
                         {students.length} students assigned to you
                     </p>
                 </div>
 
                 {/* Date Navigator */}
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goDate(-1)}>
+                <div className="flex items-center gap-2 relative">
+                    <Button variant="outline" size="icon" className="h-9 w-9 bg-white/10 hover:bg-white/20 border-white/20 text-white" onClick={() => goDate(-1)}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
 
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button variant="outline" className={cn(
-                                "w-[200px] justify-start text-left font-normal",
-                                isHoliday && "border-red-500 text-red-500"
+                                "w-[200px] justify-start text-left font-semibold border-white/20 bg-white/10 hover:bg-white/20 text-white",
+                                isHoliday && "border-red-400 text-red-200"
                             )}>
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {format(selectedDate, "EEE, MMM d, yyyy")}
@@ -410,7 +453,7 @@ export default function StaffAttendancePage() {
                         </PopoverContent>
                     </Popover>
 
-                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => goDate(1)}>
+                    <Button variant="outline" size="icon" className="h-9 w-9 bg-white/10 hover:bg-white/20 border-white/20 text-white" onClick={() => goDate(1)}>
                         <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>
@@ -454,16 +497,16 @@ export default function StaffAttendancePage() {
 
             {/* Session Table */}
             {!isHoliday && (
-                <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-[#1a2234]">
+                <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900 rounded-2xl">
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
-                            <TableRow>
-                                <TableHead className="w-[50px] pl-4">#</TableHead>
-                                <TableHead>Time</TableHead>
-                                <TableHead>Session</TableHead>
-                                <TableHead className="text-center">Students</TableHead>
-                                <TableHead className="text-center">Status</TableHead>
-                                <TableHead className="text-right pr-4">Action</TableHead>
+                            <TableRow className="border-b border-slate-200 dark:border-slate-800">
+                                <TableHead className="w-[50px] pl-4 font-semibold">#</TableHead>
+                                <TableHead className="font-semibold">Time</TableHead>
+                                <TableHead className="font-semibold">Session</TableHead>
+                                <TableHead className="text-center font-semibold">Students</TableHead>
+                                <TableHead className="text-center font-semibold">Status</TableHead>
+                                <TableHead className="text-right pr-4 font-semibold">Action</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -503,10 +546,10 @@ export default function StaffAttendancePage() {
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium">{row.session.name}</span>
                                             <Badge variant="outline" className={cn("text-[10px]",
-                                                row.session.type === "Hifz" && "border-emerald-600 text-emerald-400",
-                                                row.session.type === "School" && "border-blue-600 text-blue-400",
-                                                row.session.type === "Madrassa" && "border-purple-600 text-purple-400",
-                                            )}>{row.session.type}</Badge>
+                                                row.session.class_type === "Hifz" && "border-emerald-600 text-emerald-400",
+                                                row.session.class_type === "School" && "border-blue-600 text-blue-400",
+                                                row.session.class_type === "Madrassa" && "border-purple-600 text-purple-400",
+                                            )}>{row.session.class_type}</Badge>
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-center">
@@ -518,31 +561,48 @@ export default function StaffAttendancePage() {
                                         {getStatusBadge(row.status)}
                                     </TableCell>
                                     <TableCell className="text-right pr-4">
-                                        {row.status === "cancelled" ? (
-                                            <span className="text-xs text-red-400 italic">Cancelled</span>
-                                        ) : !isEditable || isFutureDate ? (
-                                            <Button variant="outline" size="sm" disabled className="gap-1.5">
-                                                <Lock className="h-3 w-3" />
-                                                Locked
-                                            </Button>
-                                        ) : row.status === "marked" ? (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => openMarkingModal(row.session)}
-                                                className="gap-1.5 border-slate-600 hover:bg-slate-800"
-                                            >
-                                                Edit Attendance
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                size="sm"
-                                                onClick={() => openMarkingModal(row.session)}
-                                                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                                            >
-                                                Mark Attendance
-                                            </Button>
-                                        )}
+                                        {(() => {
+                                            if (row.status === "cancelled") {
+                                                return <span className="text-xs text-red-400 italic">Cancelled</span>
+                                            }
+                                            if (!isEditable) {
+                                                return (
+                                                    <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
+                                                        <Lock className="h-3 w-3" />
+                                                        Locked
+                                                    </Button>
+                                                )
+                                            }
+                                            if (isFutureDate) {
+                                                 return (
+                                                    <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
+                                                        <Clock className="h-3 w-3" />
+                                                        Not Started
+                                                    </Button>
+                                                 )
+                                            }
+                                            if (row.status === "marked") {
+                                                return (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => openMarkingModal(row.session)}
+                                                        className="gap-1.5 border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950"
+                                                    >
+                                                        Edit Attendance
+                                                    </Button>
+                                                )
+                                            }
+                                            return (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => openMarkingModal(row.session)}
+                                                    className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                                                >
+                                                    Mark Attendance
+                                                </Button>
+                                            )
+                                        })()}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -589,7 +649,7 @@ export default function StaffAttendancePage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {students.map((student, idx) => {
+                                {sessionStudents.map((student, idx) => {
                                     const status = attendanceMap[student.adm_no] || "Present"
                                     return (
                                         <TableRow
@@ -619,7 +679,7 @@ export default function StaffAttendancePage() {
                                                 {lockedLeaves[student.adm_no] ? (
                                                     <Badge variant="outline" className="w-24 h-8 justify-center border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 shadow-sm flex items-center gap-1.5 cursor-not-allowed">
                                                         <Lock className="h-3 w-3" />
-                                                        Leave
+                                                        OUTSIDE
                                                     </Badge>
                                                 ) : (
                                                     <Button
@@ -661,7 +721,7 @@ export default function StaffAttendancePage() {
                         <Button
                             onClick={saveAttendance}
                             disabled={saving}
-                            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                         >
                             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Save Attendance

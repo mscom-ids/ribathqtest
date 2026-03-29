@@ -1,94 +1,117 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, LogOut, BookOpen, Hotel, Activity, Loader2 } from "lucide-react"
+import { Users, LogOut, BookOpen, AlertCircle, Loader2, PlaneTakeoff, Home } from "lucide-react"
 import { useEffect, useState } from "react"
 import api from "@/lib/api"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { format, subDays } from "date-fns"
 
-// Colors for the pie chart
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
+interface QuickViewDashboardProps {
+    /** When true, fetches only the current mentor's assigned students */
+    staffMode?: boolean
+}
 
-export function QuickViewDashboard() {
+export function QuickViewDashboard({ staffMode = false }: QuickViewDashboardProps) {
     const [stats, setStats] = useState({
         totalStudents: 0,
-        outside: 0,
-        studyLeave: 0,
-        sickRoom: 0
+        onLeave: 0,       // currently outside (out-campus)
+        onCampusLeave: 0, // internal / on-campus
+        institutional: 0  // institutional leave
     })
-    
+
     const [lineData, setLineData] = useState<any[]>([])
-    const [pieData, setPieData] = useState<any[]>([])
+    const [activeLeaveList, setActiveLeaveList] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             setLoading(true)
-
-            let outsideCount = 0
-            let studyLeaveCount = 0
-            let sickRoomCount = 0
-
             try {
-                const [studentsRes, leavesRes] = await Promise.all([
-                    api.get('/students', { params: { status: 'active' } }),
-                    api.get('/leaves')
-                ])
+                if (staffMode) {
+                    // ── Staff mode: fetch only assigned students + their leaves ──
+                    const [studentsRes, leavesRes] = await Promise.all([
+                        api.get('/staff/me/students'),
+                        api.get('/staff/me/leaves')
+                    ])
 
-                const totalStudents = studentsRes.data?.students?.length || 0;
-                const activeLeaves = leavesRes.data?.leaves?.filter((l: any) => ["approved", "outside"].includes(l.status)) || [];
-                
-                const illnessMap: Record<string, number> = {}
+                    const myStudents: any[] = studentsRes.data?.students || []
+                    const myStudentIds = new Set(myStudents.map((s: any) => s.adm_no))
+                    const allLeaves: any[] = leavesRes.data?.leaves || []
 
-                activeLeaves.forEach((leave: any) => {
-                    if (leave.status === "outside") outsideCount++
-                    if (leave.type === "internal") {
-                        if (leave.reason?.toLowerCase().includes("study")) studyLeaveCount++
-                        else sickRoomCount++
-                        
-                        // Parse illness reasons for the pie chart loosely
-                        if (leave.reason && leave.reason.length > 2) {
-                            const normalized = leave.reason.trim().toLowerCase()
-                            illnessMap[normalized] = (illnessMap[normalized] || 0) + 1
-                        }
-                    }
-                })
+                    // Only consider leaves belonging to THIS mentor's students
+                    const myLeaves = allLeaves.filter((l: any) =>
+                        myStudentIds.has(l.student_id)
+                    )
 
-                setStats({
-                    totalStudents,
-                    outside: outsideCount,
-                    studyLeave: studyLeaveCount,
-                    sickRoom: sickRoomCount
-                })
-                
-                // 3. Format Pie Chart Data from illnessMap (top 5)
-                const sortedPie = Object.entries(illnessMap)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 5)
-                    .map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }))
-                    
-                setPieData(sortedPie.length > 0 ? sortedPie : [{ name: "No Data", value: 1 }])
+                    // Use is_outside from student data (most reliable)
+                    const outsideStudents = myStudents.filter((s: any) => s.is_outside)
+                    const onLeaveCount = outsideStudents.length
+
+                    const onCampus = myLeaves.filter((l: any) =>
+                        l.status === 'outside' && (l.leave_type === 'on-campus' || l.leave_type === 'internal')
+                    ).length
+
+                    const instit = myLeaves.filter((l: any) =>
+                        l.status === 'outside' && l.leave_type === 'institutional'
+                    ).length
+
+                    setStats({
+                        totalStudents: myStudents.length,
+                        onLeave: onLeaveCount,
+                        onCampusLeave: onCampus,
+                        institutional: instit,
+                    })
+                    setActiveLeaveList(myLeaves.filter((l: any) => l.status === 'outside'))
+
+                    // Build 7-day history from actual leaves
+                    buildChart(myLeaves)
+
+                } else {
+                    // ── Admin mode: fetch entire institution ──
+                    const [studentsRes, leavesRes] = await Promise.all([
+                        api.get('/students', { params: { status: 'active' } }),
+                        api.get('/leaves')
+                    ])
+                    const totalStudents = studentsRes.data?.students?.length || 0
+                    const allLeaves: any[] = leavesRes.data?.leaves || []
+
+                    const outside = allLeaves.filter((l: any) => l.status === 'outside' && (l.leave_type === 'out-campus' || l.leave_type === 'personal')).length
+                    const onCampus = allLeaves.filter((l: any) => l.status === 'outside' && (l.leave_type === 'on-campus' || l.leave_type === 'internal')).length
+                    const institutional = allLeaves.filter((l: any) => l.status === 'outside' && l.leave_type === 'institutional').length
+
+                    setStats({ totalStudents, onLeave: outside, onCampusLeave: onCampus, institutional })
+                    setActiveLeaveList(allLeaves.filter((l: any) => l.status === 'outside'))
+
+                    buildChart(allLeaves)
+                }
             } catch (error) {
                 console.error("Failed to load dashboard data", error)
+            } finally {
+                setLoading(false)
             }
-            
-            // 4. Generate last 7 days line chart data (mocked slightly until historical data accumulates)
+        }
+
+        const buildChart = (leaves: any[]) => {
             const history = []
             for (let i = 6; i >= 0; i--) {
                 const d = subDays(new Date(), i)
+                const dayStr = format(d, 'yyyy-MM-dd')
+                const dayLeaves = leaves.filter((l: any) => {
+                    const start = l.start_datetime?.slice(0, 10)
+                    const end = l.end_datetime?.slice(0, 10) || l.actual_return_datetime?.slice(0, 10)
+                    return start && start <= dayStr && (!end || end >= dayStr)
+                })
                 history.push({
                     name: format(d, 'dd MMM'),
-                    'Internal Leave': Math.floor(Math.random() * 5), // Replace with actual aggregate logic later
-                    'Sick Room': i === 0 ? sickRoomCount : Math.floor(Math.random() * 3), 
-                    'Campus Exit': i === 0 ? outsideCount : Math.floor(Math.random() * 10)
+                    'Out-Campus': dayLeaves.filter((l: any) => l.leave_type === 'out-campus' || l.leave_type === 'personal').length,
+                    'Internal Leave': dayLeaves.filter((l: any) => l.leave_type === 'internal' || l.leave_type === 'on-campus').length,
+                    'Institutional': dayLeaves.filter((l: any) => l.leave_type === 'institutional').length,
                 })
             }
             setLineData(history)
-
-            setLoading(false)
         }
 
         fetchDashboardData()
-    }, [])
+    }, [staffMode])
 
     if (loading) {
         return (
@@ -98,98 +121,131 @@ export function QuickViewDashboard() {
         )
     }
 
+    const leaveLabel = staffMode ? "My Students on Leave" : "Students Outside"
+
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* ── Stat Cards ── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="bg-blue-600 border-none text-white">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium opacity-80">Total Students</CardTitle>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-medium opacity-80">
+                            {staffMode ? "My Students" : "Total Students"}
+                        </CardTitle>
                         <Users className="h-5 w-5 opacity-80" />
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pb-4 px-4">
                         <div className="text-3xl font-bold">{stats.totalStudents}</div>
+                        <p className="text-xs opacity-70 mt-1">{staffMode ? "Assigned to you" : "Active students"}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-orange-500 border-none text-white">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-medium opacity-80">{leaveLabel}</CardTitle>
+                        <PlaneTakeoff className="h-5 w-5 opacity-80" />
+                    </CardHeader>
+                    <CardContent className="pb-4 px-4">
+                        <div className="text-3xl font-bold">{stats.onLeave}</div>
+                        <p className="text-xs opacity-70 mt-1">Currently outside campus</p>
                     </CardContent>
                 </Card>
 
                 <Card className="bg-emerald-600 border-none text-white">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium opacity-80">Students Outside</CardTitle>
-                        <LogOut className="h-5 w-5 opacity-80" />
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-medium opacity-80">On-Campus Leave</CardTitle>
+                        <Home className="h-5 w-5 opacity-80" />
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{stats.outside}</div>
+                    <CardContent className="pb-4 px-4">
+                        <div className="text-3xl font-bold">{stats.onCampusLeave}</div>
+                        <p className="text-xs opacity-70 mt-1">Sick room / study leave</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-500 border-none text-white">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium opacity-80">Study Leave</CardTitle>
+                <Card className="bg-purple-600 border-none text-white">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-medium opacity-80">Institutional Leave</CardTitle>
                         <BookOpen className="h-5 w-5 opacity-80" />
                     </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{stats.studyLeave}</div>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-red-600 border-none text-white">
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                        <CardTitle className="text-sm font-medium opacity-80">Sick Room</CardTitle>
-                        <Activity className="h-5 w-5 opacity-80" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">{stats.sickRoom}</div>
+                    <CardContent className="pb-4 px-4">
+                        <div className="text-3xl font-bold">{stats.institutional}</div>
+                        <p className="text-xs opacity-70 mt-1">Bulk / campus-wide</p>
                     </CardContent>
                 </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-2 bg-white border border-slate-100 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-lg">Students Active Leave Summary (Last 7 Days)</CardTitle>
+            {/* ── Active Leave List (staff mode) ── */}
+            {staffMode && activeLeaveList.length > 0 && (
+                <Card className="border border-orange-100 dark:border-orange-900/30 bg-orange-50/50 dark:bg-orange-900/10">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                            <AlertCircle className="h-4 w-4" />
+                            Students Currently Outside Campus
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[300px]">
+                    <CardContent>
+                        <div className="space-y-2">
+                            {activeLeaveList.map((leave: any) => (
+                                <div key={leave.id} className="flex items-center justify-between rounded-lg bg-white dark:bg-slate-900 border border-orange-100 dark:border-orange-900/30 px-4 py-2.5">
+                                    <div>
+                                        <p className="font-medium text-sm text-slate-900 dark:text-white">{leave.student?.name || leave.student_id}</p>
+                                        <p className="text-xs text-slate-500">{leave.student?.standard} · {leave.reason_category || leave.leave_type}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400">
+                                            OUTSIDE
+                                        </span>
+                                        {leave.end_datetime && (
+                                            <p className="text-[10px] text-slate-400 mt-1">
+                                                Until {new Date(leave.end_datetime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {staffMode && activeLeaveList.length === 0 && (
+                <Card className="border border-emerald-100 bg-emerald-50/50 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+                    <CardContent className="p-6 text-center">
+                        <LogOut className="h-8 w-8 mx-auto mb-2 text-emerald-400 opacity-50" />
+                        <p className="text-sm text-emerald-700 dark:text-emerald-400 font-medium">All your students are on campus!</p>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ── 7-Day Chart ── */}
+            <Card className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+                <CardHeader>
+                    <CardTitle className="text-base">
+                        {staffMode ? "Your Students – Leave Activity (Last 7 Days)" : "Students Active Leave Summary (Last 7 Days)"}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                    {lineData.every(d => d['Out-Campus'] === 0 && d['Internal Leave'] === 0 && d['Institutional'] === 0) ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                            <AlertCircle className="h-8 w-8 mb-2 opacity-30" />
+                            <p className="text-sm">No leave activity in the last 7 days</p>
+                        </div>
+                    ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={lineData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis fontSize={12} tickLine={false} axisLine={false} />
+                                <XAxis dataKey="name" fontSize={11} tickLine={false} axisLine={false} />
+                                <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
                                 <Tooltip />
                                 <Legend />
-                                <Line type="monotone" dataKey="Internal Leave" stroke="#8884d8" activeDot={{ r: 8 }} strokeWidth={2} />
-                                <Line type="monotone" dataKey="Sick Room" stroke="#ffc658" strokeWidth={2} />
-                                <Line type="monotone" dataKey="Campus Exit" stroke="#82ca9d" strokeWidth={2} />
+                                <Line type="monotone" dataKey="Out-Campus" stroke="#f97316" activeDot={{ r: 6 }} strokeWidth={2} dot={{ r: 3 }} />
+                                <Line type="monotone" dataKey="Internal Leave" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                                <Line type="monotone" dataKey="Institutional" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
                             </LineChart>
                         </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-white border border-slate-100 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="text-lg">Most Reported Illnesses</CardTitle>
-                    </CardHeader>
-                    <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={pieData}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    dataKey="value"
-                                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                                >
-                                    {pieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
+                    )}
+                </CardContent>
+            </Card>
         </div>
     )
 }

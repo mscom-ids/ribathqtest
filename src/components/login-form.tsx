@@ -35,35 +35,58 @@ export default function LoginForm() {
         setError(null)
 
         try {
-            // Import api dynamically or at the top. Wait, we need to import `api` and `js-cookie`.
-            // Let's assume they are imported at the top, I will fix the imports in the next step.
-            const response = await api.post('/auth/login', {
-                email: values.email,
-                password: values.password,
-            })
+            console.log('[LOGIN] Attempting login for:', values.email)
+            
+            // Use native fetch to bypass any Axios interceptor deadlocks
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+            
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+            const res = await fetch(`${API_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: values.email, password: values.password }),
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            const data = await res.json();
+            
+            if (!res.ok) {
+                throw new Error(data.error || 'Invalid credentials');
+            }
 
-            if (response.data.success && response.data.token) {
-                // Set the token in a cookie so the Next.js middleware and future API requests can see it
-                // Make sure it persists for mobile phones across app restarts
-                Cookies.set('auth_token', response.data.token, { 
+            console.log('[LOGIN] Response:', data.success, 'role:', data.user?.role)
+
+            if (data.success && data.token) {
+                Cookies.set('auth_token', data.token, { 
                     expires: 365, 
                     secure: process.env.NODE_ENV === 'production',
                     sameSite: 'lax',
                     path: '/'
                 })
+                console.log('[LOGIN] Token saved to cookie')
                 
-                const profile = response.data.user
+                const profile = data.user
                 if (profile) {
                     const path = getRedirectPathForRole(profile.role)
-                    router.push(path)
+                    console.log('[LOGIN] Redirecting to:', path, '(role:', profile.role, ')')
+                    // Force a hard redirect so Server Components read the new cookie correctly
+                    window.location.href = path
                 } else {
                     setError("Profile not found. Contact Admin.")
                 }
             } else {
-                setError("Failed to login")
+                setError(data.error || "Failed to login")
             }
         } catch (err: any) {
-            setError(err.response?.data?.error || err.message || "Failed to login")
+            console.error('[LOGIN] Error:', err.name, err.message)
+            if (err.name === 'AbortError') {
+                setError("Login request timed out. Please ensure the backend server is running.");
+            } else {
+                setError(err.message || "Failed to login")
+            }
         } finally {
             setLoading(false)
         }

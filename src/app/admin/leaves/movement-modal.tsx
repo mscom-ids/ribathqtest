@@ -13,7 +13,25 @@ import {
 } from "@/components/ui/dialog"
 import api from "@/lib/api"
 import { toast } from "sonner"
-import type { StudentLeave } from "./page"
+
+export interface StudentLeave {
+    id: string
+    student_id: string
+    leave_type: "personal" | "internal" | "institutional" | "out-campus" | "on-campus"
+    start_datetime: string
+    end_datetime: string
+    reason?: string
+    reason_category?: string
+    remarks?: string
+    status: "approved" | "pending" | "rejected" | "outside" | "completed" | "returned" | "late" | "normal" | "cancelled"
+    actual_exit_datetime?: string
+    actual_return_datetime?: string
+    student?: {
+        name: string
+        adm_no: string
+        standard: string
+    }
+}
 
 interface MovementModalProps {
     leave: StudentLeave
@@ -61,7 +79,7 @@ export function MovementModal({ leave, open, onOpenChange, onSuccess }: Movement
                 <DialogHeader>
                     <DialogTitle>Confirm {action}</DialogTitle>
                     <DialogDescription>
-                        You are recording a physical gate scan for {leave.student.name}.
+                        You are recording a physical gate scan for {leave.student?.name}.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -69,7 +87,7 @@ export function MovementModal({ leave, open, onOpenChange, onSuccess }: Movement
                     <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 space-y-3">
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-500">Student:</span>
-                            <span className="font-medium">{leave.student.name} ({leave.student_id})</span>
+                            <span className="font-medium">{leave.student?.name} ({leave.student_id})</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-500">Leave Type:</span>

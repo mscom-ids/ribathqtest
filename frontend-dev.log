@@ -1,0 +1,28 @@
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.102:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 1513ms
+○ Compiling /staff ...
+>>> [api.ts] API_URL configured as: http://127.0.0.1:5000/api
+ GET /staff 200 in 9.5s (compile: 8.8s, proxy.ts: 267ms, render: 491ms)
+ GET /manifest.webmanifest 200 in 821ms (compile: 784ms, proxy.ts: 22ms, render: 15ms)
+ GET /staff 200 in 134ms (compile: 16ms, proxy.ts: 14ms, render: 104ms)
+ GET /manifest.webmanifest 200 in 25ms (compile: 7ms, proxy.ts: 11ms, render: 8ms)
+ GET /admin/staff 200 in 1479ms (compile: 1299ms, proxy.ts: 17ms, render: 163ms)
+ GET /manifest.webmanifest 200 in 22ms (compile: 8ms, proxy.ts: 9ms, render: 5ms)
+ GET /login 200 in 980ms (compile: 938ms, proxy.ts: 8ms, render: 35ms)
+ GET /manifest.webmanifest 200 in 27ms (compile: 6ms, proxy.ts: 14ms, render: 7ms)
+ GET /staff 200 in 109ms (compile: 8ms, proxy.ts: 7ms, render: 93ms)
+ GET /manifest.webmanifest 200 in 30ms (compile: 15ms, proxy.ts: 9ms, render: 6ms)
+ GET /admin/staff 200 in 111ms (compile: 4ms, proxy.ts: 8ms, render: 99ms)
+ GET /manifest.webmanifest 200 in 24ms (compile: 12ms, proxy.ts: 8ms, render: 4ms)
+ GET /login 200 in 730ms (compile: 78ms, proxy.ts: 100ms, render: 552ms)
+✓ Compiled in 972ms
+>>> [api.ts] API_URL configured as: http://127.0.0.1:5000/api
+ GET /staff 200 in 1418ms (compile: 244ms, proxy.ts: 41ms, render: 1133ms)
+ GET /staff 200 in 1421ms (compile: 300ms, proxy.ts: 46ms, render: 1076ms)
+ GET /manifest.webmanifest 200 in 54ms (compile: 23ms, proxy.ts: 18ms, render: 13ms)
+ GET /manifest.webmanifest 200 in 58ms (compile: 32ms, proxy.ts: 18ms, render: 7ms)

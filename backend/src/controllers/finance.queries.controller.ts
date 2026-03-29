@@ -106,15 +106,22 @@ export const getActiveStudents = async (req: Request, res: Response) => {
     try {
         const result = await db.query(
             `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.photo_url, s.dob as date_of_birth, s.status,
-                    s.assigned_usthad_id, st.name as usthad_name
+                    s.hifz_mentor_id, s.school_mentor_id, s.madrasa_mentor_id,
+                    h.name as hifz_mentor_name, sc.name as school_mentor_name, m.name as madrasa_mentor_name
              FROM students s
-             LEFT JOIN staff st ON s.assigned_usthad_id = st.id
+             LEFT JOIN staff h ON s.hifz_mentor_id = h.id
+             LEFT JOIN staff sc ON s.school_mentor_id = sc.id
+             LEFT JOIN staff m ON s.madrasa_mentor_id = m.id
              WHERE s.status = 'active' ORDER BY s.adm_no ASC`
         );
         
         const formattedData = result.rows.map(row => ({
             ...row,
-            assigned_usthad: row.usthad_name ? { name: row.usthad_name } : null
+            hifz_mentor: row.hifz_mentor_name ? { name: row.hifz_mentor_name } : null,
+            school_mentor: row.school_mentor_name ? { name: row.school_mentor_name } : null,
+            madrasa_mentor: row.madrasa_mentor_name ? { name: row.madrasa_mentor_name } : null,
+            // Kept for backward compatibility if any component hasn't migrated yet
+            assigned_usthad: row.hifz_mentor_name ? { name: row.hifz_mentor_name } : null
         }));
 
         res.json({ success: true, data: formattedData });

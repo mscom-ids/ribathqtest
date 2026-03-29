@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { getStaffId, getDelegationContext } from '../utils/staff.utils';
+import { supabaseAdmin } from '../config/supabase';
 
 export const getMyStaffProfile = async (req: Request, res: Response) => {
     try {
@@ -7,18 +9,57 @@ export const getMyStaffProfile = async (req: Request, res: Response) => {
         if (!user) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
+        const staffId = await getStaffId(req);
+        if (!staffId) {
+            return res.status(404).json({ success: false, error: 'Staff profile not found' });
+        }
 
-        // We assume user.email matches staff.email or user.id matches staff.profile_id
-        const result = await db.query('SELECT * FROM staff WHERE email = $1 OR profile_id = $2 LIMIT 1', [user.email, user.id]);
+        const result = await db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [staffId]);
         
         if (result.rows.length === 0) {
-            return res.json({ success: true, staff: null });
+            return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
         
-        res.json({ success: true, staff: result.rows[0] });
+        res.json({ success: true, staff: result.rows[0], acting_as: !!req.headers['x-acting-as-staff-id'] });
     } catch (err) {
         console.error('Error fetching staff profile:', err);
         res.status(500).json({ success: false, error: 'Failed' });
+    }
+};
+
+export const getStaffStudents = async (req: Request, res: Response) => {
+    try {
+        const { id: staffId } = req.params;
+        console.log('getStaffStudents staffId:', staffId);
+        if (!staffId) {
+            return res.status(400).json({ success: false, error: 'id required' });
+        }
+
+        const staffResult = await db.query(
+            'SELECT id, name, role FROM staff WHERE id = $1 LIMIT 1',
+            [staffId]
+        );
+        if (staffResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Staff not found' });
+        }
+
+        const result = await db.query(
+            `SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year
+             FROM students
+             WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
+               AND status = $2
+             ORDER BY name`,
+            [staffId, 'active']
+        );
+
+        console.log('getStaffStudents data:', result.rows);
+        res.json({ success: true, students: result.rows });
+    } catch (err: any) {
+        console.error('Error fetching assigned students:', err);
+        res.status(500).json({
+            success: false,
+            error: err.message || 'Failed to fetch assigned students',
+        });
     }
 };
 
@@ -28,7 +69,7 @@ export const getMyAssignedStudents = async (req: Request, res: Response) => {
         if (!staff_id) return res.status(400).json({ success: false, error: 'staff_id required' });
 
         const result = await db.query(
-            'SELECT adm_no, name, photo_url, standard FROM students WHERE assigned_usthad_id = $1 AND status = $2 ORDER BY name',
+            'SELECT adm_no, name, photo_url, standard FROM students WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1) AND status = $2 ORDER BY name',
             [staff_id, 'active']
         );
         
@@ -107,8 +148,10 @@ export const archiveStaff = async (req: Request, res: Response) => {
         const client = await db.getClient();
         try {
             await client.query('BEGIN');
-            // Unassign students
-            await client.query('UPDATE students SET assigned_usthad_id = NULL WHERE assigned_usthad_id = $1', [id]);
+            // Unassign students across all specific mentor slots
+            await client.query('UPDATE students SET hifz_mentor_id = NULL WHERE hifz_mentor_id = $1', [id]);
+            await client.query('UPDATE students SET school_mentor_id = NULL WHERE school_mentor_id = $1', [id]);
+            await client.query('UPDATE students SET madrasa_mentor_id = NULL WHERE madrasa_mentor_id = $1', [id]);
             // Archive staff
             await client.query('UPDATE staff SET is_active = false, profile_id = NULL WHERE id = $1', [id]);
             // We should ideally delete the user from `users` but we can leave it or set status=inactive.
@@ -194,14 +237,26 @@ export const createStaff = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Name is required' });
         }
 
-        let hashedPassword = null;
+        const selectedRole = role || 'usthad';
+        const finalEmail = email || `dummy-${Date.now()}@example.com`;
+
+        let authUserId = null;
+
+        // Create Supabase Auth user if password is provided
         if (password) {
-            const bcrypt = require('bcrypt');
-            const salt = await bcrypt.genSalt(10);
-            hashedPassword = await bcrypt.hash(password, salt);
+            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+                email: finalEmail,
+                password: password,
+                email_confirm: true,
+            });
+
+            if (authError || !authData.user) {
+                console.error("Supabase Auth Error:", authError);
+                return res.status(400).json({ success: false, error: authError?.message || 'Failed to create auth user' });
+            }
+            authUserId = authData.user.id;
         }
 
-        const selectedRole = role || 'usthad';
         let finalStaffId = staff_id || null;
 
         if (selectedRole === 'usthad' || selectedRole === 'vice_principal') {
@@ -216,42 +271,64 @@ export const createStaff = async (req: Request, res: Response) => {
             finalStaffId = `SR${seq}-${yearStr}-${monthStr}`;
         }
 
-        const columns = ['name', 'role', 'staff_id'];
-        const values: any[] = [name.trim(), selectedRole, finalStaffId];
-        let paramCount = 4;
+        // Optional: Wrap in a transaction
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
 
-        const optionalFields: Record<string, any> = {
-            email: email || `dummy-${Date.now()}@example.com`,
-            phone: phone || null,
-            password_hash: hashedPassword,
-            photo_url: photo_url || null,
-            address: address || null,
-            place: place || null,
-            phone_contacts: phone_contacts || [],
-        };
-
-        for (const [col, val] of Object.entries(optionalFields)) {
-            if (val !== null && val !== undefined) {
-                columns.push(col);
-                
-                let insertVal = val;
-                // Stringify JSON array for pg driver
-                if (col === 'phone_contacts' && Array.isArray(insertVal)) {
-                    insertVal = JSON.stringify(insertVal);
-                }
-                
-                values.push(insertVal);
-                paramCount++;
+            // 1. Insert into profiles if authUserId exists
+            if (authUserId) {
+                 await client.query(
+                    `INSERT INTO profiles (id, role, full_name, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT(id) DO NOTHING`,
+                    [authUserId, selectedRole, name.trim()]
+                 );
             }
+
+            const columns = ['name', 'role', 'staff_id'];
+            const values: any[] = [name.trim(), selectedRole, finalStaffId];
+            let paramCount = 4;
+
+            const optionalFields: Record<string, any> = {
+                email: finalEmail,
+                phone: phone || null,
+                profile_id: authUserId, // Set profile_id instead of password_hash
+                photo_url: photo_url || null,
+                address: address || null,
+                place: place || null,
+                phone_contacts: phone_contacts || [],
+            };
+
+            for (const [col, val] of Object.entries(optionalFields)) {
+                if (val !== null && val !== undefined) {
+                    columns.push(col);
+                    
+                    let insertVal = val;
+                    // Stringify JSON array for pg driver
+                    if (col === 'phone_contacts' && Array.isArray(insertVal)) {
+                        insertVal = JSON.stringify(insertVal);
+                    }
+                    
+                    values.push(insertVal);
+                    paramCount++;
+                }
+            }
+
+            const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+            const staffInsert = await client.query(
+                `INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+                values
+            );
+
+            await client.query('COMMIT');
+            res.json({ success: true, staffId: staffInsert.rows[0].id, staff: staffInsert.rows[0] });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
         }
 
-        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-        const staffInsert = await db.query(
-            `INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`,
-            values
-        );
-        
-        res.json({ success: true, staffId: staffInsert.rows[0].id, staff: staffInsert.rows[0] });
     } catch (err: any) {
         console.error("Failed to create staff:", err);
         res.status(500).json({ success: false, error: err.message });
@@ -262,22 +339,33 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         // Get my staff record
-        const staffResult = await db.query(
-            'SELECT id FROM staff WHERE email = $1 OR profile_id = $2 LIMIT 1',
-            [user.email, user.id]
-        );
-        if (staffResult.rows.length === 0) {
+        const ctx = await getDelegationContext(req);
+        if (!ctx) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
-        const staffId = staffResult.rows[0].id;
+        const staffId = ctx.staffId;
+        const actingStudentId = ctx.studentId;
 
         // Fetch assigned students
-        const studentsResult = await db.query(
-            `SELECT adm_no, name, photo_url, batch_year, standard, dob,
-             (SELECT name FROM staff WHERE id = assigned_usthad_id) as usthad_name
-             FROM students WHERE assigned_usthad_id = $1 AND status = 'active' ORDER BY name`,
-            [staffId]
-        );
+        let query = `
+            SELECT adm_no, name, photo_url, batch_year, standard, dob,
+            (SELECT name FROM staff WHERE id = hifz_mentor_id) as hifz_mentor_name,
+            (SELECT name FROM staff WHERE id = school_mentor_id) as school_mentor_name,
+            (SELECT name FROM staff WHERE id = madrasa_mentor_id) as madrasa_mentor_name
+            FROM students 
+            WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1) 
+              AND status = 'active'
+        `;
+        const params: any[] = [staffId];
+
+        if (actingStudentId) {
+            query += ` AND adm_no = $2`;
+            params.push(actingStudentId);
+        }
+
+        query += ` ORDER BY name`;
+
+        const studentsResult = await db.query(query, params);
         const students = studentsResult.rows;
 
         if (students.length === 0) {
@@ -287,6 +375,22 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
         const { date } = req.query;
         const todayDate = date || new Date().toISOString().split('T')[0];
         const studentIds = students.map((s: any) => s.adm_no);
+
+        // Fetch active outside leaves for these students
+        const activeLeaveResult = await db.query(
+            `SELECT student_id, leave_type, reason_category, remarks, end_datetime
+             FROM student_leaves 
+             WHERE student_id = ANY($1) AND status = 'outside'
+             ORDER BY created_at DESC`,
+            [studentIds]
+        );
+        // Build a map: student_id -> leave info
+        const activeLeaveMap: Record<string, any> = {};
+        activeLeaveResult.rows.forEach((l: any) => {
+            if (!activeLeaveMap[l.student_id]) {
+                activeLeaveMap[l.student_id] = l;
+            }
+        });
 
         // Fetch today's hifz logs
         const logsResult = await db.query(
@@ -303,10 +407,35 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
         );
         const attendance = attResult.rows;
 
+        // Fetch ANY active outgoing delegations from this mentor (could be specific students or ALL)
+        const outgoingDelegationsRes = await db.query(`
+            SELECT d.student_id, s.name as receiver_name 
+            FROM mentor_delegations d
+            JOIN staff s ON d.to_staff_id = s.id
+            WHERE d.from_staff_id = $1 AND d.status = 'approved'
+        `, [staffId]);
+        const outgoingDelegations = outgoingDelegationsRes.rows;
+
         // Enrich students with today's stats
         const enriched = students.map((student: any) => {
+            const delegation = outgoingDelegations.find(d => 
+                d.student_id === student.adm_no || d.student_id === null
+            );
+            
             const sLogs = logs.filter((l: any) => l.student_id === student.adm_no);
-            const sAtt = attendance.find((a: any) => a.student_id === student.adm_no);
+            const sAtts = attendance.filter((a: any) => a.student_id === student.adm_no);
+
+            let globalAttStatus = 'Pending';
+            if (sAtts.length > 0) {
+                // If present in ANY session today, mark them as Present globally on dashboard
+                if (sAtts.some((a: any) => a.status === 'Present')) {
+                    globalAttStatus = 'Present';
+                } else if (sAtts.every((a: any) => a.status === 'Absent')) {
+                    globalAttStatus = 'Absent';
+                } else {
+                    globalAttStatus = sAtts[0].status; // Leave, Late, etc
+                }
+            }
 
             let hifzPages = 0, revPages = 0, juzCount = 0;
             sLogs.forEach((log: any) => {
@@ -321,15 +450,28 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
                 }
             });
 
+            const activeLeaveMeta = activeLeaveMap[student.adm_no];
+
             return {
                 ...student,
-                assigned_usthad: student.usthad_name ? { name: student.usthad_name } : null,
-                today_stats: sLogs.length > 0 || sAtt ? {
+                assigned_usthad: student.hifz_mentor_name ? { name: student.hifz_mentor_name } : null,
+                hifz_mentor: student.hifz_mentor_name ? { name: student.hifz_mentor_name } : null,
+                school_mentor: student.school_mentor_name ? { name: student.school_mentor_name } : null,
+                madrasa_mentor: student.madrasa_mentor_name ? { name: student.madrasa_mentor_name } : null,
+                is_outside: !!activeLeaveMeta,
+                is_delegated: !!delegation,
+                delegated_to: delegation ? delegation.receiver_name : null,
+                active_leave: activeLeaveMeta ? {
+                    leave_type: activeLeaveMeta.leave_type,
+                    reason: activeLeaveMeta.reason_category || activeLeaveMeta.remarks || 'On Leave',
+                    end_datetime: activeLeaveMeta.end_datetime,
+                } : null,
+                today_stats: sLogs.length > 0 || sAtts.length > 0 ? {
                     hifz: parseFloat(hifzPages.toFixed(1)),
                     revision: revPages,
                     juz: parseFloat(juzCount.toFixed(1)),
-                    attendance: sAtt?.status || 'Pending'
-                } : undefined
+                    attendance: activeLeaveMeta ? 'Leave' : globalAttStatus
+                } : (activeLeaveMeta ? { hifz: 0, revision: 0, juz: 0, attendance: 'Leave' } : undefined)
             };
         });
 
@@ -344,7 +486,7 @@ export const getMyLeaves = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const staffResult = await db.query(
-            'SELECT id FROM staff WHERE email = $1 OR profile_id = $2 LIMIT 1',
+            'SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1',
             [user.email, user.id]
         );
         if (staffResult.rows.length === 0) {
@@ -356,7 +498,7 @@ export const getMyLeaves = async (req: Request, res: Response) => {
             `SELECT sl.*, s.name as student_name, s.standard, s.adm_no
              FROM student_leaves sl
              JOIN students s ON sl.student_id = s.adm_no
-             WHERE s.assigned_usthad_id = $1
+             WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
              ORDER BY sl.created_at DESC`,
             [staffId]
         );

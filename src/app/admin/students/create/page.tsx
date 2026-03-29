@@ -38,7 +38,9 @@ const formSchema = z.object({
     email: z.string().email().optional().or(z.literal('')),
     batch_year: z.string().optional().or(z.literal('')),
     standard: z.string().optional(),
-    assigned_usthad_id: z.string().optional(),
+    hifz_mentor_id: z.string().optional(),
+    school_mentor_id: z.string().optional(),
+    madrasa_mentor_id: z.string().optional(),
 })
 
 type StaffOption = { id: string; name: string }
@@ -82,6 +84,9 @@ export default function CreateStudentPage() {
             email: "",
             batch_year: "",
             standard: "Hifz",
+            hifz_mentor_id: "unassigned",
+            school_mentor_id: "unassigned",
+            madrasa_mentor_id: "unassigned"
         },
     })
 
@@ -134,7 +139,9 @@ export default function CreateStudentPage() {
                 email: values.email || null,
                 batch_year: values.batch_year || null,
                 class: values.standard || null,
-                assigned_usthad_id: values.assigned_usthad_id === "unassigned" ? null : values.assigned_usthad_id,
+                hifz_mentor_id: values.hifz_mentor_id === "unassigned" ? null : values.hifz_mentor_id,
+                school_mentor_id: values.school_mentor_id === "unassigned" ? null : values.school_mentor_id,
+                madrasa_mentor_id: values.madrasa_mentor_id === "unassigned" ? null : values.madrasa_mentor_id,
                 photo_url: photoUrl,
                 status: "active"
             })
@@ -274,29 +281,77 @@ export default function CreateStudentPage() {
                                 )}
                             />
 
-                            <FormField
-                                control={form.control}
-                                name="assigned_usthad_id"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Assign Mentor</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select Mentor" />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {staff.map((s) => (
-                                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormDescription>Can be assigned later if needed.</FormDescription>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="hifz_mentor_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Hifz Mentor</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select Mentor" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned" className="text-red-500 font-medium">Unassign Mentor</SelectItem>
+                                                    {staff.map((s) => (
+                                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="school_mentor_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>School Mentor</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select Mentor" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned" className="text-red-500 font-medium">Unassign Mentor</SelectItem>
+                                                    {staff.map((s) => (
+                                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="madrasa_mentor_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Madrasa Mentor</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select Mentor" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned" className="text-red-500 font-medium">Unassign Mentor</SelectItem>
+                                                    {staff.map((s) => (
+                                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField

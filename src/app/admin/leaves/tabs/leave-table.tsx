@@ -11,7 +11,24 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import type { StudentLeave } from "../page"
+export interface StudentLeave {
+    id: string
+    student_id: string
+    leave_type: "personal" | "internal" | "institutional" | "out-campus" | "on-campus"
+    start_datetime: string
+    end_datetime: string
+    reason?: string
+    reason_category?: string
+    remarks?: string
+    status: "approved" | "pending" | "rejected" | "outside" | "completed" | "returned" | "late" | "normal" | "cancelled"
+    actual_exit_datetime?: string
+    actual_return_datetime?: string
+    student?: {
+        name: string
+        adm_no: string
+        standard: string
+    }
+}
 
 interface LeaveTableProps {
     leaves: StudentLeave[]
@@ -68,15 +85,19 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                         leaves.map((leave) => {
                             const { color, label } = getStatusConfig(leave.status)
                             return (
-                                <TableRow key={leave.id} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+                                <TableRow key={leave.id || (leave as any).group_id} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
                                     <TableCell>
                                         <div className="font-medium text-slate-900 dark:text-slate-200">
                                             {leave.student?.name}
                                         </div>
                                         <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                            <span>{leave.student_id}</span>
-                                            <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
-                                            <span>{leave.student?.standard}</span>
+                                            <span>{(leave as any).is_group ? `${(leave as any).count} Students Released` : leave.student_id}</span>
+                                            {!(leave as any).is_group && (
+                                                <>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+                                                    <span>{leave.student?.standard}</span>
+                                                </>
+                                            )}
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -85,10 +106,17 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                                             <Badge variant="outline" className={color}>{label}</Badge>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="max-w-[200px]">
-                                        <span className="text-sm text-slate-600 dark:text-slate-300 truncate block">
-                                            {leave.reason || "—"}
-                                        </span>
+                                    <TableCell className="max-w-[250px]">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                                {(leave as any).reason_category || "General"}
+                                            </span>
+                                            {(leave as any).remarks && (
+                                                <span className="text-[11px] text-slate-500 italic line-clamp-2">
+                                                    "{(leave as any).remarks}"
+                                                </span>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         <div className="text-sm flex flex-col gap-1 text-slate-600 dark:text-slate-400">

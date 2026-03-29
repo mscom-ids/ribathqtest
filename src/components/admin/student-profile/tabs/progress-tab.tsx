@@ -46,10 +46,9 @@ export function ProgressTab({ student }: { student: Student }) {
     const [data, setData] = useState<any[]>([])
     const [monthlyStats, setMonthlyStats] = useState({
         hifzPages: 0,
-        recentRevisionPages: 0,
+        recentRevisionDays: 0,
         juzRevisionJuz: 0,
         totalJuz: 0,
-        grade: "NO GRADE",
         attendance: "0/0"
     })
     const [loading, setLoading] = useState(true)
@@ -67,7 +66,7 @@ export function ProgressTab({ student }: { student: Student }) {
             const monthStartStr = format(startOfCurrentMonth, "yyyy-MM-dd")
             const monthEndStr = format(endOfCurrentMonth, "yyyy-MM-dd")
 
-            const [logsRes, attendRes] = await Promise.all([
+            const [logsRes, attendRes, lifetimeLogsRes] = await Promise.all([
                 api.get("/hifz/logs", {
                     params: {
                         student_id: student.adm_no,
@@ -83,6 +82,12 @@ export function ProgressTab({ student }: { student: Student }) {
                         department: 'Hifz'
                     }
                 }),
+                api.get("/hifz/logs", {
+                    params: {
+                        student_id: student.adm_no,
+                        mode: 'New Verses'
+                    }
+                })
             ])
 
             const logs = logsRes.data?.logs || []
@@ -92,11 +97,22 @@ export function ProgressTab({ student }: { student: Student }) {
             }))
             setAttendanceRecords(attendRes.data?.data || [])
 
+            let lifetimePages = 0;
+            const lifetimeLogs = lifetimeLogsRes.data?.logs || [];
+            lifetimeLogs.forEach((log: any) => {
+                const sId = getSurahId(log.surah_name || "");
+                if (sId && log.start_v && log.end_v) {
+                    lifetimePages += calculatePages(sId, log.start_v, sId, log.end_v);
+                } else if (log.start_page && log.end_page) {
+                    lifetimePages += (log.end_page - log.start_page + 1);
+                }
+            });
+            const calcTotalJuz = Math.floor(lifetimePages / 20);
+
             if (logs.length > 0) {
                 const last30Days = logs.filter((l: any) => new Date(l.entry_date) >= subDays(today, 30))
                 const processed = last30Days.map((log: any) => ({
                     date: format(new Date(log.entry_date), 'dd/MM'),
-                    rating: log.rating,
                     mode: log.mode,
                     details: log.mode === 'New Verses' || log.mode === 'Recent Revision'
                         ? (log.surah_name
@@ -111,14 +127,17 @@ export function ProgressTab({ student }: { student: Student }) {
                 )
 
                 let hifzPages = 0
-                let recentRevisionPages = 0
-                let juzRevisionPages = 0
-                let totalRatings = 0
-                let ratingCount = 0
+                const recentRevisionDates = new Set<string>()
+                let juzRevisionTotal = 0
 
                 currentMonthLogs.forEach((log: any) => {
                     const pages = (log.page_end - log.page_start + 1) || 0
                     if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
+                        if (log.mode === 'Recent Revision') {
+                            recentRevisionDates.add(format(new Date(log.entry_date), 'yyyy-MM-dd'))
+                            return; // Don't add to pages count
+                        }
+                        
                         const surahId = getSurahId(log.surah_name || "");
                         let calculated = 0;
                         if (surahId && log.start_v && log.end_v) {
@@ -126,37 +145,31 @@ export function ProgressTab({ student }: { student: Student }) {
                         } else {
                             calculated = (log.start_page === log.end_page) ? 0.5 : pages;
                         }
+                        
                         if (log.mode === 'New Verses') {
                             hifzPages += calculated;
-                        } else {
-                            recentRevisionPages += calculated;
                         }
                     } else if (log.mode === 'Juz Revision') {
-                        juzRevisionPages += pages
-                    }
-                    if (log.rating) {
-                        totalRatings += log.rating
-                        ratingCount++
+                        const portion = log.juz_portion;
+                        if (portion === 'Full') juzRevisionTotal += 1;
+                        else if (portion?.includes('Half')) juzRevisionTotal += 0.5;
+                        else if (portion?.startsWith('Q')) juzRevisionTotal += 0.25;
+                        else juzRevisionTotal += 1; // Default to 1 if not specified
                     }
                 })
 
-                const avgRating = ratingCount > 0 ? (totalRatings / ratingCount).toFixed(1) : "NO GRADE"
                 setMonthlyStats(prev => ({
                     ...prev,
                     hifzPages: parseFloat(hifzPages.toFixed(2)),
-                    recentRevisionPages,
-                    juzRevisionJuz: parseFloat((juzRevisionPages / 20).toFixed(2)),
-                    grade: avgRating.toString()
+                    recentRevisionDays: recentRevisionDates.size,
+                    juzRevisionJuz: parseFloat(juzRevisionTotal.toFixed(2)),
+                    totalJuz: calcTotalJuz
                 }))
-            }
-
-            try {
-                const maxJuzRes = await api.get(`/hifz/logs/max-juz/${student.adm_no}`)
-                if (maxJuzRes.data?.success) {
-                    setMonthlyStats(prev => ({ ...prev, totalJuz: maxJuzRes.data.max_juz }))
-                }
-            } catch (err) {
-                console.error("Failed to fetch max juz", err)
+            } else {
+                setMonthlyStats(prev => ({
+                    ...prev,
+                    totalJuz: calcTotalJuz
+                }))
             }
 
             setLoading(false)
@@ -210,10 +223,6 @@ export function ProgressTab({ student }: { student: Student }) {
                     `J${l.juz || "?"} P${l.page_start}-${l.page_end}`
                 ).join(", ")
 
-                const rating = dayLogs.length > 0
-                    ? (dayLogs.reduce((sum: number, l: any) => sum + (l.rating || 0), 0) / dayLogs.length).toFixed(1)
-                    : null
-
                 return {
                     date: day,
                     dateStr,
@@ -225,7 +234,6 @@ export function ProgressTab({ student }: { student: Student }) {
                     newVersesText,
                     recentRevText,
                     juzRevText,
-                    rating,
                     hasLogs: dayLogs.length > 0,
                 }
             })
@@ -273,62 +281,48 @@ export function ProgressTab({ student }: { student: Student }) {
                                 <div key={week.weekNum} className="border border-slate-200 rounded-xl overflow-hidden">
                                     <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="bg-indigo-50">
-                                                <th className="text-left py-2 px-3 text-indigo-600 font-bold text-xs" colSpan={5}>
+                                            <tr className="bg-indigo-50 dark:bg-indigo-900/40">
+                                                <th className="text-left py-2 px-3 text-indigo-600 dark:text-indigo-300 font-bold text-xs" colSpan={4}>
                                                     Week {week.weekNum}
                                                 </th>
                                             </tr>
-                                            <tr className="bg-slate-50 text-xs text-slate-500">
+                                            <tr className="bg-slate-100 dark:bg-[#1a2035] text-xs text-slate-500 dark:text-slate-400">
                                                 <th className="py-1.5 px-3 text-left font-semibold w-[80px]">Date</th>
                                                 <th className="py-1.5 px-2 text-left font-semibold">حفظ يومي (New Hifz)</th>
                                                 <th className="py-1.5 px-2 text-left font-semibold">تسميع (Revision)</th>
                                                 <th className="py-1.5 px-2 text-left font-semibold">مراجعة (Juz Rev)</th>
-                                                <th className="py-1.5 px-2 text-center font-semibold w-[40px]">⭐</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {week.days.map((day) => (
                                                 <tr key={day.dateStr} className={cn(
-                                                    "border-t border-slate-100 transition-colors",
-                                                    day.isFriday && "bg-orange-50/50",
-                                                    day.isWeekend && "bg-purple-50/50",
-                                                    day.hasLogs && "bg-emerald-50/30"
+                                                    "border-t border-slate-100 dark:border-slate-700/50 transition-colors",
+                                                    day.isFriday && "bg-orange-50/50 dark:bg-orange-900/10",
+                                                    day.isWeekend && "bg-purple-50/50 dark:bg-purple-900/10",
+                                                    day.hasLogs && "bg-emerald-50/30 dark:bg-emerald-900/10"
                                                 )}>
                                                     <td className="py-1.5 px-3">
                                                         <div className="text-xs">
-                                                            <span className="font-bold text-slate-800">{day.dayNum}</span>
-                                                            <span className="text-slate-400 ml-1">{format(day.date, "EEE")}</span>
+                                                            <span className="font-bold text-slate-800 dark:text-slate-200">{day.dayNum}</span>
+                                                            <span className="text-slate-400 dark:text-slate-500 ml-1">{format(day.date, "EEE")}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-blue-600 max-w-[150px] truncate" title={day.newVersesText}>
-                                                        {day.newVersesText || <span className="text-slate-300">—</span>}
+                                                    <td className="py-1.5 px-2 text-xs text-blue-600 dark:text-blue-400 max-w-[150px] truncate" title={day.newVersesText}>
+                                                        {day.newVersesText || <span className="text-slate-300 dark:text-slate-600">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-orange-600 max-w-[150px] truncate" title={day.recentRevText}>
-                                                        {day.recentRevText || <span className="text-slate-300">—</span>}
+                                                    <td className="py-1.5 px-2 text-xs text-orange-600 dark:text-orange-400 max-w-[150px] truncate" title={day.recentRevText}>
+                                                        {day.recentRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-emerald-600 max-w-[150px] truncate" title={day.juzRevText}>
-                                                        {day.juzRevText || <span className="text-slate-300">—</span>}
-                                                    </td>
-                                                    <td className="py-1.5 px-2 text-center">
-                                                        {day.rating ? (
-                                                            <span className={cn("text-xs font-bold",
-                                                                Number(day.rating) >= 4 ? "text-emerald-600" :
-                                                                    Number(day.rating) >= 3 ? "text-yellow-600" : "text-red-500"
-                                                            )}>
-                                                                {day.rating}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-300 text-xs">—</span>
-                                                        )}
+                                                    <td className="py-1.5 px-2 text-xs text-emerald-600 dark:text-emerald-400 max-w-[150px] truncate" title={day.juzRevText}>
+                                                        {day.juzRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
                                                     </td>
                                                 </tr>
                                             ))}
-                                            <tr className="bg-slate-50 border-t border-slate-200 font-semibold text-xs">
-                                                <td className="py-2 px-3 text-slate-600">Summary</td>
-                                                <td className="py-2 px-2 text-blue-600">{week.summary.totalNew} entries</td>
-                                                <td className="py-2 px-2 text-orange-600">{week.summary.totalRecent} entries</td>
-                                                <td className="py-2 px-2 text-emerald-600">{week.summary.totalJuz} entries</td>
-                                                <td className="py-2 px-2"></td>
+                                            <tr className="bg-slate-100 dark:bg-[#1a2035] border-t border-slate-200 dark:border-slate-700 font-semibold text-xs">
+                                                <td className="py-2 px-3 text-slate-600 dark:text-slate-400">Summary</td>
+                                                <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNew} entries</td>
+                                                <td className="py-2 px-2 text-orange-600 dark:text-orange-400">{week.summary.totalRecent} entries</td>
+                                                <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalJuz} entries</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -352,8 +346,8 @@ export function ProgressTab({ student }: { student: Student }) {
                             <p className="text-2xl font-black text-blue-600">{monthlyStats.hifzPages}</p>
                         </div>
                         <div className="p-4 rounded-xl bg-orange-50 border border-orange-100">
-                            <p className="text-sm text-slate-500 mb-1">Recent Revision (Pages)</p>
-                            <p className="text-2xl font-black text-orange-600">{monthlyStats.recentRevisionPages}</p>
+                            <p className="text-sm text-slate-500 mb-1">Recent Revision (Days)</p>
+                            <p className="text-2xl font-black text-orange-600">{monthlyStats.recentRevisionDays}</p>
                         </div>
                         <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
                             <p className="text-sm text-slate-500 mb-1">Juz Revision (Juz)</p>
@@ -367,11 +361,6 @@ export function ProgressTab({ student }: { student: Student }) {
                     <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
                         <div className="text-sm text-slate-500">
                             Attendance: <span className="text-slate-800 font-bold">{monthlyStats.attendance}</span>
-                        </div>
-                        <div className="text-sm text-slate-500">
-                            Grade: <span className={`font-black ${monthlyStats.grade === 'NO GRADE' ? 'text-slate-400' : Number(monthlyStats.grade) >= 4 ? 'text-emerald-600' : 'text-yellow-600'}`}>
-                                {monthlyStats.grade}
-                            </span>
                         </div>
                     </div>
                 </CardContent>

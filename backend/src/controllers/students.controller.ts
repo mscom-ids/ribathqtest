@@ -5,7 +5,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
   try {
     const { search, class: className, status } = req.query;
     
-    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, comprehensive_details FROM students WHERE 1=1';
+    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
@@ -76,7 +76,9 @@ export const createStudent = async (req: Request, res: Response) => {
       email: data.email,
       batch_year: data.batch_year,
       standard: data.class || data.standard,
-      assigned_usthad_id: data.assigned_usthad_id === "unassigned" ? null : data.assigned_usthad_id,
+      hifz_mentor_id: data.hifz_mentor_id === "unassigned" ? null : data.hifz_mentor_id,
+      school_mentor_id: data.school_mentor_id === "unassigned" ? null : data.school_mentor_id,
+      madrasa_mentor_id: data.madrasa_mentor_id === "unassigned" ? null : data.madrasa_mentor_id,
       photo_url: data.photo_url,
       status: data.status || 'active',
       comprehensive_details: data.comprehensive_details || {}
@@ -85,7 +87,7 @@ export const createStudent = async (req: Request, res: Response) => {
     // We explicitly list the columns to avoid SQL injection
     const validColumns = [
       'adm_no', 'name', 'dob', 'address', 'father_name', 'phone', 
-      'email', 'batch_year', 'standard', 'assigned_usthad_id', 
+      'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id', 
       'photo_url', 'status', 'comprehensive_details'
     ];
     

@@ -54,12 +54,12 @@ export function StudentProfileView({ student, onStudentUpdated, isAdmin = true }
                                 <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).gender || "N/A"}</p>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Blood Group</label>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).blood_group || "N/A"}</p>
+                                <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Standard</label>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{student.standard || "N/A"}</p>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Religion</label>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">{(student as any).religion || "Islam"}</p>
+                                <label className="text-xs text-slate-400 block mb-1 uppercase tracking-wider">Batch Year</label>
+                                <p className="font-medium text-slate-800 dark:text-slate-200">{student.batch_year || "N/A"}</p>
                             </div>
                         </div>
                     </CardContent>

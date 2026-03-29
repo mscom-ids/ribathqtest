@@ -1,278 +1,225 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, isSameDay } from "date-fns"
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, CheckCircle2, XCircle, RotateCw } from "lucide-react"
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns"
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, Clock } from "lucide-react"
 import api from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter
-} from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
+import EventModal, { defaultEventState, EventDataType } from "@/components/shared/EventModal"
 
-export default function AcademicCalendarPage() {
+// Category Colors matching the Image reference Aesthetic
+const CATEGORY_COLORS = {
+    Celebration: { bg: 'bg-[#EBF2FF]', text: 'text-[#1E40AF]', border: 'border-[#3B82F6]', iconBg: 'bg-[#DBEAFE]', icon: 'text-[#2563EB]' }, 
+    Training:    { bg: 'bg-[#FFF8E1]', text: 'text-[#B45309]', border: 'border-[#F59E0B]', iconBg: 'bg-[#FEF3C7]', icon: 'text-[#D97706]' }, // Training (Yellowish)
+    Meeting:     { bg: 'bg-[#FFECEF]', text: 'text-[#BE123C]', border: 'border-[#F43F5E]', iconBg: 'bg-[#FFE4E6]', icon: 'text-[#E11D48]' }, // Meeting (Pinkish/Red)
+    Holidays:    { bg: 'bg-[#E8F8F0]', text: 'text-[#047857]', border: 'border-[#22C55E]', iconBg: 'bg-[#D1FAE5]', icon: 'text-[#059669]' }, // Holidays (Green)
+    Default:     { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-500', iconBg: 'bg-slate-200', icon: 'text-slate-600' },
+}
+
+export default function CalendarPage() {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [events, setEvents] = useState<any[]>([])
-    const [loading, setLoading] = useState(false)
-    const [generating, setGenerating] = useState(false)
     const { toast } = useToast()
 
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-    const [dialogOpen, setDialogOpen] = useState(false)
+    const [viewMode, setViewMode] = useState<'Month' | 'Week' | 'Day'>('Month')
+    
+    // Modal State
+    const [showModal, setShowModal] = useState(false)
+    const [editingId, setEditingId] = useState<string | null>(null)
+    const [selectedEvent, setSelectedEvent] = useState<EventDataType>(defaultEventState)
 
-    useEffect(() => {
-        fetchMonthEvents()
-    }, [currentDate])
+    useEffect(() => { fetchEvents() }, [currentDate])
 
-    const fetchMonthEvents = async () => {
-        setLoading(true)
+    const fetchEvents = async () => {
         try {
-            const startStr = format(startOfMonth(currentDate), "yyyy-MM-dd")
-            const endStr = format(endOfMonth(currentDate), "yyyy-MM-dd")
-            const res = await api.get(`/classes/events?start_date=${startStr}&end_date=${endStr}`)
-            if (res.data.success) {
-                setEvents(res.data.data)
-            }
+            const res = await api.get('/events')
+            if (res.data?.success) setEvents(res.data.events || [])
         } catch (error) {
-            console.error(error)
-            toast({ title: "Error", description: "Failed to fetch calendar events", variant: "destructive" })
-        } finally {
-            setLoading(false)
+            toast({ title: "Error", description: "Failed to load events", variant: "destructive" })
         }
     }
 
     const nextMonth = () => setCurrentDate(addMonths(currentDate, 1))
     const prevMonth = () => setCurrentDate(subMonths(currentDate, 1))
+    const goToToday = () => setCurrentDate(new Date())
 
     const monthStart = startOfMonth(currentDate)
     const monthEnd = endOfMonth(currentDate)
-    const startDate = monthStart // You could use startOfWeek here to pad the grid
-    const endDate = monthEnd
+    const startDate = startOfWeek(monthStart, { weekStartsOn: 0 }) // Force Sunday Start
+    const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 })
     
-    // Quick padding for UI to start on Sunday
-    const startDayOfWeek = startDate.getDay()
-    const prefixDays = Array.from({ length: startDayOfWeek }).map((_, i) => null)
-
     const days = eachDayOfInterval({ start: startDate, end: endDate })
 
+    // Open Modal for New Event on click
     const handleDayClick = (day: Date) => {
-        setSelectedDate(day)
-        setDialogOpen(true)
+        setSelectedEvent({ ...defaultEventState, start_date: format(day, "yyyy-MM-dd"), end_date: format(day, "yyyy-MM-dd") })
+        setEditingId(null)
+        setShowModal(true)
     }
 
-    const handleGenerate = async () => {
-        if (!selectedDate) return
-        setGenerating(true)
-        try {
-            const dateStr = format(selectedDate, "yyyy-MM-dd")
-            const res = await api.post('/classes/events/generate', { date: dateStr })
-            if (res.data.success) {
-                toast({ title: "Generated", description: `Successfully scheduled ${res.data.inserted} classes for this day.` })
-                fetchMonthEvents()
-            }
-        } catch (error) {
-            console.error(error)
-            toast({ title: "Error", description: "Failed to generate events. Make sure an Academic Year is active.", variant: "destructive" })
-        } finally {
-            setGenerating(false)
-        }
+    const handleEditEvent = (ev: any, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setSelectedEvent(ev)
+        setEditingId(ev.id)
+        setShowModal(true)
     }
-
-    const getEventsForDay = (day: Date) => {
-        const dateStr = format(day, "yyyy-MM-dd")
-        return events.filter(e => e.date === dateStr)
-    }
-
-    const selectedDayEvents = selectedDate ? getEventsForDay(selectedDate) : []
-    const isGenerated = selectedDayEvents.length > 0
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Academic Calendar</h1>
-                    <p className="text-sm text-slate-500">Manage daily class schedules and generate events.</p>
-                </div>
-
-                <div className="flex items-center gap-4 bg-white border px-4 py-2 rounded-xl shadow-sm">
-                    <Button variant="ghost" size="icon" onClick={prevMonth} className="h-8 w-8 hover:bg-[#4f46e5]/10 hover:text-[#4f46e5]">
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="w-40 text-center font-bold text-slate-700">
-                        {format(currentDate, "MMMM yyyy")}
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={nextMonth} className="h-8 w-8 hover:bg-[#4f46e5]/10 hover:text-[#4f46e5]">
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-
-            <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-                <div className="grid grid-cols-7 border-b bg-slate-50/80">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => (
-                        <div key={d} className="py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            {d}
+        <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-140px)] min-h-[750px]">
+            
+            {/* LEFT COLUMN: CALENDAR */}
+            <div className="flex-1 bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden p-6 flex flex-col">
+                
+                {/* TOOLBAR */}
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                        <button onClick={goToToday} className="px-5 py-2 rounded-lg bg-[#4f46e5] text-white hover:bg-[#4338ca] shadow-sm font-bold text-[14px] transition-colors tracking-wide">
+                            Today
+                        </button>
+                        <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200">
+                            <button onClick={prevMonth} className="px-3 py-2 hover:bg-slate-100 rounded-l-lg transition hover:text-[#4f46e5]"><ChevronLeft className="h-5 w-5" /></button>
+                            <button onClick={nextMonth} className="px-3 py-2 hover:bg-slate-100 rounded-r-lg transition hover:text-[#4f46e5]"><ChevronRight className="h-5 w-5" /></button>
                         </div>
-                    ))}
+                    </div>
+                    
+                    <h2 className="text-[20px] font-black text-[#1F2937] uppercase tracking-wider">{format(currentDate, "MMMM yyyy")}</h2>
+                    
+                    <div className="flex items-center bg-slate-50/80 rounded-lg p-1 border border-slate-200 shadow-inner">
+                        {['Month', 'Week', 'Day'].map(view => (
+                            <button key={view} onClick={() => setViewMode(view as any)} 
+                                className={`px-5 py-1.5 text-[13px] font-black rounded-md transition-all duration-200 ${viewMode === view ? 'bg-[#4f46e5] text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}>
+                                {view}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                {loading ? (
-                    <div className="h-96 flex flex-col items-center justify-center text-slate-400 gap-4">
-                        <Loader2 className="h-8 w-8 animate-spin text-[#4f46e5]" />
-                        <p>Loading Events...</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-7 auto-rows-fr">
-                        {prefixDays.map((_, i) => (
-                            <div key={`empty-${i}`} className="min-h-[85px] bg-slate-50/50 border-b border-r border-slate-100/50" />
+                {/* GRID */}
+                <div className="flex-1 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+                    {/* Header */}
+                    <div className="grid grid-cols-7 border-b border-slate-200 bg-[#F8F9FA]">
+                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+                            <div key={d} className={`py-3.5 text-center text-[13px] font-black text-[#1F2937] ${i !== 6 ? 'border-r border-slate-200' : ''}`}>
+                                {d}
+                            </div>
                         ))}
-
+                    </div>
+                    
+                    {/* Days Component */}
+                    <div className="grid grid-cols-7 flex-1 auto-rows-[minmax(100px,_1fr)]">
                         {days.map((day, i) => {
-                            const dayEvents = getEventsForDay(day)
+                            const isCurrentMonth = isSameMonth(day, currentDate)
                             const isTodayDate = isToday(day)
-                            const hasEvents = dayEvents.length > 0
                             
-                            // Determine visual state based on events
-                            const completedCnt = dayEvents.filter(e => e.status === 'completed').length
-                            const bgClass = hasEvents ? "bg-indigo-50/30" : "bg-white"
-                            
+                            // Find events occurring on this day
+                            const dayEvents = events.filter(e => {
+                                const s = new Date(e.start_date).getTime()
+                                const end = new Date(e.end_date).getTime()
+                                const curr = day.getTime()
+                                return curr >= s && curr <= end
+                            })
+
                             return (
                                 <div 
                                     key={day.toISOString()} 
                                     onClick={() => handleDayClick(day)}
-                                    className={`min-h-[85px] border-b border-r border-slate-100 p-2 cursor-pointer transition-all hover:bg-slate-50 relative group ${bgClass}`}
+                                    className={`p-2 border-b border-r border-slate-200 cursor-pointer hover:bg-slate-50/80 transition-colors group flex flex-col ${!isCurrentMonth ? 'bg-slate-50/50 text-opacity-50' : 'bg-white'}`}
+                                    style={{ borderRightWidth: (i + 1) % 7 === 0 ? '0px' : '1px' }}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className={`
-                                            h-7 w-7 rounded-full flex items-center justify-center text-sm font-bold
-                                            ${isTodayDate ? 'bg-[#4f46e5] text-white shadow-md' : 'text-slate-700 group-hover:bg-slate-200'}
-                                        `}>
+                                    <div className="flex justify-end mb-1">
+                                        <span className={`h-[26px] w-[26px] flex items-center justify-center text-[13px] font-extrabold rounded-full ${isTodayDate ? 'bg-[#4f46e5] text-white shadow-md' : isCurrentMonth ? 'text-slate-700' : 'text-slate-400'}`}>
                                             {format(day, "d")}
-                                        </div>
+                                        </span>
                                     </div>
                                     
-                                    <div className="space-y-1">
-                                        {hasEvents && (
-                                            <div className="px-2 py-1.5 rounded bg-indigo-100/60 border border-indigo-200 text-indigo-700 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
-                                                <CalendarIcon className="h-3 w-3" />
-                                                {dayEvents.length} Classes
-                                            </div>
-                                        )}
-                                        {completedCnt > 0 && (
-                                            <div className="px-2 py-1 rounded bg-emerald-50 text-emerald-600 text-[10px] font-medium border border-emerald-100">
-                                                {completedCnt} Completed
-                                            </div>
-                                        )}
+                                    <div className="flex-1 space-y-1.5 mt-1 overflow-y-auto hide-scrollbar">
+                                        {dayEvents.map(ev => {
+                                            const colorClass = (CATEGORY_COLORS as any)[ev.category] || CATEGORY_COLORS.Default
+                                            return (
+                                                <div 
+                                                    key={ev.id} 
+                                                    onClick={(e) => handleEditEvent(ev, e)}
+                                                    className={`px-2 py-1 rounded-[4px] text-[11px] font-bold truncate ${colorClass.bg} ${colorClass.text} hover:opacity-80 transition-opacity`}
+                                                    title={ev.title}
+                                                >
+                                                    {ev.title}
+                                                </div>
+                                            )
+                                        })}
                                     </div>
-                                    
-                                    {!hasEvents && day.getDay() !== 0 && (
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <span className="text-xs bg-[#4f46e5]/10 text-[#4f46e5] font-semibold px-2 py-1 rounded-md">
-                                                Click to Setup
-                                            </span>
-                                        </div>
-                                    )}
                                 </div>
                             )
                         })}
                     </div>
-                )}
+                </div>
             </div>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl">
-                            <CalendarIcon className="h-5 w-5 text-[#4f46e5]" />
-                            Schedule for {selectedDate ? format(selectedDate, "EEEE, MMMM d, yyyy") : ""}
-                        </DialogTitle>
-                    </DialogHeader>
-                    
-                    <div className="py-4">
-                        {!isGenerated ? (
-                            <div className="text-center py-10 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl">
-                                <div className="mx-auto h-16 w-16 bg-white rounded-full flex items-center justify-center shadow-sm border mb-4">
-                                    <CalendarIcon className="h-8 w-8 text-slate-400" />
-                                </div>
-                                <h3 className="text-lg font-semibold text-slate-700 mb-2">No Classes Scheduled</h3>
-                                <p className="text-sm text-slate-500 max-w-sm mx-auto mb-6">
-                                    There are no class events generated for this day. You can generate them based on the active Academic Year's weekly schedule.
-                                </p>
-                                <Button onClick={handleGenerate} disabled={generating} className="bg-[#4f46e5] hover:bg-[#4338ca] shadow-md h-11 px-6">
-                                    {generating ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <RotateCw className="h-5 w-5 mr-2" />}
-                                    Generate Daily Schedule
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="font-semibold text-slate-700">{selectedDayEvents.length} Classes Generated</h4>
-                                    <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating}>
-                                        <RotateCw className="h-3 w-3 mr-2" /> Re-sync Weekly
-                                    </Button>
-                                </div>
-                                
-                                <div className="max-h-[400px] overflow-y-auto pr-2 space-y-3">
-                                    {selectedDayEvents.map(ev => (
-                                        <div key={ev.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-[#4f46e5]/30 transition-colors">
-                                            <div className="flex items-start gap-4">
-                                                <div className="flex flex-col items-center justify-center bg-slate-50 border rounded-lg p-2 min-w-[90px]">
-                                                    <div className="text-sm font-bold text-slate-700">{ev.start_time.substring(0, 5)}</div>
-                                                    <div className="text-[10px] text-slate-400 font-semibold uppercase">to</div>
-                                                    <div className="text-sm font-bold text-slate-700">{ev.end_time.substring(0, 5)}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-slate-800 text-lg mb-1">{ev.class_name}</div>
-                                                    <div className="flex gap-2">
-                                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                                            {ev.type}
-                                                        </Badge>
-                                                        {ev.status === 'scheduled' && <Badge variant="secondary" className="bg-slate-100">Scheduled</Badge>}
-                                                        {ev.status === 'completed' && <Badge variant="default" className="bg-emerald-500">Completed</Badge>}
-                                                        {ev.status === 'cancelled' && <Badge variant="destructive">Cancelled</Badge>}
-                                                    </div>
-                                                </div>
+
+            {/* RIGHT COLUMN: EVENTS LIST */}
+            <div className="w-full xl:w-[380px] shrink-0 flex flex-col bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden p-6 relative">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-[18px] font-black text-[#1F2937]">Events</h3>
+                    <select className="bg-slate-50 border border-slate-200 text-[13px] font-bold text-slate-700 px-3 py-2 rounded-lg outline-none cursor-pointer focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5] shadow-sm">
+                        <option>All Category</option>
+                        <option>Celebration</option>
+                        <option>Meeting</option>
+                        <option>Training</option>
+                        <option>Holidays</option>
+                    </select>
+                </div>
+
+                {/* Vertical Event Cards Timeline */}
+                <div className="flex-1 overflow-y-auto space-y-5 pr-1 pb-4">
+                    {events.length === 0 ? (
+                        <div className="text-center py-10 text-slate-500 font-medium text-[14px]">No upcoming events</div>
+                    ) : (
+                        events.map((ev) => {
+                            const colorClass = (CATEGORY_COLORS as any)[ev.category] || CATEGORY_COLORS.Default
+                            
+                            return (
+                                <div key={ev.id} onClick={(e) => handleEditEvent(ev, e)} className={`bg-white rounded-xl shadow-sm border-l-[3px] border-y border-r border-[#E5E7EB] ${colorClass.border} p-5 cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group`}>
+                                    
+                                    <div className="flex gap-4">
+                                        <div className={`h-11 w-11 flex items-center justify-center shrink-0 rounded-full ${colorClass.iconBg}`}>
+                                            <Users className={`h-5 w-5 ${colorClass.icon}`} />
+                                        </div>
+                                        <div className="flex-1 pb-1">
+                                            <h4 className="text-[16px] font-extrabold text-[#1F2937] leading-tight group-hover:text-[#4f46e5] transition-colors">{ev.title}</h4>
+                                            
+                                            <div className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500 mt-2 mb-4">
+                                                <CalendarIcon className="h-3.5 w-3.5" />
+                                                {format(new Date(ev.start_date), "dd MMM yyyy")} {ev.start_date !== ev.end_date && `- ${format(new Date(ev.end_date), "dd MMMM yyyy")}`}
                                             </div>
                                             
-                                            <div className="mt-4 sm:mt-0 flex flex-wrap gap-2">
-                                                {ev.status === 'scheduled' && (
-                                                    <Button size="sm" variant="outline" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200" onClick={async () => {
-                                                        await api.patch(`/classes/events/${ev.id}/status`, { status: "completed" })
-                                                        fetchMonthEvents()
-                                                    }}>
-                                                        <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Completed
-                                                    </Button>
-                                                )}
-                                                {ev.status === 'scheduled' && (
-                                                    <Button size="sm" variant="outline" className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200" onClick={async () => {
-                                                        await api.patch(`/classes/events/${ev.id}/status`, { status: "cancelled" })
-                                                        fetchMonthEvents()
-                                                    }}>
-                                                        <XCircle className="h-4 w-4 mr-1.5" /> Cancel Class
-                                                    </Button>
-                                                )}
-                                                {(ev.status === 'completed' || ev.status === 'cancelled') && (
-                                                    <Button size="sm" variant="ghost" onClick={async () => {
-                                                        await api.patch(`/classes/events/${ev.id}/status`, { status: "scheduled" })
-                                                        fetchMonthEvents()
-                                                    }}>
-                                                        Reset Status
-                                                    </Button>
-                                                )}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500">
+                                                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                                                    {ev.start_time.substring(0, 5)} - {ev.end_time.substring(0, 5)}
+                                                </div>
+                                                
+                                                {/* Stacked avatars style match */}
+                                                <div className="flex -space-x-1.5">
+                                                    <img src="https://i.pravatar.cc/100?img=11" className="w-6 h-6 rounded-full border border-white shadow-sm" alt="User 1" />
+                                                    <img src="https://i.pravatar.cc/100?img=12" className="w-6 h-6 rounded-full border border-white shadow-sm" alt="User 2" />
+                                                    <img src="https://i.pravatar.cc/100?img=13" className="w-6 h-6 rounded-full border border-white shadow-sm" alt="User 3" />
+                                                </div>
                                             </div>
                                         </div>
-                                    ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
+                            )
+                        })
+                    )}
+                </div>
+            </div>
+
+            <EventModal
+                isOpen={showModal}
+                onClose={() => setShowModal(false)}
+                onSaveSuccess={fetchEvents}
+                editingEventId={editingId}
+                initialData={selectedEvent}
+            />
         </div>
     )
 }

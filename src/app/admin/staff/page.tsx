@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Search, Trash2, Users, Shield, KeyRound, Loader2, Pencil, Phone, RotateCcw, MapPin, Camera } from "lucide-react"
+import { Plus, Search, Trash2, Users, Shield, KeyRound, Loader2, Pencil, Phone, RotateCcw, MapPin, Camera, User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -84,6 +84,12 @@ export default function StaffPage() {
     const [saving, setSaving] = useState(false)
     const [staffToArchive, setStaffToArchive] = useState<string | null>(null)
 
+    // View Students State
+    const [viewStudentsDialogOpen, setViewStudentsDialogOpen] = useState(false)
+    const [viewStudentsStaff, setViewStudentsStaff] = useState<Staff | null>(null)
+    const [assignedStudents, setAssignedStudents] = useState<any[]>([])
+    const [loadingStudents, setLoadingStudents] = useState(false)
+
     // Edit Form State
     const [editForm, setEditForm] = useState({
         name: "",
@@ -96,8 +102,10 @@ export default function StaffPage() {
         phone_contacts: [{ number: "", relation: "Personal" }] as PhoneContact[],
     })
     const [photoFile, setPhotoFile] = useState<File | null>(null)
+    const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
+        setMounted(true)
         loadStaff()
     }, [])
 
@@ -259,6 +267,27 @@ export default function StaffPage() {
         setEditDialogOpen(true)
     }
 
+    const openViewStudents = async (s: Staff) => {
+        setViewStudentsStaff(s)
+        setViewStudentsDialogOpen(true)
+        setLoadingStudents(true)
+        setAssignedStudents([]) // clear previous
+
+        try {
+            const res = await api.get(`/staff/${s.id}/students`)
+            if (res.data.success) {
+                setAssignedStudents(res.data.students || [])
+            } else {
+                toast({ title: "Error", description: "Failed to load assigned students.", variant: "destructive" })
+            }
+        } catch (error) {
+            console.error("Failed to load students:", error)
+            toast({ title: "Error", description: "Network error loading students.", variant: "destructive" })
+        } finally {
+            setLoadingStudents(false)
+        }
+    }
+
     const addPhoneContact = () => {
         if (editForm.phone_contacts.length < 3) {
             setEditForm({
@@ -303,19 +332,25 @@ export default function StaffPage() {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">Mentors</h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage mentors and administrators.</p>
+        <div className="p-4 md:p-8 pt-6 space-y-6" suppressHydrationWarning>
+            {!mounted ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
                 </div>
-                <Link href="/admin/staff/create">
-                    <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-lg shadow-purple-500/30">
-                        <Plus className="mr-2 h-4 w-4" /> Add Mentor
-                    </Button>
-                </Link>
-            </div>
+            ) : (
+                <>
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">Mentors</h1>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">Manage mentors and administrators.</p>
+                    </div>
+                    <Link href="/admin/staff/create">
+                        <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-lg shadow-purple-500/30">
+                            <Plus className="mr-2 h-4 w-4" /> Add Mentor
+                        </Button>
+                    </Link>
+                </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -522,6 +557,17 @@ export default function StaffPage() {
                                                             >
                                                                 <KeyRound className="h-3 w-3 mr-1.5" />
                                                                 Create Login
+                                                            </Button>
+                                                        )}
+                                                        {(!['admin', 'controller'].includes(s.role)) && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 border-slate-200 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
+                                                                onClick={() => openViewStudents(s)}
+                                                                title="View Assigned Students"
+                                                            >
+                                                                <Users className="h-3.5 w-3.5" />
                                                             </Button>
                                                         )}
                                                         <Button
@@ -770,6 +816,68 @@ export default function StaffPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* View Assigned Students Dialog */}
+            <Dialog open={viewStudentsDialogOpen} onOpenChange={setViewStudentsDialogOpen}>
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+                    <DialogHeader className="pb-4 border-b">
+                        <DialogTitle className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-purple-600" />
+                            Assigned Students
+                        </DialogTitle>
+                        <DialogDescription>
+                            Students currently assigned to {viewStudentsStaff?.name} ({viewStudentsStaff?.role}).
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto py-4">
+                        {loadingStudents ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                                <Loader2 className="h-8 w-8 animate-spin mb-4 text-purple-600" />
+                                <p>Loading students...</p>
+                            </div>
+                        ) : assignedStudents.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                                <div className="h-16 w-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                                    <User className="h-8 w-8 text-slate-400" />
+                                </div>
+                                <p className="font-medium text-slate-700 dark:text-slate-300">No students assigned</p>
+                                <p className="text-sm mt-1">This mentor does not have any active students currently assigned.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between px-2 mb-2">
+                                    <span className="text-sm font-medium text-slate-500">Total: {assignedStudents.length} Students</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {assignedStudents.map((stu) => (
+                                        <div key={stu.id || stu.adm_no} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#1a2234] hover:border-purple-200 dark:hover:border-purple-800/50 transition-colors">
+                                            {stu.photo_url ? (
+                                                <img src={`http://localhost:5000${stu.photo_url}`} alt={stu.name} className="h-10 w-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-900" />
+                                            ) : (
+                                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
+                                                    {stu.name.charAt(0)}
+                                                </div>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium text-sm text-slate-900 dark:text-white truncate">{stu.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <Badge variant="outline" className="text-[10px] bg-white dark:bg-slate-800 font-normal">
+                                                        #{stu.adm_no}
+                                                    </Badge>
+                                                    {stu.standard && (
+                                                        <span className="text-xs text-slate-500">Std {stu.standard}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             {/* Archive Confirmation Dialog */}
             <AlertDialog open={!!staffToArchive} onOpenChange={(open) => !open && setStaffToArchive(null)}>
                 <AlertDialogContent>
@@ -787,6 +895,8 @@ export default function StaffPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+                </>
+            )}
         </div>
     )
 }

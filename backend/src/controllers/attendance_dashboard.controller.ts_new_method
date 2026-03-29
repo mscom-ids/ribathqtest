@@ -1,0 +1,48 @@
+export const getDailyAttendanceStats = async (req: Request, res: Response) => {
+    try {
+        const { date } = req.query;
+        if (!date) return res.status(400).json({ success: false, error: "Date is required" });
+
+        // Build stats for students
+        const studentRes = await db.query(
+            `SELECT status, count(*) as count 
+             FROM student_attendance_marks 
+             WHERE date = $1 
+             GROUP BY status`,
+            [date]
+        );
+
+        const students = { present: 0, absent: 0, late: 0, total: 0 };
+        studentRes.rows.forEach(r => {
+            const st = r.status.toLowerCase();
+            const cnt = parseInt(r.count, 10);
+            if (st === 'present') students.present += cnt;
+            else if (st === 'absent') students.absent += cnt;
+            else if (st === 'late') students.late += cnt;
+        });
+        students.total = students.present + students.absent + students.late;
+
+        // Build stats for mentors (staff attendance)
+        const mentorRes = await db.query(
+            `SELECT status, count(*) as count 
+             FROM staff_attendance 
+             WHERE date = $1 
+             GROUP BY status`,
+            [date]
+        );
+
+        const mentors = { present: 0, absent: 0, late: 0, total: 0 };
+        mentorRes.rows.forEach(r => {
+            const st = r.status.toLowerCase();
+            const cnt = parseInt(r.count, 10);
+            if (st === 'present') mentors.present += cnt;
+            else if (st === 'absent') mentors.absent += cnt;
+            else if (st === 'late') mentors.late += cnt;
+        });
+        mentors.total = mentors.present + mentors.absent + mentors.late;
+
+        res.json({ success: true, students, mentors });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};

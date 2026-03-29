@@ -12,6 +12,11 @@ import examsRoutes from './routes/exams.routes';
 import uploadRoutes from './routes/upload.routes';
 import parentRoutes from './routes/parent.routes';
 import classesRoutes from './routes/classes.routes';
+import attendanceRoutes from './routes/attendance_dashboard.routes';
+import eventsRoutes from './routes/events.routes';
+import reportsRoutes from './routes/reports.routes';
+import chatRoutes from './routes/chat.routes';
+import delegationsRoutes from './routes/delegations.routes';
 import path from 'path';
 
 dotenv.config();
@@ -37,6 +42,11 @@ app.use('/api/exams', examsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/parent', parentRoutes);
 app.use('/api/classes', classesRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/events', eventsRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/delegations', delegationsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend is running' });

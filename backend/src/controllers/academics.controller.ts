@@ -62,7 +62,12 @@ export const getStudentsForAttendance = async (req: Request, res: Response) => {
         }
         const standardColumn = `${department.toLowerCase()}_standard`;
         
-        query = `SELECT adm_no, name, ${standardColumn} as standard FROM students WHERE status = 'active' AND ${standardColumn} IS NOT NULL`;
+        query = `
+            SELECT s.adm_no, s.name, s.${standardColumn} as standard,
+            EXISTS (SELECT 1 FROM student_leaves sl WHERE sl.student_id = s.adm_no AND sl.status = 'outside') as is_outside
+            FROM students s 
+            WHERE s.status = 'active' AND s.${standardColumn} IS NOT NULL
+        `;
         const params: any[] = [];
         let paramCount = 1;
 
@@ -185,7 +190,7 @@ export const upsertAttendance = async (req: Request, res: Response) => {
         const query = `
             INSERT INTO attendance (student_id, date, session_id, class_event_id, status, recorded_by, department)
             VALUES ${placeholders.join(', ')}
-            ON CONFLICT (student_id, class_event_id)
+            ON CONFLICT (student_id, date, session_id)
             DO UPDATE SET status = EXCLUDED.status, recorded_by = EXCLUDED.recorded_by, updated_at = NOW()
         `;
         

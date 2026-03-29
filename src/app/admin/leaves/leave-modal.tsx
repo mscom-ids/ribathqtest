@@ -1,255 +1,258 @@
-import { useState, useEffect } from "react"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { format } from "date-fns"
-import { CalendarIcon, Loader2 } from "lucide-react"
+"use client"
 
-import { Button } from "@/components/ui/button"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-} from "@/components/ui/form"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import api from "@/lib/api"
+import { useState, useEffect } from "react"
+import { Loader2, Plus, X } from "lucide-react"
 import { toast } from "sonner"
 
-const leaveSchema = z.object({
-    student_id: z.string().min(1, "Student is required"),
-    leave_type: z.enum(["internal", "personal", "institutional"]),
-    start_datetime: z.string().min(1, "Start time is required"),
-    end_datetime: z.string().min(1, "End time is required"),
-    reason: z.string().optional(),
-})
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import api from "@/lib/api"
 
-type LeaveFormValues = z.infer<typeof leaveSchema>
+const REASON_CATEGORIES = [
+    "Medical Leave",
+    "Function Leave",
+    "Funeral Leave",
+    "Exam Leave",
+    "Institutional Leave",
+    "Other"
+]
 
-interface LeaveModalProps {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onSuccess: () => void
-}
+const CLASS_OPTIONS = [
+    { label: "5th Class", value: "5th" },
+    { label: "6th Class", value: "6th" },
+    { label: "7th Class", value: "7th" },
+    { label: "8th Class", value: "8th" },
+    { label: "9th Class", value: "9th" },
+    { label: "10th Class", value: "10th" },
+    { label: "Plus One", value: "Plus One" },
+    { label: "Plus Two", value: "Plus Two" }
+]
 
-export function LeaveModal({ open, onOpenChange, onSuccess }: LeaveModalProps) {
-    const [students, setStudents] = useState<{ adm_no: string; name: string; standard: string }[]>([])
+export function LeaveModal({ open, onOpenChange, onSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onSuccess: () => void }) {
     const [loading, setLoading] = useState(false)
+    const [mode, setMode] = useState<"individual" | "class" | "batch">("individual")
+    
+    // Common
+    const [startDatetime, setStartDatetime] = useState("")
+    const [endDatetime, setEndDatetime] = useState("")
+    const [reasonCategory, setReasonCategory] = useState("")
+    const [remarks, setRemarks] = useState("")
 
-    const form = useForm<LeaveFormValues>({
-        resolver: zodResolver(leaveSchema),
-        defaultValues: {
-            student_id: "",
-            leave_type: "personal",
-            start_datetime: "",
-            end_datetime: "",
-            reason: "",
-        },
-    })
+    // Individual
+    const [studentId, setStudentId] = useState("")
+    const [fetchedStudents, setFetchedStudents] = useState<any[]>([])
 
+    // Group (Class/Batch)
+    const [groupValue, setGroupValue] = useState("")
+    const [exceptions, setExceptions] = useState<string[]>([])
+    
     useEffect(() => {
-        if (!open) return
-        
-        // Fetch eligible students
-        const fetchStudents = async () => {
-            try {
-                const res = await api.get('/leaves/eligible-students')
-                if (res.data.success) {
-                    setStudents(res.data.students)
-                }
-            } catch (err) {
-                console.error("Failed to load eligible students", err)
+        if (open) {
+            const getStuds = async () => {
+                try {
+                    const res = await api.get('/leaves/eligible-students')
+                    if (res.data.success) {
+                        setFetchedStudents(res.data.students.filter((s:any) => !s.is_outside))
+                    }
+                } catch(e) {}
             }
+            getStuds()
+        } else {
+            // Reset
+            setStudentId("")
+            setStartDatetime("")
+            setEndDatetime("")
+            setReasonCategory("")
+            setRemarks("")
+            setGroupValue("")
+            setExceptions([])
         }
-        
-        fetchStudents()
-        form.reset()
     }, [open])
 
-    const onSubmit = async (values: LeaveFormValues) => {
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!startDatetime || !endDatetime || !reasonCategory) return toast.error("Please fill required fields")
+        if (reasonCategory === "Other" && !remarks) return toast.error("Please enter remarks for 'Other' reason")
+
         setLoading(true)
-        
-        // Convert local datetime to ISO aware string
-        const start = new Date(values.start_datetime).toISOString()
-        const end = new Date(values.end_datetime).toISOString()
-
         try {
-            let payload: any = {
-                type: values.leave_type,
-                start_date: start,
-                end_date: end,
-                reason: values.reason,
-                status: "approved"
-            }
-
-            if (values.student_id === "ALL") {
-                payload.student_ids = students.map(s => s.adm_no)
+            if (mode === "individual") {
+                if (!studentId) return toast.error("Select a student")
+                await api.post('/leaves/personal', {
+                    student_id: studentId,
+                    leave_type: 'out-campus',
+                    start_datetime: new Date(startDatetime).toISOString(),
+                    end_datetime: new Date(endDatetime).toISOString(),
+                    reason: reasonCategory === "Other" ? remarks : reasonCategory,
+                    reason_category: reasonCategory,
+                    remarks: remarks
+                })
             } else {
-                payload.student_id = values.student_id
+                if (!groupValue) return toast.error(`Enter ${mode} value`)
+                await api.post('/leaves/group', {
+                    group_type: mode,
+                    group_value: groupValue,
+                    leave_type: 'out-campus',
+                    start_datetime: new Date(startDatetime).toISOString(),
+                    end_datetime: new Date(endDatetime).toISOString(),
+                    reason_category: reasonCategory,
+                    remarks: remarks,
+                    exceptions: exceptions
+                })
             }
-
-            const res = await api.post("/leaves", payload)
-            
-            if (res.data.success) {
-                toast.success("Leave Authorized Successfully")
-                onSuccess()
-                onOpenChange(false)
-            } else {
-                toast.error("Failed to authorize leave", { description: res.data.error })
-            }
+            toast.success("Leave authorized successfully")
+            onSuccess()
+            onOpenChange(false)
         } catch (error: any) {
-            toast.error("Failed to authorize leave", { description: error.message })
+            toast.error(error?.response?.data?.error || "Failed to authorize leave")
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
+
+    const toggleException = (id: string) => {
+        setExceptions(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    }
+
+    const potentialExceptions = mode === 'class' 
+        ? fetchedStudents.filter(s => s.standard === groupValue)
+        : mode === 'batch'
+          ? fetchedStudents.filter(s => s.batch_year === groupValue)
+          : []
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Authorize New Leave</DialogTitle>
-                    <DialogDescription>
-                        Create a new leave request. Mentors can only issue leaves to their assigned students.
-                    </DialogDescription>
+                    <DialogTitle>Authorize New Out-Campus Leave</DialogTitle>
+                    <DialogDescription>Create leave requests for individual or entire groups.</DialogDescription>
                 </DialogHeader>
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <FormField
-                            control={form.control}
-                            name="student_id"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Student</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select student" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="max-h-64">
-                                            {form.watch("leave_type") === "institutional" && (
-                                                <SelectItem value="ALL" className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                    All Students (Bulk Vacation)
-                                                </SelectItem>
-                                            )}
-                                            {students.map((s) => (
-                                                <SelectItem key={s.adm_no} value={s.adm_no}>
-                                                    {s.name} ({s.adm_no} - {s.standard})
-                                                </SelectItem>
-                                            ))}
-                                            {students.length === 0 && (
-                                                <SelectItem value="none" disabled>No eligible students found</SelectItem>
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
 
-                        <FormField
-                            control={form.control}
-                            name="leave_type"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Leave Type</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select type" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="personal">Personal Leave (e.g., Ziyarath, Family)</SelectItem>
-                                            <SelectItem value="internal">Internal Leave (e.g., Medical, Exam)</SelectItem>
-                                            <SelectItem value="institutional">Institutional (e.g., Vacation)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-full">
+                    <TabsList className="grid grid-cols-3 w-full mb-4">
+                        <TabsTrigger value="individual">Individual</TabsTrigger>
+                        <TabsTrigger value="class">Class</TabsTrigger>
+                        <TabsTrigger value="batch">Batch</TabsTrigger>
+                    </TabsList>
+                </Tabs>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="start_datetime"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Start Time</FormLabel>
-                                        <FormControl>
-                                            <input
-                                                type="datetime-local"
-                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300"
-                                                {...field}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="end_datetime"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Expected Return</FormLabel>
-                                        <FormControl>
-                                            <input
-                                                type="datetime-local"
-                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:placeholder:text-slate-400 dark:focus-visible:ring-slate-300"
-                                                {...field}
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                <form onSubmit={handleSubmit} className="space-y-4 py-2">
+                    {mode === "individual" ? (
+                        <div className="space-y-2">
+                            <Label>Select Student</Label>
+                            <Select value={studentId} onValueChange={setStudentId}>
+                                <SelectTrigger className="bg-white dark:bg-slate-950">
+                                    <SelectValue placeholder="Choose student..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {fetchedStudents.map(s => (
+                                        <SelectItem key={s.adm_no} value={s.adm_no}>
+                                            {s.name} ({s.adm_no} - {s.standard})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>{mode === 'class' ? 'Select Class' : 'Batch Year'}</Label>
+                                {mode === 'class' ? (
+                                    <Select value={groupValue} onValueChange={setGroupValue}>
+                                        <SelectTrigger className="bg-white dark:bg-slate-950">
+                                            <SelectValue placeholder="Select class..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {CLASS_OPTIONS.map(opt => (
+                                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <Input 
+                                        placeholder="e.g. 2024" 
+                                        value={groupValue} 
+                                        onChange={(e) => setGroupValue(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                )}
+                                <p className="text-[10px] text-slate-500 italic">Select the exact group to release.</p>
+                            </div>
 
-                        <FormField
-                            control={form.control}
-                            name="reason"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Reason (Optional)</FormLabel>
-                                    <FormControl>
-                                        <Textarea
-                                            placeholder="Provide reason for leave"
-                                            className="resize-none"
-                                            {...field}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
+                            {groupValue && (
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">Exceptions (Who stays?)</Label>
+                                    <div className="max-h-32 overflow-y-auto border rounded-md p-2 bg-slate-50 dark:bg-slate-900/50 space-y-1">
+                                        {potentialExceptions.length === 0 ? (
+                                            <p className="text-xs text-slate-400 text-center py-2">No students found matching this {mode}</p>
+                                        ) : potentialExceptions.map(s => (
+                                            <div key={s.adm_no} className="flex items-center gap-2 px-2 py-1 hover:bg-white dark:hover:bg-slate-800 rounded">
+                                                <input 
+                                                    type="checkbox" 
+                                                    id={`exc-staff-${s.adm_no}`}
+                                                    checked={exceptions.includes(s.adm_no)}
+                                                    onChange={() => toggleException(s.adm_no)}
+                                                />
+                                                <label htmlFor={`exc-staff-${s.adm_no}`} className="text-xs cursor-pointer flex-1">
+                                                    {s.name} ({s.adm_no})
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
-                        />
+                        </div>
+                    )}
 
-                        <DialogFooter>
-                            <Button type="submit" disabled={loading} className="w-full sm:w-auto mt-4 sm:mt-0 bg-emerald-600 hover:bg-emerald-700">
-                                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Authorize Leave
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
+                    <div className="space-y-2">
+                        <Label>Reason Category</Label>
+                        <Select value={reasonCategory} onValueChange={setReasonCategory}>
+                            <SelectTrigger className="bg-white dark:bg-slate-950">
+                                <SelectValue placeholder="Select category..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {REASON_CATEGORIES.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Remarks / Details</Label>
+                        <Textarea 
+                            placeholder={reasonCategory === "Other" ? "Required for 'Other'..." : "Additional details (optional)..."}
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                            className="bg-white dark:bg-slate-950"
+                            required={reasonCategory === "Other"}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Start Date & Time</Label>
+                            <Input type="datetime-local" value={startDatetime} onChange={e => setStartDatetime(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Expected Return</Label>
+                            <Input type="datetime-local" value={endDatetime} onChange={e => setEndDatetime(e.target.value)} required />
+                        </div>
+                    </div>
+
+                    <DialogFooter className="mt-6">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]">
+                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Authorize Leave
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     )

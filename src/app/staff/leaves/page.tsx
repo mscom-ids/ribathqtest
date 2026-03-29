@@ -1,41 +1,56 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { format } from "date-fns"
-import { Plus, Search, Outdent, ArrowRightLeft } from "lucide-react"
+import { Plus, Search, UserCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import api from "@/lib/api"
 import { LeaveModal } from "@/app/admin/leaves/leave-modal"
-import type { StudentLeave } from "@/app/admin/leaves/page"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QuickViewDashboard } from "@/app/admin/leaves/tabs/quick-view-dashboard"
 import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
+import { OutsideStudentsPanel } from "@/app/admin/leaves/tabs/outside-students-panel"
+
+export interface StudentLeave {
+    id: string
+    student_id: string
+    leave_type: "personal" | "internal" | "institutional" | "out-campus" | "on-campus"
+    start_datetime: string
+    end_datetime: string
+    reason?: string
+    reason_category?: string
+    remarks?: string
+    status: "approved" | "pending" | "rejected" | "outside" | "completed" | "returned" | "late" | "normal" | "cancelled"
+    actual_exit_datetime?: string
+    actual_return_datetime?: string
+    student?: {
+        name: string
+        adm_no: string
+        standard: string
+    }
+}
 
 export default function StaffLeavesPage() {
     const [leaves, setLeaves] = useState<StudentLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
+    const [outsideCount, setOutsideCount] = useState(0)
 
     const fetchLeaves = async () => {
         setLoading(true)
         try {
-            const res = await api.get('/staff/me/leaves')
-            if (res.data.success) {
-                setLeaves(res.data.leaves || [])
-            }
+            const [leavesRes, outsideRes] = await Promise.all([
+                api.get('/staff/me/leaves'),
+                api.get('/leaves/outside-students'),
+            ])
+            if (leavesRes.data.success) setLeaves(leavesRes.data.leaves || [])
+            if (outsideRes.data.success) setOutsideCount(outsideRes.data.students?.length || 0)
         } catch (err) {
             console.error("Error fetching leaves:", err)
         }
@@ -69,31 +84,64 @@ export default function StaffLeavesPage() {
                 </div>
             </div>
 
-            <Tabs defaultValue="quick_view" className="w-full">
-                <TabsList className="bg-transparent border-b border-slate-200 dark:border-slate-800 w-full justify-start h-auto p-0 rounded-none mb-6 overflow-x-auto flex-nowrap">
-                    <TabsTrigger value="quick_view" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none py-3 px-4 font-medium">Quick View</TabsTrigger>
-                    <TabsTrigger value="institution_leaves" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none py-3 px-4 font-medium">Institution Leaves</TabsTrigger>
-                    <TabsTrigger value="leave_requests" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none py-3 px-4 font-medium">Leave Requests</TabsTrigger>
-                    <TabsTrigger value="internal_leave" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none py-3 px-4 font-medium">Internal Leave</TabsTrigger>
-                    <TabsTrigger value="campus_movement" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-emerald-600 rounded-none py-3 px-4 font-medium">Campus Movement</TabsTrigger>
+            <Tabs defaultValue="outside_now" className="w-full">
+                <TabsList className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full justify-start h-auto p-1 rounded-xl mb-6 shadow-sm overflow-x-auto space-x-1 shrink-0">
+                    <TabsTrigger 
+                        value="outside_now" 
+                        className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 data-[state=active]:dark:bg-orange-900/30 data-[state=active]:dark:text-orange-400 rounded-lg py-2.5 px-4 font-medium relative shrink-0"
+                    >
+                        <UserCheck className="h-4 w-4 mr-1.5 inline" />
+                        Outside Now
+                        {outsideCount > 0 && (
+                            <span className="ml-2 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full text-[10px] font-bold bg-orange-500 text-white">
+                                {outsideCount}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger 
+                        value="quick_view" 
+                        className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:dark:bg-slate-800 data-[state=active]:dark:text-slate-100 rounded-lg py-2.5 px-6 font-medium shrink-0"
+                    >
+                        Quick View
+                    </TabsTrigger>
+                    <TabsTrigger 
+                        value="institution_leaves" 
+                        className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:dark:bg-emerald-900/30 data-[state=active]:dark:text-emerald-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
+                    >
+                        Institution Leaves
+                    </TabsTrigger>
+                    <TabsTrigger 
+                        value="internal_leave" 
+                        className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:dark:bg-blue-900/30 data-[state=active]:dark:text-blue-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
+                    >
+                        Internal Leave
+                    </TabsTrigger>
+                    <TabsTrigger 
+                        value="campus_movement" 
+                        className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:dark:bg-purple-900/30 data-[state=active]:dark:text-purple-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
+                    >
+                        Campus Movement
+                    </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="quick_view">
-                    <QuickViewDashboard />
+                {/* ── Outside Now ── */}
+                <TabsContent value="outside_now">
+                    <OutsideStudentsPanel />
                 </TabsContent>
 
+                {/* ── Quick View Dashboard ── */}
+                <TabsContent value="quick_view">
+                    <QuickViewDashboard staffMode={true} />
+                </TabsContent>
+
+                {/* ── Institution Leaves (view only for mentors) ── */}
                 <TabsContent value="institution_leaves" className="space-y-4">
                     <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-8 text-center text-muted-foreground">
-                        Institution Leaves (Bulk Vacations) coming soon.
+                        Institutional leaves are set by admin. Use the <strong>Outside Now</strong> tab to return students.
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="leave_requests" className="space-y-4">
-                    <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-8 text-center text-muted-foreground">
-                        Pending Leave Requests coming soon.
-                    </Card>
-                </TabsContent>
-
+                {/* ── Internal Leave ── */}
                 <TabsContent value="internal_leave" className="space-y-4">
                     <div className="flex justify-between items-center mb-4">
                         <div className="relative w-full max-w-sm">
@@ -106,12 +154,13 @@ export default function StaffLeavesPage() {
                             />
                         </div>
                     </div>
-                    <LeaveTable 
-                        leaves={internalLeaves} 
-                        isLoading={loading} 
+                    <LeaveTable
+                        leaves={internalLeaves}
+                        isLoading={loading}
                     />
                 </TabsContent>
 
+                {/* ── Campus Movement ── */}
                 <TabsContent value="campus_movement" className="space-y-4">
                     <div className="flex justify-between items-center mb-4">
                         <div className="relative w-full max-w-sm">
@@ -124,8 +173,8 @@ export default function StaffLeavesPage() {
                             />
                         </div>
                     </div>
-                    <LeaveTable 
-                        leaves={campusMovements} 
+                    <LeaveTable
+                        leaves={campusMovements}
                         isLoading={loading}
                         showGateActions={false}
                     />

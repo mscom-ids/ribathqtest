@@ -5,7 +5,7 @@ import { verifyToken, requireRole } from '../middleware/auth.middleware';
 const router = Router();
 
 router.use(verifyToken);
-router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff']));
+router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor']));
 
 // POST /api/upload/avatar
 router.post('/avatar', uploadAvatar);

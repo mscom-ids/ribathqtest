@@ -2,14 +2,15 @@ import { Router } from 'express';
 import {
     getHifzStudents, getHifzLogsList, getHifzLog, createHifzLog, updateHifzLog,
     bulkCreateHifzLogs, getMaxJuzForStudent, getProgressSummary,
-    deleteHifzLog, getMonthlyReports, upsertMonthlyReport
+    deleteHifzLog, getMonthlyReports, upsertMonthlyReport,
+    calculateBulkMonthlyReport
 } from '../controllers/hifz.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(verifyToken);
-router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff']));
+router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor']));
 
 // GET /api/hifz/progress-summary
 router.get('/progress-summary', getProgressSummary);
@@ -37,6 +38,9 @@ router.put('/logs/:id', updateHifzLog);
 
 // DELETE /api/hifz/logs/:id
 router.delete('/logs/:id', deleteHifzLog);
+
+// GET /api/hifz/monthly-reports/calculate
+router.get('/monthly-reports/calculate', calculateBulkMonthlyReport);
 
 // GET /api/hifz/monthly-reports
 router.get('/monthly-reports', getMonthlyReports);

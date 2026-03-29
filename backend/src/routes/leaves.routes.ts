@@ -1,24 +1,53 @@
 import { Router } from 'express';
-import { getAllLeaves, createLeaveRequest, updateLeaveStatus, getEligibleStudents, recordMovement } from '../controllers/leaves.controller';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { 
+    getEligibleStudents, 
+    createInstitutionalLeave, 
+    getInstitutionalLeaves, 
+    getInstitutionalLeaveStudents,
+    createPersonalLeave,
+    createGroupLeave,
+    getLeavesFilter,
+    recordReturn,
+    getMovementHistory,
+    getActiveLeaves,
+    getOutsideStudents,
+    deleteInstitutionalLeave,
+    bulkRecordReturn,
+    getGroupLeaveStudents,
+    bulkRecordGroupReturn,
+    getAllLeaves
+} from '../controllers/leaves.controller';
 
 const router = Router();
-
 router.use(verifyToken);
 
-// GET /api/leaves/eligible-students
+// Shared
+router.get('/', getAllLeaves); // All leaves for admin dashboard
 router.get('/eligible-students', getEligibleStudents);
+router.get('/active', getActiveLeaves); // For attendance checks
+router.get('/outside-students', getOutsideStudents); // All currently outside students (any mentor/admin)
 
-// GET /api/leaves
-router.get('/', getAllLeaves);
+// Institutional Leaves — ADMIN ONLY for creation/deletion
+router.post('/institutional', requireRole(['admin', 'principal']), createInstitutionalLeave);
+router.get('/institutional', getInstitutionalLeaves);
+router.delete('/institutional/:id', requireRole(['admin', 'principal']), deleteInstitutionalLeave);
+router.get('/institutional/:id/students', getInstitutionalLeaveStudents);
+// Bulk return: any mentor or admin can return students
+router.post('/institutional/:id/bulk-return', requireRole(['admin', 'principal', 'staff', 'usthad']), bulkRecordReturn);
 
-// POST /api/leaves (Request Leave)
-router.post('/', createLeaveRequest);
+// Out-Campus & On-Campus (Individual) — admin + mentors (their own students)
+router.post('/personal', requireRole(['admin', 'principal', 'staff', 'usthad']), createPersonalLeave);
+// Class/Batch group leaves — admin only
+router.post('/group', requireRole(['admin', 'principal']), createGroupLeave);
+router.get('/personal', getLeavesFilter); // expects ?type=out-campus or ?type=on-campus
 
-// PUT /api/leaves/:id/status (Approve/Reject)
-router.put('/:id/status', requireRole(['admin', 'principal', 'staff']), updateLeaveStatus);
+// Group Leaves (For class/batch specific returns)
+router.get('/group/:id/students', getGroupLeaveStudents);
+router.post('/group/:id/bulk-return', requireRole(['admin', 'principal', 'staff', 'usthad']), bulkRecordGroupReturn);
 
-// POST /api/leaves/:id/movement (Record Gate scan)
-router.post('/:id/movement', requireRole(['admin', 'principal', 'staff']), recordMovement);
+// Returns & Movements — any mentor or admin can record a return
+router.post('/record-return', requireRole(['admin', 'principal', 'staff', 'usthad']), recordReturn);
+router.get('/movements', getMovementHistory);
 
 export default router;

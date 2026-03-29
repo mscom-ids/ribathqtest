@@ -4,9 +4,6 @@ import { useEffect, useState } from "react"
 import { format, startOfMonth, endOfMonth, isSameMonth } from "date-fns"
 import { Search, Share2, Loader2, FileText, Download, Calendar, Edit2, Save } from "lucide-react"
 
-import { getSurahId } from "@/lib/hifz-progress"
-import { calculatePages } from "@/lib/quran-pages"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -45,7 +42,7 @@ type StudentMonthlyStats = {
     usthad_name: string
     usthad_phone: string
     hifz_pages: number
-    recent_pages: number
+    recent_days: number
     juz_revision: number
     total_juz: number | string // Allow string for "N/A"
     grade: string
@@ -66,7 +63,7 @@ export default function MonthlyReportsPage() {
     const [editingStudent, setEditingStudent] = useState<StudentMonthlyStats | null>(null)
     const [editForm, setEditForm] = useState({
         hifz_pages: 0,
-        recent_pages: 0,
+        recent_days: 0,
         juz_revision: 0,
         total_juz: 0,
         grade: "",
@@ -80,142 +77,27 @@ export default function MonthlyReportsPage() {
     }, [selectedMonth])
 
     async function loadReportData() {
-        console.log("Loading report data...")
-        console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-        console.log("Supabase Key Check:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Present" : "Missing")
-
         setLoading(true)
         setSchemaWarning(false)
         try {
-            const date = new Date(selectedMonth)
-            const start = startOfMonth(date).toISOString()
-            const end = endOfMonth(date).toISOString()
-            // Make sure to format month as YYYY-MM-DD for the manual report constraint (storing as first day of month)
-            const reportMonthDate = format(date, 'yyyy-MM-01')
-
-            // 1. Fetch Students with Usthad details
-            let students: any[] = []
-            try {
-                const res = await api.get('/hifz/students');
-                if (res.data.success) students = res.data.students;
-            } catch (err: any) {
-                console.error("Failed to load students:", err)
-            }
-
-            // 2. Fetch Hifz Logs for the Selected Month (Auto Data)
-            let logs: any[] = []
-            try {
-                const res = await api.get('/hifz/logs', { params: { start_date: start, end_date: end } })
-                if (res.data.success) logs = res.data.logs;
-            } catch (err) {
-                console.error("Failed to load hifz logs:", err)
-            }
-
-            // 3. Fetch Manual Reports for the Selected Month
-            let manualReports: any[] = []
-            try {
-                const res = await api.get('/hifz/monthly-reports', { params: { report_month: reportMonthDate } })
-                if (res.data.success) manualReports = res.data.reports;
-            } catch (err) {
-                console.error("Failed to load manual reports:", err)
-            }
-
-            // 4. Fetch Attendance Summary (Auto Data)
-            let attendance: any[] = []
-            try {
-                const res = await api.get('/academics/attendance', { params: { start_date: start, end_date: end, department: 'Hifz' } })
-                if (res.data.success) attendance = res.data.data;
-            } catch (err) {
-                console.error("Failed to load attendance:", err)
-            }
-
-            // Process Data
-            const processed = students.map((s: any) => {
-                // Check if Manual Record Exists
-                const manualRecord = manualReports?.find(r => r.student_id === s.adm_no)
-
-                if (manualRecord) {
-                    return {
-                        adm_no: s.adm_no,
-                        name: s.name,
-                        standard: s.standard,
-                        usthad_name: s.usthad_name || "Unassigned",
-                        usthad_phone: s.usthad_phone || "",
-                        hifz_pages: Number(manualRecord.hifz_pages),
-                        recent_pages: Number(manualRecord.recent_pages),
-                        juz_revision: Number(manualRecord.juz_revision),
-                        total_juz: Number(manualRecord.total_juz) || "-",
-                        grade: manualRecord.grade || "-",
-                        attendance: manualRecord.attendance || "-",
-                        is_manual: true
-                    }
-                }
-
-                // If No Manual Record, Calculate Auto
-                const studentLogs = logs?.filter(l => l.student_id === s.adm_no) || []
-                const studentAtt = attendance?.filter(a => a.student_id === s.adm_no) || []
-
-                let hifzPages = 0
-                let recentPages = 0
-                let juzRevPages = 0
-                let totalRating = 0
-                let ratingCount = 0
-                let maxJuzInMonth = 0
-
-                studentLogs.forEach(log => {
-                    const pages = (log.page_end - log.page_start + 1) || 0
-                    if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
-                        const surahId = getSurahId(log.surah_name || "");
-                        let calculated = 0;
-                        if (surahId && log.start_v && log.end_v) {
-                            calculated = calculatePages(surahId, log.start_v, surahId, log.end_v);
-                        } else {
-                            calculated = (log.start_page === log.end_page) ? 0.5 : pages;
-                        }
-
-                        if (log.mode === 'New Verses') {
-                            hifzPages += calculated;
-                            if (log.juz_number > maxJuzInMonth) maxJuzInMonth = log.juz_number;
-                        } else {
-                            recentPages += calculated;
-                        }
-                    } else if (log.mode === 'Juz Revision') {
-                        juzRevPages += pages
-                        if (log.juz_number > maxJuzInMonth) maxJuzInMonth = log.juz_number;
-                    }
-
-                    if (log.rating) {
-                        totalRating += log.rating
-                        ratingCount++
-                    }
-                })
-
-                // Attendance
-                const presentDays = studentAtt.filter(a => a.status.toLowerCase() === 'present').length
-                const totalDays = studentAtt.length
-
-                return {
-                    adm_no: s.adm_no,
-                    name: s.name,
-                    standard: s.standard,
-                    usthad_name: s.usthad_name || "Unassigned",
-                    usthad_phone: s.usthad_phone || "",
-                    hifz_pages: parseFloat(hifzPages.toFixed(1)),
-                    recent_pages: recentPages,
-                    juz_revision: parseFloat((juzRevPages / 20).toFixed(1)),
-                    total_juz: maxJuzInMonth > 0 ? maxJuzInMonth : "-",
-                    grade: ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : "-",
-                    attendance: totalDays > 0 ? `${presentDays}/${totalDays}` : "-",
-                    is_manual: false
-                }
+            // Our backend now handles all the fetching, merging, and grade calculations
+            // Re-verified endpoint: /hifz/monthly-reports/calculate
+            const res = await api.get('/hifz/monthly-reports/calculate', { 
+                params: { month: selectedMonth } 
             })
-
-            setStats(processed)
-
+            
+            if (res.data.success && Array.isArray(res.data.reports)) {
+                const sorted = res.data.reports.sort((a: any, b: any) => 
+                    a.adm_no.localeCompare(b.adm_no, undefined, { numeric: true })
+                )
+                setStats(sorted)
+            } else {
+                console.error("Failed to load reports:", res.data.error || "Reports not found in response")
+                setStats([])
+            }
         } catch (error: any) {
-            console.error("Error loading report detailed:", JSON.stringify(error, null, 2))
-            console.error("Raw error:", error)
-            // Just warn in console, don't block
+            console.error("Error loading report detailed:", error)
+            setStats([])
         } finally {
             setLoading(false)
         }
@@ -235,7 +117,7 @@ Student: *${s.name}* (Ad: ${s.adm_no})
 Standard: ${s.standard}
 
 Hifz Pages: ${s.hifz_pages}
-Recent Revision: ${s.recent_pages} (Pages)
+Recent Revision: ${s.recent_days} (Days)
 Juz Revision: ${s.juz_revision} (Juz)
 Grade: *${s.grade}*
 Attendance: ${s.attendance}
@@ -253,7 +135,7 @@ _Generated from Ma'din Ribathul Quran ERP_
         setEditingStudent(student)
         setEditForm({
             hifz_pages: student.hifz_pages,
-            recent_pages: student.recent_pages,
+            recent_days: student.recent_days,
             juz_revision: student.juz_revision,
             total_juz: typeof student.total_juz === 'number' ? student.total_juz : 0,
             grade: student.grade === '-' ? '' : student.grade,
@@ -272,7 +154,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                 student_id: editingStudent.adm_no,
                 report_month: reportMonthDate,
                 hifz_pages: editForm.hifz_pages,
-                recent_pages: editForm.recent_pages,
+                recent_pages: editForm.recent_days,
                 juz_revision: editForm.juz_revision,
                 total_juz: editForm.total_juz,
                 grade: editForm.grade,
@@ -383,7 +265,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                         <TableRow>
                             <TableHead className="pl-6">Student</TableHead>
                             <TableHead>Hifz Pages</TableHead>
-                            <TableHead>Recent Rev (P)</TableHead>
+                            <TableHead>Recent Rev (D)</TableHead>
                             <TableHead>Juz Rev (J)</TableHead>
                             <TableHead>Grade</TableHead>
                             <TableHead>Attendance</TableHead>
@@ -418,7 +300,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                         </div>
                                     </TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.hifz_pages}</TableCell>
-                                    <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.recent_pages}</TableCell>
+                                    <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.recent_days}</TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-emerald-600'}`}>{s.juz_revision}</TableCell>
                                     <TableCell>
                                         <Badge
@@ -488,14 +370,14 @@ _Generated from Ma'din Ribathul Quran ERP_
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="recent" className="text-right">
-                                Recent Rev
+                                Recent Rev (Days)
                             </Label>
                             <Input
                                 id="recent"
                                 type="number"
                                 className="col-span-3"
-                                value={editForm.recent_pages}
-                                onChange={(e) => setEditForm({ ...editForm, recent_pages: parseInt(e.target.value) || 0 })}
+                                value={editForm.recent_days}
+                                onChange={(e) => setEditForm({ ...editForm, recent_days: parseInt(e.target.value) || 0 })}
                             />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">

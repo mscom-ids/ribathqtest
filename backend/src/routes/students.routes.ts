@@ -10,16 +10,16 @@ const router = Router();
 router.use(verifyToken);
 
 // GET /api/students/next-id (Helper)
-router.get('/next-id', requireRole(['admin', 'principal', 'staff']), getNextStudentId);
+router.get('/next-id', requireRole(['admin', 'principal', 'staff', 'usthad', 'mentor']), getNextStudentId);
 
 // GET /api/students/staff (Helper)
 router.get('/staff', requireRole(['admin', 'principal']), getStaff);
 
 // GET /api/students
-router.get('/', requireRole(['admin', 'staff', 'principal']), getAllStudents);
+router.get('/', requireRole(['admin', 'staff', 'principal', 'usthad', 'mentor']), getAllStudents);
 
 // GET /api/students/:id
-router.get('/:id', requireRole(['admin', 'staff', 'principal']), getStudentById);
+router.get('/:id', requireRole(['admin', 'staff', 'principal', 'usthad', 'mentor']), getStudentById);
 
 // POST /api/students (Only Admins/Principals)
 router.post('/', requireRole(['admin', 'principal']), createStudent);

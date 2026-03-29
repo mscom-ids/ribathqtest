@@ -1,297 +1,711 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import {
-    Users, ArrowUpRight, XCircle, UserCheck, FileText, Clock,
-    TrendingUp, BookOpen, Landmark, CalendarDays, MoreHorizontal,
-    Plus, Download, Play, GraduationCap, CheckCircle2,
+    Users, BookOpen,
+    CalendarDays, ChevronLeft, ChevronRight,
+    Bell, FileText, DollarSign, BarChart2,
+    CheckCircle2, Clock, AlertCircle,
+    UserCheck, CalendarCheck, TrendingUp,
+    MoreHorizontal, GraduationCap, X, Plus,
+    Edit2, Trash2, Loader2, UserCog
 } from "lucide-react"
 import api from "@/lib/api"
+import { cn } from "@/lib/utils"
 import {
-    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+    PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
 } from "recharts"
+import EventModal from "@/components/shared/EventModal"
 
-// ── Week data for chart ──────────────────────────────────────────────────────
-// Donezo shows 2 bars per day with varying shades
-const chartData = [
-    { day: 'S', curr: 45,  prev: 60 },
-    { day: 'M', curr: 80,  prev: 110 },
-    { day: 'T', curr: 120, prev: 140 },
-    { day: 'W', curr: 155, prev: 130 },
-    { day: 'T', curr: 110, prev: 130 },
-    { day: 'F', curr: 75,  prev: 90 },
-    { day: 'S', curr: 35,  prev: 50 },
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function fmt(n: number) { return n.toLocaleString() }
+
+const MONTHS = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December",
 ]
+const WEEK = ["Su","Mo","Tu","We","Th","Fr","Sa"]
 
-// ── Quick nav links (right card) ─────────────────────────────────────────────
-const quickLinks = [
-    { href: "/admin/students",            label: "Manage Students",    desc: "View & edit records",    color: "#7de0a8" },
-    { href: "/admin/staff",               label: "Staff Records",      desc: "Mentor management",      color: "#6baad6" },
-    { href: "/admin/finance/dashboard",   label: "Fee Dashboard",      desc: "Payment overview",       color: "#f5c04a" },
-    { href: "/admin/hifz/tracking",       label: "Hifz Tracking",      desc: "Memorisation progress",  color: "#e87b7b" },
-    { href: "/admin/hifz/monthly-report", label: "Monthly Report",     desc: "Generate & export",      color: "#b07fdc" },
-]
+// ── Mini calendar ─────────────────────────────────────────────────────────────
+function MiniCalendar({ events = [] }: { events?: any[] }) {
+    const today = new Date()
+    const [year, setYear] = useState(today.getFullYear())
+    const [month, setMonth] = useState(today.getMonth())
 
-// ── Pending tasks ────────────────────────────────────────────────────────────
-const tasks = [
-    { label: "Approve leave requests",   status: "Pending",     color: "#f5c04a" },
-    { label: "Update class schedules",   status: "In Progress", color: "#6baad6" },
-    { label: "Review fee submissions",   status: "In Progress", color: "#6baad6" },
-    { label: "Publish Hifz results",     status: "Pending",     color: "#f5c04a" },
-    { label: "Staff attendance review",  status: "Completed",   color: "#3dbf82" },
-]
+    const firstDay = new Date(year, month, 1).getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-// ── Donezo-style white card ──────────────────────────────────────────────────
-function Card({ children, className = "", hover = true }: { children: React.ReactNode; className?: string; hover?: boolean }) {
+    const prev = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
+    const next = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+
+    const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
+
+    // Map events to date strings for quick lookup [Year-Month-Date] -> 2024-6-15
+    const eventDates = events.map(e => {
+        const d = new Date(e.start_date)
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    })
+
     return (
-        <div className={`bg-white rounded-2xl border border-[#e8ede9] ${hover ? 'hover:shadow-md transition-shadow' : ''} ${className}`}>
-            {children}
+        <div>
+            <div className="flex items-center justify-between mb-4 mt-2">
+                <button onClick={prev} className="h-8 w-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                </button>
+                <span className="text-[15px] font-bold text-slate-800 dark:text-slate-100">{MONTHS[month]} {year}</span>
+                <button onClick={next} className="h-8 w-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                    <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                </button>
+            </div>
+            <div className="grid grid-cols-7 mb-2">
+                {WEEK.map(d => (
+                    <div key={d} className="text-center text-[12px] font-bold text-slate-800 dark:text-slate-200 py-1">{d}</div>
+                ))}
+            </div>
+            <div className="grid grid-cols-7 gap-y-1">
+                {cells.map((day, i) => {
+                    const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
+                    const hasEvent = day ? eventDates.includes(`${year}-${month}-${day}`) : false
+
+                    return (
+                        <div key={i} className="flex flex-col items-center justify-center relative h-10">
+                            {day ? (
+                                <>
+                                    <span className={cn(
+                                        "h-8 w-8 flex items-center justify-center text-[13px] font-bold rounded-lg transition-all",
+                                        isToday ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                                    )}>
+                                        {day}
+                                    </span>
+                                    {hasEvent && <div className={cn("h-1 w-1 rounded-full absolute bottom-0.5", isToday ? "bg-white" : "bg-blue-500")} />}
+                                </>
+                            ) : null}
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
 
-// ── Stat card — first one is dark green like Donezo ─────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
-    label, value, sub, dark = false, href,
+    label, value, active, inactive, percent, icon: Icon, iconBg, iconColor, badgeStyle, activeLabel, inactiveLabel
 }: {
-    label: string; value: string | number; sub?: string; dark?: boolean; href: string
+    label: string
+    value: number
+    active: number
+    inactive: number
+    percent: string
+    icon: React.ElementType
+    iconBg: string
+    iconColor: string
+    badgeStyle: string
+    activeLabel?: string
+    inactiveLabel?: string
 }) {
     return (
-        <Link href={href}>
-            <div className={`rounded-2xl p-5 flex flex-col justify-between h-full min-h-[130px] hover:shadow-lg transition-all duration-200 cursor-pointer border ${
-                dark
-                    ? "border-transparent text-white"
-                    : "bg-white dark:bg-[#1a1f2e] border-[#e8ede9] dark:border-[#2a2f3e] text-[#1a1a1a] dark:text-[#e0e0e0]"
-            }`}
-            style={dark ? { background: 'linear-gradient(160deg, #1a3d2a 0%, #264f37 50%, #2d6b45 100%)' } : undefined}
-            >
-                <div className="flex items-center justify-between">
-                    <p className={`text-[12px] font-semibold ${dark ? "text-white/60" : "text-[#9ca3af]"}`}>{label}</p>
-                    <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${dark ? "border-white/20 text-white/50 hover:bg-white/10" : "border-[#e8ede9] text-[#9ca3af] hover:bg-[#f5f9f6]"} transition-colors`}>
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                    </div>
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-200/60 dark:border-slate-700 flex flex-col justify-between group h-full">
+            <div className="flex items-start justify-between mb-4">
+                {/* Image / Icon container (left) */}
+                <div className={`h-[68px] w-[68px] rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
+                    <Icon className={`h-8 w-8 ${iconColor}`} />
                 </div>
-                <div>
-                    <p className={`text-[32px] font-black leading-none ${dark ? "text-white" : "text-[#1a1a1a] dark:text-[#e0e0e0]"}`}>{value}</p>
-                    {sub && (
-                        <p className={`text-[10px] font-semibold mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${dark ? "bg-white/10 text-[#7de0a8]" : "bg-[#eaf4ee] text-[#2d6b45]"}`}>
-                            <CheckCircle2 className="h-3 w-3" /> {sub}
-                        </p>
-                    )}
+
+                {/* Content (right aligned) */}
+                <div className="flex flex-col items-end pt-1">
+                    <span className={`text-[12px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${badgeStyle}`}>
+                        <TrendingUp className="h-3 w-3" /> {percent}
+                    </span>
+                    <span className="text-[32px] font-black text-slate-800 dark:text-white mt-1.5 leading-none">
+                        {fmt(value)}
+                    </span>
+                    <p className="text-[14px] font-semibold text-slate-500 dark:text-slate-400 mt-1">{label}</p>
                 </div>
             </div>
+
+            <div className="border-t border-slate-100 dark:border-slate-700 w-full mb-3" />
+
+            <div className="flex items-center justify-between text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                <div>
+                    {activeLabel || 'Active'} : <span className="text-slate-800 dark:text-slate-200 pl-1">{fmt(active)}</span>
+                </div>
+                <div>
+                    {inactiveLabel || 'Inactive'} : <span className="text-slate-800 dark:text-slate-200 pl-1">{fmt(inactive).padStart(2, '0')}</span>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+
+function QuickLink({ href, label, icon: Icon, bg, iconBg, onClick }: {
+    href?: string; label: string; icon: React.ElementType; bg: string; iconBg: string; onClick?: () => void;
+}) {
+    if (onClick) {
+        return (
+            <button onClick={onClick} className={`flex flex-col items-center justify-center py-5 rounded-xl ${bg} hover:shadow flex-1 min-w-[30%] transition-all`}>
+                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform hover:scale-110`}>
+                    <Icon className="h-5 w-5" />
+                </div>
+                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{label}</span>
+            </button>
+        )
+    }
+    return (
+        <Link href={href!} className={`flex flex-col items-center justify-center py-5 rounded-xl ${bg} hover:shadow flex-1 min-w-[30%] transition-all`}>
+            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform hover:scale-110`}>
+                <Icon className="h-5 w-5" />
+            </div>
+            <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{label}</span>
         </Link>
     )
 }
 
-const tooltipStyle = {
-    contentStyle: { background: '#fff', border: '1px solid #e8ede9', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)', fontSize: '12px', fontWeight: 700 },
-    cursor: { fill: 'rgba(26,61,42,0.03)' },
-}
 
-// ── Custom bar shape with rounded caps (Donezo style) ────────────────────────
-function RoundedBar(props: any) {
-    const { x, y, width, height, fill } = props
-    if (!height || height <= 0) return null
-    const r = Math.min(8, width / 2)
-    return (
-        <g>
-            <rect x={x} y={y} width={width} height={height} rx={r} ry={r} fill={fill} />
-        </g>
-    )
-}
-
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
-    const [stats, setStats] = useState({ students: 0, active: 0, complete: 0, dropout: 0 })
     const [loading, setLoading] = useState(true)
-    const [dateInfo, setDateInfo] = useState({ dayStr: '', dateStr: '' })
+    const [students, setStudents] = useState({ total: 0, active: 0, inactive: 0 })
+    const [staff, setStaff] = useState({ total: 0, active: 0, inactive: 0 })
+    const [alumni, setAlumni] = useState({ total: 0, completed: 0, dropout: 0 })
+    const [events, setEvents] = useState<any[]>([])
+    const [showEventModal, setShowEventModal] = useState(false)
+    const [isSavingEvent, setIsSavingEvent] = useState(false)
+    const [editingEventId, setEditingEventId] = useState<string | null>(null)
+    const [attStats, setAttStats] = useState({
+        students: { present: 0, absent: 0, late: 0, total: 0 },
+        mentors: { present: 0, absent: 0, late: 0, total: 0 }
+    })
+    const [attTab, setAttTab] = useState<'Students' | 'Mentors'>('Students')
+    const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month'>('today')
+    const [examPopupOpen, setExamPopupOpen] = useState(false)
+    const [reportsPopupOpen, setReportsPopupOpen] = useState(false)
+    const [pendingDelegationsCount, setPendingDelegationsCount] = useState(0)
 
-    useEffect(() => {
-        const today = new Date()
-        setDateInfo({
-            dayStr: today.toLocaleDateString('en-US', { weekday: 'long' }),
-            dateStr: today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        })
+    const defaultEventState = {
+        title: "", category: "Celebration", event_for: "All",
+        target_roles: [] as string[],
+        start_date: "", end_date: "",
+        start_time: "09:00", end_time: "10:00", message: ""
+    }
+    const [newEvent, setNewEvent] = useState(defaultEventState)
+    const today = new Date()
+
+    const load = useCallback(async () => {
+        setLoading(true)
+        try {
+            const [stuRes, staffRes, evtRes, delRes] = await Promise.all([
+                api.get("/students", { params: { status: "all" } }),
+                api.get("/staff"),
+                api.get("/events"),
+                api.get("/delegations/admin/all")
+            ])
+            if (evtRes?.data?.success) {
+                setEvents(evtRes.data.events || [])
+            }
+            if (delRes?.data?.success) {
+                const pendings = delRes.data.requests?.filter((r: any) => r.status === 'pending') || []
+                setPendingDelegationsCount(pendings.length)
+            }
+
+
+            if (stuRes.data.success) {
+                const d: any[] = stuRes.data.students || []
+                let active = 0, inactive = 0
+                let completed = 0, dropout = 0
+                d.forEach((s: any) => {
+                    const st = (s.status || "active").toLowerCase()
+                    if (st === "active") active++
+                    else if (st === 'completed') completed++
+                    else if (st === 'dropout') dropout++
+                    else inactive++ // catch-all for other inactive
+                })
+                
+                // For student card, maybe total active vs non-active makes sense
+                setStudents({ total: d.length - completed - dropout, active, inactive })
+                setAlumni({ total: completed + dropout, completed, dropout })
+            }
+
+            if (staffRes.data.success) {
+                const d: any[] = staffRes.data.staff || []
+                const active = d.filter((s: any) => s.is_active !== false).length
+                setStaff({ total: d.length, active, inactive: d.length - active })
+            }
+        } catch {}
+        setLoading(false)
     }, [])
 
-    useEffect(() => {
-        async function load() {
-            setLoading(true)
-            try {
-                const res = await api.get('/students', { params: { status: 'all' } })
-                if (res.data.success) {
-                    const d: any[] = res.data.students || []
-                    let students = d.length, active = 0, complete = 0, dropout = 0
-                    d.forEach((s: any) => {
-                        const st = (s.status || 'active').toLowerCase()
-                        if (st.includes('drop')) dropout++
-                        else if (st.includes('complet')) complete++
-                        else active++
-                    })
-                    setStats({ students, active, complete, dropout })
-                }
-            } catch {}
-            setLoading(false)
+    const handleSaveEvent = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (isSavingEvent) return
+        setIsSavingEvent(true)
+        try {
+            let res;
+            if (editingEventId) {
+                res = await api.put(`/events/${editingEventId}`, newEvent)
+            } else {
+                res = await api.post('/events', newEvent)
+            }
+            if (res.data.success) {
+                setShowEventModal(false)
+                setNewEvent(defaultEventState)
+                setEditingEventId(null)
+                load()
+            }
+        } catch (error: any) {
+            alert(error.response?.data?.error || "Error saving event")
+        } finally {
+            setIsSavingEvent(false)
         }
-        load()
-    }, [])
+    }
 
-    const n = (v: number) => loading ? '—' : v
+    const handleDeleteEvent = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this event?")) return
+        try {
+            await api.delete(`/events/${id}`)
+            load()
+        } catch (error: any) {
+            alert(error.response?.data?.error || "Failed to delete event")
+        }
+    }
+
+    const openEditModal = (ev: any) => {
+        setNewEvent({
+            title: ev.title || "",
+            category: ev.category || "Celebration",
+            event_for: ev.event_for || "All",
+            target_roles: Array.isArray(ev.target_roles) ? ev.target_roles : (JSON.parse(ev.target_roles || "[]") || []),
+            start_date: new Date(ev.start_date || "").toISOString().split("T")[0],
+            end_date: new Date(ev.end_date || "").toISOString().split("T")[0],
+            start_time: ev.start_time || "09:00",
+            end_time: ev.end_time || "10:00",
+            message: ev.message || ""
+        })
+        setEditingEventId(ev.id)
+        setShowEventModal(true)
+    }
+
+    const handleCloseModal = () => {
+        setShowEventModal(false)
+        setNewEvent(defaultEventState)
+        setEditingEventId(null)
+    }
+
+    const getEventStyles = (cat: string) => {
+        const t = (cat || "").toLowerCase()
+        if (t === 'celebration') return { border: 'border-cyan-400', icon: CalendarDays }
+        if (t === 'meeting') return { border: 'border-blue-600', icon: Users }
+        if (t === 'training') return { border: 'border-purple-500', icon: BookOpen }
+        if (t === 'holidays') return { border: 'border-pink-500', icon: CalendarCheck }
+        return { border: 'border-slate-400', icon: Bell }
+    }
+
+    useEffect(() => {
+        load()
+    }, [load])
+
+    useEffect(() => {
+        const fetchAttendance = async () => {
+            try {
+                const dates = (() => {
+                    const t = new Date();
+                    const e = t.toISOString().split('T')[0];
+                    let s = e;
+                    if (timeframe === 'week') {
+                        const d = new Date(t);
+                        d.setDate(d.getDate() - d.getDay()); // Sunday as start of week.
+                        s = d.toISOString().split('T')[0];
+                    } else if (timeframe === 'month') {
+                        const d = new Date(t.getFullYear(), t.getMonth(), 1);
+                        s = d.toISOString().split('T')[0];
+                    }
+                    return { s, e };
+                })();
+                const res = await api.get("/attendance/daily-stats", { params: { start_date: dates.s, end_date: dates.e } });
+                if (res.data.success) {
+                    setAttStats({
+                        students: res.data.students || { present: 0, absent: 0, late: 0, total: 0 },
+                        mentors: res.data.mentors || { present: 0, absent: 0, late: 0, total: 0 }
+                    })
+                }
+            } catch(e) {}
+        }
+        fetchAttendance()
+    }, [timeframe])
+
+    // Mock data for display
+    const attData = [{ name: "Present", value: 98.8 }, { name: "Absent",  value: 1.2 }]
+    const PIE_COLORS = ["#3b82f6", "#e5e7eb"]
 
     return (
-        <div className="space-y-6 pb-10 text-[#1a1a1a] dark:text-[#e0e0e0]">
+        <div className="space-y-6 pb-12 w-full max-w-[1600px] mx-auto">
 
-            {/* ── Page header — Donezo style ──────────────────────────────── */}
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            {/* Title Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-[28px] font-black text-[#1a1a1a] dark:text-[#e0e0e0] leading-tight">Dashboard</h1>
-                    <p className="text-[13px] text-[#9ca3af] mt-1">{dateInfo.dayStr}, {dateInfo.dateStr} · Welcome back to Admin Portal.</p>
+                    <h1 className="text-[24px] font-black text-slate-800 dark:text-white">Admin Dashboard</h1>
+                    <p className="text-[13px] text-slate-500 font-medium">Dashboard / Admin Dashboard</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center gap-3">
                     <Link href="/admin/students/create"
-                        className="inline-flex items-center gap-2 bg-[#1a3d2a] hover:bg-[#2d6b45] text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-md shadow-[#1a3d2a]/20 transition-all hover:scale-105 active:scale-95">
-                        <Plus className="h-4 w-4" /> Add Student
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-[14px] font-bold px-5 py-2.5 rounded-lg shadow-sm transition-colors">
+                        + Add New Student
                     </Link>
-                    <Link href="/admin/hifz/monthly-report"
-                        className="inline-flex items-center gap-2 border border-[#e8ede9] bg-white text-[#1a1a1a] text-[13px] font-bold px-5 py-2.5 rounded-xl hover:border-[#2d6b45]/40 hover:text-[#1a3d2a] transition-all">
-                        <Download className="h-4 w-4" /> Export Report
+                    <Link href="/admin/finance/dashboard"
+                        className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-[14px] font-bold px-5 py-2.5 rounded-lg shadow-sm transition-colors">
+                        Fees Details
                     </Link>
                 </div>
             </div>
 
-            {/* ── Stat cards — first card dark green ─────────────────────── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Total Students"  value={n(stats.students)} dark href="/admin/students" />
-                <StatCard label="Active Students" value={n(stats.active)}   href="/admin/students?status=active" />
-                <StatCard label="Graduates"        value={n(stats.complete)} href="/admin/alumni" />
-                <StatCard label="Dropouts"         value={n(stats.dropout)}  href="/admin/students?status=dropout" />
+            {/* Welcome Banner - Exact Match */}
+            <div className="relative rounded-2xl overflow-hidden bg-[#21293B] px-8 py-7 text-white shadow-sm flex items-center justify-between flex-wrap gap-4">
+                <div className="absolute right-0 top-0 bottom-0 w-1/3 pointer-events-none select-none overflow-hidden flex items-center justify-end pr-8">
+                    {/* Abstract circles / shapes mimicking the reference design */}
+                    <div className="h-40 w-40 rounded-full border-[12px] border-[#2A344A] opacity-50 absolute -right-8" />
+                    <div className="h-20 w-20 rounded-full bg-[#2A344A] opacity-50 absolute right-16 top-2" />
+                </div>
+                
+                <div className="z-10">
+                    <h2 className="text-[28px] font-bold tracking-tight">
+                        Welcome Back, Admin <span className="ml-1 inline-block animate-wave origin-bottom-right">👋</span>
+                    </h2>
+                    <p className="text-[14px] text-slate-400 font-medium mt-1">Have a good day at work</p>
+                </div>
+                
+                <div className="z-10 flex items-center gap-2 text-[13px] font-medium text-slate-300 bg-white/5 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/10">
+                    <CalendarDays className="h-4 w-4" />
+                    Updated Recently on {today.toLocaleDateString("en-US", { day:"numeric", month:"short", year:"numeric" })}
+                </div>
             </div>
 
-            {/* ── Main 3-col grid ─────────────────────────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard 
+                    label="Total Students" value={loading ? 0 : students.total} active={loading ? 0 : students.active} inactive={loading ? 0 : students.inactive}
+                    percent="1.2%" icon={Users} iconBg="bg-pink-50" iconColor="text-pink-500" badgeStyle="bg-green-50 text-green-600"
+                />
+                <StatCard 
+                    label="Total Staff" value={loading ? 0 : staff.total} active={loading ? 0 : staff.active} inactive={loading ? 0 : staff.inactive}
+                    percent="1.2%" icon={UserCheck} iconBg="bg-blue-50" iconColor="text-blue-500" badgeStyle="bg-blue-50 text-blue-600"
+                />
+                <StatCard 
+                    label="Total Alumni" value={loading ? 0 : alumni.total} active={loading ? 0 : alumni.completed} inactive={loading ? 0 : alumni.dropout}
+                    activeLabel="Completed" inactiveLabel="Dropout"
+                    percent="1.2%" icon={GraduationCap} iconBg="bg-orange-50" iconColor="text-orange-500" badgeStyle="bg-orange-50 text-orange-600"
+                />
+                <StatCard 
+                    label="Fee Collection" value={0} active={0} inactive={0}
+                    percent="1.2%" icon={DollarSign} iconBg="bg-green-50" iconColor="text-green-500" badgeStyle="bg-green-50 text-green-600"
+                />
+            </div>
 
-                {/* ── Chart + Tasks (2/3) ─────────────────────────────────── */}
-                <div className="lg:col-span-2 space-y-4">
+            {/* Main Content Grid (3 Columns) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* Chart card */}
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-[15px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Student Analytics</h3>
-                                <p className="text-[11px] text-[#9ca3af] mt-0.5">Weekly attendance performance</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button className="px-3 py-1.5 rounded-lg bg-[#1a3d2a] text-white text-[11px] font-bold">All Class</button>
-                                <button className="px-3 py-1.5 rounded-lg bg-[#f7f9f7] border border-[#e8ede9] text-[#9ca3af] text-[11px] font-bold hover:bg-[#eaf4ee] transition">English</button>
-                                <button className="h-7 w-7 flex items-center justify-center rounded-lg bg-[#f7f9f7] border border-[#e8ede9] text-[#9ca3af]">
-                                    <MoreHorizontal className="h-3.5 w-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="h-52">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData} barGap={3} barCategoryGap="32%">
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.04)" />
-                                    <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: '#9ca3af' }} />
-                                    <YAxis hide />
-                                    <Tooltip {...tooltipStyle} />
-                                    <Bar dataKey="prev" name="Previous" shape={<RoundedBar />} fill="#c8e6d4" />
-                                    <Bar dataKey="curr" name="Current" shape={<RoundedBar />} fill="#1a3d2a" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </Card>
-
-                    {/* Team tasks — like Donezo's Team Collaboration card */}
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-[15px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Pending Tasks</h3>
-                            <button className="text-[11px] font-bold text-[#2d6b45] border border-[#c8e6d4] bg-[#eaf4ee] px-3 py-1.5 rounded-lg hover:bg-[#d4f0df] transition">
-                                + Add Task
+                {/* Left Column */}
+                <div className="space-y-6">
+                    {/* Schedules inside a bordered card */}
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Schedules</h3>
+                            <button onClick={() => { setNewEvent(defaultEventState); setEditingEventId(null); setShowEventModal(true) }} className="text-[13px] font-bold text-blue-600 flex items-center gap-1 hover:underline">
+                                <Plus className="h-4 w-4" /> Add New
                             </button>
                         </div>
-                        <div className="space-y-3">
-                            {tasks.map((t, i) => (
-                                <div key={i} className="flex items-center justify-between py-2 border-b border-[#f5f5f5] dark:border-[#2a2f3e] last:border-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-lg flex items-center justify-center text-white text-[11px] font-bold" style={{ background: t.color }}>
-                                            {t.label[0]}
-                                        </div>
-                                        <p className="text-[12px] font-semibold text-[#333] dark:text-[#d0d0d0]">{t.label}</p>
-                                    </div>
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{
-                                        background: t.status === 'Completed' ? '#eaf4ee' : t.status === 'In Progress' ? '#e8f4fd' : '#fefce8',
-                                        color: t.status === 'Completed' ? '#2d6b45' : t.status === 'In Progress' ? '#2563eb' : '#a16207',
-                                    }}>{t.status}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </Card>
-                </div>
+                        <MiniCalendar events={events} />
 
-                {/* ── Right sidebar col (1/3) ────────────────────────────── */}
-                <div className="space-y-4">
-                    {/* Reminders card — dark green CTA like Donezo */}
-                    <Card className="p-5">
-                        <h3 className="text-[13px] font-bold text-[#9ca3af] uppercase tracking-widest mb-3">Reminders</h3>
-                        <div className="space-y-3">
-                            <div className="p-3 rounded-xl bg-[#f7f9f7] dark:bg-[#232838] border border-[#e8ede9] dark:border-[#2a2f3e]">
-                                <p className="text-[13px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Staff Meeting</p>
-                                <p className="text-[11px] text-[#9ca3af] mt-0.5">Today · 10:00 am – 11:30 am</p>
-                                <button className="mt-3 w-full flex items-center justify-center gap-2 bg-[#1a3d2a] hover:bg-[#2d6b45] text-white text-[11px] font-bold py-2 rounded-lg transition-colors">
-                                    <Play className="h-3 w-3" /> Start Meeting
-                                </button>
+                        {/* Upcoming Events Area */}
+                        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-700">
+                            <h4 className="text-[14px] font-extrabold text-[#1F2937] dark:text-white mb-4">Upcoming Events</h4>
+                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                                {events.length === 0 ? (
+                                    <p className="text-[13px] text-slate-500">No upcoming events.</p>
+                                ) : (
+                                    events.map((ev, i) => {
+                                        const { border, icon: EvIcon } = getEventStyles(ev.category)
+                                        return (
+                                            <div key={i} className={cn("border-l-[3px] pl-4 py-1 relative", border)}>
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <h5 className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{ev.title}</h5>
+                                                        <p className="text-[12px] text-slate-500 flex items-center gap-1 mt-1">
+                                                            <EvIcon className="h-3.5 w-3.5" /> {new Date(ev.start_date).toLocaleDateString("en-US", { day: 'numeric', month: 'long', year: 'numeric' })}
+                                                        </p>
+                                                        <p className="text-[11px] text-slate-400 mt-2 font-medium uppercase">{ev.start_time.substring(0,5)} - {ev.end_time.substring(0,5)}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <button onClick={() => openEditModal(ev)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </button>
+                                                        <button onClick={() => handleDeleteEvent(ev.id)} className="text-slate-400 hover:text-red-600 transition-colors">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })
+                                )}
                             </div>
-                            <div className="p-3 rounded-xl bg-[#f7f9f7] dark:bg-[#232838] border border-[#e8ede9] dark:border-[#2a2f3e]">
-                                <p className="text-[13px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0]">Fee Submission Deadline</p>
-                                <p className="text-[11px] text-[#9ca3af] mt-0.5">Mar 25, 2026</p>
-                            </div>
-                        </div>
-                    </Card>
-
-                    {/* Quick Links card — like Donezo's Project list */}
-                    <Card className="p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-[13px] font-bold text-[#9ca3af] uppercase tracking-widest">Quick Access</h3>
-                            <button className="text-[10px] font-bold border border-[#e8ede9] px-2.5 py-1 rounded-lg text-[#9ca3af] hover:border-[#2d6b45]/40 hover:text-[#1a3d2a] transition">+ New</button>
-                        </div>
-                        <div className="space-y-1">
-                            {quickLinks.map(({ href, label, desc, color }) => (
-                                <Link key={href} href={href}
-                                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f7f9f7] dark:hover:bg-[#232838] transition-colors group">
-                                    <div className="h-6 w-6 rounded-lg shrink-0 flex items-center justify-center" style={{ background: color + '30' }}>
-                                        <div className="h-2 w-2 rounded-full" style={{ background: color }} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-[12px] font-bold text-[#1a1a1a] dark:text-[#e0e0e0] group-hover:text-[#1a3d2a] dark:group-hover:text-[#7de0a8] truncate transition-colors">{label}</p>
-                                        <p className="text-[10px] text-[#9ca3af] truncate">{desc}</p>
-                                    </div>
-                                    <ArrowUpRight className="h-3.5 w-3.5 text-[#e8ede9] group-hover:text-[#2d6b45] shrink-0 transition-colors" />
-                                </Link>
-                            ))}
-                        </div>
-                    </Card>
-
-                    {/* Time / Progress tracker — Donezo dark green card */}
-                    <div className="rounded-2xl p-5 text-white relative overflow-hidden"
-                        style={{ background: 'linear-gradient(140deg, #1a3d2a 0%, #2d6b45 100%)' }}>
-                        <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-                        <p className="text-[11px] font-bold text-white/50 uppercase tracking-widest">Academic Progress</p>
-                        <div className="mt-3 flex items-end gap-2">
-                            <span className="text-[36px] font-black leading-none">41%</span>
-                            <span className="text-[13px] text-white/60 pb-1">of year done</span>
-                        </div>
-                        <div className="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-[#7de0a8] rounded-full" style={{ width: '41%' }} />
-                        </div>
-                        <div className="mt-3 flex gap-3 text-[10px] font-bold text-white/50">
-                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#7de0a8]" />Completed</span>
-                            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-white/30" />Remaining</span>
                         </div>
                     </div>
                 </div>
+
+                {/* Middle Column */}
+                <div className="space-y-6">
+                    {/* Attendance Card */}
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Attendance</h3>
+                            <div className="relative">
+                                <select 
+                                    className="appearance-none border border-slate-200 rounded-lg pl-8 pr-6 py-1.5 text-[12px] font-medium text-slate-600 bg-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                    value={timeframe}
+                                    onChange={(e) => setTimeframe(e.target.value as any)}
+                                >
+                                    <option value="today">Today</option>
+                                    <option value="week">This Week</option>
+                                    <option value="month">This Month</option>
+                                </select>
+                                <CalendarDays className="h-3.5 w-3.5 absolute left-2.5 top-[6px] text-slate-500 pointer-events-none" />
+                                <ChevronRight className="h-3 w-3 rotate-90 absolute right-2.5 top-[9px] text-slate-500 pointer-events-none" />
+                            </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-slate-100 dark:border-slate-700 gap-6 mb-5">
+                            {["Students", "Mentors"].map((tab) => (
+                                <button key={tab} onClick={() => setAttTab(tab as any)} className={`text-[14px] font-bold pb-2.5 transition-colors border-b-[3px] ${
+                                    attTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"
+                                }`}>{tab}</button>
+                            ))}
+                        </div>
+
+                        {/* Present/Absent Tabs Block */}
+                        <div className="grid grid-cols-3 gap-3 mb-6">
+                            <div className="bg-[#F8F9FA] dark:bg-slate-700/50 rounded-lg py-3 text-center">
+                                <h4 className="text-[18px] font-black text-slate-800 dark:text-white">{loading ? "-" : String(attTab === 'Students' ? attStats.students.present : attStats.mentors.present).padStart(2, '0')}</h4>
+                                <p className="text-[12px] font-semibold text-slate-500">Present</p>
+                            </div>
+                            <div className="bg-[#F8F9FA] dark:bg-slate-700/50 rounded-lg py-3 text-center">
+                                <h4 className="text-[18px] font-black text-slate-800 dark:text-white">{loading ? "-" : String(attTab === 'Students' ? attStats.students.absent : attStats.mentors.absent).padStart(2, '0')}</h4>
+                                <p className="text-[12px] font-semibold text-slate-500">Absent</p>
+                            </div>
+                            <div className="bg-[#F8F9FA] dark:bg-slate-700/50 rounded-lg py-3 text-center">
+                                <h4 className="text-[18px] font-black text-slate-800 dark:text-white">{loading ? "-" : String(attTab === 'Students' ? attStats.students.late : attStats.mentors.late).padStart(2, '0')}</h4>
+                                <p className="text-[12px] font-semibold text-slate-500">Late</p>
+                            </div>
+                        </div>
+
+                        {/* Donut Chart */}
+                        {(() => {
+                            const curStats = attTab === 'Students' ? attStats.students : attStats.mentors;
+                            const tVal = curStats.total || 0;
+                            // Make it look smooth by providing a grey circle if everything is 0
+                            const pieData = tVal === 0 
+                                ? [{ name: "No Data", value: 1 }] 
+                                : [
+                                    { name: "Present", value: Math.max((curStats.present / tVal) * 100, 2) }, // minimum 2% sliver to be visible
+                                    { name: "Absent", value: Math.max((curStats.absent / tVal) * 100, 0) },
+                                    { name: "Late", value: Math.max((curStats.late / tVal) * 100, 0) }
+                                  ];
+                            
+                            const pctText = tVal === 0 ? "0%" : `${((curStats.present / tVal) * 100).toFixed(1)}%`;
+                            const activeColors = tVal === 0 ? ["#e5e7eb"] : ["#3b82f6", "#ef4444", "#f59e0b"]; // gray vs blue, red, orange
+
+                            return (
+                                <div className="relative h-48 w-full flex items-center justify-center mb-6">
+                                    <ResponsiveContainer width={180} height={180}>
+                                        <PieChart>
+                                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value" stroke="none">
+                                                {pieData.map((_, i) => <Cell key={i} fill={activeColors[i]} />)}
+                                            </Pie>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    <div className="absolute inset-0 flex items-center justify-center font-black text-[18px] text-white">
+                                        <span className="text-slate-800 dark:text-white font-bold text-lg">{pctText}</span>
+                                    </div>
+                                </div>
+                            )
+                        })()}
+
+                        <div className="flex justify-center">
+                            <Link href="/admin/student-attendance" className="border border-slate-200 bg-[#F8F9FA] text-slate-700 text-[13px] font-bold px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-slate-100">
+                                <CalendarDays className="h-4 w-4" /> View All
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-6">
+                    {/* Quick Links Blocks */}
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
+                        <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white mb-5">Quick Links</h3>
+                        
+                        <div className="flex flex-wrap gap-4">
+                            <QuickLink href="/admin/calendar"           label="Calendar"    icon={CalendarDays} bg="bg-[#E8F8F0]" iconBg="bg-[#22C55E]" />
+                            <QuickLink label="Exam Result"              onClick={() => setExamPopupOpen(true)} icon={BarChart2}    bg="bg-[#EBF2FF]" iconBg="bg-[#3B82F6]" />
+                            <QuickLink href="/admin/student-attendance" label="Attendance"  icon={UserCheck}    bg="bg-[#FFF8E1]" iconBg="bg-[#F59E0B]" />
+                            
+                            <QuickLink href="/admin/finance/dashboard"  label="Fees"        icon={DollarSign}   bg="bg-[#E0F7FA]" iconBg="bg-[#06B6D4]" />
+                            <QuickLink label="Reports"                 onClick={() => setReportsPopupOpen(true)} icon={FileText}     bg="bg-[#E0F2FE]" iconBg="bg-[#0EA5E9]" />
+                            
+                            <Link href="/admin/delegations" className="flex flex-col items-center justify-center py-5 rounded-xl bg-purple-50 hover:shadow flex-1 min-w-[30%] transition-all relative">
+                                {pendingDelegationsCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+                                        {pendingDelegationsCount}
+                                    </span>
+                                )}
+                                <div className="h-[42px] w-[42px] rounded-full flex items-center justify-center bg-purple-600 text-white shadow-sm mb-3 transition-transform hover:scale-110">
+                                    <Bell className="h-5 w-5" />
+                                </div>
+                                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Requests</span>
+                            </Link>
+                        </div>
+                    </div>
+
+                </div>
+
             </div>
+
+            {/* ── Event Modal ──────────────────────────────────────────────────────── */}
+            <EventModal
+                isOpen={showEventModal}
+                onClose={handleCloseModal}
+                onSaveSuccess={() => load()}
+                editingEventId={editingEventId}
+                initialData={newEvent}
+            />
+
+            {/* Bottom Rectangle Action Tiles as shown in Screenshot 2647 */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-6">
+                {[
+                    { href: "/admin/student-attendance", label: "View Attendance",    icon: CalendarDays, bg: "bg-[#FFF9E5]", iconBg: "bg-[#F59E0B]", text: "text-[#F59E0B]" },
+                    { href: "/admin/calendar",           label: "New Events",         icon: Bell,         bg: "bg-[#E8F8F0]", iconBg: "bg-[#22C55E]", text: "text-[#22C55E]" },
+                    { href: "/admin/finance/dashboard",  label: "Finance & Accounts", icon: UserCheck,    bg: "bg-[#E0F7FA]", iconBg: "bg-[#06B6D4]", text: "text-[#06B6D4]" },
+                ].map((tile, i) => (
+                    <Link key={i} href={tile.href} className={`${tile.bg} rounded-xl p-5 flex items-center justify-between group`}>
+                        <div className="flex items-center gap-4">
+                            <div className={`h-12 w-12 rounded-lg ${tile.iconBg} flex items-center justify-center shadow-sm`}>
+                                <tile.icon className="h-6 w-6 text-white" />
+                            </div>
+                            <span className="text-[14px] font-bold text-slate-800">{tile.label}</span>
+                        </div>
+                        <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center group-hover:bg-slate-50 transition-colors">
+                            <ChevronRight className={`h-4 w-4 ${tile.text}`} />
+                        </div>
+                    </Link>
+                ))}
+            </div>
+
+            {/* ── Exam Router Modal ──────────────────────────────────────────────────────── */}
+            {examPopupOpen && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[24px] shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
+                        <div className="p-6 text-center border-b border-slate-100 dark:border-slate-800 relative">
+                            <div className="h-16 w-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <BarChart2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <h2 className="text-[20px] font-black text-slate-800 dark:text-white">Select Section</h2>
+                            <p className="text-[14px] text-slate-500 font-medium mt-1">Choose which academic section's exams you want to manage.</p>
+                            <button onClick={() => setExamPopupOpen(false)} className="absolute top-4 right-4 h-8 w-8 bg-slate-100 text-slate-500 hover:text-slate-800 rounded-full flex items-center justify-center transition-colors">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+                            <Link href="/admin/madrassa/exams" className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:shadow-md rounded-xl p-4 flex items-center justify-between group transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                                        <BookOpen className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-[15px] font-bold text-slate-800 dark:text-white">Madrassa</h4>
+                                        <p className="text-[12px] text-slate-500 font-medium font-medium">Manage madrassa exams</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                            </Link>
+                            
+                            <Link href="/admin/hifz/exams" className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:shadow-md rounded-xl p-4 flex items-center justify-between group transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                                        <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-[15px] font-bold text-slate-800 dark:text-white">Hifz</h4>
+                                        <p className="text-[12px] text-slate-500 font-medium font-medium">Manage hifz exams</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                            </Link>
+
+                            <Link href="/admin/school/exams" className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:shadow-md rounded-xl p-4 flex items-center justify-between group transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-rose-50 dark:bg-rose-900/30 rounded-lg flex items-center justify-center">
+                                        <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-[15px] font-bold text-slate-800 dark:text-white">School</h4>
+                                        <p className="text-[12px] text-slate-500 font-medium font-medium">Manage school exams</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* ── Reports Router Modal ──────────────────────────────────────────────────────── */}
+            {reportsPopupOpen && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[24px] shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col overflow-hidden">
+                        <div className="p-6 text-center border-b border-slate-100 dark:border-slate-800 relative">
+                            <div className="h-16 w-16 bg-cyan-50 dark:bg-cyan-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <FileText className="h-8 w-8 text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <h2 className="text-[20px] font-black text-slate-800 dark:text-white">Generate Reports</h2>
+                            <p className="text-[14px] text-slate-500 font-medium mt-1">Select which type of comprehensive report to view and download.</p>
+                            <button onClick={() => setReportsPopupOpen(false)} className="absolute top-4 right-4 h-8 w-8 bg-slate-100 text-slate-500 hover:text-slate-800 rounded-full flex items-center justify-center transition-colors">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+                            
+                            <Link href="/admin/reports/students" className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-cyan-500 hover:shadow-md rounded-xl p-4 flex items-center justify-between group transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                                        <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-[15px] font-bold text-slate-800 dark:text-white">Students</h4>
+                                        <p className="text-[12px] text-slate-500 font-medium font-medium">Detailed student records</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
+                            </Link>
+
+                            <Link href="/admin/reports/mentors" className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-cyan-500 hover:shadow-md rounded-xl p-4 flex items-center justify-between group transition-all">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-10 w-10 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                                        <UserCog className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h4 className="text-[15px] font-bold text-slate-800 dark:text-white">Mentors</h4>
+                                        <p className="text-[12px] text-slate-500 font-medium font-medium">Mentor performance & leaves</p>
+                                    </div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     )
 }

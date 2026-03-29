@@ -13,7 +13,7 @@ const router = Router();
 
 // Protect all academics routes
 router.use(verifyToken);
-router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'controller']));
+router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 
 // ---- Sessions ----
 router.get('/sessions', getAcademicSessions);

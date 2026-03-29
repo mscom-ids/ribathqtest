@@ -12,7 +12,7 @@ const router = Router();
 
 // Protect all class routes
 router.use(verifyToken);
-router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'controller']));
+router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 
 // Academic Years
 router.get('/academic-years', getAcademicYears);

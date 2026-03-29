@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Search, BookOpen, Star, X } from "lucide-react"
+import { Calendar as CalendarIcon, Search, BookOpen, X } from "lucide-react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
@@ -236,14 +236,13 @@ export default function HifzTrackingPage() {
                                         <TableHead>Student Name</TableHead>
                                         <TableHead>Current Position</TableHead>
                                         <TableHead>Today's Record</TableHead>
-                                        <TableHead>Rating</TableHead>
                                         <TableHead className="text-right">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {filteredStudents.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                                                 No students found
                                             </TableCell>
                                         </TableRow>
@@ -311,29 +310,6 @@ export default function HifzTrackingPage() {
                                                             );
                                                         })() : (
                                                             <span className="text-gray-400">No entry</span>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {logs.length > 0 ? (
-                                                            <div className="flex items-center gap-1">
-                                                                {/* Show average rating across all logs */}
-                                                                {[1, 2, 3, 4, 5].map(star => {
-                                                                    const avgRating = logs.reduce((sum, l) => sum + (l.rating || 0), 0) / logs.length
-                                                                    return (
-                                                                        <Star
-                                                                            key={star}
-                                                                            className={cn(
-                                                                                "h-4 w-4",
-                                                                                star <= avgRating
-                                                                                    ? "fill-yellow-400 stroke-yellow-400"
-                                                                                    : "stroke-gray-300"
-                                                                            )}
-                                                                        />
-                                                                    )
-                                                                })}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-gray-400">-</span>
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right">

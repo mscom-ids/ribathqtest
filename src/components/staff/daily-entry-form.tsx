@@ -52,7 +52,6 @@ const formSchema = z.object({
         z.enum(["Full", "1st Half", "2nd Half", "Q1", "Q2", "Q3", "Q4"]).optional()
     ),
     // Common
-    rating: optionalNumMin1,
 }).superRefine((data, ctx) => {
     if (data.mode === "New Verses" || data.mode === "Recent Revision") {
         data.new_verses.forEach((entry, index) => {
@@ -72,11 +71,10 @@ const formSchema = z.object({
                     }
                 }
             }
-            if (!entry.start_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "start_v"] })
             if (!entry.end_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "end_v"] })
         })
 
-    } else {
+    } else if (data.mode === "Juz Revision") {
         if (!data.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_number"] })
         if (!data.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_portion"] })
     }
@@ -104,12 +102,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             session: "Subh",
             mode: "New Verses",
             new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
-            rating: 3,
         },
     })
 
     // Field array for multiple surahs
-    const { fields: versesFields, append: appendVerse, remove: removeVerse } = useFieldArray({
+    const { fields: versesFields, append: appendVerse, remove: removeVerse, replace: replaceVerses } = useFieldArray({
         control: form.control,
         name: "new_verses"
     });
@@ -168,18 +165,19 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     start_page: existingLog.start_page,
                     end_page: existingLog.end_page,
                     juz_number: existingLog.juz_number,
-                    juz_portion: existingLog.juz_portion as any,
-                    rating: existingLog.rating || 3
+                    juz_portion: existingLog.juz_portion as any
                 })
             } else {
                 if (!logIdParam) {
                     setLogId(null)
-                    form.setValue("new_verses", [{ surah_id: undefined, start_v: undefined, end_v: undefined }])
-                    form.setValue("start_page", undefined)
-                    form.setValue("end_page", undefined)
-                    form.setValue("juz_number", undefined)
-                    form.setValue("juz_portion", undefined as any)
-                    form.setValue("rating", 3)
+                    form.reset({
+                        date: watchedDate || format(today, 'yyyy-MM-dd'),
+                        session: watchedSession || "Subh",
+                        mode: watchedMode || "New Verses",
+                        new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                        juz_number: "" as any,
+                        juz_portion: "" as any
+                    })
                 }
             }
         }
@@ -218,11 +216,18 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         start_page: data.start_page,
                         end_page: data.end_page,
                         juz_number: data.juz_number,
-                        juz_portion: data.juz_portion as any,
-                        rating: data.rating || 3
+                        juz_portion: data.juz_portion as any
                     })
                 } else {
                     setLogId(null)
+                    form.reset({
+                        date: watchedDate,
+                        session: watchedSession,
+                        mode: watchedMode,
+                        new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                        juz_number: "" as any,
+                        juz_portion: "" as any
+                    })
                 }
             } catch (e) { console.error(e) }
         }
@@ -251,8 +256,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             usthad_id: targetUsthadId,
             entry_date: values.date,
             session_type: values.session,
-            mode: values.mode,
-            rating: values.rating
+            mode: values.mode
         }
 
         try {
@@ -293,7 +297,14 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 router.push(returnTo)
             } else {
                 alert("Saved successfully!")
-                form.setValue("new_verses", [{ surah_id: undefined, start_v: undefined, end_v: undefined }])
+                form.reset({
+                    date: form.getValues("date"),
+                    session: form.getValues("session"),
+                    mode: form.getValues("mode"),
+                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                    juz_number: "" as any,
+                    juz_portion: "" as any
+                })
             }
         } catch (err: any) {
             alert(`Failed to save log: ${err?.response?.data?.error || err.message}`)
@@ -326,37 +337,37 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
     return (
         <div className="p-4 max-w-lg mx-auto pb-20">
-            <div className="flex items-center mb-6">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                    <ArrowLeft className="w-5 h-5" />
+            <div className="flex items-center mb-4">
+                <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-8 w-8">
+                    <ArrowLeft className="w-4 h-4" />
                 </Button>
-                <h1 className="ml-2 text-xl font-bold">{student?.name || "Loading..."}</h1>
+                <h1 className="ml-2 text-lg font-bold text-slate-800 dark:text-slate-100">{student?.name || "Loading..."}</h1>
             </div>
 
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
-                    console.error("Form validation errors:", errors)
+                    console.log("Form validation errors:", errors)
                     const firstError = Object.values(errors)[0]
                     const msg = Array.isArray(firstError)
                         ? firstError[0]?.surah_id?.message || firstError[0]?.start_v?.message || firstError[0]?.end_v?.message || "Validation error"
                         : (firstError as any)?.message || "Please fill all required fields"
                     alert("Validation failed: " + msg)
-                })} className="space-y-6">
+                })} className="space-y-3">
 
-                    <Card>
-                        <CardHeader className="pb-3 border-b border-white/5">
-                            <CardTitle className="text-base text-emerald-400">Session Setup</CardTitle>
+                    <Card className="border-emerald-900/10 shadow-sm">
+                        <CardHeader className="p-3 pb-1.5 border-b border-emerald-900/5">
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Session Setup</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4 pt-4">
+                        <CardContent className="space-y-2.5 p-3 pt-2">
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                     control={form.control}
                                     name="date"
                                     render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs text-gray-400">Date</FormLabel>
+                                        <FormItem className="space-y-1">
+                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Date</FormLabel>
                                             <FormControl>
-                                                <Input type="date" {...field} className="bg-[#1e1e1e] border-gray-700" />
+                                                <Input type="date" {...field} className="bg-white dark:bg-slate-900 border-input h-9 text-sm px-2 cursor-pointer" />
                                             </FormControl>
                                         </FormItem>
                                     )}
@@ -365,11 +376,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                     control={form.control}
                                     name="session"
                                     render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs text-gray-400">Session</FormLabel>
+                                        <FormItem className="space-y-1">
+                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Session</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
                                                 <FormControl>
-                                                    <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
                                                         <SelectValue />
                                                     </SelectTrigger>
                                                 </FormControl>
@@ -386,28 +397,43 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         </CardContent>
                     </Card>
 
-                    <Card className="border border-emerald-900/40 shadow-xl shadow-emerald-900/10">
-                        <CardHeader className="pb-3 bg-white/5 border-b border-white/5">
+                    <Card className="border border-emerald-900/10 shadow-sm overflow-hidden">
+                        <CardHeader className="p-3 pb-1.5 bg-emerald-50/30 dark:bg-emerald-950/10 border-b border-emerald-900/5">
                             <div className="flex items-center justify-between">
-                                <CardTitle className="text-base text-emerald-400">Hifz Progress Tracker</CardTitle>
+                                <CardTitle className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Hifz Progress Tracker</CardTitle>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-6 pt-4">
+                        <CardContent className="space-y-3 p-3 pt-2">
                             <FormField
                                 control={form.control}
                                 name="mode"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
+                                        <Select 
+                                            onValueChange={(val) => {
+                                                // 1. Force RHF absolute wipe instantly
+                                                form.reset({
+                                                    date: form.getValues("date"),
+                                                    session: form.getValues("session"),
+                                                    mode: val as any,
+                                                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                                                    juz_number: "" as any,
+                                                    juz_portion: "" as any
+                                                });
+                                                setLogId(null);
+                                            }} 
+                                            value={field.value} 
+                                            disabled={isOldDate}
+                                        >
                                             <FormControl>
-                                                <SelectTrigger className="bg-emerald-900/20 border-emerald-600/50 text-emerald-300 font-semibold h-12">
+                                                <SelectTrigger className="bg-emerald-50 dark:bg-emerald-900/20 border-emerald-600/30 text-emerald-700 dark:text-emerald-300 font-semibold h-10 w-[180px] rounded-full px-4">
                                                     <SelectValue />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
                                                 <SelectItem value="New Verses">New Verses</SelectItem>
                                                 <SelectItem value="Recent Revision">Recent Revision</SelectItem>
-                                                <SelectItem value="Juz Revision">Juz Revision (Amak)</SelectItem>
+                                                <SelectItem value="Juz Revision">Juz Revision</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
@@ -416,7 +442,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                             {/* New Verses Mode - Multiple Surahs */}
                             {(form.watch("mode") === "New Verses" || form.watch("mode") === "Recent Revision") && (
-                                <div className="space-y-4">
+                                <div className="space-y-4" key={form.watch("mode")}>
                                     {versesFields.map((field, index) => (
                                         <div key={field.id} className="p-4 border-l-2 border-emerald-500 bg-emerald-950/10 rounded-r-lg relative group">
                                             <div className="flex justify-between items-center mb-3">
@@ -434,15 +460,15 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                 )}
                                             </div>
 
-                                            <FormField
+                                             <FormField
                                                 control={form.control}
                                                 name={`new_verses.${index}.surah_id`}
                                                 render={({ field }) => (
-                                                    <FormItem className="mb-3">
+                                                     <FormItem className="mb-2">
                                                         <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString() || ""} disabled={isOldDate}>
                                                             <FormControl>
-                                                                <SelectTrigger className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500">
-                                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-500/50 pointer-events-none">
+                                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
+                                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-600/70 font-bold pointer-events-none uppercase">
                                                                         {typedSurahList.find(s => s.id === field.value)?.totalVerses ? `${typedSurahList.find(s => s.id === field.value)?.totalVerses} Ayahs` : ''}
                                                                     </div>
                                                                     <SelectValue placeholder="Select Surah" />
@@ -456,22 +482,22 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        <FormMessage />
+                                                        <FormMessage className="text-[10px]" />
                                                     </FormItem>
                                                 )}
                                             />
 
-                                            <div className="grid grid-cols-2 gap-3">
+                                             <div className="grid grid-cols-2 gap-2">
                                                 <FormField
                                                     control={form.control}
                                                     name={`new_verses.${index}.start_v`}
                                                     render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="text-xs text-gray-400">Start Verse</FormLabel>
+                                                        <FormItem className="flex flex-col gap-1">
+                                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Start</FormLabel>
                                                             <FormControl>
-                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500" />
+                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="h-8 text-sm px-2" />
                                                             </FormControl>
-                                                            <FormMessage />
+                                                            <FormMessage className="text-[10px]" />
                                                         </FormItem>
                                                     )}
                                                 />
@@ -479,45 +505,44 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                     control={form.control}
                                                     name={`new_verses.${index}.end_v`}
                                                     render={({ field }) => (
-                                                        <FormItem>
-                                                            <FormLabel className="text-xs text-gray-400">End Verse</FormLabel>
+                                                        <FormItem className="flex flex-col gap-1">
+                                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">End</FormLabel>
                                                             <FormControl>
-                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="bg-[#1e1e1e] border-gray-700 focus:border-emerald-500" />
+                                                                <Input type="number" {...field} value={field.value ?? ""} disabled={isOldDate} className="h-8 text-sm px-2" />
                                                             </FormControl>
-                                                            <FormMessage />
+                                                            <FormMessage className="text-[10px]" />
                                                         </FormItem>
                                                     )}
                                                 />
                                             </div>
                                         </div>
                                     ))}
-
                                     {!isOldDate && (
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             onClick={() => appendVerse({ surah_id: undefined, start_v: undefined, end_v: undefined })}
-                                            className="w-full border border-dashed border-emerald-800 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-950/30"
+                                            className="w-full h-8 border border-dashed border-emerald-800/30 text-[11px] font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                                         >
-                                            <PlusCircle size={16} className="mr-2" /> Add another Surah
+                                            <PlusCircle size={14} className="mr-2" /> Add another Surah
                                         </Button>
                                     )}
                                 </div>
                             )}
 
-                            {/* Juz Revision Mode */}
+                             {/* Juz Revision Mode */}
                             {form.watch("mode") === "Juz Revision" && (
-                                <div className="space-y-4 p-4 border-l-2 border-purple-500 bg-purple-950/10 rounded-r-lg">
-                                    <div className="flex gap-4">
+                                <div className="space-y-3 p-3 border border-purple-500/10 bg-purple-50/30 dark:bg-purple-950/10 rounded-lg" key="juz">
+                                    <div className="flex gap-3">
                                         <FormField
                                             control={form.control}
                                             name="juz_number"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel className="text-xs text-gray-400">Juz Number</FormLabel>
+                                                    <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Juz Number</FormLabel>
                                                     <Select onValueChange={(v) => field.onChange(parseInt(v))} value={field.value?.toString()} disabled={isOldDate}>
                                                         <FormControl>
-                                                            <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
                                                                 <SelectValue placeholder="Select Juz" />
                                                             </SelectTrigger>
                                                         </FormControl>
@@ -529,7 +554,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
-                                                    <FormMessage />
+                                                    <FormMessage className="text-[10px]" />
                                                 </FormItem>
                                             )}
                                         />
@@ -538,10 +563,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                             name="juz_portion"
                                             render={({ field }) => (
                                                 <FormItem className="flex-1">
-                                                    <FormLabel className="text-xs text-gray-400">Portion</FormLabel>
+                                                    <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Portion</FormLabel>
                                                     <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
                                                         <FormControl>
-                                                            <SelectTrigger className="bg-[#1e1e1e] border-gray-700">
+                                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
                                                                 <SelectValue placeholder="Portion" />
                                                             </SelectTrigger>
                                                         </FormControl>
@@ -555,7 +580,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                             <SelectItem value="Q4">Quarter 4</SelectItem>
                                                         </SelectContent>
                                                     </Select>
-                                                    <FormMessage />
+                                                    <FormMessage className="text-[10px]" />
                                                 </FormItem>
                                             )}
                                         />
@@ -563,54 +588,24 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                 </div>
                             )}
 
-                            <div className="border-t border-white/5 pt-4">
-                                <FormField
-                                    control={form.control}
-                                    name="rating"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-xs text-gray-400 uppercase tracking-wider block mb-2">Performance Rating (1-5)</FormLabel>
-                                            <FormControl>
-                                                <div className="flex gap-2 w-full">
-                                                    {[1, 2, 3, 4, 5].map((star) => (
-                                                        <Button
-                                                            key={star}
-                                                            type="button"
-                                                            variant="outline"
-                                                            className={`flex-1 h-12 transition-all ${field.value === star
-                                                                ? 'bg-emerald-500 text-white border-none shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400'
-                                                                : 'bg-[#1e1e1e] border-gray-800 text-gray-400 hover:text-white hover:bg-gray-800'}`}
-                                                            onClick={() => field.onChange(star)}
-                                                            disabled={isOldDate}
-                                                        >
-                                                            <span className="text-lg font-bold">{star}</span>
-                                                        </Button>
-                                                    ))}
-                                                </div>
-                                            </FormControl>
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
-
                         </CardContent>
                     </Card>
 
-                    <div className="flex flex-col gap-4">
+                     <div className="flex flex-col gap-3">
                         {isOldDate && (
-                            <p className="text-red-400 text-sm text-center font-medium bg-red-400/10 py-2 rounded-lg border border-red-400/20">
-                                Notice: Data entry is locked for dates older than 7 days.
+                            <p className="text-red-400 text-[11px] text-center font-bold bg-red-400/5 py-1.5 rounded-md border border-red-400/20">
+                                Locked for dates older than 7 days.
                             </p>
                         )}
-                        <div className="flex gap-4">
+                        <div className="flex gap-3">
                             {logId && (
-                                <Button type="button" variant="destructive" className="h-12 flex-1 max-w-[120px]" onClick={handleDelete} disabled={loading || isOldDate}>
+                                <Button type="button" variant="destructive" className="h-10 px-4 text-xs font-bold" onClick={handleDelete} disabled={loading || isOldDate}>
                                     Delete
                                 </Button>
                             )}
-                            <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-12 font-bold transition-all shadow-lg shadow-emerald-900/40" disabled={loading || isOldDate}>
-                                {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                                {logId ? "Update Record" : "Save Progress"}
+                            <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white h-10 text-sm font-bold shadow-md" disabled={loading || isOldDate}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                {logId ? "Update" : "Save Progress"}
                             </Button>
                         </div>
                     </div>

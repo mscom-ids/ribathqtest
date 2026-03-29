@@ -1,0 +1,29 @@
+﻿[dotenv@17.3.1] injecting env (2) from .env -- tip: ΓÜÖ∩╕Å  enable debug logging with { debug: true }
+=== Phase 1: Database Migration ===
+Adding effective_from, effective_until, is_deleted to attendance_schedules...
+  Done.
+Deleting all rows from academic_sessions...
+  Deleted 7 rows.
+Clearing attendance table (0 rows expected)...
+  Deleted 0 rows.
+
+=== Verification ===
+attendance_schedules columns:
+  id (uuid)
+  class_type (character varying)
+  standards (jsonb)
+  day_of_week (integer)
+  start_time (time without time zone)
+  end_time (time without time zone)
+  duration_mins (integer)
+  mentor_id (uuid)
+  created_at (timestamp with time zone)
+  academic_year_id (uuid)
+  name (character varying)
+  effective_from (date)
+  effective_until (date)
+  is_deleted (boolean)
+academic_sessions rows: 0
+attendance rows: 0
+
+Migration complete!

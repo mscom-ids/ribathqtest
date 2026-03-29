@@ -73,6 +73,16 @@ export default function CreateStaffPage() {
             return
         }
 
+        // If email is provided, password is mandatory for login
+        if (form.email.trim() && !form.password.trim()) {
+            toast({ title: "Error", description: "Password is required when email is provided (needed for login)", variant: "destructive" })
+            return
+        }
+        if (form.password.trim() && form.password.trim().length < 6) {
+            toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" })
+            return
+        }
+
         setLoading(true)
 
         try {
@@ -98,7 +108,7 @@ export default function CreateStaffPage() {
             const result = await api.post('/staff', {
                 name: form.name.trim(),
                 email: form.email.trim() || undefined,
-                password: form.password || undefined,
+                password: form.password ? form.password.trim() : undefined,
                 role: form.role,
                 phone: primaryPhone,
                 photo_url: photoUrl,
