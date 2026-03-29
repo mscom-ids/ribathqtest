@@ -134,6 +134,18 @@ export default function StudentDetailPage() {
     const watchedState = form.watch("state")
     const isIndian = watchedNationality?.toLowerCase() === "indian" || watchedNationality?.toLowerCase() === "india"
 
+    // Helper for safe date formatting from DB legacy values
+    const safeFormatDateForInput = (d: any) => {
+        if (!d || d === "" || d === "0000-00-00") return "";
+        try {
+            const parsed = new Date(d);
+            if (isNaN(parsed.getTime())) return "";
+            return parsed.toISOString().split('T')[0];
+        } catch {
+            return "";
+        }
+    }
+
     // ── Photo upload ──────────────────────────────────────────
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files?.length) return
@@ -165,9 +177,10 @@ export default function StudentDetailPage() {
                     const s = res.data.student
                     setStudentData(s)
                     if (s.photo_url) setPhotoUrl(s.photo_url)
+                    
                     form.reset({
                         name: s.name,
-                        dob: (s.dob || s.date_of_birth) ? new Date(s.dob || s.date_of_birth).toISOString().split('T')[0] : "",
+                        dob: safeFormatDateForInput(s.dob || s.date_of_birth),
                         address: s.address_line || s.address || "",
                         father_name: s.father_name || s.parent_name || "",
                         email: s.email || "",
@@ -190,8 +203,9 @@ export default function StudentDetailPage() {
                     setFetching(false)
                     return
                 }
-            } catch {
-                setError("Could not connect to server. Please ensure the backend is running.")
+            } catch (err: any) {
+                console.error("Failed to load student details:", err)
+                setError("Unable to process student data. Please ensure the backend is running and data is valid.")
                 setFetching(false)
                 return
             }
@@ -248,7 +262,7 @@ export default function StudentDetailPage() {
         const s = studentData
         if (!s) { setEditing(false); return }
         form.reset({
-            name: s.name || "", dob: (s.dob || s.date_of_birth) ? new Date(s.dob || s.date_of_birth).toISOString().split('T')[0] : "",
+            name: s.name || "", dob: safeFormatDateForInput(s.dob || s.date_of_birth),
             address: s.address_line || s.address || "", father_name: s.father_name || s.parent_name || "",
             email: s.email || "", batch_year: s.batch_year || "",
             standard: s.school_standard || s.hifz_standard || s.madrassa_standard || "",
