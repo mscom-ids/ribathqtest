@@ -4,7 +4,10 @@ import jwt from 'jsonwebtoken';
 import { db } from '../config/db';
 import { supabaseAdmin } from '../config/supabase';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_here';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
+}
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -89,9 +92,9 @@ export const login = async (req: Request, res: Response) => {
       } catch (_) { /* profiles table may not be accessible, use staff.role */ }
     }
 
-    // Generate JWT
+    // Generate JWT with 7-day expiry (not 365d)
     const token = jwt.sign(
-      { 
+      {
         id: staff.id,
         profile_id: staff.profile_id,
         email: staff.email,
@@ -99,12 +102,21 @@ export const login = async (req: Request, res: Response) => {
         name: staff.name
       },
       JWT_SECRET,
-      { expiresIn: '365d' }
+      { expiresIn: '7d' }
     );
+
+    // Set secure httpOnly cookie
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/'
+    });
 
     res.json({
       success: true,
-      token,
+      token, // still returned for backward compat during migration
       user: {
         id: staff.id,
         email: staff.email,
@@ -145,8 +157,12 @@ export const me = async (req: Request, res: Response) => {
 };
 
 export const logout = async (req: Request, res: Response) => {
-  // Clear the auth cookie if set
+  res.clearCookie('auth_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/'
+  });
   res.clearCookie('token');
-  res.clearCookie('auth_token', { path: '/' });
   res.json({ success: true, message: 'Logged out successfully' });
 };

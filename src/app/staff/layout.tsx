@@ -34,12 +34,12 @@ export default function StaffLayout({
 
     useEffect(() => {
         setMounted(true)
-        const actingAs = localStorage.getItem('actingAsMentorId')
-        const actingName = localStorage.getItem('actingAsMentorName')
-        const actingStudentName = localStorage.getItem('actingAsStudentName')
-        if (actingAs && actingName) {
-            setActingAsMentorName(actingName)
-            setActingAsStudentName(actingStudentName)
+        const delegationToken = sessionStorage.getItem('delegationToken')
+        const mentorName = sessionStorage.getItem('delegationMentorName')
+        const studentName = sessionStorage.getItem('delegationStudentName')
+        if (delegationToken && mentorName) {
+            setActingAsMentorName(mentorName)
+            setActingAsStudentName(studentName)
         }
     }, [])
 
@@ -72,18 +72,16 @@ export default function StaffLayout({
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
         Cookies.remove('auth_token', { path: '/' })
         document.cookie = 'auth_token=; path=/; max-age=0'
-        localStorage.removeItem('actingAsMentorId')
-        localStorage.removeItem('actingAsMentorName')
-        localStorage.removeItem('actingAsStudentId')
-        localStorage.removeItem('actingAsStudentName')
+        sessionStorage.removeItem('delegationToken')
+        sessionStorage.removeItem('delegationMentorName')
+        sessionStorage.removeItem('delegationStudentName')
         router.push("/login")
     }
 
     const exitDelegationMode = () => {
-        localStorage.removeItem('actingAsMentorId')
-        localStorage.removeItem('actingAsMentorName')
-        localStorage.removeItem('actingAsStudentId')
-        localStorage.removeItem('actingAsStudentName')
+        sessionStorage.removeItem('delegationToken')
+        sessionStorage.removeItem('delegationMentorName')
+        sessionStorage.removeItem('delegationStudentName')
         setActingAsMentorName(null)
         setActingAsStudentName(null)
         window.location.href = "/staff"

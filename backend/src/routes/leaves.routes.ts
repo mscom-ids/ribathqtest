@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
-import { 
-    getEligibleStudents, 
-    createInstitutionalLeave, 
-    getInstitutionalLeaves, 
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
+import {
+    getEligibleStudents,
+    createInstitutionalLeave,
+    getInstitutionalLeaves,
     getInstitutionalLeaveStudents,
     createPersonalLeave,
     createGroupLeave,
@@ -21,6 +21,7 @@ import {
 
 const router = Router();
 router.use(verifyToken);
+router.use(verifyDelegation);
 
 // Shared
 router.get('/', getAllLeaves); // All leaves for admin dashboard

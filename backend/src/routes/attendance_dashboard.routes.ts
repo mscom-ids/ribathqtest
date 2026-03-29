@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 import {
     getSchedules,
     getSchedulesForDate,
@@ -19,6 +19,7 @@ const router = Router();
 
 // Protect all routes
 router.use(verifyToken);
+router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 
 // Dashboard & Schedule Setup

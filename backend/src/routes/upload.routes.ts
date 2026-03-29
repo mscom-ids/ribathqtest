@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { uploadAvatar } from '../controllers/upload.controller';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(verifyToken);
+router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor']));
 
 // POST /api/upload/avatar

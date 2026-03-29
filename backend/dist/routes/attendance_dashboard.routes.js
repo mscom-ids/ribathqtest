@@ -6,6 +6,7 @@ const attendance_dashboard_controller_1 = require("../controllers/attendance_das
 const router = (0, express_1.Router)();
 // Protect all routes
 router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
 router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 // Dashboard & Schedule Setup
 router.get('/daily-stats', attendance_dashboard_controller_1.getDailyAttendanceStats);

@@ -5,11 +5,12 @@ import {
     deleteHifzLog, getMonthlyReports, upsertMonthlyReport,
     calculateBulkMonthlyReport
 } from '../controllers/hifz.controller';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(verifyToken);
+router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor']));
 
 // GET /api/hifz/progress-summary

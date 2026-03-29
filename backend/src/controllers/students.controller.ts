@@ -128,20 +128,33 @@ export const updateStudent = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Student ID is required' });
     }
     const updateData = req.body;
-    
+
     // Safety check - don't allow updating ID
     delete updateData.id;
-    
-    const keys = Object.keys(updateData);
-    if (keys.length === 0) {
-      return res.status(400).json({ success: false, error: 'No data provided for update' });
+
+    // Map legacy/frontend fields to db fields if they exist
+    if ('assigned_usthad_id' in updateData) {
+      updateData.hifz_mentor_id = updateData.assigned_usthad_id;
+      delete updateData.assigned_usthad_id;
+    }
+
+    const validColumns = [
+      'name', 'dob', 'address', 'father_name', 'phone', 
+      'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id', 
+      'photo_url', 'status', 'comprehensive_details'
+    ];
+
+    const keysToUpdate = Object.keys(updateData).filter(key => validColumns.includes(key));
+
+    if (keysToUpdate.length === 0) {
+      return res.status(400).json({ success: false, error: 'No valid data provided for update' });
     }
 
     const setClauses = [];
     const values = [];
     let paramCount = 1;
 
-    for (const key of keys) {
+    for (const key of keysToUpdate) {
       if (key === 'comprehensive_details') {
         // Deep merge the new JSON inside Postgres so we don't accidentally overwrite other saved tabs
         setClauses.push(`${key} = COALESCE(students.${key}, '{}'::jsonb) || $${paramCount}::jsonb`);

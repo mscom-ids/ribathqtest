@@ -5,6 +5,7 @@ const exams_controller_1 = require("../controllers/exams.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
 router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor']));
 // GET /api/exams
 router.get('/', exams_controller_1.getExams);

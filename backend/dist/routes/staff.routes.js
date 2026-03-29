@@ -6,6 +6,7 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 // Protect all staff routes
 router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
 router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 // GET /api/staff/me
 router.get('/me', staff_controller_1.getMyStaffProfile);

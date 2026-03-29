@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { getAllStudents, getStudentById, createStudent, updateStudent } from '../controllers/students.controller';
 import { getNextStudentId, getStaff } from '../controllers/students.helpers';
 import { getDisciplinaryRecords, createDisciplinaryRecord, deleteDisciplinaryRecord } from '../controllers/academics.controller';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
 
 // Protect all student routes
 router.use(verifyToken);
+router.use(verifyDelegation);
 
 // GET /api/students/next-id (Helper)
 router.get('/next-id', requireRole(['admin', 'principal', 'staff', 'usthad', 'mentor']), getNextStudentId);

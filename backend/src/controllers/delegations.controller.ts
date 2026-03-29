@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
+}
 
 // 1. Mentor requests student assignment
 export const createDelegationRequest = async (req: Request, res: Response) => {
@@ -166,6 +172,78 @@ export const revokeDelegation = async (req: Request, res: Response) => {
         
         res.json({ success: true, message: "Assignment terminated successfully" });
     } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+};
+
+// 7. Issue a short-lived delegation token (server-side, cryptographically signed)
+export const issueDelegationToken = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const { delegationId, targetStaffId, studentId } = req.body;
+
+        if (!delegationId || !targetStaffId) {
+            return res.status(400).json({ success: false, error: 'delegationId and targetStaffId are required.' });
+        }
+
+        // Resolve current user's staff ID
+        const staffRes = await db.query(
+            'SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1',
+            [user.id, user.email]
+        );
+        if (staffRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Staff profile not found.' });
+        }
+        const currentStaffId = staffRes.rows[0].id;
+
+        // Strict delegation validation (Req 5)
+        const delegationRes = await db.query(`
+            SELECT id, from_staff_id, to_staff_id, student_id, status, terminated_at
+            FROM mentor_delegations
+            WHERE id = $1
+        `, [delegationId]);
+
+        if (delegationRes.rows.length === 0) {
+            return res.status(403).json({ success: false, error: 'Delegation not found.' });
+        }
+
+        const delegation = delegationRes.rows[0];
+
+        // Validate ALL conditions — reject if ANY fails
+        if (delegation.status !== 'approved') {
+            return res.status(403).json({ success: false, error: 'Delegation is not approved.' });
+        }
+        if (delegation.terminated_at !== null) {
+            return res.status(403).json({ success: false, error: 'Delegation has been terminated.' });
+        }
+        if (delegation.to_staff_id !== currentStaffId) {
+            return res.status(403).json({ success: false, error: 'This delegation is not assigned to you.' });
+        }
+        if (delegation.from_staff_id !== targetStaffId) {
+            return res.status(403).json({ success: false, error: 'Target staff does not match delegation source.' });
+        }
+        // If studentId is specified, it must match delegation's student_id (or delegation must be for all students)
+        if (studentId && delegation.student_id && delegation.student_id !== studentId) {
+            return res.status(403).json({ success: false, error: 'Student is not covered by this delegation.' });
+        }
+
+        // All checks passed — issue a short-lived delegation JWT (1 hour)
+        const delegationToken = jwt.sign(
+            {
+                type: 'delegation',
+                delegationId: delegation.id,
+                actingAs: targetStaffId,
+                studentId: studentId || delegation.student_id || null,
+                issuedBy: currentStaffId,
+                issuedTo: user.id
+            },
+            JWT_SECRET!,
+            { expiresIn: '1h' }
+        );
+
+        res.json({ success: true, delegationToken });
+    } catch (e: any) {
+        console.error('Delegation token issuance error:', e);
         res.status(500).json({ success: false, error: e.message });
     }
 };

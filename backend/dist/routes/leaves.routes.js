@@ -5,6 +5,7 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const leaves_controller_1 = require("../controllers/leaves.controller");
 const router = (0, express_1.Router)();
 router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
 // Shared
 router.get('/', leaves_controller_1.getAllLeaves); // All leaves for admin dashboard
 router.get('/eligible-students', leaves_controller_1.getEligibleStudents);

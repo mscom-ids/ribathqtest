@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { getFeePlans, getStudentLedger, recordPayment } from '../controllers/finance.controller';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
 
 // Protect all finance routes
 router.use(verifyToken);
+router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'controller']));
 
 // GET /api/finance/fee-plans

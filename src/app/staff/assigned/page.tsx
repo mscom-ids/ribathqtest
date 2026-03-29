@@ -47,19 +47,31 @@ export default function AssignedStudentsPage() {
             setLoading(false)
         }
     }
-    const enterDelegationMode = (assignment: Assignment) => {
-        localStorage.setItem('actingAsMentorId', assignment.from_staff_id)
-        localStorage.setItem('actingAsMentorName', assignment.original_mentor_name)
-        if (assignment.student_id) {
-            localStorage.setItem('actingAsStudentId', assignment.student_id)
-            localStorage.setItem('actingAsStudentName', assignment.student_name || 'Student')
-        } else {
-            localStorage.removeItem('actingAsStudentId')
-            localStorage.removeItem('actingAsStudentName')
+    const enterDelegationMode = async (assignment: Assignment) => {
+        try {
+            // Request a server-issued delegation token
+            const res = await api.post('/delegations/token', {
+                delegationId: assignment.id,
+                targetStaffId: assignment.from_staff_id,
+                studentId: assignment.student_id || undefined
+            })
+            if (res.data.success && res.data.delegationToken) {
+                // Store server-issued token in sessionStorage (cleared on tab close)
+                sessionStorage.setItem('delegationToken', res.data.delegationToken)
+                sessionStorage.setItem('delegationMentorName', assignment.original_mentor_name)
+                if (assignment.student_name) {
+                    sessionStorage.setItem('delegationStudentName', assignment.student_name)
+                } else {
+                    sessionStorage.removeItem('delegationStudentName')
+                }
+                toast.success(`Now managing ${assignment.student_name || 'students'} for ${assignment.original_mentor_name}`)
+                window.location.href = "/staff"
+            } else {
+                toast.error(res.data.error || "Failed to enter delegation mode")
+            }
+        } catch (e: any) {
+            toast.error(e?.response?.data?.error || "Failed to enter delegation mode. Delegation may be expired or revoked.")
         }
-        toast.success(`Now managing ${assignment.student_name || 'students'} for ${assignment.original_mentor_name}`)
-        // Force a full reload to the dashboard to update all contexts and headers
-        window.location.href = "/staff"
     }
 
     if (loading) {

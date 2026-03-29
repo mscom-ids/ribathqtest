@@ -8,6 +8,7 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 // Protect all student routes
 router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
 // GET /api/students/next-id (Helper)
 router.get('/next-id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'staff', 'usthad', 'mentor']), students_helpers_1.getNextStudentId);
 // GET /api/students/staff (Helper)

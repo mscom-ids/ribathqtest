@@ -11,28 +11,25 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // send httpOnly cookies with cross-origin requests
 });
 
-// Request interceptor to automatically add the custom JWT token to every request
+// Request interceptor to automatically add the JWT token and delegation token
 api.interceptors.request.use(
   (config) => {
     const token = Cookies.get('auth_token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
-    
-    // Support Mentor Delegation Mode (Client-side only)
+
+    // Attach server-issued delegation token if active
     if (typeof window !== 'undefined') {
-        const actingAs = localStorage.getItem('actingAsMentorId');
-        if (actingAs) {
-            config.headers['x-acting-as-staff-id'] = actingAs;
-        }
-        const actingAsStudent = localStorage.getItem('actingAsStudentId');
-        if (actingAsStudent) {
-            config.headers['x-acting-as-student-id'] = actingAsStudent;
-        }
+      const delegationToken = sessionStorage.getItem('delegationToken');
+      if (delegationToken) {
+        config.headers['x-delegation-token'] = delegationToken;
+      }
     }
-    
+
     return config;
   },
   (error) => {
@@ -56,10 +53,13 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       // Token is invalid or expired
       Cookies.remove('auth_token');
-      
-      // Only redirect if we are in the browser environment
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('delegationToken');
+        sessionStorage.removeItem('delegationMentorName');
+        sessionStorage.removeItem('delegationStudentName');
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);

@@ -60,10 +60,10 @@ export default function LoginForm() {
             console.log('[LOGIN] Response:', data.success, 'role:', data.user?.role)
 
             if (data.success && data.token) {
-                Cookies.set('auth_token', data.token, { 
-                    expires: 365, 
+                Cookies.set('auth_token', data.token, {
+                    expires: 7,
                     secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'lax',
+                    sameSite: 'strict',
                     path: '/'
                 })
                 console.log('[LOGIN] Token saved to cookie')

@@ -1,6 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import path from 'path';
+
+// Load env BEFORE any module that reads process.env
+dotenv.config();
+
+// ── Req 9: Startup environment validation ──
+const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`FATAL: Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+console.log('[STARTUP] Environment validated — all required variables present.');
+
 import authRoutes from './routes/auth.routes';
 import studentRoutes from './routes/students.routes';
 import leavesRoutes from './routes/leaves.routes';
@@ -17,21 +34,31 @@ import eventsRoutes from './routes/events.routes';
 import reportsRoutes from './routes/reports.routes';
 import chatRoutes from './routes/chat.routes';
 import delegationsRoutes from './routes/delegations.routes';
-import path from 'path';
-
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// ── Core middleware ──
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
+
+// ── Req 7: Rate limit auth routes ──
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 attempts per window
+  message: { success: false, error: 'Too many login attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Serve static files for avatars
 app.use('/public', express.static(path.join(__dirname, '../public')));
 
-// Routes
-app.use('/api/auth', authRoutes);
+// ── Routes ──
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/leaves', leavesRoutes);
 app.use('/api/finance', financeRoutes);
@@ -53,5 +80,5 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`[STARTUP] Server is running on port ${PORT}`);
 });

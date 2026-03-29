@@ -20,7 +20,7 @@ export const getMyStaffProfile = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
         
-        res.json({ success: true, staff: result.rows[0], acting_as: !!req.headers['x-acting-as-staff-id'] });
+        res.json({ success: true, staff: result.rows[0], acting_as: !!(req as any).delegation });
     } catch (err) {
         console.error('Error fetching staff profile:', err);
         res.status(500).json({ success: false, error: 'Failed' });

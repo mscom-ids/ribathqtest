@@ -18,7 +18,7 @@ const getMyStaffProfile = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
-        res.json({ success: true, staff: result.rows[0], acting_as: !!req.headers['x-acting-as-staff-id'] });
+        res.json({ success: true, staff: result.rows[0], acting_as: !!req.delegation });
     }
     catch (err) {
         console.error('Error fetching staff profile:', err);

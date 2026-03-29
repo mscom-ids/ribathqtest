@@ -6,12 +6,13 @@ import {
     getWeeklySchedule, upsertWeeklySchedule, deleteWeeklySchedule,
     getClassEvents, generateDailyEvents, updateClassEventStatus, createManualClassEvent
 } from '../controllers/classes.controller';
-import { verifyToken, requireRole } from '../middleware/auth.middleware';
+import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
 
 // Protect all class routes
 router.use(verifyToken);
+router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 
 // Academic Years
