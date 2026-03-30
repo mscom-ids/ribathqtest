@@ -52,10 +52,10 @@ const formSchema = z.object({
     assigned_usthad_id: z.string().optional(),
     local_body: z.string().optional(),
     pincode: z.string().optional(),
+    post: z.string().optional(),
     id_mark: z.string().optional(),
     district: z.string().optional(),
     nationality: z.string().optional(),
-    country: z.string().optional(),
     place: z.string().optional(),
     state: z.string().optional(),
     gender: z.string().optional(),
@@ -118,14 +118,16 @@ export default function StudentDetailPage() {
     const [hifzLogs, setHifzLogs] = useState<any[]>([])
     const [photoUploading, setPhotoUploading] = useState(false)
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+    const [pincodeLoading, setPincodeLoading] = useState(false)
+    const [pincodeError, setPincodeError] = useState<string | null>(null)
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "", dob: "", address: "", father_name: "", email: "",
             batch_year: "", standard: "", assigned_usthad_id: "unassigned",
-            local_body: "", pincode: "", id_mark: "", district: "",
-            nationality: "Indian", country: "", place: "", state: "",
+            local_body: "", pincode: "", post: "", id_mark: "", district: "",
+            nationality: "Indian", place: "", state: "",
             gender: "Male", aadhar: ""
         },
     })
@@ -133,6 +135,38 @@ export default function StudentDetailPage() {
     const watchedNationality = form.watch("nationality")
     const watchedState = form.watch("state")
     const isIndian = watchedNationality?.toLowerCase() === "indian" || watchedNationality?.toLowerCase() === "india"
+
+    // ── Pincode auto-fill (India Post API) ────────────────────
+    async function handlePincodeChange(pincode: string) {
+        form.setValue("pincode", pincode)
+        if (!isIndian || pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
+            if (pincode.length === 0) setPincodeError(null)
+            return
+        }
+        setPincodeLoading(true)
+        setPincodeError(null)
+        try {
+            const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`)
+            const data = await res.json()
+            if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+                const offices = data[0].PostOffice
+                // Find first entry with both District and State filled
+                const validOffice = offices.find((o: any) => o.District && o.District !== "NA" && o.State && o.State !== "NA") || offices[0]
+                form.setValue("post", validOffice?.Name || "")
+                form.setValue("district", validOffice?.District || validOffice?.Division || "")
+                form.setValue("state", validOffice?.State || "")
+                const block = validOffice?.Block && validOffice.Block !== "NA" ? validOffice.Block : validOffice?.Region && validOffice.Region !== "NA" ? validOffice.Region : ""
+                if (block) form.setValue("place", block)
+                setPincodeError(null)
+            } else {
+                setPincodeError("Invalid pincode")
+            }
+        } catch {
+            setPincodeError("Failed to fetch pincode data")
+        } finally {
+            setPincodeLoading(false)
+        }
+    }
 
     // Helper for safe date formatting from DB legacy values
     const safeFormatDateForInput = (d: any) => {
@@ -187,14 +221,14 @@ export default function StudentDetailPage() {
                         batch_year: s.batch_year || "",
                         standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
                         assigned_usthad_id: s.assigned_usthad_id || "unassigned",
-                        local_body: s.comprehensive_details?.basic?.local_body || "",
-                        pincode: s.comprehensive_details?.basic?.pincode || "",
-                        id_mark: s.comprehensive_details?.basic?.id_mark || "",
-                        district: s.comprehensive_details?.basic?.district || "",
-                        nationality: s.comprehensive_details?.basic?.nationality || "Indian",
-                        country: s.comprehensive_details?.basic?.country || "",
-                        place: s.comprehensive_details?.basic?.place || "",
-                        state: s.comprehensive_details?.basic?.state || "",
+                        local_body: s.local_body || s.comprehensive_details?.basic?.local_body || "",
+                        pincode: s.pincode || s.comprehensive_details?.basic?.pincode || "",
+                        post: s.post || s.comprehensive_details?.basic?.post || "",
+                        id_mark: s.id_mark || s.comprehensive_details?.basic?.id_mark || "",
+                        district: s.district || s.comprehensive_details?.basic?.district || "",
+                        nationality: s.nationality || s.comprehensive_details?.basic?.nationality || "Indian",
+                        place: s.place || s.comprehensive_details?.basic?.place || "",
+                        state: s.state || s.comprehensive_details?.basic?.state || "",
                         gender: s.gender || s.comprehensive_details?.basic?.gender || "Male",
                         aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || ""
                     })
@@ -230,11 +264,23 @@ export default function StudentDetailPage() {
             standard: values.standard || null,
             assigned_usthad_id: values.assigned_usthad_id === "unassigned" ? null : values.assigned_usthad_id,
             photo_url: photoUrl,
+            // Save directly to dedicated columns
+            gender: values.gender || null,
+            nationality: values.nationality || null,
+            pincode: values.pincode || null,
+            post: values.post || null,
+            district: values.district || null,
+            state: values.state || null,
+            place: values.place || null,
+            local_body: values.local_body || null,
+            aadhar: values.aadhar || null,
+            id_mark: values.id_mark || null,
+            // Keep comprehensive_details in sync for backward compat
             comprehensive_details: {
                 basic: {
                     local_body: values.local_body, pincode: values.pincode,
-                    id_mark: values.id_mark, district: values.district,
-                    nationality: values.nationality, country: values.country,
+                    post: values.post, id_mark: values.id_mark, district: values.district,
+                    nationality: values.nationality,
                     place: values.place, state: values.state,
                     gender: values.gender, aadhar: values.aadhar
                 }
@@ -247,7 +293,10 @@ export default function StudentDetailPage() {
                     ...prev, name: values.name, dob: values.dob,
                     address: values.address, father_name: values.father_name,
                     email: values.email, batch_year: values.batch_year,
-                    standard: values.standard, gender: values.gender, aadhar: values.aadhar, photo_url: photoUrl,
+                    standard: values.standard, gender: values.gender, aadhar: values.aadhar,
+                    nationality: values.nationality, pincode: values.pincode, post: values.post,
+                    district: values.district, state: values.state, place: values.place,
+                    local_body: values.local_body, id_mark: values.id_mark, photo_url: photoUrl,
                     comprehensive_details: { ...prev?.comprehensive_details, basic: updates.comprehensive_details.basic }
                 }))
                 setEditing(false)
@@ -267,10 +316,14 @@ export default function StudentDetailPage() {
             email: s.email || "", batch_year: s.batch_year || "",
             standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
             assigned_usthad_id: s.assigned_usthad_id || "unassigned",
-            local_body: s.comprehensive_details?.basic?.local_body || "", pincode: s.comprehensive_details?.basic?.pincode || "",
-            id_mark: s.comprehensive_details?.basic?.id_mark || "", district: s.comprehensive_details?.basic?.district || "",
-            nationality: s.comprehensive_details?.basic?.nationality || "Indian", country: s.comprehensive_details?.basic?.country || "",
-            place: s.comprehensive_details?.basic?.place || "", state: s.comprehensive_details?.basic?.state || "",
+            local_body: s.local_body || s.comprehensive_details?.basic?.local_body || "",
+            pincode: s.pincode || s.comprehensive_details?.basic?.pincode || "",
+            post: s.post || s.comprehensive_details?.basic?.post || "",
+            id_mark: s.id_mark || s.comprehensive_details?.basic?.id_mark || "",
+            district: s.district || s.comprehensive_details?.basic?.district || "",
+            nationality: s.nationality || s.comprehensive_details?.basic?.nationality || "Indian",
+            place: s.place || s.comprehensive_details?.basic?.place || "",
+            state: s.state || s.comprehensive_details?.basic?.state || "",
             gender: s.gender || s.comprehensive_details?.basic?.gender || "Male",
             aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || ""
         })
@@ -370,7 +423,7 @@ export default function StudentDetailPage() {
                             <InfoRow label="Date Of Birth" value={formatDate(studentData?.dob || studentData?.date_of_birth)} />
                             <InfoRow label="Standard" value={studentData?.standard || studentData?.school_standard || studentData?.hifz_standard || studentData?.madrassa_standard} />
                             <InfoRow label="Batch Year" value={studentData?.batch_year} />
-                            <InfoRow label="Nationality" value={studentData?.comprehensive_details?.basic?.nationality} />
+                            <InfoRow label="Nationality" value={studentData?.nationality || studentData?.comprehensive_details?.basic?.nationality} />
                             <InfoRow label="Father" value={studentData?.father_name || studentData?.parent_name} />
                             <InfoRow label="Usthad" value={mentorName} />
                             <InfoRow label="Aadhar" value={studentData?.aadhar || studentData?.comprehensive_details?.basic?.aadhar} />
@@ -522,13 +575,13 @@ export default function StudentDetailPage() {
                                                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Address</p>
                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                                                     <InfoField label="Address Line" value={studentData?.address_line || studentData?.address} />
-                                                    <InfoField label="Place" value={studentData?.comprehensive_details?.basic?.place} />
-                                                    <InfoField label="Local Body" value={studentData?.comprehensive_details?.basic?.local_body} />
-                                                    <InfoField label="Pincode" value={studentData?.comprehensive_details?.basic?.pincode} />
-                                                    <InfoField label="Nationality" value={studentData?.comprehensive_details?.basic?.nationality} />
-                                                    <InfoField label="Country" value={studentData?.comprehensive_details?.basic?.country} />
-                                                    <InfoField label="State" value={studentData?.comprehensive_details?.basic?.state} />
-                                                    <InfoField label="District" value={studentData?.comprehensive_details?.basic?.district} />
+                                                    <InfoField label="Place" value={studentData?.place || studentData?.comprehensive_details?.basic?.place} />
+                                                    <InfoField label="Local Body" value={studentData?.local_body || studentData?.comprehensive_details?.basic?.local_body} />
+                                                    <InfoField label="Pincode" value={studentData?.pincode || studentData?.comprehensive_details?.basic?.pincode} />
+                                                    <InfoField label="Post Office" value={studentData?.post || studentData?.comprehensive_details?.basic?.post} />
+                                                    <InfoField label="Nationality" value={studentData?.nationality || studentData?.comprehensive_details?.basic?.nationality} />
+                                                    <InfoField label="State" value={studentData?.state || studentData?.comprehensive_details?.basic?.state} />
+                                                    <InfoField label="District" value={studentData?.district || studentData?.comprehensive_details?.basic?.district} />
                                                 </div>
                                             </div>
 
@@ -536,7 +589,7 @@ export default function StudentDetailPage() {
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Other Details</p>
                                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                                                    <InfoField label="Identification Mark" value={studentData?.comprehensive_details?.basic?.id_mark} />
+                                                    <InfoField label="Identification Mark" value={studentData?.id_mark || studentData?.comprehensive_details?.basic?.id_mark} />
                                                     <InfoField label="Father's Name" value={studentData?.father_name || studentData?.parent_name} />
                                                     <InfoField label="Parent Email" value={studentData?.email} />
                                                     <InfoField label="Assigned Mentor" value={mentorName || (studentData?.assigned_usthad_id ? "—" : "Unassigned")} />
@@ -641,12 +694,28 @@ export default function StudentDetailPage() {
                                                                     <FormMessage /></FormItem>
                                                             )} />
                                                             <FormField control={form.control} name="pincode" render={({ field }) => (
-                                                                <FormItem><FormLabel>Pincode</FormLabel>
-                                                                    <FormControl><Input placeholder="671123" {...field} /></FormControl>
-                                                                    <FormMessage /></FormItem>
+                                                                <FormItem>
+                                                                    <FormLabel>Pincode {isIndian && pincodeLoading && <span className="text-xs text-slate-400 font-normal ml-1">fetching...</span>}</FormLabel>
+                                                                    <FormControl>
+                                                                        <Input
+                                                                            placeholder="671123"
+                                                                            {...field}
+                                                                            onChange={e => handlePincodeChange(e.target.value)}
+                                                                            maxLength={6}
+                                                                        />
+                                                                    </FormControl>
+                                                                    {pincodeError && <p className="text-xs text-red-500 mt-1">{pincodeError}</p>}
+                                                                    <FormMessage />
+                                                                </FormItem>
                                                             )} />
                                                         </div>
+                                                        {/* Post Office + Nationality row */}
                                                         <div className="grid grid-cols-3 gap-4">
+                                                            <FormField control={form.control} name="post" render={({ field }) => (
+                                                                <FormItem><FormLabel>Post Office</FormLabel>
+                                                                    <FormControl><Input placeholder="Auto-filled from pincode" {...field} /></FormControl>
+                                                                    <FormMessage /></FormItem>
+                                                            )} />
                                                             <FormField control={form.control} name="nationality" render={({ field }) => (
                                                                 <FormItem><FormLabel>Nationality</FormLabel>
                                                                     <Select onValueChange={field.onChange} value={field.value || "Indian"}>
@@ -658,13 +727,8 @@ export default function StudentDetailPage() {
                                                                     </Select>
                                                                     <FormMessage /></FormItem>
                                                             )} />
-                                                            {watchedNationality === "Other" && (
-                                                                <FormField control={form.control} name="country" render={({ field }) => (
-                                                                    <FormItem><FormLabel>Country</FormLabel>
-                                                                        <FormControl><Input placeholder="E.g., UAE" {...field} /></FormControl>
-                                                                        <FormMessage /></FormItem>
-                                                                )} />
-                                                            )}
+                                                        </div>
+                                                        <div className="grid grid-cols-3 gap-4">
                                                             <FormField control={form.control} name="state" render={({ field }) => (
                                                                 <FormItem><FormLabel>State</FormLabel>
                                                                     {isIndian ? (

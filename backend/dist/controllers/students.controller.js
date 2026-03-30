@@ -5,7 +5,7 @@ const db_1 = require("../config/db");
 const getAllStudents = async (req, res) => {
     try {
         const { search, class: className, status } = req.query;
-        let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE 1=1';
+        let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE 1=1';
         const params = [];
         let paramCount = 1;
         if (search) {
@@ -76,13 +76,27 @@ const createStudent = async (req, res) => {
             madrasa_mentor_id: data.madrasa_mentor_id === "unassigned" ? null : data.madrasa_mentor_id,
             photo_url: data.photo_url,
             status: data.status || 'active',
-            comprehensive_details: data.comprehensive_details || {}
+            comprehensive_details: data.comprehensive_details || {},
+            gender: data.gender,
+            admission_date: data.admission_date || data.date_of_join,
+            nationality: data.nationality || 'Indian',
+            pincode: data.pincode,
+            post: data.post,
+            district: data.district,
+            state: data.state,
+            place: data.place,
+            local_body: data.local_body,
+            aadhar: data.aadhar,
+            id_mark: data.id_mark,
+            country: data.country,
         };
         // We explicitly list the columns to avoid SQL injection
         const validColumns = [
             'adm_no', 'name', 'dob', 'address', 'father_name', 'phone',
             'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
-            'photo_url', 'status', 'comprehensive_details'
+            'photo_url', 'status', 'comprehensive_details',
+            'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
+            'place', 'local_body', 'aadhar', 'id_mark', 'country'
         ];
         const values = [];
         const placeholders = [];
@@ -118,6 +132,7 @@ const updateStudent = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Student ID is required' });
         }
         const updateData = req.body;
+        console.log('[updateStudent] id:', id, 'keys:', Object.keys(updateData));
         // Safety check - don't allow updating ID
         delete updateData.id;
         // Map legacy/frontend fields to db fields if they exist
@@ -128,7 +143,9 @@ const updateStudent = async (req, res) => {
         const validColumns = [
             'name', 'dob', 'address', 'father_name', 'phone',
             'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
-            'photo_url', 'status', 'comprehensive_details'
+            'photo_url', 'status', 'comprehensive_details',
+            'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
+            'place', 'local_body', 'aadhar', 'id_mark', 'country'
         ];
         const keysToUpdate = Object.keys(updateData).filter(key => validColumns.includes(key));
         if (keysToUpdate.length === 0) {
@@ -164,7 +181,9 @@ const updateStudent = async (req, res) => {
     }
     catch (err) {
         console.error('Error updating student:', err);
-        res.status(500).json({ success: false, error: err.message || 'Failed to update student' });
+        // Surface the PostgreSQL error detail so it's easier to diagnose (e.g. missing column)
+        const detail = err.detail || err.hint || '';
+        res.status(500).json({ success: false, error: `${err.message || 'Failed to update student'}${detail ? ` — ${detail}` : ''}` });
     }
 };
 exports.updateStudent = updateStudent;

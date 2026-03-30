@@ -43,6 +43,7 @@ export type Student = {
     comprehensive_details?: any
     gender?: string
     date_of_join?: string
+    admission_date?: string
     father_name?: string
     parent_name?: string
 }
@@ -121,7 +122,7 @@ function StudentTableRow({ student }: { student: Student }) {
                     {(student.status || 'active').charAt(0).toUpperCase() + (student.status || 'active').slice(1)}
                 </span>
             </TableCell>
-            <TableCell className="text-sm text-slate-500">{formatDate(student.date_of_join)}</TableCell>
+            <TableCell className="text-sm text-slate-500">{formatDate(student.admission_date || student.date_of_join)}</TableCell>
             <TableCell className="text-sm text-slate-500">{formatDate(student.dob)}</TableCell>
             <TableCell>
                 <Button
@@ -208,7 +209,7 @@ function StudentGridCard({ student }: { student: Student }) {
                 <div>
                     <p className="text-[13px] text-slate-500 mb-0.5">Joined On</p>
                     <p className="text-[13px] font-medium text-slate-800 dark:text-slate-200">
-                        {formatDate(student.date_of_join)}
+                        {formatDate(student.admission_date || student.date_of_join)}
                     </p>
                 </div>
             </div>
@@ -265,6 +266,7 @@ function StudentsPageContent() {
                     ...s,
                     dob: s.dob || s.date_of_birth,
                     gender: s.gender || s.comprehensive_details?.basic?.gender,
+                    date_of_join: s.date_of_join || s.admission_date || s.comprehensive_details?.admission?.admission_date,
                     progress: 0
                 }))
 
@@ -297,6 +299,7 @@ function StudentsPageContent() {
                         ...s,
                         dob: s.dob || s.date_of_birth,
                         gender: s.gender || s.comprehensive_details?.basic?.gender,
+                        date_of_join: s.date_of_join || s.admission_date || s.comprehensive_details?.admission?.admission_date,
                         progress: 0
                     }))
                     setStudents(prev => {
