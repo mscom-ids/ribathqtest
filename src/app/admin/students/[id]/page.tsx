@@ -185,7 +185,7 @@ export default function StudentDetailPage() {
                         father_name: s.father_name || s.parent_name || "",
                         email: s.email || "",
                         batch_year: s.batch_year || "",
-                        standard: s.school_standard || s.hifz_standard || s.madrassa_standard || "",
+                        standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
                         assigned_usthad_id: s.assigned_usthad_id || "unassigned",
                         local_body: s.comprehensive_details?.basic?.local_body || "",
                         pincode: s.comprehensive_details?.basic?.pincode || "",
@@ -247,7 +247,7 @@ export default function StudentDetailPage() {
                     ...prev, name: values.name, dob: values.dob,
                     address: values.address, father_name: values.father_name,
                     email: values.email, batch_year: values.batch_year,
-                    gender: values.gender, aadhar: values.aadhar, photo_url: photoUrl,
+                    standard: values.standard, gender: values.gender, aadhar: values.aadhar, photo_url: photoUrl,
                     comprehensive_details: { ...prev?.comprehensive_details, basic: updates.comprehensive_details.basic }
                 }))
                 setEditing(false)
@@ -265,7 +265,7 @@ export default function StudentDetailPage() {
             name: s.name || "", dob: safeFormatDateForInput(s.dob || s.date_of_birth),
             address: s.address_line || s.address || "", father_name: s.father_name || s.parent_name || "",
             email: s.email || "", batch_year: s.batch_year || "",
-            standard: s.school_standard || s.hifz_standard || s.madrassa_standard || "",
+            standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
             assigned_usthad_id: s.assigned_usthad_id || "unassigned",
             local_body: s.comprehensive_details?.basic?.local_body || "", pincode: s.comprehensive_details?.basic?.pincode || "",
             id_mark: s.comprehensive_details?.basic?.id_mark || "", district: s.comprehensive_details?.basic?.district || "",
@@ -368,7 +368,7 @@ export default function StudentDetailPage() {
                             <InfoRow label="Roll No" value={id} />
                             <InfoRow label="Gender" value={studentData?.gender || studentData?.comprehensive_details?.basic?.gender} />
                             <InfoRow label="Date Of Birth" value={formatDate(studentData?.dob || studentData?.date_of_birth)} />
-                            <InfoRow label="Standard" value={studentData?.school_standard || studentData?.hifz_standard || studentData?.madrassa_standard} />
+                            <InfoRow label="Standard" value={studentData?.standard || studentData?.school_standard || studentData?.hifz_standard || studentData?.madrassa_standard} />
                             <InfoRow label="Batch Year" value={studentData?.batch_year} />
                             <InfoRow label="Nationality" value={studentData?.comprehensive_details?.basic?.nationality} />
                             <InfoRow label="Father" value={studentData?.father_name || studentData?.parent_name} />
@@ -512,7 +512,7 @@ export default function StudentDetailPage() {
                                                     <InfoField label="Date of Birth" value={formatDate(studentData?.dob || studentData?.date_of_birth)} />
                                                     <InfoField label="Gender" value={studentData?.gender || studentData?.comprehensive_details?.basic?.gender} />
                                                     <InfoField label="Aadhar Number" value={studentData?.aadhar || studentData?.comprehensive_details?.basic?.aadhar} />
-                                                    <InfoField label="Standard / Grade" value={studentData?.school_standard || studentData?.hifz_standard || studentData?.madrassa_standard} />
+                                                    <InfoField label="Standard / Grade" value={studentData?.standard || studentData?.school_standard || studentData?.hifz_standard || studentData?.madrassa_standard} />
                                                     <InfoField label="Batch Year" value={studentData?.batch_year} />
                                                 </div>
                                             </div>

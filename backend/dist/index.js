@@ -39,8 +39,18 @@ const delegations_routes_1 = __importDefault(require("./routes/delegations.route
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 // ── Core middleware ──
+const allowedOrigins = process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
+    : ['http://localhost:3000'];
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin))
+            return callback(null, true);
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true
 }));
 app.use(express_1.default.json());
