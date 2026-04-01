@@ -316,61 +316,62 @@ export function OutsideStudentsPanel() {
     }
 
     return (
-        <div className="space-y-5">
-            {/* Summary Strip */}
+        <div className="space-y-4">
+            {/* Summary Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-900 dark:bg-slate-800 rounded-xl p-3 text-white text-center">
-                    <div className="text-2xl font-bold">{students.length}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Total Outside</div>
+                <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                    <div className="text-2xl font-bold text-slate-900 dark:text-white">{students.length}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Total Outside</div>
                 </div>
-                <div className="bg-purple-600 rounded-xl p-3 text-white text-center">
-                    <div className="text-2xl font-bold">{counts.institutional}</div>
-                    <div className="text-[11px] text-purple-200 mt-0.5">Institutional</div>
+                <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                    <div className="text-2xl font-bold text-slate-900 dark:text-white">{counts.institutional}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Institutional</div>
                 </div>
-                <div className="bg-orange-500 rounded-xl p-3 text-white text-center">
-                    <div className="text-2xl font-bold">{counts.outCampus}</div>
-                    <div className="text-[11px] text-orange-100 mt-0.5">Out-Campus</div>
+                <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                    <div className="text-2xl font-bold text-slate-900 dark:text-white">{counts.outCampus}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Out-Campus</div>
                 </div>
                 {counts.overdue > 0 ? (
-                    <div className="bg-red-600 rounded-xl p-3 text-white text-center animate-pulse">
-                        <div className="text-2xl font-bold">{counts.overdue}</div>
-                        <div className="text-[11px] text-red-100 mt-0.5">⚠ Overdue</div>
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800 p-3 text-center">
+                        <div className="text-2xl font-bold text-red-600 dark:text-red-400">{counts.overdue}</div>
+                        <div className="text-xs text-red-500 dark:text-red-400 mt-0.5">⚠ Overdue</div>
                     </div>
                 ) : (
-                    <div className="bg-emerald-600 rounded-xl p-3 text-white text-center">
-                        <div className="text-2xl font-bold">{counts.onCampus}</div>
-                        <div className="text-[11px] text-emerald-100 mt-0.5">On-Campus Leave</div>
+                    <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{counts.onCampus}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">On-Campus</div>
                     </div>
                 )}
             </div>
 
-            {/* Filters row */}
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            {/* Filters */}
+            <div className="space-y-3">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
                         placeholder="Search student name, ID, or class..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                        className="pl-9 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl"
                     />
                 </div>
-                <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-full sm:w-44 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
-                        <Filter className="h-4 w-4 mr-2 text-slate-400" />
-                        <SelectValue placeholder="All Types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="institutional">Institutional</SelectItem>
-                        <SelectItem value="out-campus">Out-Campus</SelectItem>
-                        <SelectItem value="on-campus">On-Campus</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Button variant="outline" size="sm" onClick={fetchOutside} className="shrink-0 gap-2">
-                    <RefreshCw className="h-4 w-4" />
-                    Refresh
-                </Button>
+                <div className="flex gap-2">
+                    <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger className="flex-1 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl">
+                            <Filter className="h-4 w-4 mr-2 text-gray-400" />
+                            <SelectValue placeholder="All Types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Types</SelectItem>
+                            <SelectItem value="institutional">Institutional</SelectItem>
+                            <SelectItem value="out-campus">Out-Campus</SelectItem>
+                            <SelectItem value="on-campus">On-Campus</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="icon" onClick={fetchOutside} className="shrink-0 rounded-xl border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0f172a]">
+                        <RefreshCw className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
             {/* Cards grid */}

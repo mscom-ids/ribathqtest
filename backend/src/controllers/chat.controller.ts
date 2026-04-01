@@ -433,7 +433,7 @@ export const markAsRead = async (req: Request, res: Response) => {
 export const deleteMessage = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const staffRes = await db.query('SELECT id, role FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        const staffRes = await db.query('SELECT id, role FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
         if (staffRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Staff profile not found' });
         
         const operator = staffRes.rows[0];
@@ -511,6 +511,49 @@ export const pollMessages = async (req: Request, res: Response) => {
         res.json({ success: true, messages: result.rows });
     } catch (err) {
         console.error('Error polling:', err);
+        res.status(500).json({ success: false, error: 'Failed' });
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DELETE /chat/conversations/:id — Delete entire conversation (admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+export const deleteConversation = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        const staffRes = await db.query('SELECT id, role FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        if (staffRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Staff profile not found' });
+        
+        const operator = staffRes.rows[0];
+        if (operator.role !== 'admin') {
+            return res.status(403).json({ success: false, error: 'Only admins can delete conversations' });
+        }
+
+        const id = req.params.id as string;
+        const conv = await db.query('SELECT id FROM chat_conversations WHERE id = $1', [id]);
+        if (conv.rows.length === 0) return res.status(404).json({ success: false, error: 'Conversation not found' });
+
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+
+            // Delete messages and participants (they have a foreign key to conversation_id)
+            await client.query('DELETE FROM chat_messages WHERE conversation_id = $1', [id]);
+            await client.query('DELETE FROM chat_participants WHERE conversation_id = $1', [id]);
+            
+            // Delete the conversation itself
+            await client.query('DELETE FROM chat_conversations WHERE id = $1', [id]);
+
+            await client.query('COMMIT');
+            res.json({ success: true, message: 'Conversation deleted successfully' });
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('Error deleting conversation:', err);
         res.status(500).json({ success: false, error: 'Failed' });
     }
 };

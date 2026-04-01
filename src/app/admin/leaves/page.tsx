@@ -1,17 +1,27 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserCheck, Building2, MapPin, ArrowLeftRight, History } from "lucide-react"
 import { InstitutionalLeavesTab } from "./tabs/institutional-leaves"
 import { OutCampusLeavesTab } from "./tabs/out-campus-leaves"
 import { OnCampusLeavesTab } from "./tabs/on-campus-leaves"
 import { MovementHistoryTab } from "./tabs/movement-history"
 import { OutsideStudentsPanel } from "./tabs/outside-students-panel"
-import { UserCheck } from "lucide-react"
 import api from "@/lib/api"
+
+type TabKey = "outside_now" | "institutional" | "out-campus" | "on-campus" | "movements"
+
+const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+    { key: "outside_now", label: "Outside", icon: UserCheck },
+    { key: "institutional", label: "Institution", icon: Building2 },
+    { key: "out-campus", label: "Out-Campus", icon: MapPin },
+    { key: "on-campus", label: "On-Campus", icon: ArrowLeftRight },
+    { key: "movements", label: "History", icon: History },
+]
 
 export default function AdminLeavesPage() {
     const [outsideCount, setOutsideCount] = useState(0)
+    const [activeTab, setActiveTab] = useState<TabKey>("outside_now")
 
     useEffect(() => {
         api.get('/leaves/outside-students')
@@ -20,72 +30,57 @@ export default function AdminLeavesPage() {
     }, [])
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6">
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Leave Management</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage institutional leaves, individual requests, and track student movements.</p>
+        <div className="min-h-screen bg-gray-50 dark:bg-[#020617]">
+            <div className="max-w-7xl mx-auto px-4 py-5 space-y-5">
+
+                {/* ── Header ── */}
+                <div>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">Leave Management</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                        Manage institutional leaves, individual requests, and track student movements.
+                    </p>
+                </div>
+
+                {/* ── Mobile: Vertical pill list / Desktop: Horizontal segmented bar ── */}
+                {/* Mobile stacked, desktop inline */}
+                <div className="flex flex-col sm:flex-row sm:rounded-xl sm:bg-gray-100 sm:dark:bg-gray-800 sm:p-1 sm:gap-1 gap-2">
+                    {TABS.map(tab => {
+                        const Icon = tab.icon
+                        const isActive = activeTab === tab.key
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`
+                                    flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all
+                                    sm:flex-1 sm:justify-center sm:py-2 sm:px-2 sm:rounded-lg
+                                    ${isActive
+                                        ? "bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-600 sm:border-0 sm:shadow-sm"
+                                        : "bg-white dark:bg-[#0f172a] text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 sm:bg-transparent sm:dark:bg-transparent sm:border-0 hover:text-slate-700 dark:hover:text-gray-200"
+                                    }
+                                `}
+                            >
+                                <Icon className="h-4 w-4 shrink-0" />
+                                <span className="truncate">{tab.label}</span>
+                                {tab.key === "outside_now" && outsideCount > 0 && (
+                                    <span className="ml-auto sm:ml-1 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full text-[10px] font-bold bg-orange-500 text-white shrink-0">
+                                        {outsideCount}
+                                    </span>
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+
+                {/* ── Tab Content ── */}
+                <div>
+                    {activeTab === "outside_now" && <OutsideStudentsPanel />}
+                    {activeTab === "institutional" && <InstitutionalLeavesTab />}
+                    {activeTab === "out-campus" && <OutCampusLeavesTab />}
+                    {activeTab === "on-campus" && <OnCampusLeavesTab />}
+                    {activeTab === "movements" && <MovementHistoryTab />}
+                </div>
             </div>
-
-            <Tabs defaultValue="outside_now" className="w-full">
-                <TabsList className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full justify-start h-auto p-1 rounded-xl mb-6 shadow-sm overflow-x-auto space-x-1">
-                    <TabsTrigger
-                        value="outside_now"
-                        className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 data-[state=active]:dark:bg-orange-900/30 data-[state=active]:dark:text-orange-400 rounded-lg py-2.5 px-4 font-medium relative"
-                    >
-                        <UserCheck className="h-4 w-4 mr-1.5 inline" />
-                        Outside Now
-                        {outsideCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full text-[10px] font-bold bg-orange-500 text-white">
-                                {outsideCount}
-                            </span>
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="institutional"
-                        className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:dark:bg-emerald-900/30 data-[state=active]:dark:text-emerald-400 rounded-lg py-2.5 px-6 font-medium"
-                    >
-                        Institutional Leave
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="out-campus"
-                        className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:dark:bg-blue-900/30 data-[state=active]:dark:text-blue-400 rounded-lg py-2.5 px-6 font-medium"
-                    >
-                        Out-Campus Leave
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="on-campus"
-                        className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:dark:bg-purple-900/30 data-[state=active]:dark:text-purple-400 rounded-lg py-2.5 px-6 font-medium"
-                    >
-                        On-Campus Leave
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="movements"
-                        className="data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:dark:bg-amber-900/30 data-[state=active]:dark:text-amber-400 rounded-lg py-2.5 px-6 font-medium"
-                    >
-                        Movement History
-                    </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="outside_now">
-                    <OutsideStudentsPanel />
-                </TabsContent>
-
-                <TabsContent value="institutional">
-                    <InstitutionalLeavesTab />
-                </TabsContent>
-
-                <TabsContent value="out-campus">
-                    <OutCampusLeavesTab />
-                </TabsContent>
-
-                <TabsContent value="on-campus">
-                    <OnCampusLeavesTab />
-                </TabsContent>
-
-                <TabsContent value="movements">
-                    <MovementHistoryTab />
-                </TabsContent>
-            </Tabs>
         </div>
     )
 }

@@ -292,7 +292,7 @@ export default function StaffDashboard() {
                         </Link>
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-slate-950">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-[#020617]">
                     <StudentProfileView student={selectedStudent} isAdmin={false} />
                 </div>
             </div>
@@ -300,8 +300,8 @@ export default function StaffDashboard() {
     }
 
     return (
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-slate-950">
-            <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-6 space-y-6">
+        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]">
+            <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-6 lg:space-y-8">
 
                 {/* ── Welcome Banner ──────────────────────────────────────── */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-xl">
@@ -313,7 +313,7 @@ export default function StaffDashboard() {
                         <div className="space-y-2">
                             <p className="text-blue-200 text-sm font-medium tracking-wide uppercase">Mentor Portal</p>
                             <h1 className="text-2xl md:text-3xl font-bold">
-                                {getGreeting()}, {staffName.split(" ")[0] || "Mentor"} 👋
+                                {getGreeting()}, Mentor 👋
                             </h1>
                             <p className="text-blue-100 text-sm">{format(today, "EEEE, MMMM d, yyyy")}</p>
                             {(currentSession || nextSessionLabel) && (
@@ -379,7 +379,7 @@ export default function StaffDashboard() {
                             </div>
                         </div>
 
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Entries</h3>
                                 <TrendingUp className="h-4 w-4 text-blue-500" />
@@ -390,13 +390,13 @@ export default function StaffDashboard() {
                                     <div className="absolute text-lg font-bold">{entryPct}%</div>
                                 </div>
                                 <div className="space-y-1 flex-1">
-                                    <div className="text-xs text-slate-500">Recorded: <b>{entryCount}</b></div>
-                                    <div className="text-xs text-slate-500">Pending: <b>{students.length - entryCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Recorded: <b className="dark:text-white">{entryCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Pending: <b className="dark:text-white">{students.length - entryCount}</b></div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Attendance</h3>
                             </div>
@@ -406,24 +406,24 @@ export default function StaffDashboard() {
                                     <div className="absolute text-lg font-bold">{attendancePct}%</div>
                                 </div>
                                 <div className="space-y-1 flex-1">
-                                    <div className="text-xs text-slate-500">Present: <b>{presentCount}</b></div>
-                                    <div className="text-xs text-slate-500">Absent: <b>{absentCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Present: <b className="dark:text-white">{presentCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Absent: <b className="dark:text-white">{absentCount}</b></div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div className="lg:col-span-2 xl:col-span-2 space-y-6">
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-slate-900 dark:text-white">Today's Sessions</h3>
                             </div>
                             <div className="flex gap-3 overflow-x-auto pb-2">
                                 {todaySessions.map((s) => (
                                     <Link href={`/staff/attendance?session=${s.id}`} key={s.id} className="block shrink-0">
-                                        <div className="w-44 rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-white dark:bg-slate-800">
-                                            <p className="font-semibold text-sm truncate">{s.name}</p>
-                                            <div className="text-[11px] text-slate-500 mt-1">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</div>
+                                        <div className="w-44 rounded-xl border border-slate-200 dark:border-gray-700 p-3 bg-white dark:bg-[#111827]">
+                                            <p className="font-semibold text-sm truncate dark:text-white">{s.name}</p>
+                                            <div className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</div>
                                         </div>
                                     </Link>
                                 ))}
@@ -431,32 +431,32 @@ export default function StaffDashboard() {
                         </div>
 
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                            <Link href="/staff/attendance" className="p-4 rounded-xl border bg-blue-50 text-center">
-                                <CalendarDays className="h-5 w-5 mx-auto mb-1 text-blue-600" />
-                                <span className="text-xs font-semibold">Attendance</span>
+                            <Link href="/staff/attendance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-blue-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-blue-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
+                                <CalendarDays className="h-5 w-5 mb-1 text-blue-600 dark:text-blue-400" />
+                                <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Attendance</span>
                             </Link>
-                            <Link href="/staff/leaves" className="p-4 rounded-xl border bg-amber-50 text-center">
-                                <Bell className="h-5 w-5 mx-auto mb-1 text-amber-600" />
-                                <span className="text-xs font-semibold">Leaves</span>
+                            <Link href="/staff/leaves" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-amber-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-amber-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
+                                <Bell className="h-5 w-5 mb-1 text-amber-600 dark:text-amber-400" />
+                                <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Leaves</span>
                             </Link>
-                            <Link href="/staff/finance" className="p-4 rounded-xl border bg-emerald-50 text-center">
-                                <TrendingUp className="h-5 w-5 mx-auto mb-1 text-emerald-600" />
-                                <span className="text-xs font-semibold">Finance</span>
+                            <Link href="/staff/finance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-emerald-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-emerald-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
+                                <TrendingUp className="h-5 w-5 mb-1 text-emerald-600 dark:text-emerald-400" />
+                                <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Finance</span>
                             </Link>
                             <AssignStudentsModal 
                                 currentStaffId={staffId} 
                                 students={students}
                                 trigger={
-                                    <div className="p-4 rounded-xl border bg-slate-50 text-center cursor-pointer">
-                                        <Users className="h-5 w-5 mx-auto mb-1 text-slate-600" />
-                                        <span className="text-xs font-semibold">Assign</span>
+                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-[#0f172a] text-center cursor-pointer transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
+                                        <Users className="h-5 w-5 mb-1 text-slate-600 dark:text-gray-300" />
+                                        <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Assign</span>
                                     </div>
                                 }
                             />
                         </div>
 
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-gray-700">
                                 <h3 className="font-semibold text-slate-900 dark:text-white">My Students</h3>
                                 <div className="relative w-48">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -469,11 +469,11 @@ export default function StaffDashboard() {
                                 </div>
                             </div>
 
-                            <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                            <div className="divide-y divide-slate-50 dark:divide-gray-800/50">
                                 {filtered.map(student => {
                                     const att = student.today_stats?.attendance
                                     const isOnLeave = student.is_outside
-                                    const attColor = isOnLeave || att === "Leave" ? "bg-orange-100 text-orange-700" : att === "Present" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                    const attColor = isOnLeave ? "bg-orange-500/20 text-orange-400" : att === "Leave" ? "bg-orange-500/20 text-orange-400" : att === "Present" ? "bg-green-500/20 text-green-400" : att === "Absent" ? "bg-red-500/20 text-red-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-gray-400"
                                     
                                     return (
                                         <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -482,26 +482,26 @@ export default function StaffDashboard() {
                                                 <AvatarFallback className="bg-slate-200">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0">
-                                                <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm hover:text-blue-600 truncate block">
+                                                <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 truncate block">
                                                     {student.name}
                                                 </button>
-                                                <p className="text-[11px] text-slate-400">{student.adm_no} • {student.standard}</p>
+                                                <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no} • {student.standard}</p>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 {isOnLeave && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">OUTSIDE</span>}
                                                 <div className="flex items-center gap-1">
                                                     {student.is_delegated ? (
-                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 border-dashed border">
+                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500 border-dashed border dark:border-gray-700">
                                                             <Clock className="h-3 w-3" /> Delegated
                                                         </Button>
                                                     ) : (
                                                         <Link href={`/staff/entry/${student.adm_no}`}>
-                                                            <Button size="sm" className="h-7 text-[11px] bg-emerald-600 text-white">
+                                                            <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700">
                                                                 <BookOpen className="h-3 w-3" /> Record
                                                             </Button>
                                                         </Link>
                                                     )}
-                                                    <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100">
+                                                    <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-gray-300">
                                                         <ChevronRight className="h-4 w-4" />
                                                     </button>
                                                 </div>
@@ -514,7 +514,7 @@ export default function StaffDashboard() {
                     </div>
 
                     <div className="space-y-6">
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm p-5">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-sm">Top Performers</h3>
                                 <Award className="h-4 w-4 text-amber-500" />
@@ -538,7 +538,7 @@ export default function StaffDashboard() {
                                                 </div>
                                                 <div>
                                                     <p className="font-medium text-sm text-slate-900 dark:text-white truncate max-w-[120px]">{stu.name}</p>
-                                                    <p className="text-[10px] text-slate-500">{stu.standard}</p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-gray-400">{stu.standard}</p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
@@ -553,8 +553,8 @@ export default function StaffDashboard() {
                             )}
                         </div>
 
-                        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
-                            <h3 className="font-semibold text-sm mb-4">Quick Actions</h3>
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
+                            <h3 className="font-semibold text-sm mb-4 text-slate-900 dark:text-white">Quick Actions</h3>
                             <div className="space-y-2">
                                 {[
                                     { href: "/staff/attendance", label: "Mark Attendance", icon: CalendarDays },
@@ -564,10 +564,10 @@ export default function StaffDashboard() {
                                     <Link key={item.href} href={item.href}>
                                         <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                                             <div className="flex items-center gap-3">
-                                                <item.icon className="h-4 w-4 text-blue-500" />
-                                                <span className="text-sm font-medium">{item.label}</span>
+                                                <item.icon className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                                                <span className="text-sm font-medium text-slate-900 dark:text-gray-300">{item.label}</span>
                                             </div>
-                                            <ChevronRight className="h-4 w-4 text-slate-300" />
+                                            <ChevronRight className="h-4 w-4 text-slate-300 dark:text-gray-500" />
                                         </div>
                                     </Link>
                                 ))}

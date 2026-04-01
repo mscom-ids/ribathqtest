@@ -3,7 +3,7 @@ import {
     getConversations, startPrivateChat, createGroupChat,
     updateGroupMembers, getGroupMembers, getMessages,
     sendMessage, sendImageMessage, markAsRead,
-    deleteMessage, getStaffList, pollMessages
+    deleteMessage, getStaffList, pollMessages, deleteConversation
 } from '../controllers/chat.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
@@ -22,6 +22,9 @@ router.post('/conversations/group', requireRole(['admin', 'principal']), createG
 // Group management (admin only)
 router.put('/conversations/:id/members', requireRole(['admin', 'principal']), updateGroupMembers);
 router.get('/conversations/:id/members', getGroupMembers);
+
+// Admin: delete entire conversation/group
+router.delete('/conversations/:id', requireRole(['admin']), deleteConversation);
 
 // Messages
 router.get('/conversations/:id/messages', getMessages);

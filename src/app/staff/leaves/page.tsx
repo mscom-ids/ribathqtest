@@ -1,20 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, UserCheck } from "lucide-react"
-
+import { Plus, Search, RefreshCw, UserCheck, Building2, ArrowLeftRight, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card } from "@/components/ui/card"
-import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table"
 import api from "@/lib/api"
 import { LeaveModal } from "@/app/admin/leaves/leave-modal"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { QuickViewDashboard } from "@/app/admin/leaves/tabs/quick-view-dashboard"
-import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
 import { OutsideStudentsPanel } from "@/app/admin/leaves/tabs/outside-students-panel"
+import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
 
 export interface StudentLeave {
     id: string
@@ -35,12 +28,21 @@ export interface StudentLeave {
     }
 }
 
+type TabKey = "outside" | "institutional" | "internal"
+
+const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+    { key: "outside", label: "Outside", icon: UserCheck },
+    { key: "institutional", label: "Institution", icon: Building2 },
+    { key: "internal", label: "Internal", icon: ArrowLeftRight },
+]
+
 export default function StaffLeavesPage() {
     const [leaves, setLeaves] = useState<StudentLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
     const [outsideCount, setOutsideCount] = useState(0)
+    const [activeTab, setActiveTab] = useState<TabKey>("outside")
 
     const fetchLeaves = async () => {
         setLoading(true)
@@ -57,129 +59,115 @@ export default function StaffLeavesPage() {
         setLoading(false)
     }
 
-    useEffect(() => {
-        fetchLeaves()
-    }, [])
+    useEffect(() => { fetchLeaves() }, [])
 
-    const filteredLeaves = leaves.filter(l =>
+    const filtered = leaves.filter(l =>
         l.student?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.student_id.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    const internalLeaves = filteredLeaves.filter(l => l.leave_type === "internal")
-    const campusMovements = filteredLeaves.filter(l => l.leave_type === "personal" || l.leave_type === "institutional")
+    const internalLeaves = filtered.filter(l => l.leave_type === "internal")
+    const institutionalLeaves = filtered.filter(l => l.leave_type === "institutional")
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto h-[calc(100vh-4rem)] overflow-y-auto w-full pb-20 md:pb-0">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="min-h-screen bg-gray-50 dark:bg-[#020617]">
+            <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+
+                {/* ── Header ── */}
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Student Leaves</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage leave authorizations for your assigned students.</p>
+                    <h1 className="text-xl font-bold text-slate-900 dark:text-white">Student Leaves</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                        Manage leave authorizations for your students.
+                    </p>
                 </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                    <Button onClick={() => setIsLeaveModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Authorize Leave
-                    </Button>
+
+                {/* ── Authorize Button ── */}
+                <Button
+                    onClick={() => setIsLeaveModalOpen(true)}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 h-auto rounded-xl gap-2"
+                >
+                    <Plus className="h-4 w-4" />
+                    Authorize Leave
+                </Button>
+
+                {/* ── Stats Row ── */}
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{outsideCount}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Outside</div>
+                    </div>
+                    <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{institutionalLeaves.length}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Institution</div>
+                    </div>
+                    <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{internalLeaves.length}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Internal</div>
+                    </div>
                 </div>
-            </div>
 
-            <Tabs defaultValue="outside_now" className="w-full">
-                <TabsList className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full justify-start h-auto p-1 rounded-xl mb-6 shadow-sm overflow-x-auto space-x-1 shrink-0">
-                    <TabsTrigger 
-                        value="outside_now" 
-                        className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 data-[state=active]:dark:bg-orange-900/30 data-[state=active]:dark:text-orange-400 rounded-lg py-2.5 px-4 font-medium relative shrink-0"
-                    >
-                        <UserCheck className="h-4 w-4 mr-1.5 inline" />
-                        Outside Now
-                        {outsideCount > 0 && (
-                            <span className="ml-2 inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full text-[10px] font-bold bg-orange-500 text-white">
-                                {outsideCount}
-                            </span>
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger 
-                        value="quick_view" 
-                        className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:dark:bg-slate-800 data-[state=active]:dark:text-slate-100 rounded-lg py-2.5 px-6 font-medium shrink-0"
-                    >
-                        Quick View
-                    </TabsTrigger>
-                    <TabsTrigger 
-                        value="institution_leaves" 
-                        className="data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:dark:bg-emerald-900/30 data-[state=active]:dark:text-emerald-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
-                    >
-                        Institution Leaves
-                    </TabsTrigger>
-                    <TabsTrigger 
-                        value="internal_leave" 
-                        className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 data-[state=active]:dark:bg-blue-900/30 data-[state=active]:dark:text-blue-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
-                    >
-                        Internal Leave
-                    </TabsTrigger>
-                    <TabsTrigger 
-                        value="campus_movement" 
-                        className="data-[state=active]:bg-purple-50 data-[state=active]:text-purple-700 data-[state=active]:dark:bg-purple-900/30 data-[state=active]:dark:text-purple-400 rounded-lg py-2.5 px-6 font-medium shrink-0"
-                    >
-                        Campus Movement
-                    </TabsTrigger>
-                </TabsList>
+                {/* ── Segmented Tab Control ── */}
+                <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 gap-1">
+                    {TABS.map(tab => {
+                        const Icon = tab.icon
+                        const isActive = activeTab === tab.key
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-sm font-medium transition-all ${
+                                    isActive
+                                        ? "bg-white dark:bg-gray-700 text-slate-900 dark:text-white shadow-sm"
+                                        : "text-gray-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"
+                                }`}
+                            >
+                                <Icon className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{tab.label}</span>
+                                {tab.key === "outside" && outsideCount > 0 && (
+                                    <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full text-[9px] font-bold bg-orange-500 text-white shrink-0">
+                                        {outsideCount}
+                                    </span>
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
 
-                {/* ── Outside Now ── */}
-                <TabsContent value="outside_now">
+                {/* ── Tab Content ── */}
+                {activeTab === "outside" && (
                     <OutsideStudentsPanel />
-                </TabsContent>
+                )}
 
-                {/* ── Quick View Dashboard ── */}
-                <TabsContent value="quick_view">
-                    <QuickViewDashboard staffMode={true} />
-                </TabsContent>
+                {activeTab === "institutional" && (
+                    <div className="space-y-3">
+                        <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                            Institutional leaves are managed by admin. Use <strong className="text-slate-700 dark:text-gray-300">Outside</strong> tab to record student returns.
+                        </div>
+                    </div>
+                )}
 
-                {/* ── Institution Leaves (view only for mentors) ── */}
-                <TabsContent value="institution_leaves" className="space-y-4">
-                    <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-8 text-center text-muted-foreground">
-                        Institutional leaves are set by admin. Use the <strong>Outside Now</strong> tab to return students.
-                    </Card>
-                </TabsContent>
-
-                {/* ── Internal Leave ── */}
-                <TabsContent value="internal_leave" className="space-y-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <div className="relative w-full max-w-sm">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                {activeTab === "internal" && (
+                    <div className="space-y-3">
+                        {/* Search */}
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <Input
                                 placeholder="Search by student name or ID..."
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="pl-9 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl"
                             />
                         </div>
-                    </div>
-                    <LeaveTable
-                        leaves={internalLeaves}
-                        isLoading={loading}
-                    />
-                </TabsContent>
-
-                {/* ── Campus Movement ── */}
-                <TabsContent value="campus_movement" className="space-y-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <div className="relative w-full max-w-sm">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                            <Input
-                                placeholder="Search by student name or ID..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                            />
+                        <div className="flex justify-end">
+                            <Button variant="outline" size="sm" onClick={fetchLeaves} className="gap-2 rounded-lg border-gray-200 dark:border-gray-700">
+                                <RefreshCw className="h-3.5 w-3.5" />
+                                Refresh
+                            </Button>
                         </div>
+                        <LeaveTable leaves={internalLeaves} isLoading={loading} />
                     </div>
-                    <LeaveTable
-                        leaves={campusMovements}
-                        isLoading={loading}
-                        showGateActions={false}
-                    />
-                </TabsContent>
-            </Tabs>
+                )}
+            </div>
 
             <LeaveModal
                 open={isLeaveModalOpen}

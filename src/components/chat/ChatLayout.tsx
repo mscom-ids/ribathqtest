@@ -69,6 +69,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
     const [showNewChat, setShowNewChat] = useState(false)
     const [showNewGroup, setShowNewGroup] = useState(false)
     const [showGroupInfo, setShowGroupInfo] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [staffList, setStaffList] = useState<StaffMember[]>([])
     const [staffSearch, setStaffSearch] = useState("")
     const [groupName, setGroupName] = useState("")
@@ -240,6 +241,18 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
         try {
             await api.delete(`/chat/messages/${messageId}`)
             setMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_deleted: true, content: null, image_url: null } : m))
+        } catch (e) { console.error(e) }
+    }
+
+    // ── Delete conversation (admin) ──────────────────────────────────────────
+    const handleDeleteChat = async () => {
+        if (!activeConv) return
+        try {
+            await api.delete(`/chat/conversations/${activeConv.id}`)
+            setConversations(prev => prev.filter(c => c.id !== activeConv.id))
+            setShowDeleteConfirm(false)
+            setActiveConv(null)
+            setShowMobileChat(false)
         } catch (e) { console.error(e) }
     }
 
@@ -441,6 +454,11 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
                                     <Users className="h-4 w-4" />
                                 </Button>
                             )}
+                            {isAdmin && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => setShowDeleteConfirm(true)} title="Delete Chat">
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            )}
                         </div>
 
                         {/* Messages area */}
@@ -628,13 +646,28 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
                 </DialogContent>
             </Dialog>
 
-            {/* Image preview modal */}
             <Dialog open={!!imagePreview} onOpenChange={() => setImagePreview(null)}>
                 <DialogContent className="sm:max-w-2xl p-2">
                     <DialogHeader><DialogTitle className="sr-only">Image Preview</DialogTitle></DialogHeader>
                     {imagePreview && (
                         <img src={getPhotoUrl(imagePreview)} alt="Shared" className="w-full rounded-lg" />
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Chat Confirmation */}
+            <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Delete Conversation</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to permanently delete this {activeConv?.type === 'group' ? 'group' : 'chat'}? This action cannot be undone and will remove it for all participants.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+                        <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleDeleteChat}>Delete</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

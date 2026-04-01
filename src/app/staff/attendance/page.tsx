@@ -495,119 +495,173 @@ export default function StaffAttendancePage() {
                 </Card>
             )}
 
-            {/* Session Table */}
+            {/* Session Table/Cards */}
             {!isHoliday && (
                 <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900 rounded-2xl">
-                    <Table>
-                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
-                            <TableRow className="border-b border-slate-200 dark:border-slate-800">
-                                <TableHead className="w-[50px] pl-4 font-semibold">#</TableHead>
-                                <TableHead className="font-semibold">Time</TableHead>
-                                <TableHead className="font-semibold">Session</TableHead>
-                                <TableHead className="text-center font-semibold">Students</TableHead>
-                                <TableHead className="text-center font-semibold">Status</TableHead>
-                                <TableHead className="text-right pr-4 font-semibold">Action</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loadingSessions && (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="text-center h-32">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
-                                            Loading sessions...
-                                        </div>
-                                    </TableCell>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                        <Table>
+                            <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                                <TableRow className="border-b border-slate-200 dark:border-slate-800">
+                                    <TableHead className="w-[50px] pl-4 font-semibold">#</TableHead>
+                                    <TableHead className="font-semibold">Time</TableHead>
+                                    <TableHead className="font-semibold">Session</TableHead>
+                                    <TableHead className="text-center font-semibold">Students</TableHead>
+                                    <TableHead className="text-center font-semibold">Status</TableHead>
+                                    <TableHead className="text-right pr-4 font-semibold">Action</TableHead>
                                 </TableRow>
-                            )}
+                            </TableHeader>
+                            <TableBody>
+                                {loadingSessions && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center h-32">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                                                Loading sessions...
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
 
-                            {!loadingSessions && sessionRows.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="text-center h-32 text-slate-500">
-                                        <Users className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                                        No sessions scheduled for this date.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                                {!loadingSessions && sessionRows.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="text-center h-32 text-slate-500">
+                                            <Users className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+                                            No sessions scheduled for this date.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
 
-                            {!loadingSessions && sessionRows.map((row, idx) => (
-                                <TableRow key={row.session.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <TableCell className="pl-4 font-mono text-xs text-slate-500">{idx + 1}</TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-1.5 text-sm">
-                                            <Clock className="h-3.5 w-3.5 text-slate-400" />
-                                            <span className="font-mono">
-                                                {row.session.start_time?.slice(0, 5) || "—"}
-                                                {row.session.end_time ? ` - ${row.session.end_time.slice(0, 5)}` : ""}
+                                {!loadingSessions && sessionRows.map((row, idx) => (
+                                    <TableRow key={row.session.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <TableCell className="pl-4 font-mono text-xs text-slate-500">{idx + 1}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1.5 text-sm">
+                                                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                                <span className="font-mono">
+                                                    {row.session.start_time?.slice(0, 5) || "—"}
+                                                    {row.session.end_time ? ` - ${row.session.end_time.slice(0, 5)}` : ""}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium">{row.session.name}</span>
+                                                <Badge variant="outline" className={cn("text-[10px]",
+                                                    row.session.class_type === "Hifz" && "border-emerald-600 text-emerald-400",
+                                                    row.session.class_type === "School" && "border-blue-600 text-blue-400",
+                                                    row.session.class_type === "Madrassa" && "border-purple-600 text-purple-400",
+                                                )}>{row.session.class_type}</Badge>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <span className="text-sm font-medium">
+                                                {row.status === "marked" ? `${row.markedCount}/${row.studentCount}` : row.studentCount}
                                             </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-medium">{row.session.name}</span>
-                                            <Badge variant="outline" className={cn("text-[10px]",
-                                                row.session.class_type === "Hifz" && "border-emerald-600 text-emerald-400",
-                                                row.session.class_type === "School" && "border-blue-600 text-blue-400",
-                                                row.session.class_type === "Madrassa" && "border-purple-600 text-purple-400",
-                                            )}>{row.session.class_type}</Badge>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <span className="text-sm font-medium">
-                                            {row.status === "marked" ? `${row.markedCount}/${row.studentCount}` : row.studentCount}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {getStatusBadge(row.status)}
-                                    </TableCell>
-                                    <TableCell className="text-right pr-4">
-                                        {(() => {
-                                            if (row.status === "cancelled") {
-                                                return <span className="text-xs text-red-400 italic">Cancelled</span>
-                                            }
-                                            if (!isEditable) {
-                                                return (
-                                                    <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
-                                                        <Lock className="h-3 w-3" />
-                                                        Locked
-                                                    </Button>
-                                                )
-                                            }
-                                            if (isFutureDate) {
-                                                 return (
-                                                    <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
-                                                        <Clock className="h-3 w-3" />
-                                                        Not Started
-                                                    </Button>
-                                                 )
-                                            }
-                                            if (row.status === "marked") {
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {getStatusBadge(row.status)}
+                                        </TableCell>
+                                        <TableCell className="text-right pr-4">
+                                            {(() => {
+                                                if (row.status === "cancelled") {
+                                                    return <span className="text-xs text-red-400 italic">Cancelled</span>
+                                                }
+                                                if (!isEditable) {
+                                                    return (
+                                                        <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
+                                                            <Lock className="h-3 w-3" />
+                                                            Locked
+                                                        </Button>
+                                                    )
+                                                }
+                                                if (isFutureDate) {
+                                                    return (
+                                                        <Button variant="outline" size="sm" disabled className="gap-1.5 border-slate-200 text-slate-400">
+                                                            <Clock className="h-3 w-3" />
+                                                            Not Started
+                                                        </Button>
+                                                    )
+                                                }
+                                                if (row.status === "marked") {
+                                                    return (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => openMarkingModal(row.session)}
+                                                            className="gap-1.5 border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950"
+                                                        >
+                                                            Edit Attendance
+                                                        </Button>
+                                                    )
+                                                }
                                                 return (
                                                     <Button
-                                                        variant="outline"
                                                         size="sm"
                                                         onClick={() => openMarkingModal(row.session)}
-                                                        className="gap-1.5 border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950"
+                                                        className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
                                                     >
-                                                        Edit Attendance
+                                                        Mark Attendance
                                                     </Button>
                                                 )
-                                            }
-                                            return (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => openMarkingModal(row.session)}
-                                                    className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                                                >
-                                                    Mark Attendance
-                                                </Button>
-                                            )
-                                        })()}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                                            })()}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden flex flex-col p-4 space-y-4">
+                        {loadingSessions && (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+                            </div>
+                        )}
+                        {!loadingSessions && sessionRows.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-8 text-slate-500 text-center">
+                                <Users className="h-10 w-10 mb-3 text-slate-400" />
+                                <p className="text-sm font-medium">No sessions scheduled for this date.</p>
+                            </div>
+                        )}
+                        {!loadingSessions && sessionRows.map((row) => (
+                            <div key={row.session.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex flex-col gap-3 shadow-sm">
+                                <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 w-fit px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700 shadow-sm">
+                                    <Clock className="h-4 w-4 text-blue-500" />
+                                    <span>
+                                        {row.session.start_time?.slice(0, 5) || "—"}
+                                        {row.session.end_time ? ` - ${row.session.end_time.slice(0, 5)}` : ""}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between mt-1">
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{row.session.name}</h3>
+                                    {getStatusBadge(row.status)}
+                                </div>
+                                <div className="flex items-center text-sm text-slate-600 dark:text-slate-300">
+                                    <Users className="h-4 w-4 mr-2" />
+                                    Students: <span className="font-semibold ml-1">{row.status === "marked" ? `${row.markedCount}/${row.studentCount}` : row.studentCount}</span>
+                                </div>
+                                <div className="pt-2">
+                                    {(() => {
+                                        if (row.status === "cancelled") {
+                                            return <div className="w-full py-2.5 text-center text-sm font-semibold text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg">Cancelled</div>
+                                        }
+                                        if (!isEditable) {
+                                            return <Button variant="outline" disabled className="w-full gap-2 border-slate-200 text-slate-400 h-11 rounded-xl"><Lock className="h-4 w-4" /> Locked</Button>
+                                        }
+                                        if (isFutureDate) {
+                                            return <Button variant="outline" disabled className="w-full gap-2 border-slate-200 text-slate-400 h-11 rounded-xl"><Clock className="h-4 w-4" /> Not Started</Button>
+                                        }
+                                        if (row.status === "marked") {
+                                            return <Button variant="outline" onClick={() => openMarkingModal(row.session)} className="w-full gap-2 border-blue-600 text-blue-600 hover:bg-blue-50 dark:border-blue-500 dark:text-blue-400 dark:hover:bg-blue-950 h-11 rounded-xl font-semibold">Edit Attendance</Button>
+                                        }
+                                        return <Button onClick={() => openMarkingModal(row.session)} className="w-full gap-2 bg-blue-600 hover:bg-blue-700 text-white h-11 rounded-xl font-semibold">Mark Attendance</Button>
+                                    })()}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </Card>
             )}
 

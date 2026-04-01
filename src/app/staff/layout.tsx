@@ -97,6 +97,14 @@ export default function StaffLayout({
         { href: "/staff/finance", label: "Finance", icon: Landmark },
     ]
 
+    const mobileNavItems = [
+        { href: "/staff", label: "Class", icon: LayoutDashboard },
+        { href: "/staff/attendance", label: "Attend", icon: CalendarCheck },
+        { href: "/staff/chat", label: "Chat", icon: MessageCircle, highlight: true },
+        { href: "/staff/leaves", label: "Leaves", icon: DoorOpen },
+        { href: "/staff/reports", label: "Reports", icon: FileText },
+    ]
+
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
             {/* Delegation Banner */}
@@ -169,65 +177,49 @@ export default function StaffLayout({
                         <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
                             <LogOut className="h-5 w-5 text-slate-500 hover:text-red-500 transition-colors" />
                         </Button>
-
-                        {/* Mobile Menu Trigger */}
-                        <div className="md:hidden">
-                            {mounted && (
-                                <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-                                    <SheetTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                            <Menu className="h-6 w-6" />
-                                        </Button>
-                                    </SheetTrigger>
-                                    <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-                                        <div className="flex flex-col gap-6 pt-6">
-                                            <div className="flex items-center gap-3 pb-6 border-b border-slate-200 dark:border-slate-800">
-                                                <Avatar className="h-10 w-10">
-                                                    <AvatarImage src={getPhotoUrl(staffPhoto)} className="object-cover" />
-                                                    <AvatarFallback className="bg-emerald-100 text-emerald-700 font-bold">
-                                                        {staffName ? staffName.substring(0, 2).toUpperCase() : "ST"}
-                                                    </AvatarFallback>
-                                                </Avatar>
-                                                <div>
-                                                    <h3 className="font-medium">{staffName || "Mentor"}</h3>
-                                                    <p className="text-xs text-muted-foreground">Logged in</p>
-                                                </div>
-                                            </div>
-                                            <nav className="flex flex-col gap-3">
-                                                {navItems.map((item) => {
-                                                    const isActive = pathname === item.href
-                                                    const Icon = item.icon
-                                                    return (
-                                                        <Link
-                                                            key={item.href}
-                                                            href={item.href}
-                                                            onClick={() => setIsMobileOpen(false)}
-                                                            className={`
-                                                            flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors
-                                                            ${isActive
-                                                                    ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"
-                                                                    : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"}
-                                                        `}
-                                                        >
-                                                            <Icon className="h-5 w-5" />
-                                                            {item.label}
-                                                        </Link>
-                                                    )
-                                                })}
-                                            </nav>
-                                        </div>
-                                    </SheetContent>
-                                </Sheet>
-                            )}
-                        </div>
                     </div>
                 </div>
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-auto flex flex-col relative">
+            <main className="flex-1 overflow-auto flex flex-col relative pb-20 md:pb-0">
                 {children}
             </main>
+
+            {/* Bottom Mobile Navigation */}
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 pb-safe rounded-t-2xl shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+                <div className="flex items-center justify-around h-16 px-2">
+                    {mobileNavItems.map((item) => {
+                        const isActive = pathname === item.href
+                        const Icon = item.icon
+                        
+                        if (item.highlight) {
+                            return (
+                                <Link key={item.href} href={item.href} className="relative -top-5 flex flex-col items-center justify-center">
+                                    <div className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg transition-transform ${isActive ? 'bg-blue-600 outline outline-4 outline-white dark:outline-slate-900 scale-110' : 'bg-blue-500 outline outline-4 outline-white dark:outline-slate-900'}`}>
+                                        <Icon className="h-6 w-6 text-white" />
+                                    </div>
+                                    <span className={`text-[10px] mt-1 font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                        {item.label}
+                                    </span>
+                                </Link>
+                            )
+                        }
+
+                        return (
+                            <Link key={item.href} href={item.href} className="flex flex-col items-center justify-center w-16 h-full gap-1">
+                                <div className={`flex items-center justify-center h-8 w-12 rounded-full transition-colors ${isActive ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                    <Icon className={`h-5 w-5 ${isActive ? 'fill-current opacity-20' : ''}`} />
+                                    {isActive && <Icon className="h-5 w-5 absolute" />}
+                                </div>
+                                <span className={`text-[10px] font-medium ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                    {item.label}
+                                </span>
+                            </Link>
+                        )
+                    })}
+                </div>
+            </nav>
         </div>
     )
 }

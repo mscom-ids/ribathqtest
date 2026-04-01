@@ -77,9 +77,9 @@ function formatDate(dateStr: string | null | undefined) {
 /** Left-panel label-value row — matches PreSkool reference */
 function InfoRow({ label, value }: { label: string; value?: string | null }) {
     return (
-        <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 dark:border-slate-700/50 last:border-0">
-            <span className="text-[13px] text-slate-500 dark:text-slate-400 shrink-0">{label}</span>
-            <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-200 text-right truncate">{value || "—"}</span>
+        <div className="flex items-center justify-between gap-4 py-3 min-h-[44px] border-b border-slate-100 dark:border-slate-700/50 last:border-0">
+            <span className="text-[14px] md:text-[13px] text-slate-500 dark:text-slate-400 shrink-0">{label}</span>
+            <span className="text-[15px] md:text-[13px] font-semibold text-slate-800 dark:text-slate-200 text-right truncate">{value || "—"}</span>
         </div>
     )
 }
@@ -87,9 +87,9 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 /** Right-panel section display field */
 function InfoField({ label, value }: { label: string; value?: string | null }) {
     return (
-        <div>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">{label}</p>
-            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{value || "—"}</p>
+        <div className="flex flex-col space-y-1 py-1">
+            <p className="text-[13px] md:text-[10px] text-slate-500 md:text-slate-400 dark:text-slate-500 uppercase tracking-wider">{label}</p>
+            <p className="text-[15px] md:text-sm font-medium text-slate-800 dark:text-slate-200">{value || "—"}</p>
         </div>
     )
 }
@@ -382,12 +382,12 @@ export default function StudentDetailPage() {
             )}
 
             {/* ── 2-Column Layout ──────────────────────────────── */}
-            <div className="flex gap-5 items-start">
+            <div className="flex flex-col xl:flex-row gap-5 items-start">
 
                 {/* ╔══════════════════════════════╗
                     ║      LEFT PANEL              ║
                     ╚══════════════════════════════╝ */}
-                <div className="w-[300px] shrink-0">
+                <div className="w-full xl:w-[300px] shrink-0">
                     <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-2xl shadow-sm">
 
                         {/* ── Profile header ─────────────────────── */}
@@ -474,12 +474,12 @@ export default function StudentDetailPage() {
                 {/* ╔══════════════════════════════╗
                     ║      RIGHT PANEL             ║
                     ╚══════════════════════════════╝ */}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 w-full min-w-0">
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
 
                         {/* ── Tab Navigation — plain buttons, 2-row grid ── */}
-                        <div className="bg-white dark:bg-[#1e2538] rounded-xl shadow-sm mb-4 border border-slate-200 dark:border-[#2a3348] px-2 py-2">
-                            <div className="grid grid-cols-7 gap-1">
+                        <div className="bg-white dark:bg-[#1e2538] rounded-xl shadow-sm mb-4 border border-slate-200 dark:border-[#2a3348] p-2">
+                            <div className="flex overflow-x-auto whitespace-nowrap gap-2 pb-1 hide-scrollbar">
                                 {([
                                     { value: 'basic',        label: 'Student Details',  icon: User },
                                     { value: 'hifz',         label: 'Hifz History',     icon: BookOpen },
@@ -500,13 +500,13 @@ export default function StudentDetailPage() {
                                         <button
                                             key={tab.value}
                                             onClick={() => setActiveTab(tab.value)}
-                                            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap
+                                            className={`flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full text-sm font-medium transition-colors whitespace-nowrap shrink-0 border
                                                 ${isActive
-                                                    ? 'bg-[#e8ebfd] text-[#3d5ee1]'
-                                                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-700 dark:hover:text-slate-200'
+                                                    ? 'bg-[#e8ebfd] text-[#3d5ee1] border-[#3d5ee1]/20'
+                                                    : 'bg-white border-slate-200 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-700 dark:hover:text-slate-200'
                                                 }`}
                                         >
-                                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                                            <Icon className="h-4 w-4 shrink-0" />
                                             {tab.label}
                                         </button>
                                     )
@@ -516,51 +516,51 @@ export default function StudentDetailPage() {
 
                         {/* ── BASIC INFO TAB ──────────────────────── */}
                         <TabsContent value="basic" className="mt-0">
-                            <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl shadow-sm overflow-hidden">
+                            <div className="bg-transparent md:bg-white dark:bg-transparent md:dark:bg-[#1e2538] border-none md:border border-slate-200 dark:border-[#2a3348] rounded-none md:rounded-xl shadow-none md:shadow-sm overflow-hidden">
 
                                 {/* Card header */}
-                                <div className="px-6 py-4 border-b border-slate-100 dark:border-[#2a3348] flex items-center justify-between">
+                                <div className="px-4 md:px-6 py-4 mb-4 md:mb-0 bg-white md:bg-transparent rounded-xl md:rounded-none shadow-sm md:shadow-none border md:border-b border-slate-200 md:border-slate-100 dark:border-[#2a3348] flex flex-col md:flex-row md:items-center justify-between gap-3">
                                     <div>
                                         <h3 className="text-base font-semibold text-slate-800 dark:text-white">Basic Information</h3>
                                         <p className="text-xs text-slate-400 mt-0.5">Personal details and identification</p>
                                     </div>
                                     {!editing ? (
                                         <Button variant="outline" size="sm" onClick={() => setEditing(true)}
-                                            className="gap-1.5 text-xs bg-white border-[#3d5ee1] text-[#3d5ee1] hover:bg-[#e8ebfd]">
-                                            <Pencil className="h-3.5 w-3.5" /> Edit Profile
+                                            className="w-full md:w-auto gap-1.5 text-sm md:text-xs bg-white border-[#3d5ee1] text-[#3d5ee1] hover:bg-[#e8ebfd] min-h-[44px] md:min-h-0">
+                                            <Pencil className="h-4 w-4 md:h-3.5 md:w-3.5" /> Edit Profile
                                         </Button>
                                     ) : (
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
                                             <Button size="sm" onClick={() => form.handleSubmit(onSubmit)()} disabled={loading}
-                                                className="bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 text-white text-xs">
-                                                {loading ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Saving...</> : "Save Changes"}
+                                                className="w-full md:w-auto bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 text-white text-sm md:text-xs min-h-[44px] md:min-h-0">
+                                                {loading ? <><Loader2 className="mr-1.5 h-4 w-4 md:h-3.5 md:w-3.5 animate-spin" />Saving...</> : "Save Changes"}
                                             </Button>
-                                            <Button size="sm" variant="outline" onClick={handleCancelEdit} disabled={loading} className="gap-1 text-xs">
-                                                <X className="h-3.5 w-3.5" /> Cancel
+                                            <Button size="sm" variant="outline" onClick={handleCancelEdit} disabled={loading} className="w-full md:w-auto gap-1 text-sm md:text-xs min-h-[44px] md:min-h-0">
+                                                <X className="h-4 w-4 md:h-3.5 md:w-3.5" /> Cancel
                                             </Button>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="p-6">
+                                <div className="p-0 md:p-6 pb-20">
                                     {!editing ? (
                                         /* ── VIEW MODE ──────────────────────── */
-                                        <div className="space-y-7">
+                                        <div className="space-y-4 md:space-y-7">
                                             {/* Photo row */}
                                             {photoUrl && (
-                                                <div className="flex items-center gap-4 pb-5 border-b border-slate-100 dark:border-slate-800">
-                                                    <img src={photoUrl} alt="Student" className="h-16 w-16 rounded-xl object-cover ring-4 ring-slate-100 dark:ring-slate-700 shadow-sm" />
+                                                <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none flex items-center gap-4 md:pb-5 md:border-b dark:border-slate-800">
+                                                    <img src={photoUrl} alt="Student" className="h-16 w-16 rounded-xl object-cover ring-4 ring-slate-50 md:ring-slate-100 dark:ring-slate-700 shadow-sm" />
                                                     <div>
-                                                        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Profile Photo</p>
+                                                        <p className="text-[12px] md:text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Profile Photo</p>
                                                         <p className="text-xs text-slate-500">Photo on file</p>
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Personal */}
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Personal Information</p>
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                                            <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none">
+                                                <p className="text-[12px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Personal Information</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6">
                                                     <InfoField label="Full Name" value={studentData?.name} />
                                                     <InfoField label="Date of Birth" value={formatDate(studentData?.dob || studentData?.date_of_birth)} />
                                                     <InfoField label="Gender" value={studentData?.gender || studentData?.comprehensive_details?.basic?.gender} />
@@ -571,9 +571,9 @@ export default function StudentDetailPage() {
                                             </div>
 
                                             {/* Address */}
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Address</p>
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                                            <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none">
+                                                <p className="text-[12px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Address</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6">
                                                     <InfoField label="Address Line" value={studentData?.address_line || studentData?.address} />
                                                     <InfoField label="Place" value={studentData?.place || studentData?.comprehensive_details?.basic?.place} />
                                                     <InfoField label="Local Body" value={studentData?.local_body || studentData?.comprehensive_details?.basic?.local_body} />
@@ -586,9 +586,9 @@ export default function StudentDetailPage() {
                                             </div>
 
                                             {/* Other */}
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Other Details</p>
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                                            <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none">
+                                                <p className="text-[12px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Other Details</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6">
                                                     <InfoField label="Identification Mark" value={studentData?.id_mark || studentData?.comprehensive_details?.basic?.id_mark} />
                                                     <InfoField label="Father's Name" value={studentData?.father_name || studentData?.parent_name} />
                                                     <InfoField label="Parent Email" value={studentData?.email} />
@@ -599,7 +599,7 @@ export default function StudentDetailPage() {
                                     ) : (
                                         /* ── EDIT MODE ──────────────────────── */
                                         <Form {...form}>
-                                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-7">
+                                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 md:space-y-7">
 
                                                 {/* Photo */}
                                                 <div>
