@@ -8,6 +8,8 @@ import path from 'path';
 // Load env BEFORE any module that reads process.env
 dotenv.config();
 
+// here new u
+
 // ── Req 9: Startup environment validation ──
 const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
 for (const key of REQUIRED_ENV) {
