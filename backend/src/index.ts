@@ -8,8 +8,6 @@ import path from 'path';
 // Load env BEFORE any module that reads process.env
 dotenv.config();
 
-// here new u
-
 // ── Req 9: Startup environment validation ──
 const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
 for (const key of REQUIRED_ENV) {
@@ -40,9 +38,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Core middleware ──
-const allowedOriginsStr = process.env.FRONTEND_URL || process.env.CORS_ORIGIN;
-const allowedOrigins = allowedOriginsStr
-  ? allowedOriginsStr.split(',').map(o => o.trim())
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
   : ['http://localhost:3000'];
 
 app.use(cors({
