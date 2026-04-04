@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMyStaffProfile, getMyAssignedStudents, getStaffStudents, cancelSession, getAllStaff, createStaffLogin, archiveStaff, restoreStaff, updateStaffProfile, createStaff, getMyStudentsWithStats, getMyLeaves } from '../controllers/staff.controller';
+import { getMyStaffProfile, getMyAssignedStudents, getStaffStudents, assignStudentsToMentor, unassignStudentFromMentor, cancelSession, getAllStaff, getStaffById, createStaffLogin, archiveStaff, restoreStaff, updateStaffProfile, createStaff, getMyStudentsWithStats, getMyLeaves } from '../controllers/staff.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -24,6 +24,12 @@ router.post('/cancel-session', cancelSession);
 // GET /api/staff/:id/students
 router.get('/:id/students', getStaffStudents);
 
+// POST /api/staff/:id/assign
+router.post('/:id/assign', assignStudentsToMentor);
+
+// POST /api/staff/:id/unassign
+router.post('/:id/unassign', unassignStudentFromMentor);
+
 // GET /api/staff
 router.get('/', getAllStaff);
 
@@ -38,6 +44,9 @@ router.put('/:id/archive', archiveStaff);
 
 // PUT /api/staff/:id/restore
 router.put('/:id/restore', restoreStaff);
+
+// GET /api/staff/:id
+router.get('/:id', getStaffById);
 
 // PUT /api/staff/:id
 router.put('/:id', updateStaffProfile);

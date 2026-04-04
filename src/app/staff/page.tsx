@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { format, getDay } from "date-fns"
 import {
     BookOpen, ChevronRight, Clock, Users, CalendarDays,
-    TrendingUp, Award, Bell, ArrowRight, User, Search, Camera
+    TrendingUp, Award, Bell, User, Search, Camera, Loader2, BarChart2,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
+import { HifzProgressModal } from "@/components/staff/HifzProgressModal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Student = {
@@ -40,6 +41,13 @@ type Student = {
     }
 }
 
+type AllStudent = {
+    adm_no: string
+    name: string
+    standard: string | null
+    status: string
+}
+
 type Session = {
     id: string
     name: string
@@ -53,8 +61,7 @@ type Session = {
 }
 
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
-function getGreeting() {
-    const h = new Date().getHours()
+function getGreeting(h: number) {
     if (h < 12) return "Good Morning"
     if (h < 17) return "Good Afternoon"
     return "Good Evening"
@@ -62,11 +69,7 @@ function getGreeting() {
 
 // ─── Helper: SVG Donut ───────────────────────────────────────────────────────
 function DonutRing({
-    pct,
-    size = 96,
-    stroke = 12,
-    color = "#3b82f6",
-    bg = "#e2e8f0",
+    pct, size = 96, stroke = 12, color = "#3b82f6", bg = "#e2e8f0",
 }: {
     pct: number; size?: number; stroke?: number; color?: string; bg?: string
 }) {
@@ -87,95 +90,64 @@ function DonutRing({
     )
 }
 
-// ─── Helper: Mini Calendar ────────────────────────────────────────────────────
-function MiniCalendar() {
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = today.getMonth()
-    const firstDay = new Date(year, month, 1).getDay()
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-    const cells: (number | null)[] = []
-    for (let i = 0; i < firstDay; i++) cells.push(null)
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d)
-
-    return (
-        <div className="text-sm">
-            <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold text-slate-900 dark:text-white">
-                    {format(today, "MMMM yyyy")}
-                </span>
-            </div>
-            <div className="grid grid-cols-7 text-center text-[10px] font-medium text-slate-400 mb-1">
-                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => (
-                    <div key={d}>{d}</div>
-                ))}
-            </div>
-            <div className="grid grid-cols-7 text-center gap-y-0.5">
-                {cells.map((d, i) => (
-                    <div
-                        key={i}
-                        className={`
-                            text-xs py-1 rounded-full w-7 h-7 flex items-center justify-center mx-auto
-                            ${!d ? "" : d === today.getDate()
-                                ? "bg-blue-600 text-white font-bold"
-                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-default"}
-                        `}
-                    >
-                        {d || ""}
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
-// ─── Session time badge color ─────────────────────────────────────────────────
-function sessionCardColors(classType: string, isPast: boolean) {
-    if (isPast) return { border: "border-red-200 dark:border-red-900", badge: "bg-red-500 text-white", dot: "bg-red-500" }
-    const t = (classType || '').toLowerCase()
-    if (t === 'school') return { border: "border-blue-200 dark:border-blue-900", badge: "bg-blue-600 text-white", dot: "bg-blue-500" }
-    if (t === 'madrassa' || t === 'madrasa') return { border: "border-purple-200 dark:border-purple-900", badge: "bg-purple-600 text-white", dot: "bg-purple-500" }
-    return { border: "border-emerald-200 dark:border-emerald-900", badge: "bg-emerald-600 text-white", dot: "bg-emerald-500" }
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function StaffDashboard() {
     const [staffName, setStaffName] = useState("")
     const [staffId, setStaffId] = useState("")
     const [staffPhoto, setStaffPhoto] = useState("")
-    const [students, setStudents] = useState<Student[]>([])
+    const [myStudents, setMyStudents] = useState<Student[]>([])
+    const [allStudents, setAllStudents] = useState<AllStudent[]>([])
+    const [allStudentsLoaded, setAllStudentsLoaded] = useState(false)
     const [sessions, setSessions] = useState<Session[]>([])
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-    const [currentTime, setCurrentTime] = useState(new Date())
+    const [currentTime, setCurrentTime] = useState<Date | null>(null)
+    // "my" = assigned only, "all" = every active student
+    const [studentMode, setStudentMode] = useState<"my" | "all">("my")
+    const [mounted, setMounted] = useState(false)
     const router = useRouter()
 
-    const today = useMemo(() => new Date(), [])
-    const todayStr = format(today, "yyyy-MM-dd")
-    const todayDow = getDay(today)
+    // Chart modal
+    type ChartStudent = { adm_no: string; name: string; standard: string | null; photo_url?: string | null }
+    const [chartStudent, setChartStudent] = useState<ChartStudent | null>(null)
+
+    // Only compute date on client to avoid hydration mismatch
+    const [todayStr, setTodayStr] = useState("")
+    const [todayLabel, setTodayLabel] = useState("")
+
+    useEffect(() => {
+        setMounted(true)
+        const now = new Date()
+        setCurrentTime(now)
+        setTodayStr(format(now, "yyyy-MM-dd"))
+        setTodayLabel(format(now, "EEEE, MMMM d, yyyy"))
+    }, [])
+
+    // Clock tick
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 10000)
+        return () => clearInterval(timer)
+    }, [])
 
     const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined;
-        return url.startsWith('http') ? url : `http://localhost:5000${url}`;
+        if (!url) return undefined
+        return url.startsWith("http") ? url : `http://localhost:5000${url}`
     }
 
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file || !staffId) return
-
         try {
             const formData = new FormData()
-            formData.append('avatar', file)
-            const uploadRes = await api.post('/upload/avatar', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            formData.append("avatar", file)
+            const uploadRes = await api.post("/upload/avatar", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
             })
-
             if (uploadRes.data.success && uploadRes.data.filePath) {
                 const newUrl = uploadRes.data.filePath
                 setStaffPhoto(newUrl)
                 await api.put(`/staff/${staffId}`, { photo_url: newUrl })
-                // Trigger a page reload or update context (reloading is easiest to sync the TopNav)
                 window.location.reload()
             }
         } catch (error) {
@@ -183,32 +155,29 @@ export default function StaffDashboard() {
         }
     }
 
+    // Load my assigned students + sessions (only once todayStr is ready)
     useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 10000) // Update every 10 seconds
-        return () => clearInterval(timer)
-    }, [])
-    
-    useEffect(() => {
+        if (!todayStr) return
         async function load() {
             setLoading(true)
             try {
-                const profileRes = await api.get('/staff/me')
+                const profileRes = await api.get("/staff/me")
                 if (!profileRes.data.success) { router.push("/login"); return }
                 setStaffName(profileRes.data.staff.name || "")
                 setStaffId(profileRes.data.staff.id || "")
                 setStaffPhoto(profileRes.data.staff.photo_url || "")
 
                 const [studRes, sessRes] = await Promise.all([
-                    api.get('/staff/me/students', { params: { date: todayStr } }),
-                    api.get('/attendance/schedules-for-date', { params: { date: todayStr } }),
+                    api.get("/staff/me/students", { params: { date: todayStr } }),
+                    api.get("/attendance/schedules-for-date", { params: { date: todayStr } }),
                 ])
-                if (studRes.data.success) setStudents(studRes.data.students || [])
+                if (studRes.data.success) setMyStudents(studRes.data.students || [])
                 if (sessRes.data.data) setSessions(sessRes.data.data.map((s: any) => ({
                     ...s,
                     name: s.name || `${s.class_type} Class`,
                 })))
             } catch (err: any) {
-                console.error('[STAFF PAGE] Load error:', err.response?.status, err.response?.data?.error || err.message)
+                console.error("[STAFF PAGE] Load error:", err)
                 router.push("/login")
             }
             setLoading(false)
@@ -216,63 +185,74 @@ export default function StaffDashboard() {
         load()
     }, [router, todayStr])
 
-    // ── Derived: today's sessions (already date-filtered by server) ───────────
+    // Lazy-load all students when switching to "All Students" mode
+    useEffect(() => {
+        if (studentMode !== "all" || allStudentsLoaded) return
+        async function loadAll() {
+            try {
+                const res = await api.get("/students")
+                if (res.data.success) setAllStudents(res.data.students || [])
+            } catch { /* non-blocking */ }
+            setAllStudentsLoaded(true)
+        }
+        loadAll()
+    }, [studentMode, allStudentsLoaded])
+
+    // ── Derived ──────────────────────────────────────────────────
     const todaySessions = useMemo(() => {
-        if (students.length === 0) return []
+        if (myStudents.length === 0) return []
         return [...sessions].sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""))
-    }, [sessions, students.length])
+    }, [sessions, myStudents.length])
 
-    // ── Derived: filtered students ───────────────────────────────────────────
-    const filtered = useMemo(() =>
-        students.filter(s =>
-            s.name.toLowerCase().includes(search.toLowerCase()) ||
-            s.adm_no.toLowerCase().includes(search.toLowerCase())
-        ), [students, search])
+    const presentCount = myStudents.filter(s => s.today_stats?.attendance === "Present" || s.today_stats?.attendance === "present").length
+    const absentCount = myStudents.filter(s => s.today_stats?.attendance === "Absent").length
+    const entryCount = myStudents.filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0)).length
+    const attendancePct = myStudents.length > 0 ? Math.round((presentCount / myStudents.length) * 100) : 0
+    const entryPct = myStudents.length > 0 ? Math.round((entryCount / myStudents.length) * 100) : 0
 
-    // ── Stats ────────────────────────────────────────────────────────────────
-    const presentCount = students.filter(s => s.today_stats?.attendance === "Present" || s.today_stats?.attendance === "present").length
-    const absentCount = students.filter(s => s.today_stats?.attendance === "Absent").length
-    const entryCount = students.filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0)).length
-    const attendancePct = students.length > 0 ? Math.round((presentCount / students.length) * 100) : 0
-    const entryPct = students.length > 0 ? Math.round((entryCount / students.length) * 100) : 0
+    const topPerformers = useMemo(() => [...myStudents]
+        .filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0))
+        .sort((a, b) => ((b.today_stats?.hifz || 0) + (b.today_stats?.revision || 0)) - ((a.today_stats?.hifz || 0) + (a.today_stats?.revision || 0)))
+        .slice(0, 3),
+        [myStudents]
+    )
 
-    // ── Top Performers ───────────────────────────────────────────────────────
-    const topPerformers = useMemo(() => {
-        return [...students]
-            .filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0))
-            .sort((a, b) => {
-                const aScore = (a.today_stats?.hifz || 0) + (a.today_stats?.revision || 0);
-                const bScore = (b.today_stats?.hifz || 0) + (b.today_stats?.revision || 0);
-                return bScore - aScore;
-            })
-            .slice(0, 3);
-    }, [students])
+    const nowStr = currentTime ? format(currentTime, "HH:mm") : "00:00"
+    const greetingHour = currentTime ? currentTime.getHours() : 12
 
-    // ── Current session ──────────────────────────────────────────────────────
-    const nowStr = format(currentTime, "HH:mm")
     const currentSession = todaySessions.find(s =>
         s.start_time && s.end_time &&
         nowStr >= s.start_time.slice(0, 5) &&
         nowStr <= s.end_time.slice(0, 5)
     )
-    
-    let nextSession = !currentSession ? todaySessions.find(s =>
+    const nextSession = !currentSession ? todaySessions.find(s =>
         s.start_time && nowStr < s.start_time.slice(0, 5)
     ) : undefined
-
-    let nextSessionLabel = nextSession 
+    let nextSessionLabel = nextSession
         ? `Next: ${nextSession.name} at ${nextSession.start_time?.slice(0, 5)}`
-        : null;
-
+        : null
     if (!currentSession && !nextSessionLabel && todaySessions.length > 0) {
-        nextSessionLabel = `Classes resume tomorrow`;
+        nextSessionLabel = "Classes resume tomorrow"
     }
 
-    // If student detail view is open
+    // Filtered student list (mode-aware)
+    const filteredStudents = useMemo(() => {
+        const q = search.toLowerCase()
+        if (studentMode === "my") {
+            return myStudents.filter(s =>
+                s.name.toLowerCase().includes(q) || s.adm_no.toLowerCase().includes(q)
+            )
+        } else {
+            return allStudents.filter(s =>
+                !q || s.name.toLowerCase().includes(q) || s.adm_no.toLowerCase().includes(q)
+            )
+        }
+    }, [studentMode, myStudents, allStudents, search])
+
+    // ── Student detail view ───────────────────────────────────────
     if (selectedStudent) {
         return (
             <div className="h-full flex flex-col overflow-hidden">
-                {/* Back header */}
                 <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                     <button
                         onClick={() => setSelectedStudent(null)}
@@ -299,11 +279,23 @@ export default function StaffDashboard() {
         )
     }
 
-    return (
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]">
-            <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-6 lg:space-y-8">
+    // ── Loading placeholder ───────────────────────────────────────
+    if (loading || !mounted) {
+        return (
+            <div className="flex items-center justify-center h-full min-h-[60vh]">
+                <div className="flex flex-col items-center gap-3 text-slate-500">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                    <p className="text-sm">Loading dashboard…</p>
+                </div>
+            </div>
+        )
+    }
 
-                {/* ── Welcome Banner ──────────────────────────────────────── */}
+    return (
+        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
+            <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-5">
+
+                {/* ── Welcome Banner ────────────────────────────────── */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-xl">
                     <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5" />
                     <div className="absolute -bottom-12 -left-6 w-40 h-40 rounded-full bg-white/5" />
@@ -313,9 +305,9 @@ export default function StaffDashboard() {
                         <div className="space-y-2">
                             <p className="text-blue-200 text-sm font-medium tracking-wide uppercase">Mentor Portal</p>
                             <h1 className="text-2xl md:text-3xl font-bold">
-                                {getGreeting()}, Mentor 👋
+                                {getGreeting(greetingHour)}, Mentor 👋
                             </h1>
-                            <p className="text-blue-100 text-sm">{format(today, "EEEE, MMMM d, yyyy")}</p>
+                            <p className="text-blue-100 text-sm">{todayLabel}</p>
                             {(currentSession || nextSessionLabel) && (
                                 <div className="flex items-center gap-2 mt-2 bg-white/15 backdrop-blur-sm rounded-full px-3 py-1.5 w-fit text-sm">
                                     <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
@@ -328,7 +320,7 @@ export default function StaffDashboard() {
 
                         <div className="flex flex-wrap gap-3">
                             <div className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-3 text-center min-w-[80px]">
-                                <div className="text-2xl font-bold">{students.length}</div>
+                                <div className="text-2xl font-bold">{myStudents.length}</div>
                                 <div className="text-blue-200 text-xs">Students</div>
                             </div>
                             <div className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-3 text-center min-w-[80px]">
@@ -343,14 +335,18 @@ export default function StaffDashboard() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    <div className="space-y-6">
+                {/* ── Profile card + Stat rings (mobile: stacked, desktop: side card) ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+
+                    {/* Left column: profile + rings */}
+                    <div className="lg:col-span-1 space-y-4">
+                        {/* Profile Card */}
                         <div className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white p-5 shadow-lg relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-white/5 -translate-y-8 translate-x-8" />
                             <div className="relative">
                                 <div className="flex items-center gap-3 mb-4">
                                     <div className="relative group">
-                                        <Avatar className="h-14 w-14 rounded-xl shadow-lg ring-2 ring-white/10 rounded-xl">
+                                        <Avatar className="h-14 w-14 rounded-xl ring-2 ring-white/10">
                                             <AvatarImage src={getPhotoUrl(staffPhoto)} className="object-cover" />
                                             <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-blue-500 rounded-xl flex items-center justify-center text-lg font-bold text-white">
                                                 {staffName ? staffName.substring(0, 2).toUpperCase() : "ST"}
@@ -369,7 +365,7 @@ export default function StaffDashboard() {
                                 <div className="space-y-2">
                                     <div className="flex items-center gap-2 text-xs text-slate-400">
                                         <Users className="h-3.5 w-3.5 text-emerald-400" />
-                                        <span>{students.length} assigned students</span>
+                                        <span>{myStudents.length} assigned students</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-xs text-slate-400">
                                         <CalendarDays className="h-3.5 w-3.5 text-blue-400" />
@@ -379,6 +375,7 @@ export default function StaffDashboard() {
                             </div>
                         </div>
 
+                        {/* Today's Entries */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Entries</h3>
@@ -391,11 +388,12 @@ export default function StaffDashboard() {
                                 </div>
                                 <div className="space-y-1 flex-1">
                                     <div className="text-xs text-slate-500 dark:text-gray-300">Recorded: <b className="dark:text-white">{entryCount}</b></div>
-                                    <div className="text-xs text-slate-500 dark:text-gray-300">Pending: <b className="dark:text-white">{students.length - entryCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Pending: <b className="dark:text-white">{myStudents.length - entryCount}</b></div>
                                 </div>
                             </div>
                         </div>
 
+                        {/* Today's Attendance */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Attendance</h3>
@@ -413,55 +411,88 @@ export default function StaffDashboard() {
                         </div>
                     </div>
 
-                    <div className="lg:col-span-2 xl:col-span-2 space-y-6">
+                    {/* Middle column: sessions + quick actions + student list */}
+                    <div className="lg:col-span-2 space-y-4">
+
+                        {/* Today's Sessions */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-slate-900 dark:text-white">Today's Sessions</h3>
-                            </div>
-                            <div className="flex gap-3 overflow-x-auto pb-2">
-                                {todaySessions.map((s) => (
-                                    <Link href={`/staff/attendance?session=${s.id}`} key={s.id} className="block shrink-0">
-                                        <div className="w-44 rounded-xl border border-slate-200 dark:border-gray-700 p-3 bg-white dark:bg-[#111827]">
-                                            <p className="font-semibold text-sm truncate dark:text-white">{s.name}</p>
-                                            <div className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</div>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
+                            <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Today's Sessions</h3>
+                            {todaySessions.length === 0 ? (
+                                <p className="text-sm text-slate-400 text-center py-4">No sessions scheduled for today.</p>
+                            ) : (
+                                <div className="flex gap-3 overflow-x-auto pb-2">
+                                    {todaySessions.map((s) => (
+                                        <Link href={`/staff/attendance?session=${s.id}`} key={s.id} className="block shrink-0">
+                                            <div className="w-44 rounded-xl border border-slate-200 dark:border-gray-700 p-3 bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                                <p className="font-semibold text-sm truncate dark:text-white">{s.name}</p>
+                                                <div className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</div>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                            <Link href="/staff/attendance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-blue-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-blue-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
-                                <CalendarDays className="h-5 w-5 mb-1 text-blue-600 dark:text-blue-400" />
+                        {/* Quick Actions */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <Link href="/staff/attendance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-blue-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-blue-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center gap-1">
+                                <CalendarDays className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                 <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Attendance</span>
                             </Link>
-                            <Link href="/staff/leaves" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-amber-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-amber-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
-                                <Bell className="h-5 w-5 mb-1 text-amber-600 dark:text-amber-400" />
+                            <Link href="/staff/leaves" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-amber-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-amber-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center gap-1">
+                                <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                                 <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Leaves</span>
                             </Link>
-                            <Link href="/staff/finance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-emerald-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-emerald-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
-                                <TrendingUp className="h-5 w-5 mb-1 text-emerald-600 dark:text-emerald-400" />
+                            <Link href="/staff/finance" className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-emerald-50 dark:bg-[#0f172a] text-center transition-colors hover:bg-emerald-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center gap-1">
+                                <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                                 <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Finance</span>
                             </Link>
-                            <AssignStudentsModal 
-                                currentStaffId={staffId} 
-                                students={students}
-                                trigger={
-                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-[#0f172a] text-center cursor-pointer transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center">
-                                        <Users className="h-5 w-5 mb-1 text-slate-600 dark:text-gray-300" />
-                                        <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Assign</span>
-                                    </div>
-                                }
-                            />
+                            {/* Assign modal — only rendered after mount to avoid hydration mismatch */}
+                            {mounted && (
+                                <AssignStudentsModal
+                                    currentStaffId={staffId}
+                                    students={myStudents}
+                                    trigger={
+                                        <div className="p-4 rounded-xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-[#0f172a] text-center cursor-pointer transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 flex flex-col items-center justify-center gap-1">
+                                            <Users className="h-5 w-5 text-slate-600 dark:text-gray-300" />
+                                            <span className="text-xs font-semibold text-slate-900 dark:text-gray-300">Assign</span>
+                                        </div>
+                                    }
+                                />
+                            )}
                         </div>
 
+                        {/* Student List — My Students / All Students toggle */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-gray-700">
-                                <h3 className="font-semibold text-slate-900 dark:text-white">My Students</h3>
-                                <div className="relative w-48">
+                            {/* Header */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
+                                {/* Mode toggle */}
+                                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => { setStudentMode("my"); setSearch("") }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all
+                                            ${studentMode === "my"
+                                                ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400"
+                                                : "text-slate-500 dark:text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                        My Students
+                                    </button>
+                                    <button
+                                        onClick={() => { setStudentMode("all"); setSearch("") }}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all
+                                            ${studentMode === "all"
+                                                ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400"
+                                                : "text-slate-500 dark:text-slate-400 hover:text-slate-700"}`}
+                                    >
+                                        All Students
+                                    </button>
+                                </div>
+
+                                {/* Search */}
+                                <div className="relative w-44 sm:w-52">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                                     <Input
-                                        placeholder="Search..."
+                                        placeholder="Search…"
                                         value={search}
                                         onChange={e => setSearch(e.target.value)}
                                         className="pl-8 h-8 text-xs"
@@ -469,54 +500,109 @@ export default function StaffDashboard() {
                                 </div>
                             </div>
 
-                            <div className="divide-y divide-slate-50 dark:divide-gray-800/50">
-                                {filtered.map(student => {
-                                    const att = student.today_stats?.attendance
-                                    const isOnLeave = student.is_outside
-                                    const attColor = isOnLeave ? "bg-orange-500/20 text-orange-400" : att === "Leave" ? "bg-orange-500/20 text-orange-400" : att === "Present" ? "bg-green-500/20 text-green-400" : att === "Absent" ? "bg-red-500/20 text-red-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-gray-400"
-                                    
-                                    return (
-                                        <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                            <Avatar className="h-10 w-10">
-                                                <AvatarImage src={getPhotoUrl(student.photo_url)} />
-                                                <AvatarFallback className="bg-slate-200">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex-1 min-w-0">
-                                                <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 truncate block">
-                                                    {student.name}
-                                                </button>
-                                                <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no} • {student.standard}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {isOnLeave && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">OUTSIDE</span>}
-                                                <div className="flex items-center gap-1">
+                            {/* All Students loading state */}
+                            {studentMode === "all" && !allStudentsLoaded ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                                </div>
+                            ) : filteredStudents.length === 0 ? (
+                                <div className="text-center py-10 text-sm text-slate-400">
+                                    {search ? "No students match your search." : "No students found."}
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-50 dark:divide-gray-800/50">
+                                    {(studentMode === "my" ? filteredStudents as Student[] : []).map(student => {
+                                        const att = student.today_stats?.attendance
+                                        const isOnLeave = student.is_outside
+                                        return (
+                                            <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <Avatar className="h-10 w-10 shrink-0">
+                                                    <AvatarImage src={getPhotoUrl(student.photo_url)} />
+                                                    <AvatarFallback className="bg-slate-200 text-slate-600">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex-1 min-w-0">
+                                                    <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 truncate block text-left w-full">
+                                                        {student.name}
+                                                    </button>
+                                                    <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no} · {student.standard}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {isOnLeave && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">OUTSIDE</span>}
                                                     {student.is_delegated ? (
-                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500 border-dashed border dark:border-gray-700">
+                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500">
                                                             <Clock className="h-3 w-3" /> Delegated
                                                         </Button>
                                                     ) : (
                                                         <Link href={`/staff/entry/${student.adm_no}`}>
-                                                            <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700">
+                                                            <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
                                                                 <BookOpen className="h-3 w-3" /> Record
                                                             </Button>
                                                         </Link>
                                                     )}
-                                                    <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-gray-300">
+                                                    <button
+                                                        title="View Hifz Progress"
+                                                        onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
+                                                        className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
+                                                    >
+                                                        <BarChart2 className="h-4 w-4" />
+                                                    </button>
+                                                    <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
                                                         <ChevronRight className="h-4 w-4" />
                                                     </button>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                        )
+                                    })}
+
+                                    {/* All Students mode — scrollable with chart button */}
+                                    {studentMode === "all" && (
+                                        <>
+                                            {allStudentsLoaded && filteredStudents.length > 0 && (
+                                                <div className="px-5 py-2 text-[11px] text-slate-400 border-b border-slate-50 dark:border-slate-800">
+                                                    Showing {filteredStudents.length} student{filteredStudents.length !== 1 ? "s" : ""}
+                                                </div>
+                                            )}
+                                            <div className="overflow-y-auto divide-y divide-slate-50 dark:divide-gray-800/50" style={{ maxHeight: 440 }}>
+                                                {(filteredStudents as AllStudent[]).map(student => (
+                                                    <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                        <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
+                                                            {student.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
+                                                            <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <button
+                                                                title="View Hifz Progress"
+                                                                onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
+                                                                className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
+                                                            >
+                                                                <BarChart2 className="h-4 w-4" />
+                                                            </button>
+                                                            <Link href={`/staff/entry/${student.adm_no}`}>
+                                                                <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                    <BookOpen className="h-3 w-3" /> Record
+                                                                </Button>
+                                                            </Link>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
                         </div>
                     </div>
 
-                    <div className="space-y-6">
+                    {/* Right column: top performers + quick actions list */}
+                    <div className="lg:col-span-1 space-y-4">
+                        {/* Top Performers */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm p-5">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-sm">Top Performers</h3>
+                                <h3 className="font-semibold text-sm dark:text-white">Top Performers</h3>
                                 <Award className="h-4 w-4 text-amber-500" />
                             </div>
                             {topPerformers.length === 0 ? (
@@ -526,18 +612,17 @@ export default function StaffDashboard() {
                             ) : (
                                 <div className="space-y-4">
                                     {topPerformers.map((stu, i) => (
-                                        <div key={stu.adm_no} className="flex items-center justify-between group">
+                                        <div key={stu.adm_no} className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
-                                                <div className={`
-                                                    h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs
-                                                    ${i === 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400' :
-                                                      i === 1 ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' :
-                                                      'bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400'}
-                                                `}>
+                                                <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs
+                                                    ${i === 0 ? "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400" :
+                                                      i === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300" :
+                                                      "bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400"}`}
+                                                >
                                                     #{i + 1}
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-sm text-slate-900 dark:text-white truncate max-w-[120px]">{stu.name}</p>
+                                                    <p className="font-medium text-sm text-slate-900 dark:text-white truncate max-w-[110px]">{stu.name}</p>
                                                     <p className="text-[10px] text-slate-500 dark:text-gray-400">{stu.standard}</p>
                                                 </div>
                                             </div>
@@ -553,13 +638,14 @@ export default function StaffDashboard() {
                             )}
                         </div>
 
+                        {/* Quick Actions list */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <h3 className="font-semibold text-sm mb-4 text-slate-900 dark:text-white">Quick Actions</h3>
-                            <div className="space-y-2">
+                            <div className="space-y-1">
                                 {[
                                     { href: "/staff/attendance", label: "Mark Attendance", icon: CalendarDays },
-                                    { href: "/staff/leaves", label: "Manage Leaves", icon: Bell },
-                                    { href: "/staff/reports", label: "Reports", icon: TrendingUp },
+                                    { href: "/staff/leaves",    label: "Manage Leaves",   icon: Bell },
+                                    { href: "/staff/reports",   label: "Reports",          icon: TrendingUp },
                                 ].map(item => (
                                     <Link key={item.href} href={item.href}>
                                         <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
@@ -576,6 +662,13 @@ export default function StaffDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* Hifz Progress Modal */}
+            <HifzProgressModal
+                open={!!chartStudent}
+                onClose={() => setChartStudent(null)}
+                student={chartStudent}
+            />
         </div>
     )
 }

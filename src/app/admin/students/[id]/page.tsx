@@ -49,7 +49,9 @@ const formSchema = z.object({
     email: z.string().optional().or(z.literal('')),
     batch_year: z.string().optional(),
     standard: z.string().optional(),
-    assigned_usthad_id: z.string().optional(),
+    hifz_mentor_id: z.string().optional(),
+    school_mentor_id: z.string().optional(),
+    madrasa_mentor_id: z.string().optional(),
     local_body: z.string().optional(),
     pincode: z.string().optional(),
     post: z.string().optional(),
@@ -125,7 +127,10 @@ export default function StudentDetailPage() {
         resolver: zodResolver(formSchema),
         defaultValues: {
             name: "", dob: "", address: "", father_name: "", email: "",
-            batch_year: "", standard: "", assigned_usthad_id: "unassigned",
+            batch_year: "", standard: "",
+            hifz_mentor_id: "unassigned",
+            school_mentor_id: "unassigned",
+            madrasa_mentor_id: "unassigned",
             local_body: "", pincode: "", post: "", id_mark: "", district: "",
             nationality: "Indian", place: "", state: "",
             gender: "Male", aadhar: ""
@@ -189,8 +194,8 @@ export default function StudentDetailPage() {
         try {
             const res = await api.post('/upload/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
             if (res.data.success) {
-                const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '')
-                setPhotoUrl(base + res.data.filePath)
+                // filePath is now a full Supabase public URL — use it directly
+                setPhotoUrl(res.data.filePath)
             }
         } catch (err) { console.error("Upload error:", err) }
         finally { setPhotoUploading(false) }
@@ -220,7 +225,9 @@ export default function StudentDetailPage() {
                         email: s.email || "",
                         batch_year: s.batch_year || "",
                         standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
-                        assigned_usthad_id: s.assigned_usthad_id || "unassigned",
+                        hifz_mentor_id: s.hifz_mentor_id || "unassigned",
+                        school_mentor_id: s.school_mentor_id || "unassigned",
+                        madrasa_mentor_id: s.madrasa_mentor_id || "unassigned",
                         local_body: s.local_body || s.comprehensive_details?.basic?.local_body || "",
                         pincode: s.pincode || s.comprehensive_details?.basic?.pincode || "",
                         post: s.post || s.comprehensive_details?.basic?.post || "",
@@ -262,9 +269,10 @@ export default function StudentDetailPage() {
             address: values.address || null, father_name: values.father_name || null,
             email: values.email || null, batch_year: values.batch_year || null,
             standard: values.standard || null,
-            assigned_usthad_id: values.assigned_usthad_id === "unassigned" ? null : values.assigned_usthad_id,
+            hifz_mentor_id: values.hifz_mentor_id === "unassigned" ? null : (values.hifz_mentor_id || null),
+            school_mentor_id: values.school_mentor_id === "unassigned" ? null : (values.school_mentor_id || null),
+            madrasa_mentor_id: values.madrasa_mentor_id === "unassigned" ? null : (values.madrasa_mentor_id || null),
             photo_url: photoUrl,
-            // Save directly to dedicated columns
             gender: values.gender || null,
             nationality: values.nationality || null,
             pincode: values.pincode || null,
@@ -275,7 +283,6 @@ export default function StudentDetailPage() {
             local_body: values.local_body || null,
             aadhar: values.aadhar || null,
             id_mark: values.id_mark || null,
-            // Keep comprehensive_details in sync for backward compat
             comprehensive_details: {
                 basic: {
                     local_body: values.local_body, pincode: values.pincode,
@@ -289,6 +296,9 @@ export default function StudentDetailPage() {
         try {
             const res = await api.put(`/students/${id}`, updates)
             if (res.data.success) {
+                const hm = values.hifz_mentor_id === "unassigned" ? null : values.hifz_mentor_id
+                const sm = values.school_mentor_id === "unassigned" ? null : values.school_mentor_id
+                const mm = values.madrasa_mentor_id === "unassigned" ? null : values.madrasa_mentor_id
                 setStudentData((prev: any) => ({
                     ...prev, name: values.name, dob: values.dob,
                     address: values.address, father_name: values.father_name,
@@ -297,6 +307,7 @@ export default function StudentDetailPage() {
                     nationality: values.nationality, pincode: values.pincode, post: values.post,
                     district: values.district, state: values.state, place: values.place,
                     local_body: values.local_body, id_mark: values.id_mark, photo_url: photoUrl,
+                    hifz_mentor_id: hm, school_mentor_id: sm, madrasa_mentor_id: mm,
                     comprehensive_details: { ...prev?.comprehensive_details, basic: updates.comprehensive_details.basic }
                 }))
                 setEditing(false)
@@ -315,7 +326,9 @@ export default function StudentDetailPage() {
             address: s.address_line || s.address || "", father_name: s.father_name || s.parent_name || "",
             email: s.email || "", batch_year: s.batch_year || "",
             standard: s.standard || s.school_standard || s.hifz_standard || s.madrassa_standard || "",
-            assigned_usthad_id: s.assigned_usthad_id || "unassigned",
+            hifz_mentor_id: s.hifz_mentor_id || "unassigned",
+            school_mentor_id: s.school_mentor_id || "unassigned",
+            madrasa_mentor_id: s.madrasa_mentor_id || "unassigned",
             local_body: s.local_body || s.comprehensive_details?.basic?.local_body || "",
             pincode: s.pincode || s.comprehensive_details?.basic?.pincode || "",
             post: s.post || s.comprehensive_details?.basic?.post || "",
@@ -355,7 +368,9 @@ export default function StudentDetailPage() {
 
     const status = studentData?.status || 'active'
     const statusStyle = statusConfig[status] || statusConfig.active
-    const mentorName = staff.find(s => s.id === studentData?.assigned_usthad_id)?.name
+    const hifzMentorName = staff.find(s => s.id === studentData?.hifz_mentor_id)?.name || null
+    const schoolMentorName = staff.find(s => s.id === studentData?.school_mentor_id)?.name || null
+    const madrasaMentorName = staff.find(s => s.id === studentData?.madrasa_mentor_id)?.name || null
 
     // ── Render ────────────────────────────────────────────────
     return (
@@ -425,7 +440,9 @@ export default function StudentDetailPage() {
                             <InfoRow label="Batch Year" value={studentData?.batch_year} />
                             <InfoRow label="Nationality" value={studentData?.nationality || studentData?.comprehensive_details?.basic?.nationality} />
                             <InfoRow label="Father" value={studentData?.father_name || studentData?.parent_name} />
-                            <InfoRow label="Usthad" value={mentorName} />
+                            <InfoRow label="Hifz Mentor" value={hifzMentorName} />
+                            <InfoRow label="School Mentor" value={schoolMentorName} />
+                            <InfoRow label="Madrasa Mentor" value={madrasaMentorName} />
                             <InfoRow label="Aadhar" value={studentData?.aadhar || studentData?.comprehensive_details?.basic?.aadhar} />
                         </div>
 
@@ -479,7 +496,7 @@ export default function StudentDetailPage() {
 
                         {/* ── Tab Navigation — plain buttons, 2-row grid ── */}
                         <div className="bg-white dark:bg-[#1e2538] rounded-xl shadow-sm mb-4 border border-slate-200 dark:border-[#2a3348] p-2">
-                            <div className="flex overflow-x-auto whitespace-nowrap gap-2 pb-1 hide-scrollbar">
+                            <div className="flex flex-wrap gap-2">
                                 {([
                                     { value: 'basic',        label: 'Student Details',  icon: User },
                                     { value: 'hifz',         label: 'Hifz History',     icon: BookOpen },
@@ -500,13 +517,13 @@ export default function StudentDetailPage() {
                                         <button
                                             key={tab.value}
                                             onClick={() => setActiveTab(tab.value)}
-                                            className={`flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full text-sm font-medium transition-colors whitespace-nowrap shrink-0 border
+                                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap border
                                                 ${isActive
-                                                    ? 'bg-[#e8ebfd] text-[#3d5ee1] border-[#3d5ee1]/20'
-                                                    : 'bg-white border-slate-200 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-700 dark:hover:text-slate-200'
+                                                    ? 'bg-[#e8ebfd] text-[#3d5ee1] border-[#3d5ee1]/30 shadow-sm'
+                                                    : 'bg-white dark:bg-[#1e2538] border-slate-200 dark:border-[#2a3348] text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-700 dark:hover:text-slate-200'
                                                 }`}
                                         >
-                                            <Icon className="h-4 w-4 shrink-0" />
+                                            <Icon className="h-[15px] w-[15px] shrink-0" />
                                             {tab.label}
                                         </button>
                                     )
@@ -592,7 +609,16 @@ export default function StudentDetailPage() {
                                                     <InfoField label="Identification Mark" value={studentData?.id_mark || studentData?.comprehensive_details?.basic?.id_mark} />
                                                     <InfoField label="Father's Name" value={studentData?.father_name || studentData?.parent_name} />
                                                     <InfoField label="Parent Email" value={studentData?.email} />
-                                                    <InfoField label="Assigned Mentor" value={mentorName || (studentData?.assigned_usthad_id ? "—" : "Unassigned")} />
+                                                </div>
+                                            </div>
+
+                                            {/* Mentor Assignments */}
+                                            <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none">
+                                                <p className="text-[12px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Mentor Assignments</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-y-4 gap-x-6">
+                                                    <InfoField label="Hifz Mentor" value={hifzMentorName || "Unassigned"} />
+                                                    <InfoField label="School Mentor" value={schoolMentorName || "Unassigned"} />
+                                                    <InfoField label="Madrasa Mentor" value={madrasaMentorName || "Unassigned"} />
                                                 </div>
                                             </div>
                                         </div>
@@ -782,10 +808,51 @@ export default function StudentDetailPage() {
                                                                     <FormMessage /></FormItem>
                                                             )} />
                                                         </div>
-                                                        <FormField control={form.control} name="assigned_usthad_id" render={({ field }) => (
-                                                            <FormItem><FormLabel>Assign Mentor</FormLabel>
+                                                    </div>
+                                                </div>
+
+                                                {/* Mentor Assignments */}
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Mentor Assignments</p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                                                        <FormField control={form.control} name="hifz_mentor_id" render={({ field }) => (
+                                                            <FormItem className="min-w-0 w-full"><FormLabel>Hifz Mentor</FormLabel>
                                                                 <Select onValueChange={field.onChange} value={field.value || "unassigned"}>
-                                                                    <FormControl><SelectTrigger><SelectValue placeholder="Select Mentor" /></SelectTrigger></FormControl>
+                                                                    <FormControl>
+                                                                        <SelectTrigger className="w-full min-w-0 overflow-hidden">
+                                                                            <SelectValue placeholder="Select Mentor" className="truncate" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="unassigned">-- Unassigned --</SelectItem>
+                                                                        {staff.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage /></FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name="school_mentor_id" render={({ field }) => (
+                                                            <FormItem className="min-w-0 w-full"><FormLabel>School Mentor</FormLabel>
+                                                                <Select onValueChange={field.onChange} value={field.value || "unassigned"}>
+                                                                    <FormControl>
+                                                                        <SelectTrigger className="w-full min-w-0 overflow-hidden">
+                                                                            <SelectValue placeholder="Select Mentor" className="truncate" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="unassigned">-- Unassigned --</SelectItem>
+                                                                        {staff.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <FormMessage /></FormItem>
+                                                        )} />
+                                                        <FormField control={form.control} name="madrasa_mentor_id" render={({ field }) => (
+                                                            <FormItem className="min-w-0 w-full"><FormLabel>Madrasa Mentor</FormLabel>
+                                                                <Select onValueChange={field.onChange} value={field.value || "unassigned"}>
+                                                                    <FormControl>
+                                                                        <SelectTrigger className="w-full min-w-0 overflow-hidden">
+                                                                            <SelectValue placeholder="Select Mentor" className="truncate" />
+                                                                        </SelectTrigger>
+                                                                    </FormControl>
                                                                     <SelectContent>
                                                                         <SelectItem value="unassigned">-- Unassigned --</SelectItem>
                                                                         {staff.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

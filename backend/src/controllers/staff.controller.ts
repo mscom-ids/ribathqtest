@@ -30,7 +30,6 @@ export const getMyStaffProfile = async (req: Request, res: Response) => {
 export const getStaffStudents = async (req: Request, res: Response) => {
     try {
         const { id: staffId } = req.params;
-        console.log('getStaffStudents staffId:', staffId);
         if (!staffId) {
             return res.status(400).json({ success: false, error: 'id required' });
         }
@@ -44,7 +43,10 @@ export const getStaffStudents = async (req: Request, res: Response) => {
         }
 
         const result = await db.query(
-            `SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year
+            `SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year,
+                    (hifz_mentor_id = $1)    AS is_hifz,
+                    (school_mentor_id = $1)  AS is_school,
+                    (madrasa_mentor_id = $1) AS is_madrasa
              FROM students
              WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
                AND status = $2
@@ -52,7 +54,6 @@ export const getStaffStudents = async (req: Request, res: Response) => {
             [staffId, 'active']
         );
 
-        console.log('getStaffStudents data:', result.rows);
         res.json({ success: true, students: result.rows });
     } catch (err: any) {
         console.error('Error fetching assigned students:', err);
@@ -60,6 +61,60 @@ export const getStaffStudents = async (req: Request, res: Response) => {
             success: false,
             error: err.message || 'Failed to fetch assigned students',
         });
+    }
+};
+
+export const assignStudentsToMentor = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params; // staff id
+        const { student_ids, section } = req.body;
+
+        if (!student_ids?.length || !section) {
+            return res.status(400).json({ success: false, error: 'student_ids and section are required' });
+        }
+
+        const fieldMap: Record<string, string> = {
+            hifz:    'hifz_mentor_id',
+            school:  'school_mentor_id',
+            madrasa: 'madrasa_mentor_id',
+        };
+        const field = fieldMap[section];
+        if (!field) return res.status(400).json({ success: false, error: 'Invalid section' });
+
+        await db.query(
+            `UPDATE students SET ${field} = $1 WHERE adm_no = ANY($2::text[])`,
+            [id, student_ids]
+        );
+
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error('assignStudentsToMentor error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to assign students' });
+    }
+};
+
+export const unassignStudentFromMentor = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params; // staff id
+        const { student_id, section } = req.body;
+
+        const fieldMap: Record<string, string> = {
+            hifz:    'hifz_mentor_id',
+            school:  'school_mentor_id',
+            madrasa: 'madrasa_mentor_id',
+        };
+        const field = fieldMap[section];
+        if (!field) return res.status(400).json({ success: false, error: 'Invalid section' });
+
+        await db.query(
+            `UPDATE students SET ${field} = NULL WHERE adm_no = $1 AND ${field} = $2`,
+            [student_id, id]
+        );
+
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error('unassignStudentFromMentor error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to unassign student' });
     }
 };
 
@@ -184,6 +239,29 @@ export const getAllStaff = async (req: Request, res: Response) => {
         res.json({ success: true, staff: result.rows });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch staff' });
+    }
+};
+
+export const getStaffById = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const result = await db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Staff not found' });
+        }
+        const studentCount = await db.query(
+            `SELECT COUNT(*) FROM students
+             WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
+               AND status = 'active'`,
+            [id]
+        );
+        res.json({
+            success: true,
+            staff: result.rows[0],
+            student_count: parseInt(studentCount.rows[0].count, 10),
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch staff member' });
     }
 };
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Plus, Search, Trash2, Users, Shield, KeyRound, Loader2, Pencil, Phone, RotateCcw, MapPin, Camera, User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -69,6 +70,7 @@ type Staff = {
 const RELATION_OPTIONS = ["Personal", "Home", "Father", "Mother", "Guardian", "Other"]
 
 export default function StaffPage() {
+    const router = useRouter()
     const [staff, setStaff] = useState<Staff[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
@@ -489,7 +491,7 @@ export default function StaffPage() {
                                 </TableRow>
                             ) : (
                                 filtered.map((s, idx) => (
-                                    <TableRow key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <TableRow key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => router.push(`/admin/staff/${s.id}`)}>
                                         <TableCell className="pl-6 text-slate-400 text-xs">{idx + 1}</TableCell>
                                         <TableCell>
                                             {s.photo_url ? (
@@ -545,7 +547,16 @@ export default function StaffPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right pr-6">
-                                            <div className="flex items-center justify-end gap-2">
+                                            <div className="flex items-center justify-end gap-2" onClick={e => e.stopPropagation()}>
+                                                <Link href={`/admin/staff/${s.id}`}>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 text-xs border-[#3d5ee1]/20 text-[#3d5ee1] hover:bg-[#e8ebfd]"
+                                                    >
+                                                        View Details
+                                                    </Button>
+                                                </Link>
                                                 {activeTab === "active" ? (
                                                     <>
                                                         {!s.password_hash && (
@@ -557,17 +568,6 @@ export default function StaffPage() {
                                                             >
                                                                 <KeyRound className="h-3 w-3 mr-1.5" />
                                                                 Create Login
-                                                            </Button>
-                                                        )}
-                                                        {(!['admin', 'controller'].includes(s.role)) && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-8 w-8 p-0 border-slate-200 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-blue-900/20"
-                                                                onClick={() => openViewStudents(s)}
-                                                                title="View Assigned Students"
-                                                            >
-                                                                <Users className="h-3.5 w-3.5" />
                                                             </Button>
                                                         )}
                                                         <Button
