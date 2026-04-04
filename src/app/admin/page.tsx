@@ -145,20 +145,20 @@ function QuickLink({ href, label, icon: Icon, bg, iconBg, onClick }: {
 }) {
     if (onClick) {
         return (
-            <button onClick={onClick} className={`flex flex-col items-center justify-center py-5 rounded-xl ${bg} hover:shadow flex-1 min-w-[30%] transition-all`}>
-                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform hover:scale-110`}>
+            <button onClick={onClick} className={`flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg hover:scale-105 flex-1 min-w-[30%] transition-all duration-200`}>
+                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform`}>
                     <Icon className="h-5 w-5" />
                 </div>
-                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{label}</span>
+                <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900">{label}</span>
             </button>
         )
     }
     return (
-        <Link href={href!} className={`flex flex-col items-center justify-center py-5 rounded-xl ${bg} hover:shadow flex-1 min-w-[30%] transition-all`}>
-            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform hover:scale-110`}>
+        <Link href={href!} className={`flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg hover:scale-105 flex-1 min-w-[30%] transition-all duration-200`}>
+            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3`}>
                 <Icon className="h-5 w-5" />
             </div>
-            <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{label}</span>
+            <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900">{label}</span>
         </Link>
     )
 }
@@ -167,7 +167,7 @@ function QuickLink({ href, label, icon: Icon, bg, iconBg, onClick }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
     const [loading, setLoading] = useState(true)
-    const [students, setStudents] = useState({ total: 0, active: 0, inactive: 0 })
+    const [students, setStudents] = useState({ total: 0, onCampus: 0, outCampus: 0 })
     const [staff, setStaff] = useState({ total: 0, active: 0, inactive: 0 })
     const [alumni, setAlumni] = useState({ total: 0, completed: 0, dropout: 0 })
     const [events, setEvents] = useState<any[]>([])
@@ -211,20 +211,22 @@ export default function AdminDashboardPage() {
             }
 
 
-            if (stuRes.data.success) {
+                if (stuRes.data.success) {
                 const d: any[] = stuRes.data.students || []
-                let active = 0, inactive = 0
                 let completed = 0, dropout = 0
+                const currentStudents: any[] = []
                 d.forEach((s: any) => {
                     const st = (s.status || "active").toLowerCase()
-                    if (st === "active") active++
-                    else if (st === 'completed') completed++
+                    if (st === 'completed') completed++
                     else if (st === 'dropout') dropout++
-                    else inactive++ // catch-all for other inactive
+                    else currentStudents.push(s)
                 })
-                
-                // For student card, maybe total active vs non-active makes sense
-                setStudents({ total: d.length - completed - dropout, active, inactive })
+
+                // On Campus = active students NOT currently on outside leave
+                const outCampus = currentStudents.filter((s: any) => s.is_outside === true).length
+                const onCampus = currentStudents.length - outCampus
+
+                setStudents({ total: currentStudents.length, onCampus, outCampus })
                 setAlumni({ total: completed + dropout, completed, dropout })
             }
 
@@ -384,7 +386,8 @@ export default function AdminDashboardPage() {
             {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard 
-                    label="Total Students" value={loading ? 0 : students.total} active={loading ? 0 : students.active} inactive={loading ? 0 : students.inactive}
+                    label="Total Students" value={loading ? 0 : students.total} active={loading ? 0 : students.onCampus} inactive={loading ? 0 : students.outCampus}
+                    activeLabel="On Campus" inactiveLabel="Out Campus"
                     percent="1.2%" icon={Users} iconBg="bg-pink-50" iconColor="text-pink-500" badgeStyle="bg-green-50 text-green-600"
                 />
                 <StatCard 
@@ -398,6 +401,7 @@ export default function AdminDashboardPage() {
                 />
                 <StatCard 
                     label="Fee Collection" value={0} active={0} inactive={0}
+                    activeLabel="Cleared" inactiveLabel="Pending"
                     percent="1.2%" icon={DollarSign} iconBg="bg-green-50" iconColor="text-green-500" badgeStyle="bg-green-50 text-green-600"
                 />
             </div>

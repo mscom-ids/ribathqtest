@@ -1,53 +1,56 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Search, IndianRupee, ShieldAlert, Receipt } from "lucide-react"
+import Link from "next/link"
+import { Landmark, ArrowLeft, Clock } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function StaffFinancePage() {
-    // In the future this will be replaced with API data
-    const realAssignedStudents: any[] = []
-
     return (
-        <div className="w-full mx-auto px-4 lg:px-6 py-4 lg:py-6 space-y-4 lg:space-y-6 flex-1 bg-slate-50 dark:bg-slate-950 animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                    <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Student Fees</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">View pending balances for your assigned students.</p>
-                </div>
-                <Badge variant="outline" className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700">
-                    <ShieldAlert className="mr-1 h-3 w-3" />
-                    Read Only
-                </Badge>
-            </div>
+        <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-slate-50 dark:bg-[#020617] px-4">
+            <div className="w-full max-w-md">
+                {/* Card */}
+                <div className="bg-white dark:bg-[#0f172a] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 px-8 py-10 flex flex-col items-center text-center gap-5">
 
-            <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input 
-                    type="text" 
-                    placeholder="Find a student..." 
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm md:text-base text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors shadow-sm"
-                />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-                {realAssignedStudents.length > 0 ? (
-                    realAssignedStudents.map(student => (
-                        <Card key={student.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-                             {/* Future Implementation Placeholder */}
-                        </Card>
-                    ))
-                ) : (
-                    <div className="col-span-full py-16 flex flex-col items-center justify-center text-center">
-                        <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-full mb-4">
-                            <Receipt className="h-8 w-8 text-slate-400" />
-                        </div>
-                        <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">No fee records available</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-                            There is currently no fee data associated with your assigned students.
+                    {/* Icon */}
+                    <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shadow-sm">
+                        <Landmark className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+
+                    {/* Badge */}
+                    <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-semibold px-3 py-1 rounded-full">
+                        <Clock className="h-3 w-3" />
+                        Coming Soon
+                    </span>
+
+                    {/* Text */}
+                    <div className="space-y-2">
+                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                            Finance Module
+                        </h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
+                            This feature is currently under development and will be available soon. Check back later for fee tracking and payment history.
                         </p>
                     </div>
-                )}
+
+                    {/* Divider */}
+                    <div className="w-full border-t border-slate-100 dark:border-slate-800" />
+
+                    {/* Action */}
+                    <Link href="/staff" className="w-full">
+                        <Button
+                            variant="outline"
+                            className="w-full gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                            Back to Dashboard
+                        </Button>
+                    </Link>
+                </div>
+
+                {/* Footer note */}
+                <p className="text-center text-xs text-slate-400 mt-4">
+                    Need help? Contact your administrator.
+                </p>
             </div>
         </div>
     )

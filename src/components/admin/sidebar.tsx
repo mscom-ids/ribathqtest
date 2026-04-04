@@ -360,25 +360,6 @@ export function AdminSidebar({
                     </div>
                 </nav>
 
-                {/* ── User strip at bottom ─────────────────────────────── */}
-                <div className={cn(
-                    "shrink-0 border-t border-slate-200 dark:border-slate-800 p-4 transition-all duration-300 bg-slate-50 dark:bg-[#0f172a]",
-                    isCollapsed ? "flex flex-col items-center gap-2" : "flex items-center gap-3"
-                )}>
-                    <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0 border border-indigo-200 dark:border-indigo-800">
-                        <span className="text-[13px] font-bold text-indigo-700 dark:text-indigo-300">{initials}</span>
-                    </div>
-                    {!isCollapsed ? (
-                        <>
-                            <div className="flex-1 min-w-0 animate-in fade-in duration-300">
-                                <p className="text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate">{user.name}</p>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">{user.role}</p>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
-                        </>
-                    ) : null}
-                </div>
-
             </aside>
         </>
     )
