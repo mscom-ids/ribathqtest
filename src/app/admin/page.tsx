@@ -196,11 +196,12 @@ export default function AdminDashboardPage() {
     const load = useCallback(async () => {
         setLoading(true)
         try {
-            const [stuRes, staffRes, evtRes, delRes] = await Promise.all([
+            const [stuRes, staffRes, evtRes, delRes, outsideRes] = await Promise.all([
                 api.get("/students", { params: { status: "all" } }),
                 api.get("/staff"),
                 api.get("/events"),
-                api.get("/delegations/admin/all")
+                api.get("/delegations/admin/all"),
+                api.get("/leaves/outside-students").catch(() => ({ data: { success: false, students: [] } })),
             ])
             if (evtRes?.data?.success) {
                 setEvents(evtRes.data.events || [])
@@ -210,23 +211,24 @@ export default function AdminDashboardPage() {
                 setPendingDelegationsCount(pendings.length)
             }
 
-
-                if (stuRes.data.success) {
+            if (stuRes.data.success) {
                 const d: any[] = stuRes.data.students || []
                 let completed = 0, dropout = 0
-                const currentStudents: any[] = []
+                let enrolledCount = 0
                 d.forEach((s: any) => {
                     const st = (s.status || "active").toLowerCase()
                     if (st === 'completed') completed++
                     else if (st === 'dropout') dropout++
-                    else currentStudents.push(s)
+                    else enrolledCount++
                 })
 
-                // On Campus = active students NOT currently on outside leave
-                const outCampus = currentStudents.filter((s: any) => s.is_outside === true).length
-                const onCampus = currentStudents.length - outCampus
+                // Out Campus = unique students with status='outside' in student_leaves
+                // This correctly covers individual leaves, institutional leaves, and return overrides
+                const outsideStudents: any[] = outsideRes.data?.students || []
+                const outCampus = new Set(outsideStudents.map((s: any) => s.student_id || s.adm_no)).size
+                const onCampus = Math.max(0, enrolledCount - outCampus)
 
-                setStudents({ total: currentStudents.length, onCampus, outCampus })
+                setStudents({ total: enrolledCount, onCampus, outCampus })
                 setAlumni({ total: completed + dropout, completed, dropout })
             }
 
