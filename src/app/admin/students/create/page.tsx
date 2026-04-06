@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
+import { PhoneInput, validatePhone } from "@/components/ui/phone-input"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -41,6 +42,10 @@ const formSchema = z.object({
     hifz_mentor_id: z.string().optional(),
     school_mentor_id: z.string().optional(),
     madrasa_mentor_id: z.string().optional(),
+    phone_number: z.string().optional().refine(
+        (v) => validatePhone(v) === true,
+        { message: "Phone must be 8–15 digits" }
+    ),
 })
 
 type StaffOption = { id: string; name: string }
@@ -86,7 +91,8 @@ export default function CreateStudentPage() {
             standard: "Hifz",
             hifz_mentor_id: "unassigned",
             school_mentor_id: "unassigned",
-            madrasa_mentor_id: "unassigned"
+            madrasa_mentor_id: "unassigned",
+            phone_number: ""
         },
     })
 
@@ -143,7 +149,8 @@ export default function CreateStudentPage() {
                 school_mentor_id: values.school_mentor_id === "unassigned" ? null : values.school_mentor_id,
                 madrasa_mentor_id: values.madrasa_mentor_id === "unassigned" ? null : values.madrasa_mentor_id,
                 photo_url: photoUrl,
-                status: "active"
+                status: "active",
+                phone_number: values.phone_number || null
             })
 
             if (response.data.success) {
@@ -382,6 +389,22 @@ export default function CreateStudentPage() {
                                     )}
                                 />
                             </div>
+
+                            <FormField
+                                control={form.control}
+                                name="phone_number"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Phone Number</FormLabel>
+                                        <PhoneInput
+                                            value={field.value ?? ""}
+                                            onChange={field.onChange}
+                                            disabled={loading}
+                                        />
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
 
                             <Button type="submit" disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700">
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

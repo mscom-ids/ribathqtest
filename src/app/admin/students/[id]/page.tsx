@@ -7,6 +7,7 @@ import * as z from "zod"
 import { useRouter, useParams } from "next/navigation"
 import { ArrowLeft, Loader2, Pencil, X, AlertCircle, CheckCircle2, User, BookOpen, FileText, Users, BookMarked, GraduationCap, Globe, Trophy, Heart, Lightbulb, Gift, Briefcase } from "lucide-react"
 
+import { PhoneInput, validatePhone } from "@/components/ui/phone-input"
 import AdmissionDetailsTab from "./AdmissionDetailsTab"
 import ReligiousEducationTab from "./ReligiousEducationTab"
 import { ProgressTab } from "@/components/admin/student-profile/tabs/progress-tab"
@@ -62,6 +63,10 @@ const formSchema = z.object({
     state: z.string().optional(),
     gender: z.string().optional(),
     aadhar: z.string().optional(),
+    phone_number: z.string().optional().refine(
+        (v) => validatePhone(v) === true,
+        { message: "Phone must be 8–15 digits" }
+    ),
 })
 
 type StaffOption = { id: string; name: string }
@@ -74,6 +79,16 @@ function formatDate(dateStr: string | null | undefined) {
         if (isNaN(d.getTime())) return "—"
         return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     } catch { return "—" }
+}
+
+/** Format a stored E.164 number for display: "+919876543210" → "+91 9876543210" */
+function formatPhone(phone: string | null | undefined): string {
+    if (!phone) return "—"
+    const cleaned = phone.startsWith("+") ? phone : "+" + phone
+    // Match country code (1-3 digits) + subscriber number
+    const match = cleaned.match(/^(\+\d{1,3})(\d+)$/)
+    if (match) return `${match[1]} ${match[2]}`
+    return cleaned
 }
 
 /** Left-panel label-value row — matches PreSkool reference */
@@ -133,7 +148,7 @@ export default function StudentDetailPage() {
             madrasa_mentor_id: "unassigned",
             local_body: "", pincode: "", post: "", id_mark: "", district: "",
             nationality: "Indian", place: "", state: "",
-            gender: "Male", aadhar: ""
+            gender: "Male", aadhar: "", phone_number: ""
         },
     })
 
@@ -237,7 +252,8 @@ export default function StudentDetailPage() {
                         place: s.place || s.comprehensive_details?.basic?.place || "",
                         state: s.state || s.comprehensive_details?.basic?.state || "",
                         gender: s.gender || s.comprehensive_details?.basic?.gender || "Male",
-                        aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || ""
+                        aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || "",
+                        phone_number: s.phone_number || ""
                     })
                 } else {
                     setError("Student record not found.")
@@ -283,6 +299,7 @@ export default function StudentDetailPage() {
             local_body: values.local_body || null,
             aadhar: values.aadhar || null,
             id_mark: values.id_mark || null,
+            phone_number: values.phone_number || null,
             comprehensive_details: {
                 basic: {
                     local_body: values.local_body, pincode: values.pincode,
@@ -307,6 +324,7 @@ export default function StudentDetailPage() {
                     nationality: values.nationality, pincode: values.pincode, post: values.post,
                     district: values.district, state: values.state, place: values.place,
                     local_body: values.local_body, id_mark: values.id_mark, photo_url: photoUrl,
+                    phone_number: values.phone_number,
                     hifz_mentor_id: hm, school_mentor_id: sm, madrasa_mentor_id: mm,
                     comprehensive_details: { ...prev?.comprehensive_details, basic: updates.comprehensive_details.basic }
                 }))
@@ -338,7 +356,8 @@ export default function StudentDetailPage() {
             place: s.place || s.comprehensive_details?.basic?.place || "",
             state: s.state || s.comprehensive_details?.basic?.state || "",
             gender: s.gender || s.comprehensive_details?.basic?.gender || "Male",
-            aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || ""
+            aadhar: s.aadhar || s.comprehensive_details?.basic?.aadhar || "",
+            phone_number: s.phone_number || ""
         })
         setEditing(false)
     }
@@ -444,6 +463,7 @@ export default function StudentDetailPage() {
                             <InfoRow label="School Mentor" value={schoolMentorName} />
                             <InfoRow label="Madrasa Mentor" value={madrasaMentorName} />
                             <InfoRow label="Aadhar" value={studentData?.aadhar || studentData?.comprehensive_details?.basic?.aadhar} />
+                            <InfoRow label="Phone No" value={formatPhone(studentData?.phone_number)} />
                         </div>
 
                         {/* ── Primary Contact ────────────────────── */}
@@ -609,6 +629,7 @@ export default function StudentDetailPage() {
                                                     <InfoField label="Identification Mark" value={studentData?.id_mark || studentData?.comprehensive_details?.basic?.id_mark} />
                                                     <InfoField label="Father's Name" value={studentData?.father_name || studentData?.parent_name} />
                                                     <InfoField label="Parent Email" value={studentData?.email} />
+                                                    <InfoField label="Phone Number" value={formatPhone(studentData?.phone_number)} />
                                                 </div>
                                             </div>
 
@@ -808,6 +829,17 @@ export default function StudentDetailPage() {
                                                                     <FormMessage /></FormItem>
                                                             )} />
                                                         </div>
+                                                        <FormField control={form.control} name="phone_number" render={({ field }) => (
+                                                            <FormItem>
+                                                                <FormLabel>Phone Number</FormLabel>
+                                                                <PhoneInput
+                                                                    value={field.value ?? ""}
+                                                                    onChange={field.onChange}
+                                                                    disabled={loading}
+                                                                />
+                                                                <FormMessage />
+                                                            </FormItem>
+                                                        )} />
                                                     </div>
                                                 </div>
 

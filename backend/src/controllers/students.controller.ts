@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
+import * as XLSX from 'xlsx';
 import { db } from '../config/db';
 
 export const getAllStudents = async (req: Request, res: Response) => {
   try {
     const { search, class: className, status } = req.query;
     
-    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE 1=1';
+    let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number FROM students WHERE 1=1';
     const params: any[] = [];
     let paramCount = 1;
 
@@ -102,7 +103,7 @@ export const createStudent = async (req: Request, res: Response) => {
       'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
       'photo_url', 'status', 'comprehensive_details',
       'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
-      'place', 'local_body', 'aadhar', 'id_mark', 'country'
+      'place', 'local_body', 'aadhar', 'id_mark', 'country', 'phone_number'
     ];
     
     const values: any[] = [];
@@ -158,7 +159,7 @@ export const updateStudent = async (req: Request, res: Response) => {
       'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
       'photo_url', 'status', 'comprehensive_details',
       'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
-      'place', 'local_body', 'aadhar', 'id_mark', 'country'
+      'place', 'local_body', 'aadhar', 'id_mark', 'country', 'phone_number'
     ];
 
     const keysToUpdate = Object.keys(updateData).filter(key => validColumns.includes(key));
@@ -204,5 +205,56 @@ export const updateStudent = async (req: Request, res: Response) => {
     // Surface the PostgreSQL error detail so it's easier to diagnose (e.g. missing column)
     const detail = err.detail || err.hint || '';
     res.status(500).json({ success: false, error: `${err.message || 'Failed to update student'}${detail ? ` — ${detail}` : ''}` });
+  }
+};
+
+// ── Export students as JSON ────────────────────────────────────
+export const exportStudents = async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(
+      `SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`
+    );
+    const data = result.rows.map((s: any) => ({
+      rollNo: s.adm_no,
+      name: s.name,
+      phoneNumber: s.phone_number || ''
+    }));
+    res.json({ success: true, students: data });
+  } catch (err) {
+    console.error('Error exporting students:', err);
+    res.status(500).json({ success: false, error: 'Failed to export students' });
+  }
+};
+
+// ── Download students as Excel (.xlsx) ────────────────────────
+export const downloadStudentsExcel = async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(
+      `SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`
+    );
+
+    const rows = result.rows.map((s: any, i: number) => ({
+      'S.No': i + 1,
+      'Roll No': s.adm_no,
+      'Student Name': s.name,
+      'Phone Number': s.phone_number || ''
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Column widths
+    ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 30 }, { wch: 15 }];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Disposition', 'attachment; filename="students.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (err) {
+    console.error('Error generating Excel:', err);
+    res.status(500).json({ success: false, error: 'Failed to generate Excel file' });
   }
 };

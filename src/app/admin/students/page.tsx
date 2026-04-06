@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import {
     Plus, Search, Users, Filter, LayoutGrid, List, Eye,
-    ChevronDown, ArrowUpDown, GraduationCap, UserCheck
+    ChevronDown, ArrowUpDown, GraduationCap, UserCheck, Download
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -46,6 +46,7 @@ export type Student = {
     admission_date?: string
     father_name?: string
     parent_name?: string
+    phone_number?: string
 }
 
 function calculateAge(dob: string) {
@@ -250,10 +251,31 @@ function StudentsPageContent() {
     const [sortBy, setSortBy] = useState<"name" | "adm_no" | "standard">("name")
     const [rowsPerPage, setRowsPerPage] = useState(15)
     const [currentPage, setCurrentPage] = useState(1)
+    const [exportLoading, setExportLoading] = useState(false)
 
     useEffect(() => {
         if (filterFromUrl) setStatusFilter(filterFromUrl)
     }, [filterFromUrl])
+
+    // ── Export to Excel ───────────────────────────────────────
+    async function handleExportExcel() {
+        setExportLoading(true)
+        try {
+            const res = await api.get('/students/download-excel', { responseType: 'blob' })
+            const url = window.URL.createObjectURL(new Blob([res.data]))
+            const link = document.createElement('a')
+            link.href = url
+            link.setAttribute('download', 'students.xlsx')
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(url)
+        } catch (err) {
+            console.error('Export failed:', err)
+        } finally {
+            setExportLoading(false)
+        }
+    }
 
     // ── Load Students ─────────────────────────────────────────
     useEffect(() => {
@@ -359,11 +381,21 @@ function StudentsPageContent() {
                         Dashboard / Peoples / Students Grid
                     </p>
                 </div>
-                <Link href="/admin/students/create">
-                    <Button className="bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 shadow-sm font-semibold gap-2">
-                        <Plus className="h-4 w-4" /> Add Student
-                    </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={exportLoading}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors shadow-sm"
+                    >
+                        <Download className="h-4 w-4" />
+                        {exportLoading ? 'Exporting...' : 'Export Students'}
+                    </button>
+                    <Link href="/admin/students/create">
+                        <Button className="bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 shadow-sm font-semibold gap-2">
+                            <Plus className="h-4 w-4" /> Add Student
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {/* ── Backend Error Banner ─────────────────────────── */}

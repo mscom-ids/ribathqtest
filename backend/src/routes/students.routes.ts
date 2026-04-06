@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllStudents, getStudentById, createStudent, updateStudent } from '../controllers/students.controller';
+import { getAllStudents, getStudentById, createStudent, updateStudent, exportStudents, downloadStudentsExcel } from '../controllers/students.controller';
 import { getNextStudentId, getStaff } from '../controllers/students.helpers';
 import { getDisciplinaryRecords, createDisciplinaryRecord, deleteDisciplinaryRecord } from '../controllers/academics.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
@@ -15,6 +15,12 @@ router.get('/next-id', requireRole(['admin', 'principal', 'staff', 'usthad', 'me
 
 // GET /api/students/staff (Helper)
 router.get('/staff', requireRole(['admin', 'principal']), getStaff);
+
+// GET /api/students/export (JSON)
+router.get('/export', requireRole(['admin', 'principal', 'staff']), exportStudents);
+
+// GET /api/students/download-excel
+router.get('/download-excel', requireRole(['admin', 'principal', 'staff']), downloadStudentsExcel);
 
 // GET /api/students
 router.get('/', requireRole(['admin', 'staff', 'principal', 'usthad', 'mentor']), getAllStudents);
