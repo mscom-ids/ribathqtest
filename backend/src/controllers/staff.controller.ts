@@ -494,6 +494,19 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
         `, [staffId]);
         const outgoingDelegations = outgoingDelegationsRes.rows;
 
+        // Fetch last recited ayah (most recent "New Verses" mode log)
+        const lastHifzResult = await db.query(
+            `SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date 
+             FROM hifz_logs 
+             WHERE student_id = ANY($1) AND mode = 'New Verses' 
+             ORDER BY student_id, entry_date DESC, created_at DESC`,
+            [studentIds]
+        );
+        const lastHifzMap: Record<string, any> = {};
+        lastHifzResult.rows.forEach(r => {
+            lastHifzMap[r.student_id] = r;
+        });
+
         // Enrich students with today's stats
         const enriched = students.map((student: any) => {
             const delegation = outgoingDelegations.find(d => 
@@ -539,6 +552,7 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
                 is_outside: !!activeLeaveMeta,
                 is_delegated: !!delegation,
                 delegated_to: delegation ? delegation.receiver_name : null,
+                last_hifz: lastHifzMap[student.adm_no] || null,
                 active_leave: activeLeaveMeta ? {
                     leave_type: activeLeaveMeta.leave_type,
                     reason: activeLeaveMeta.reason_category || activeLeaveMeta.remarks || 'On Leave',

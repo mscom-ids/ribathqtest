@@ -39,6 +39,13 @@ type Student = {
         juz: number
         attendance: string
     }
+    last_hifz?: {
+        surah_name?: string
+        start_v?: number
+        end_v?: number
+        start_page?: number
+        end_page?: number
+    } | null
 }
 
 type AllStudent = {
@@ -521,10 +528,19 @@ export default function StaffDashboard() {
                                                     <AvatarFallback className="bg-slate-200 text-slate-600">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex-1 min-w-0">
-                                                    <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 truncate block text-left w-full">
+                                                    <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 line-clamp-2 break-words whitespace-normal text-left w-full">
                                                         {student.name}
                                                     </button>
-                                                    <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no} · {student.standard}</p>
+                                                    <div className="flex flex-col gap-0.5 mt-1">
+                                                        <p className="text-[11px] text-slate-400 dark:text-gray-400">
+                                                            {student.adm_no} · {student.standard}
+                                                        </p>
+                                                        {student.last_hifz && (
+                                                            <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                                                                📍 Last Hifz: {student.last_hifz.surah_name ? `${student.last_hifz.surah_name} – ${student.last_hifz.end_v || student.last_hifz.start_v || ''}` : `Page ${student.last_hifz.end_page || student.last_hifz.start_page || ''}`}
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {isOnLeave && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">OUTSIDE</span>}

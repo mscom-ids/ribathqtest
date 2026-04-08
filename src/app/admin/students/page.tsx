@@ -252,6 +252,7 @@ function StudentsPageContent() {
     const [rowsPerPage, setRowsPerPage] = useState(15)
     const [currentPage, setCurrentPage] = useState(1)
     const [exportLoading, setExportLoading] = useState(false)
+    const [outCampusCount, setOutCampusCount] = useState(0)
 
     useEffect(() => {
         if (filterFromUrl) setStatusFilter(filterFromUrl)
@@ -301,6 +302,15 @@ function StudentsPageContent() {
                 } catch (_) { /* hifz progress is optional */ }
 
                 setStudents(merged)
+
+                // Fetch Out Campus count from leave system (Option A — no DB column needed)
+                try {
+                    const leaveRes = await api.get('/leaves/outside-students')
+                    if (leaveRes.data.success) {
+                        setOutCampusCount(leaveRes.data.students?.length || 0)
+                    }
+                } catch (_) { /* non-critical */ }
+
             } catch (error: any) {
                 console.error('Error loading students:', error.message || error)
                 setLoadError('Could not connect to the server. Please ensure the backend is running.')
@@ -333,6 +343,14 @@ function StudentsPageContent() {
                         return merged
                     })
                 }
+                
+                // Fetch Out Campus count dynamically
+                try {
+                    const leaveRes = await api.get('/leaves/outside-students')
+                    if (leaveRes.data.success) {
+                        setOutCampusCount(leaveRes.data.students?.length || 0)
+                    }
+                } catch (_) {}
             } catch (_) {}
         }, 30_000)
         return () => clearInterval(interval)
@@ -367,8 +385,8 @@ function StudentsPageContent() {
     const statusCounts = {
         all: students.length,
         active: students.filter(s => (s.status || 'active') === 'active').length,
-        completed: students.filter(s => s.status === 'completed').length,
-        dropout: students.filter(s => s.status === 'dropout').length,
+        on_campus: Math.max(0, students.filter(s => (s.status || 'active') === 'active').length - outCampusCount),
+        out_campus: outCampusCount,
     }
 
     return (
@@ -407,6 +425,7 @@ function StudentsPageContent() {
 
             {/* ── Stat Summary Cards ───────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Active */}
                 <div
                     className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'active' ? 'border-emerald-300 shadow-sm ring-1 ring-emerald-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
                     onClick={() => setStatusFilter('active')}
@@ -419,30 +438,30 @@ function StudentsPageContent() {
                         <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{loading ? '—' : statusCounts.active}</p>
                     </div>
                 </div>
-                <div
-                    className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'completed' ? 'border-blue-300 shadow-sm ring-1 ring-blue-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
-                    onClick={() => setStatusFilter('completed')}
-                >
+
+                {/* On Campus */}
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-all">
                     <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center shrink-0">
                         <GraduationCap className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed</p>
-                        <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{loading ? '—' : statusCounts.completed}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">On Campus</p>
+                        <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{loading ? '—' : statusCounts.on_campus}</p>
                     </div>
                 </div>
-                <div
-                    className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'dropout' ? 'border-red-300 shadow-sm ring-1 ring-red-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
-                    onClick={() => setStatusFilter('dropout')}
-                >
-                    <div className="h-10 w-10 rounded-full bg-red-50 dark:bg-red-950 flex items-center justify-center shrink-0">
-                        <Users className="h-5 w-5 text-red-500" />
+
+                {/* Out Campus */}
+                <div className="flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border border-[#e8ede9] dark:border-[#2a3348] p-4 hover:shadow-md transition-all">
+                    <div className="h-10 w-10 rounded-full bg-orange-50 dark:bg-orange-950 flex items-center justify-center shrink-0">
+                        <Users className="h-5 w-5 text-orange-500" />
                     </div>
                     <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dropout</p>
-                        <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{loading ? '—' : statusCounts.dropout}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Out Campus</p>
+                        <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{loading ? '—' : statusCounts.out_campus}</p>
                     </div>
                 </div>
+
+                {/* Total */}
                 <div
                     className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'all' ? 'border-indigo-300 shadow-sm ring-1 ring-indigo-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
                     onClick={() => setStatusFilter('all')}

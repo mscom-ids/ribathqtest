@@ -118,7 +118,8 @@ export function ProgressTab({ student }: { student: Student }) {
                         ? (log.surah_name
                             ? `${getArabic(log.surah_name)} ${log.start_v ? `(${log.start_v}-${log.end_v})` : ''}`
                             : `Pages ${log.start_page}-${log.end_page}`)
-                        : `Juz ${log.juz_number || '?'} (${log.juz_portion || 'Full'})`
+                        : `Juz ${log.juz_number || '?'} (${log.juz_portion || 'Full'})`,
+                    recorded_by_name: log.recorded_by_name
                 }))
                 setData(processed)
 
@@ -211,17 +212,17 @@ export function ProgressTab({ student }: { student: Student }) {
                 const recentRev = dayLogs.filter((l: any) => l.mode === "Recent Revision")
                 const juzRev = dayLogs.filter((l: any) => l.mode === "Juz Revision")
 
-                const newVersesText = newVerses.map((l: any) =>
+                const newVersesEntries = newVerses.map((l: any) =>
                     `${getArabic(l.surah_name)} ${l.start_v ? `(${l.start_v}-${l.end_v})` : l.verses ? `(${l.verses})` : l.page_start ? `P${l.page_start}-${l.page_end}` : ''}`
-                ).join(", ")
+                ).filter(Boolean)
 
-                const recentRevText = recentRev.map((l: any) =>
+                const recentRevEntries = recentRev.map((l: any) =>
                     `${getArabic(l.surah_name)} ${l.page_start ? `P${l.page_start}-${l.page_end}` : ""}`
-                ).join(", ")
+                ).filter(Boolean)
 
-                const juzRevText = juzRev.map((l: any) =>
+                const juzRevEntries = juzRev.map((l: any) =>
                     `J${l.juz || "?"} P${l.page_start}-${l.page_end}`
-                ).join(", ")
+                ).filter(Boolean)
 
                 return {
                     date: day,
@@ -231,17 +232,17 @@ export function ProgressTab({ student }: { student: Student }) {
                     isFriday: dayOfWeek === 5,
                     isWeekend: dayOfWeek === 6,
                     attendance: isPresent ? "P" : isAbsent ? "A" : (dayOfWeek === 5 ? "—" : ""),
-                    newVersesText,
-                    recentRevText,
-                    juzRevText,
+                    newVersesEntries,
+                    recentRevEntries,
+                    juzRevEntries,
                     hasLogs: dayLogs.length > 0,
                 }
             })
 
             const presentDays = dayRows.filter(d => d.attendance === "P").length
-            const totalNew = dayRows.filter(d => d.newVersesText).length
-            const totalRecent = dayRows.filter(d => d.recentRevText).length
-            const totalJuz = dayRows.filter(d => d.juzRevText).length
+            const totalNew = dayRows.filter(d => d.newVersesEntries.length > 0).length
+            const totalRecent = dayRows.filter(d => d.recentRevEntries.length > 0).length
+            const totalJuz = dayRows.filter(d => d.juzRevEntries.length > 0).length
 
             return { weekNum: week.weekNum, days: dayRows, summary: { presentDays, totalNew, totalRecent, totalJuz } }
         })
@@ -307,14 +308,38 @@ export function ProgressTab({ student }: { student: Student }) {
                                                             <span className="text-slate-400 dark:text-slate-500 ml-1">{format(day.date, "EEE")}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-blue-600 dark:text-blue-400 max-w-[150px] truncate" title={day.newVersesText}>
-                                                        {day.newVersesText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 align-top">
+                                                        {day.newVersesEntries.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {day.newVersesEntries.map((txt: string, idx: number) => (
+                                                                    <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] sm:text-xs font-medium border border-blue-100 dark:border-blue-800 break-words whitespace-normal leading-tight">
+                                                                        {txt}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-orange-600 dark:text-orange-400 max-w-[150px] truncate" title={day.recentRevText}>
-                                                        {day.recentRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 align-top">
+                                                        {day.recentRevEntries.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {day.recentRevEntries.map((txt: string, idx: number) => (
+                                                                    <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 text-[10px] sm:text-xs font-medium border border-orange-100 dark:border-orange-800 break-words whitespace-normal leading-tight">
+                                                                        {txt}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                     </td>
-                                                    <td className="py-1.5 px-2 text-xs text-emerald-600 dark:text-emerald-400 max-w-[150px] truncate" title={day.juzRevText}>
-                                                        {day.juzRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                    <td className="py-1.5 px-2 align-top">
+                                                        {day.juzRevEntries.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {day.juzRevEntries.map((txt: string, idx: number) => (
+                                                                    <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] sm:text-xs font-medium border border-emerald-100 dark:border-emerald-800 break-words whitespace-normal leading-tight">
+                                                                        {txt}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -384,7 +409,10 @@ export function ProgressTab({ student }: { student: Student }) {
                                             <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${item.mode === 'New Verses' ? 'bg-blue-500' : item.mode === 'Recent Revision' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
                                             <div>
                                                 <span className="text-slate-800 font-semibold block">{item.mode}</span>
-                                                <span className="text-slate-500 text-xs block mt-0.5">{item.details}</span>
+                                                <span className="text-slate-500 text-xs block mt-0.5 break-words whitespace-normal">{item.details}</span>
+                                                {item.recorded_by_name && (
+                                                    <span className="text-[10px] text-slate-400 italic block mt-0.5">Recorded by: <span className="font-medium text-slate-500 not-italic">{item.recorded_by_name}</span></span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-1">

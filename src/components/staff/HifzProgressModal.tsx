@@ -31,6 +31,7 @@ type Log = {
     end_page?: number
     juz_number?: number
     juz_portion?: string
+    recorded_by_name?: string
 }
 
 type AttendanceRecord = {
@@ -131,17 +132,17 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             const isPresent = att.some(r => r.status === "Present")
             const isAbsent = att.some(r => r.status === "Absent")
 
-            const newHifzText = newVerses.map(l =>
+            const newHifzEntries = newVerses.map(l =>
                 `${getArabic(l.surah_name)} ${l.start_v ? `(${l.start_v}-${l.end_v})` : l.start_page ? `P${l.start_page}-${l.end_page}` : ""}`
-            ).join(", ")
+            ).filter(Boolean)
 
-            const recentRevText = recentRev.map(l =>
+            const recentRevEntries = recentRev.map(l =>
                 `${getArabic(l.surah_name)} ${l.start_page ? `P${l.start_page}-${l.end_page}` : ""}`
-            ).join(", ")
+            ).filter(Boolean)
 
-            const juzRevText = juzRev.map(l =>
+            const juzRevEntries = juzRev.map(l =>
                 `J${l.juz_number ?? "?"} (${l.juz_portion || "Full"})`
-            ).join(", ")
+            ).filter(Boolean)
 
             return {
                 date: day,
@@ -152,9 +153,9 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
                 isWeekend: dow === 6,
                 hasLogs: dayLogs.length > 0,
                 attendance: isPresent ? "P" : isAbsent ? "A" : dow === 5 ? "—" : "",
-                newHifzText,
-                recentRevText,
-                juzRevText,
+                newHifzEntries,
+                recentRevEntries,
+                juzRevEntries,
             }
         })
 
@@ -162,9 +163,9 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             weekNum: week.weekNum,
             days: dayRows,
             summary: {
-                totalNew: dayRows.filter(d => d.newHifzText).length,
-                totalRecent: dayRows.filter(d => d.recentRevText).length,
-                totalJuz: dayRows.filter(d => d.juzRevText).length,
+                totalNew: dayRows.filter(d => d.newHifzEntries.length > 0).length,
+                totalRecent: dayRows.filter(d => d.recentRevEntries.length > 0).length,
+                totalJuz: dayRows.filter(d => d.juzRevEntries.length > 0).length,
             },
         }
     })
@@ -437,14 +438,38 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                                                                     <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{day.dayNum}</span>
                                                                     <span className="text-slate-400 text-[10px] ml-1">{day.dayName}</span>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 text-xs text-blue-600 dark:text-blue-400 max-w-[130px] truncate" title={day.newHifzText}>
-                                                                    {day.newHifzText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                                <td className="py-1.5 px-2 align-top">
+                                                                    {day.newHifzEntries.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {day.newHifzEntries.map((txt, idx) => (
+                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] sm:text-xs font-medium border border-blue-100 dark:border-blue-800 break-words whitespace-normal leading-tight">
+                                                                                    {txt}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                                 </td>
-                                                                <td className="py-1.5 px-2 text-xs text-orange-600 dark:text-orange-400 max-w-[130px] truncate" title={day.recentRevText}>
-                                                                    {day.recentRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                                <td className="py-1.5 px-2 align-top">
+                                                                    {day.recentRevEntries.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {day.recentRevEntries.map((txt, idx) => (
+                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 text-[10px] sm:text-xs font-medium border border-orange-100 dark:border-orange-800 break-words whitespace-normal leading-tight">
+                                                                                    {txt}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                                 </td>
-                                                                <td className="py-1.5 px-2 text-xs text-emerald-600 dark:text-emerald-400 max-w-[130px] truncate" title={day.juzRevText}>
-                                                                    {day.juzRevText || <span className="text-slate-300 dark:text-slate-600">—</span>}
+                                                                <td className="py-1.5 px-2 align-top">
+                                                                    {day.juzRevEntries.length > 0 ? (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {day.juzRevEntries.map((txt, idx) => (
+                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] sm:text-xs font-medium border border-emerald-100 dark:border-emerald-800 break-words whitespace-normal leading-tight">
+                                                                                    {txt}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -481,7 +506,10 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                                                 <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${MODE_DOT[log.mode] || "bg-slate-400"}`} />
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">{log.mode}</p>
-                                                    <p className="text-[11px] text-slate-500 truncate">{logLabel(log)}</p>
+                                                    <p className="text-[11px] text-slate-500 break-words whitespace-normal leading-snug">{logLabel(log)}</p>
+                                                    {log.recorded_by_name && (
+                                                        <p className="text-[10px] text-slate-400 italic mt-0.5">Recorded by: <span className="font-medium text-slate-500 dark:text-slate-300 not-italic">{log.recorded_by_name}</span></p>
+                                                    )}
                                                 </div>
                                                 <span className="text-[11px] text-slate-400 shrink-0">
                                                     {format(new Date(log.entry_date), "dd MMM")}

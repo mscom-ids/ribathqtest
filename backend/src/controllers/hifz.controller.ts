@@ -32,7 +32,12 @@ export const getHifzLogsList = async (req: Request, res: Response) => {
     try {
         const { date, session_type, start_date, end_date, student_id, mode, limit } = req.query;
 
-        let query = 'SELECT * FROM hifz_logs WHERE 1=1';
+        let query = `
+            SELECT hl.*, st.name as recorded_by_name 
+            FROM hifz_logs hl
+            LEFT JOIN staff st ON hl.usthad_id = st.id
+            WHERE 1=1
+        `;
         const params: any[] = [];
         let paramCount = 1;
 

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, Loader2, Pencil, X, AlertCircle, CheckCircle2, User, BookOpen, FileText, Users, BookMarked, GraduationCap, Globe, Trophy, Heart, Lightbulb, Gift, Briefcase } from "lucide-react"
+import { ArrowLeft, Loader2, Pencil, X, AlertCircle, CheckCircle2, User, BookOpen, FileText, Users, BookMarked, GraduationCap, Globe, Trophy, Heart, Lightbulb, Gift, Briefcase, LogOut } from "lucide-react"
 
 import { PhoneInput, validatePhone } from "@/components/ui/phone-input"
 import AdmissionDetailsTab from "./AdmissionDetailsTab"
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
 
 // ── Constants ────────────────────────────────────────────────
@@ -113,9 +115,11 @@ function InfoField({ label, value }: { label: string; value?: string | null }) {
 
 // ── Status styles ─────────────────────────────────────────────
 const statusConfig: Record<string, { label: string; dot: string; badge: string }> = {
-    active:    { label: "Active",    dot: "bg-[#26af48]", badge: "bg-[#e6f7ec] text-[#26af48]" },
-    completed: { label: "Completed", dot: "bg-blue-500",    badge: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    dropout:   { label: "Dropout",   dot: "bg-red-400",     badge: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    active:           { label: "Active",           dot: "bg-[#26af48]", badge: "bg-[#e6f7ec] text-[#26af48]" },
+    completed:        { label: "Completed",        dot: "bg-blue-500",  badge: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    dropout:          { label: "Dropout",          dot: "bg-red-400",   badge: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    higher_education: { label: "Higher Education", dot: "bg-orange-400",badge: "bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+    stopped:          { label: "Stopped",          dot: "bg-slate-400", badge: "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-400" },
 }
 
 // ── Main Component ────────────────────────────────────────────
@@ -137,6 +141,16 @@ export default function StudentDetailPage() {
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
     const [pincodeLoading, setPincodeLoading] = useState(false)
     const [pincodeError, setPincodeError] = useState<string | null>(null)
+
+    // ── Transfer to Alumni modal state ───────────────────────
+    const [transferModalOpen, setTransferModalOpen] = useState(false)
+    const [transferStatus, setTransferStatus] = useState<'completed' | 'dropout' | 'higher_education'>('completed')
+    const [transferLeaveDate, setTransferLeaveDate] = useState(new Date().toISOString().split('T')[0])
+    const [transferDropoutReason, setTransferDropoutReason] = useState('')
+    const [transferCampus, setTransferCampus] = useState('')
+    const [transferCourse, setTransferCourse] = useState('')
+    const [transferring, setTransferring] = useState(false)
+    const [transferError, setTransferError] = useState<string | null>(null)
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -362,6 +376,52 @@ export default function StudentDetailPage() {
         setEditing(false)
     }
 
+    // ── Transfer to Alumni ─────────────────────────────────────
+    async function handleTransferToAlumni() {
+        if (!studentData) return
+        if (transferStatus === 'dropout' && !transferDropoutReason.trim()) {
+            setTransferError('Please enter the reason for dropout.')
+            return
+        }
+        if (transferStatus === 'higher_education' && !transferCampus.trim()) {
+            setTransferError('Please enter the campus name.')
+            return
+        }
+        setTransferError(null)
+        setTransferring(true)
+        try {
+            const comprehensiveUpdate: Record<string, string> = {
+                leaving_date: transferLeaveDate,
+            }
+            if (transferStatus === 'dropout') {
+                comprehensiveUpdate.reason_for_leaving = transferDropoutReason.trim()
+            }
+            if (transferStatus === 'higher_education') {
+                comprehensiveUpdate.higher_education_campus = transferCampus.trim()
+                comprehensiveUpdate.higher_education_course = transferCourse.trim()
+                comprehensiveUpdate.reason_for_leaving = `Higher Education – ${transferCampus.trim()}${transferCourse.trim() ? `, ${transferCourse.trim()}` : ''}`
+            }
+            const res = await api.put(`/students/${id}`, {
+                status: transferStatus,
+                comprehensive_details: comprehensiveUpdate,
+            })
+            if (res.data.success) {
+                setStudentData((prev: any) => ({
+                    ...prev,
+                    status: transferStatus,
+                    comprehensive_details: { ...prev?.comprehensive_details, ...comprehensiveUpdate },
+                }))
+                setTransferModalOpen(false)
+                setSaveSuccess(true)
+                setTimeout(() => setSaveSuccess(false), 3000)
+            }
+        } catch (err: any) {
+            setTransferError(err?.response?.data?.error || 'Transfer failed. Please try again.')
+        } finally {
+            setTransferring(false)
+        }
+    }
+
     // ── Loading / Error states ────────────────────────────────
     if (fetching) {
         return (
@@ -393,7 +453,8 @@ export default function StudentDetailPage() {
 
     // ── Render ────────────────────────────────────────────────
     return (
-        <div className="space-y-4 pb-20">
+        <>
+            <div className="space-y-4 pb-20">
 
             {/* ── Page Header ──────────────────────────────────── */}
             <div className="flex items-center justify-between">
@@ -499,11 +560,28 @@ export default function StudentDetailPage() {
                             </div>
                         </div>
 
-                        {/* ── Add Fees button ────────────────────── */}
-                        <div className="px-5 pb-5 pt-2">
+                        {/* ── Actions ────────────────────────────── */}
+                        <div className="px-5 pb-5 pt-2 space-y-2">
                             <button className="w-full py-2.5 px-4 rounded-xl bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 text-white text-sm font-semibold transition-colors">
                                 Add Fees
                             </button>
+                            {studentData?.status === 'active' && (
+                                <button
+                                    onClick={() => {
+                                        setTransferStatus('completed')
+                                        setTransferDropoutReason('')
+                                        setTransferCampus('')
+                                        setTransferCourse('')
+                                        setTransferError(null)
+                                        setTransferLeaveDate(new Date().toISOString().split('T')[0])
+                                        setTransferModalOpen(true)
+                                    }}
+                                    className="w-full py-2.5 px-4 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <LogOut className="h-4 w-4" />
+                                    Transfer to Alumni
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1031,5 +1109,120 @@ export default function StudentDetailPage() {
                 </div>
             </div>
         </div>
+
+        {/* ── Transfer to Alumni Modal ──────────────────────── */}
+        <Dialog open={transferModalOpen} onOpenChange={(open) => { if (!transferring) setTransferModalOpen(open) }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <LogOut className="h-5 w-5 text-red-500" />
+                        Transfer to Alumni
+                    </DialogTitle>
+                    <DialogDescription>
+                        Moving <span className="font-semibold text-slate-700 dark:text-slate-300">{studentData?.name}</span> out of active students. This action can be reversed from the Alumni page.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                    {/* Status selector */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="transfer-status">Reason / Status</Label>
+                        <Select
+                            value={transferStatus}
+                            onValueChange={(v) => {
+                                setTransferStatus(v as typeof transferStatus)
+                                setTransferError(null)
+                            }}
+                        >
+                            <SelectTrigger id="transfer-status">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="completed">✅ Completed (Course finished)</SelectItem>
+                                <SelectItem value="dropout">⛔ Dropout (Left mid-course)</SelectItem>
+                                <SelectItem value="higher_education">🎓 Higher Education</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Leaving date */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="transfer-date">Leaving Date</Label>
+                        <Input
+                            id="transfer-date"
+                            type="date"
+                            value={transferLeaveDate}
+                            onChange={e => setTransferLeaveDate(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Conditional: Dropout reason */}
+                    {transferStatus === 'dropout' && (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="transfer-reason">
+                                Reason for Dropout <span className="text-red-500">*</span>
+                            </Label>
+                            <textarea
+                                id="transfer-reason"
+                                rows={3}
+                                value={transferDropoutReason}
+                                onChange={e => { setTransferDropoutReason(e.target.value); setTransferError(null) }}
+                                placeholder="e.g. Family relocation, financial issues…"
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                            />
+                        </div>
+                    )}
+
+                    {/* Conditional: Higher Education fields */}
+                    {transferStatus === 'higher_education' && (
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="transfer-campus">
+                                    Campus / Institution Name <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                    id="transfer-campus"
+                                    value={transferCampus}
+                                    onChange={e => { setTransferCampus(e.target.value); setTransferError(null) }}
+                                    placeholder="e.g. Jamia Islamia Santhapuram"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="transfer-course">Course Name (Optional)</Label>
+                                <Input
+                                    id="transfer-course"
+                                    value={transferCourse}
+                                    onChange={e => setTransferCourse(e.target.value)}
+                                    placeholder="e.g. Bachelor of Islamic Studies"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Error message */}
+                    {transferError && (
+                        <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                            <AlertCircle className="h-4 w-4 shrink-0" />
+                            {transferError}
+                        </p>
+                    )}
+                </div>
+
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => setTransferModalOpen(false)} disabled={transferring}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleTransferToAlumni}
+                        disabled={transferring}
+                        className="bg-red-600 hover:bg-red-700 text-white gap-2"
+                    >
+                        {transferring ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                        {transferring ? 'Transferring…' : 'Confirm Transfer'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     )
 }

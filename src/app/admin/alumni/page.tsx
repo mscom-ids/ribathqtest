@@ -13,7 +13,8 @@ import {
     FileSearch,
     AlertCircle,
     FileCheck,
-    Upload
+    Upload,
+    Users
 } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -135,7 +136,7 @@ export default function AlumniPage() {
         completed: alumni.filter(s => s.status === 'completed').length,
         dropout: alumni.filter(s => s.status === 'dropout').length,
         higher_education: alumni.filter(s => s.status === 'higher_education').length,
-        stopped: alumni.filter(s => s.status === 'stopped').length,
+        total: alumni.filter(s => ['completed', 'dropout', 'higher_education'].includes(s.status)).length,
     }
 
     return (
@@ -173,12 +174,12 @@ export default function AlumniPage() {
                 </div>
 
                 <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl p-4 flex items-center gap-4 shadow-sm">
-                    <div className="h-12 w-12 rounded-lg bg-[#e3242b] text-white flex items-center justify-center flex-shrink-0">
-                        <Ban className="h-6 w-6" />
+                    <div className="h-12 w-12 rounded-lg bg-[#4f46e5] text-white flex items-center justify-center flex-shrink-0">
+                        <Users className="h-6 w-6" />
                     </div>
                     <div>
-                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stopped</div>
-                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.stopped}</div>
+                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Alumni</div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.total}</div>
                     </div>
                 </div>
             </div>
@@ -208,7 +209,6 @@ export default function AlumniPage() {
                                 <SelectItem value="completed">Completed</SelectItem>
                                 <SelectItem value="dropout">Dropout</SelectItem>
                                 <SelectItem value="higher_education">Higher Education</SelectItem>
-                                <SelectItem value="stopped">Stopped</SelectItem>
                             </SelectContent>
                         </Select>
 
