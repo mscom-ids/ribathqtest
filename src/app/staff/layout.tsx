@@ -124,43 +124,62 @@ export default function StaffLayout({
                 </div>
             )}
             {/* Header */}
-            <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm" suppressHydrationWarning>
-                <div className="container flex h-16 items-center justify-between px-4 md:px-6">
-                    {/* Logo / Brand */}
-                    <div className="flex items-center gap-2.5 font-bold text-lg">
-                        <img src="/logo.png" alt="Ribath" className="h-8 w-auto object-contain drop-shadow-sm" />
-                        <span className="hidden md:inline-block bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Mentor Portal</span>
+            <header
+                className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-sm"
+                suppressHydrationWarning
+            >
+                {/* 
+                  Three-section layout: [Logo | Nav | Profile]
+                  - Logo: fixed min-width, never shrinks
+                  - Nav: flex-1, scrollable on tablet
+                  - Profile: fixed min-width, never shrinks
+                */}
+                <div className="flex items-center h-14 lg:h-16 px-3 md:px-5 gap-2 lg:gap-4 max-w-[1400px] mx-auto w-full">
+
+                    {/* ── LEFT: Logo / Brand ── */}
+                    <div className="flex items-center gap-2 font-bold shrink-0 min-w-[36px] md:min-w-[160px]">
+                        <img
+                            src="/logo.png"
+                            alt="Ribath"
+                            className="h-8 w-8 object-contain drop-shadow-sm rounded-md"
+                        />
+                        <span className="hidden md:inline-block text-base lg:text-lg bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent whitespace-nowrap">
+                            Mentor Portal
+                        </span>
                     </div>
 
-                    {/* Desktop Navigation */}
-                    <nav className="hidden md:flex items-center gap-1">
+                    {/* ── CENTER: Desktop / Tablet Navigation — scrollable ── */}
+                    <nav className="hidden md:flex flex-1 items-center overflow-x-auto scrollbar-none gap-0.5 lg:gap-1 min-w-0">
                         {navItems.map((item) => {
-                            const isActive = pathname === item.href
+                            const isActive = pathname === item.href || (item.href !== "/staff" && pathname.startsWith(item.href))
                             const Icon = item.icon
                             return (
                                 <Link
                                     key={item.href}
                                     href={item.href}
-                                    className={`
-                                        relative flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg transition-all
-                                        ${isActive
+                                    className={[
+                                        "relative flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                                        "text-[12px] lg:text-sm font-medium",
+                                        "px-2.5 lg:px-3 py-2 rounded-lg transition-all duration-200",
+                                        isActive
                                             ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50"
-                                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"}
-                                    `}
+                                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                    ].join(" ")}
                                 >
-                                    <Icon className="h-4 w-4" />
-                                    {item.label}
+                                    <Icon className="h-[15px] w-[15px] lg:h-4 lg:w-4 shrink-0" />
+                                    <span>{item.label}</span>
                                     {isActive && (
-                                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-blue-600 dark:bg-blue-400" />
+                                        <span className="absolute bottom-[2px] left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-blue-600 dark:bg-blue-400" />
                                     )}
                                 </Link>
                             )
                         })}
                     </nav>
 
-                    {/* Right Side: User Profile & Actions */}
-                    <div className="flex items-center gap-3">
-                        <div className="hidden md:flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
+                    {/* ── RIGHT: Profile + Actions — fixed width, never shrinks ── */}
+                    <div className="flex items-center gap-1.5 lg:gap-2.5 shrink-0 ml-auto md:ml-0">
+                        {/* Staff name pill — only on lg+ */}
+                        <div className="hidden lg:flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
                             <Avatar className="h-7 w-7 ring-2 ring-white dark:ring-slate-900">
                                 <AvatarImage src={getPhotoUrl(staffPhoto)} className="object-cover" />
                                 <AvatarFallback className="bg-gradient-to-br from-blue-400 to-indigo-500 text-white text-xs font-bold">
@@ -172,10 +191,20 @@ export default function StaffLayout({
                             </span>
                         </div>
 
+                        {/* Avatar only on md–lg (tablet) */}
+                        <div className="hidden md:flex lg:hidden">
+                            <Avatar className="h-8 w-8 ring-2 ring-white dark:ring-slate-900">
+                                <AvatarImage src={getPhotoUrl(staffPhoto)} className="object-cover" />
+                                <AvatarFallback className="bg-gradient-to-br from-blue-400 to-indigo-500 text-white text-xs font-bold">
+                                    {staffName ? staffName.substring(0, 2).toUpperCase() : "ST"}
+                                </AvatarFallback>
+                            </Avatar>
+                        </div>
+
                         {mounted && <ModeToggle />}
 
-                        <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
-                            <LogOut className="h-5 w-5 text-slate-500 hover:text-red-500 transition-colors" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8 lg:h-9 lg:w-9" onClick={handleSignOut} title="Sign Out">
+                            <LogOut className="h-4 w-4 lg:h-5 lg:w-5 text-slate-500 hover:text-red-500 transition-colors" />
                         </Button>
                     </div>
                 </div>

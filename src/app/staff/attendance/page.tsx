@@ -45,6 +45,7 @@ type Student = {
     name: string
     photo_url: string | null
     standard: string
+    is_temp?: boolean
 }
 
 type CalendarPolicy = {
@@ -88,6 +89,7 @@ export default function StaffAttendancePage() {
     const [saving, setSaving] = useState(false)
     const [cancelling, setCancelling] = useState(false)
     const [lockedLeaves, setLockedLeaves] = useState<Record<string, string>>({})
+    const [modalLoading, setModalLoading] = useState(false)
 
     const router = useRouter()
     const todayStr = format(currentTime, "yyyy-MM-dd")
@@ -224,71 +226,66 @@ export default function StaffAttendancePage() {
         }
     }, [loadingSessions, sessionRows, daysDiff, isEditable])
 
-    // Open attendance marking modal
+    // Open attendance marking modal — opens immediately, loads data in background
     const openMarkingModal = async (session: SessionInfo) => {
         setActiveSession(session)
-        
+        setSessionStudents([])
+        setAttendanceMap({})
+        setLockedLeaves({})
+        setModalLoading(true)
+        setModalOpen(true)  // ← open instantly, show spinner inside
+
         try {
-            // Load existing student attendance marks for this schedule + date
+            // Step 1: fetch students first (needed for subsequent parallel calls)
             const { data: stuData } = await api.get('/attendance/students', {
                 params: { schedule_id: session.id, date: dateStr }
             });
-            const scheduleStudents = stuData?.students || []
+            const scheduleStudents: Student[] = stuData?.students || []
             const studentIds = scheduleStudents.map((s: Student) => s.adm_no)
             setSessionStudents(scheduleStudents)
 
             if (studentIds.length === 0) {
                 setLockedLeaves({})
                 setAttendanceMap({})
-                setModalOpen(true)
+                setModalLoading(false)
                 return
             }
 
-            // Load active leaves for these students
-            const { data: { leaves: activeLeaves } } = await api.get(`/leaves/active`, {
-                params: { student_ids: studentIds.join(',') }
-            });
+            // Step 2: fetch leaves, dashboard marks, and existing attendance IN PARALLEL
+            const idsParam = studentIds.join(',')
+            const [leavesRes, existingAttRes] = await Promise.all([
+                api.get('/leaves/active', { params: { student_ids: idsParam } }),
+                api.get('/academics/attendance', {
+                    params: { date: dateStr, session_id: session.id, student_ids: idsParam }
+                }).catch(() => ({ data: { data: [] } })),  // graceful fallback
+            ])
 
             const locks: Record<string, string> = {}
-            if (activeLeaves) {
-                activeLeaves.forEach((l: any) => { locks[l.student_id] = l.leave_type })
-            }
+            const activeLeaves = leavesRes.data?.leaves || []
+            activeLeaves.forEach((l: any) => { locks[l.student_id] = l.leave_type })
             setLockedLeaves(locks)
 
-            // Load existing marks for this date + schedule
-            const { data: dashData } = await api.get('/attendance/dashboard', {
-                params: { start_date: dateStr, end_date: dateStr }
-            });
-
-            // Build map: default to Present for unmarked
+            // Build attendance map: default Present, Leave if on active leave
             const map: Record<string, "Present" | "Absent" | "Leave"> = {}
-            scheduleStudents.forEach((s: Student) => { 
-                if (locks[s.adm_no]) {
-                    map[s.adm_no] = "Leave"
-                } else {
-                    map[s.adm_no] = "Present" 
+            scheduleStudents.forEach((s: Student) => {
+                map[s.adm_no] = locks[s.adm_no] ? "Leave" : "Present"
+            })
+
+            // Override with any existing saved marks
+            const existingAtt = existingAttRes.data?.data || []
+            existingAtt.forEach((a: any) => {
+                if (!locks[a.student_id]) {
+                    map[a.student_id] = a.status
                 }
             })
 
-            // Check student_attendance_marks for existing data
-            try {
-                const { data: { data: existingAtt } } = await api.get(`/academics/attendance`, {
-                    params: { date: dateStr, session_id: session.id, student_ids: studentIds.join(',') }
-                });
-                if (existingAtt) {
-                    existingAtt.forEach((a: any) => { 
-                        if (!locks[a.student_id]) {
-                            map[a.student_id] = a.status 
-                        }
-                    })
-                }
-            } catch { /* no existing marks */ }
-
             setAttendanceMap(map)
-            setModalOpen(true)
         } catch (error) {
             console.error(error)
-            toast.error("Failed to load attendance")
+            toast.error("Failed to load attendance data")
+            setModalOpen(false)
+        } finally {
+            setModalLoading(false)
         }
     }
 
@@ -671,12 +668,23 @@ export default function StaffAttendancePage() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             Mark Attendance — {activeSession?.name}
+                            {modalLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-500 ml-1" />}
                         </DialogTitle>
                         <DialogDescription>
                             {format(selectedDate, "EEEE, MMMM d, yyyy")} • {activeSession?.start_time?.slice(0, 5)} - {activeSession?.end_time?.slice(0, 5)}
                         </DialogDescription>
                     </DialogHeader>
 
+                    {/* Loading skeleton shown while data is fetching */}
+                    {modalLoading && (
+                        <div className="flex flex-col items-center justify-center py-12 gap-3">
+                            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Loading students...</p>
+                        </div>
+                    )}
+
+                    {/* Main content — only shown after data loads */}
+                    {!modalLoading && <>
                     {/* Quick Actions */}
                     <div className="flex items-center justify-between py-2">
                         <div className="flex items-center gap-2 text-xs">
@@ -724,7 +732,14 @@ export default function StaffAttendancePage() {
                                                         <AvatarFallback className="text-xs">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                                     </Avatar>
                                                     <div>
-                                                        <p className="font-medium text-sm">{student.name}</p>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <p className="font-medium text-sm">{student.name}</p>
+                                                            {student.is_temp && (
+                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 leading-none">
+                                                                    TEMP
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <p className="text-xs text-muted-foreground">{student.adm_no} • {student.standard}</p>
                                                     </div>
                                                 </div>
@@ -781,6 +796,7 @@ export default function StaffAttendancePage() {
                             Save Attendance
                         </Button>
                     </DialogFooter>
+                    </>}
                 </DialogContent>
             </Dialog>
         </div>

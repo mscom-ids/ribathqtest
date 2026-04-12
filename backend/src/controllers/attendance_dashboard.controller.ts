@@ -3,12 +3,17 @@ import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
 
 const ROLE_LIMITS = {
-    staff: 3, // 3 days for mentors
-    admin: 30, // 30 days for admins
+    staff: 3,    // 3 days for mentors
+    usthad: 3,   // same window for usthad role
+    mentor: 3,   // same window for mentor role
+    admin: 30,
     principal: 30,
     vice_principal: 30,
     controller: 30
 };
+
+// All roles treated as a mentor (filtered access)
+const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 
 // Helper: calculate next occurrence of a day_of_week from a given date
 function getNextOccurrence(dayOfWeek: number, fromDate: Date = new Date()): string {
@@ -120,6 +125,7 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
 
         const targetDate = new Date(date as string);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
+        const user = (req as any).user;
 
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
                      FROM attendance_schedules a
@@ -140,6 +146,47 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         query += ` ORDER BY a.start_time`;
 
         const result = await db.query(query, params);
+
+        // ── For mentor roles: filter to only schedules where they have students ──
+        if (MENTOR_ROLES.includes(user?.role)) {
+            const mentorId = await getStaffId(req);
+            if (!mentorId) return res.json({ success: true, data: [] });
+
+            const mentorColMap: Record<string, string> = {
+                hifz:     'hifz_mentor_id',
+                school:   'school_mentor_id',
+                madrasa:  'madrasa_mentor_id',
+                madrassa: 'madrasa_mentor_id',
+            };
+
+            const filteredSchedules: any[] = [];
+            for (const schedule of result.rows) {
+                const classType = (schedule.class_type || '').toLowerCase();
+                const mentorCol = mentorColMap[classType];
+                if (!mentorCol) continue;
+
+                const rawStds: string[] = typeof schedule.standards === 'string'
+                    ? JSON.parse(schedule.standards || '[]')
+                    : (schedule.standards || []);
+                const dbStds = rawStds.map(normalizeScheduleStandard);
+
+                const countRes = await db.query(
+                    `SELECT COUNT(*) AS cnt
+                     FROM students
+                     WHERE status = 'active'
+                       AND standard = ANY($1)
+                       AND ${mentorCol} = $2`,
+                    [dbStds, mentorId]
+                );
+                const studentCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
+
+                if (studentCount > 0) {
+                    filteredSchedules.push({ ...schedule, student_count: studentCount });
+                }
+            }
+            return res.json({ success: true, data: filteredSchedules });
+        }
+
         res.json({ success: true, data: result.rows });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -311,7 +358,9 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
     try {
         let { schedule_id, date, mentor_id } = req.query;
         const user = (req as any).user;
-        if (user.role === 'staff') {
+
+        // Resolve mentor_id for ALL mentor-type roles (not just 'staff')
+        if (MENTOR_ROLES.includes(user?.role)) {
             const resolvedId = await getStaffId(req);
             if (resolvedId) mentor_id = resolvedId;
         }
@@ -326,9 +375,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
             : (schedRes.rows[0].standards || []);
         const classType = (schedRes.rows[0].class_type || '').toLowerCase();
 
-        // ── Normalize schedule pill-labels → actual student DB values ──
-        // Schedule stores: "6th Standard", "+1 (Plus One)", "Hifz Only"
-        // Students table:  "6th",          "Plus One",      "Hifz"
+        // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
 
         // Map class_type to the mentor_id column on the students table
@@ -340,9 +387,12 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         };
         const mentorCol = mentorColMap[classType];
 
-        let students;
+        let permanentStudents: any[] = [];
+        let delegatedStudents: any[] = [];
+
         if (mentor_id && mentorCol) {
-            students = await db.query(
+            // Fetch permanently assigned students
+            const permRes = await db.query(
                 `SELECT adm_no, name, standard, photo_url
                  FROM students
                  WHERE status = 'active'
@@ -351,17 +401,45 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                  ORDER BY standard, name`,
                 [dbStds, mentor_id]
             );
+            permanentStudents = permRes.rows.map((s: any) => ({ ...s, is_temp: false }));
+
+            // Fetch delegated students (from mentors who delegated TO the current mentor)
+            // mentor_delegations is a global mentor-level delegation (not per-student)
+            // So: get all students belonging to any mentor who delegated to us
+            try {
+                const delRes = await db.query(
+                    `SELECT s.adm_no, s.name, s.standard, s.photo_url
+                     FROM mentor_delegations d
+                     JOIN students s ON s.${mentorCol} = d.from_staff_id
+                     WHERE d.to_staff_id = $1
+                       AND d.status = 'approved'
+                       AND s.status = 'active'
+                       AND s.standard = ANY($2)
+                     ORDER BY s.name`,
+                    [mentor_id, dbStds]
+                );
+                // Only include students not already in permanent list
+                const permIds = new Set(permanentStudents.map((s: any) => s.adm_no));
+                delegatedStudents = delRes.rows
+                    .filter((s: any) => !permIds.has(s.adm_no))
+                    .map((s: any) => ({ ...s, is_temp: true }));
+            } catch (delErr: any) {
+                console.warn('Delegation query skipped:', delErr.message);
+            }
         } else {
-            students = await db.query(
+            // Admin/principal: return all students unfiltered
+            const allRes = await db.query(
                 `SELECT adm_no, name, standard, photo_url
                  FROM students
                  WHERE status = 'active' AND standard = ANY($1)
                  ORDER BY standard, name`,
                 [dbStds]
             );
+            permanentStudents = allRes.rows.map((s: any) => ({ ...s, is_temp: false }));
         }
 
-        res.json({ success: true, students: students.rows });
+        const students = [...permanentStudents, ...delegatedStudents];
+        res.json({ success: true, students });
     } catch (e: any) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -378,6 +456,58 @@ export const markAttendance = async (req: Request, res: Response) => {
         const schedRes = await db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
         const schedule = schedRes.rows[0];
+
+        // ── Security Guard: mentor roles may only mark their own students ──
+        if (MENTOR_ROLES.includes(userRole) && student_marks?.length > 0) {
+            const mentorId = await getStaffId(req);
+            if (mentorId) {
+                const classType = (schedule.class_type || '').toLowerCase();
+                const mentorColMap: Record<string, string> = {
+                    hifz:     'hifz_mentor_id',
+                    school:   'school_mentor_id',
+                    madrasa:  'madrasa_mentor_id',
+                    madrassa: 'madrasa_mentor_id',
+                };
+                const mentorCol = mentorColMap[classType];
+                const submittedIds: string[] = student_marks.map((m: any) => m.student_id);
+
+                if (mentorCol) {
+                    // Fetch permanently assigned students
+                    const permRes = await db.query(
+                        `SELECT adm_no FROM students WHERE adm_no = ANY($1) AND ${mentorCol} = $2`,
+                        [submittedIds, mentorId]
+                    );
+                    const permIds = new Set(permRes.rows.map((r: any) => r.adm_no));
+
+                    // Fetch delegated students (from mentors who delegated TO the current mentor)
+                    let delegatedIds = new Set<string>();
+                    try {
+                        const delRes = await db.query(
+                            `SELECT s.adm_no FROM mentor_delegations d
+                             JOIN students s ON s.${mentorCol} = d.from_staff_id
+                             WHERE d.to_staff_id = $1
+                               AND d.status = 'approved'
+                               AND s.adm_no = ANY($2)`,
+                            [mentorId, submittedIds]
+                        );
+                        delegatedIds = new Set(delRes.rows.map((r: any) => r.adm_no));
+                    } catch (delErr: any) {
+                        console.warn('Delegation check skipped:', delErr.message);
+                    }
+
+                    const unauthorizedIds = submittedIds.filter(
+                        (id: string) => !permIds.has(id) && !delegatedIds.has(id)
+                    );
+
+                    if (unauthorizedIds.length > 0) {
+                        return res.status(403).json({
+                            success: false,
+                            error: `Access denied: Not assigned to student(s): ${unauthorizedIds.join(', ')}`
+                        });
+                    }
+                }
+            }
+        }
 
         const cancelCheck = await db.query('SELECT id FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
         if (cancelCheck.rows.length > 0) return res.status(400).json({ success: false, error: "Cannot mark attendance for cancelled sessions" });
