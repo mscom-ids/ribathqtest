@@ -517,59 +517,141 @@ export default function StaffDashboard() {
                                     {search ? "No students match your search." : "No students found."}
                                 </div>
                             ) : (
-                                <div className="divide-y divide-slate-50 dark:divide-gray-800/50">
+                                <div className="divide-y divide-slate-100 dark:divide-gray-800/50">
                                     {(studentMode === "my" ? filteredStudents as Student[] : []).map(student => {
-                                        const att = student.today_stats?.attendance
                                         const isOnLeave = student.is_outside
                                         return (
-                                            <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                                <Avatar className="h-10 w-10 shrink-0">
-                                                    <AvatarImage src={getPhotoUrl(student.photo_url)} />
-                                                    <AvatarFallback className="bg-slate-200 text-slate-600">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                                </Avatar>
-                                                <div className="flex-1 min-w-0">
-                                                    <button onClick={() => setSelectedStudent(student)} className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 line-clamp-2 break-words whitespace-normal text-left w-full">
-                                                        {student.name}
-                                                    </button>
-                                                    <div className="flex flex-col gap-0.5 mt-1">
-                                                        <p className="text-[11px] text-slate-400 dark:text-gray-400">
-                                                            {student.adm_no} · {student.standard}
-                                                        </p>
-                                                        {student.last_hifz && (
-                                                            <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
-                                                                📍 Last Hifz: {student.last_hifz.surah_name ? `${student.last_hifz.surah_name} – ${student.last_hifz.end_v || student.last_hifz.start_v || ''}` : `Page ${student.last_hifz.end_page || student.last_hifz.start_page || ''}`}
+                                            <div key={student.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+
+                                                {/* ── Mobile card (hidden on md+) ─────────────────── */}
+                                                <div className="md:hidden px-4 py-3.5 space-y-2.5">
+                                                    {/* Row 1: Avatar + Name/Meta */}
+                                                    <div className="flex items-start gap-3">
+                                                        <Avatar className="h-11 w-11 shrink-0 mt-0.5">
+                                                            <AvatarImage src={getPhotoUrl(student.photo_url)} />
+                                                            <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm">
+                                                                {student.name.substring(0, 2).toUpperCase()}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <div className="flex-1 min-w-0">
+                                                            <button
+                                                                onClick={() => setSelectedStudent(student)}
+                                                                className="font-bold text-[13px] text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left w-full leading-snug"
+                                                                style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
+                                                            >
+                                                                {student.name}
+                                                            </button>
+                                                            <p className="text-[11px] text-slate-400 dark:text-gray-400 mt-0.5">
+                                                                {student.adm_no} · {student.standard}
                                                             </p>
+                                                            {student.last_hifz && (
+                                                                <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 mt-1 leading-snug">
+                                                                    📍 {student.last_hifz.surah_name
+                                                                        ? `${student.last_hifz.surah_name} – ${student.last_hifz.end_v || student.last_hifz.start_v || ""}`
+                                                                        : `Page ${student.last_hifz.end_page || student.last_hifz.start_page || ""}`}
+                                                                </p>
+                                                            )}
+                                                            {isOnLeave && (
+                                                                <span className="inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 tracking-wide">
+                                                                    OUTSIDE
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 2: Action button + icon buttons */}
+                                                    <div className="flex items-center gap-2 pl-14">
+                                                        {student.is_delegated ? (
+                                                            <Button size="sm" disabled className="flex-1 h-8 text-[11px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500">
+                                                                <Clock className="h-3.5 w-3.5 mr-1" /> Delegated
+                                                            </Button>
+                                                        ) : isOnLeave ? (
+                                                            <Button size="sm" disabled className="flex-1 h-8 text-[11px] bg-orange-50 text-orange-400 dark:bg-orange-900/20 dark:text-orange-500 cursor-not-allowed border border-orange-200 dark:border-orange-800/50">
+                                                                Currently Outside
+                                                            </Button>
+                                                        ) : (
+                                                            <Link href={`/staff/entry/${student.adm_no}`} className="flex-1">
+                                                                <Button size="sm" className="w-full h-8 text-[12px] font-semibold bg-green-600 hover:bg-green-700 active:bg-green-800 text-white">
+                                                                    <BookOpen className="h-3.5 w-3.5 mr-1" /> Record
+                                                                </Button>
+                                                            </Link>
                                                         )}
+                                                        <button
+                                                            title="View Hifz Progress"
+                                                            onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#3d5ee1] hover:bg-[#e8ebfd] dark:hover:bg-[#1e2a5c] transition-colors shrink-0"
+                                                        >
+                                                            <BarChart2 className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedStudent(student)}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+                                                        >
+                                                            <ChevronRight className="h-4 w-4" />
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    {isOnLeave && <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">OUTSIDE</span>}
-                                                    {student.is_delegated ? (
-                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500">
-                                                            <Clock className="h-3 w-3" /> Delegated
-                                                        </Button>
-                                                    ) : isOnLeave ? (
-                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-orange-100 text-orange-500 dark:bg-orange-900/30 dark:text-orange-400 cursor-not-allowed">
-                                                            Outside
-                                                        </Button>
-                                                    ) : (
-                                                        <Link href={`/staff/entry/${student.adm_no}`}>
-                                                            <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
-                                                                <BookOpen className="h-3 w-3" /> Record
+
+                                                {/* ── Desktop row (hidden below md) ───────────────── */}
+                                                <div className="hidden md:flex items-center gap-3 px-5 py-3.5">
+                                                    <Avatar className="h-10 w-10 shrink-0">
+                                                        <AvatarImage src={getPhotoUrl(student.photo_url)} />
+                                                        <AvatarFallback className="bg-slate-200 text-slate-600">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-1 min-w-0">
+                                                        <button
+                                                            onClick={() => setSelectedStudent(student)}
+                                                            className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 line-clamp-2 break-words whitespace-normal text-left w-full"
+                                                        >
+                                                            {student.name}
+                                                        </button>
+                                                        <div className="flex flex-col gap-0.5 mt-0.5">
+                                                            <p className="text-[11px] text-slate-400 dark:text-gray-400">
+                                                                {student.adm_no} · {student.standard}
+                                                            </p>
+                                                            {student.last_hifz && (
+                                                                <p className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                                                                    📍 Last Hifz: {student.last_hifz.surah_name
+                                                                        ? `${student.last_hifz.surah_name} – ${student.last_hifz.end_v || student.last_hifz.start_v || ""}`
+                                                                        : `Page ${student.last_hifz.end_page || student.last_hifz.start_page || ""}`}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {isOnLeave && (
+                                                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 font-semibold">
+                                                                OUTSIDE
+                                                            </span>
+                                                        )}
+                                                        {student.is_delegated ? (
+                                                            <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500">
+                                                                <Clock className="h-3 w-3" /> Delegated
                                                             </Button>
-                                                        </Link>
-                                                    )}
-                                                    <button
-                                                        title="View Hifz Progress"
-                                                        onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
-                                                        className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
-                                                    >
-                                                        <BarChart2 className="h-4 w-4" />
-                                                    </button>
-                                                    <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
-                                                        <ChevronRight className="h-4 w-4" />
-                                                    </button>
+                                                        ) : isOnLeave ? (
+                                                            <Button size="sm" disabled className="h-7 text-[10px] bg-orange-100 text-orange-500 dark:bg-orange-900/30 dark:text-orange-400 cursor-not-allowed">
+                                                                Outside
+                                                            </Button>
+                                                        ) : (
+                                                            <Link href={`/staff/entry/${student.adm_no}`}>
+                                                                <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                    <BookOpen className="h-3 w-3" /> Record
+                                                                </Button>
+                                                            </Link>
+                                                        )}
+                                                        <button
+                                                            title="View Hifz Progress"
+                                                            onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
+                                                            className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
+                                                        >
+                                                            <BarChart2 className="h-4 w-4" />
+                                                        </button>
+                                                        <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+                                                            <ChevronRight className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
+
                                             </div>
                                         )
                                     })}
@@ -582,29 +664,60 @@ export default function StaffDashboard() {
                                                     Showing {filteredStudents.length} student{filteredStudents.length !== 1 ? "s" : ""}
                                                 </div>
                                             )}
-                                            <div className="overflow-y-auto divide-y divide-slate-50 dark:divide-gray-800/50" style={{ maxHeight: 440 }}>
+                                            <div className="overflow-y-auto divide-y divide-slate-100 dark:divide-gray-800/50" style={{ maxHeight: 440 }}>
                                                 {(filteredStudents as AllStudent[]).map(student => (
-                                                    <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                                        <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
-                                                            {student.name.charAt(0).toUpperCase()}
+                                                    <div key={student.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                                        {/* Mobile */}
+                                                        <div className="md:hidden flex items-center gap-3 px-4 py-3">
+                                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
+                                                                {student.name.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-semibold text-sm text-slate-900 dark:text-white break-words leading-snug" style={{ wordBreak: "break-word" }}>
+                                                                    {student.name}
+                                                                </p>
+                                                                <p className="text-[11px] text-slate-400 dark:text-gray-400 mt-0.5">
+                                                                    {student.adm_no}{student.standard ? ` · ${student.standard}` : ""}
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                <button
+                                                                    title="View Hifz Progress"
+                                                                    onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
+                                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#3d5ee1] hover:bg-[#e8ebfd] transition-colors"
+                                                                >
+                                                                    <BarChart2 className="h-4 w-4" />
+                                                                </button>
+                                                                <Link href={`/staff/entry/${student.adm_no}`}>
+                                                                    <Button size="sm" className="h-8 text-[11px] bg-green-600 hover:bg-green-700 text-white px-3">
+                                                                        <BookOpen className="h-3 w-3 mr-1" /> Record
+                                                                    </Button>
+                                                                </Link>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
-                                                            <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 shrink-0">
-                                                            <button
-                                                                title="View Hifz Progress"
-                                                                onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
-                                                                className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
-                                                            >
-                                                                <BarChart2 className="h-4 w-4" />
-                                                            </button>
-                                                            <Link href={`/staff/entry/${student.adm_no}`}>
-                                                                <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
-                                                                    <BookOpen className="h-3 w-3" /> Record
-                                                                </Button>
-                                                            </Link>
+                                                        {/* Desktop */}
+                                                        <div className="hidden md:flex items-center gap-3 px-5 py-3.5">
+                                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
+                                                                {student.name.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
+                                                                <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                <button
+                                                                    title="View Hifz Progress"
+                                                                    onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
+                                                                    className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
+                                                                >
+                                                                    <BarChart2 className="h-4 w-4" />
+                                                                </button>
+                                                                <Link href={`/staff/entry/${student.adm_no}`}>
+                                                                    <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                        <BookOpen className="h-3 w-3" /> Record
+                                                                    </Button>
+                                                                </Link>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 ))}
