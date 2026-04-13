@@ -224,12 +224,21 @@ const getDashboardData = async (req, res) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date)
             return res.status(400).json({ success: false, error: "Dates required" });
+        const user = req.user;
         const cancels = await db_1.db.query('SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2', [start_date, end_date]);
-        const marks = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2', [start_date, end_date]);
+        let marksQuery;
+        if (MENTOR_ROLES.includes(user?.role)) {
+            // Mentors only see their own marks — so "Marked" status is per-mentor
+            marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3', [start_date, end_date, user.id]);
+        }
+        else {
+            // Admin/Principal: see all marks (session shown as completed if anyone marked it)
+            marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2', [start_date, end_date]);
+        }
         res.json({
             success: true,
             cancellations: cancels.rows,
-            marks: marks.rows
+            marks: marksQuery.rows
         });
     }
     catch (err) {
@@ -484,10 +493,10 @@ const markAttendance = async (req, res) => {
         await db_1.db.query(`INSERT INTO staff_attendance (staff_id, date, status) 
              VALUES ($1, $2, 'present')
              ON CONFLICT (staff_id, date) DO UPDATE SET status = 'present'`, [userId, date]);
-        // Record the Master Class Completion Marker
-        const result = await db_1.db.query(`INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at) 
+        // Record the Master Class Completion Marker — scoped per mentor
+        const result = await db_1.db.query(`INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at)
              VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (schedule_id, date) DO UPDATE SET updated_at = NOW(), marked_by = EXCLUDED.marked_by RETURNING *`, [schedule_id, date, userId]);
+             ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`, [schedule_id, date, userId]);
         await db_1.db.query('COMMIT');
         res.json({ success: true, data: result.rows[0] });
     }

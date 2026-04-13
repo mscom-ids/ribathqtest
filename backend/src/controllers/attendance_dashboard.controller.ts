@@ -259,19 +259,31 @@ export const getDashboardData = async (req: Request, res: Response) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date) return res.status(400).json({ success: false, error: "Dates required" });
 
+        const user = (req as any).user;
         const cancels = await db.query(
             'SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2',
             [start_date, end_date]
         );
-        const marks = await db.query(
-            'SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2',
-            [start_date, end_date]
-        );
+
+        let marksQuery: { rows: any[] };
+        if (MENTOR_ROLES.includes(user?.role)) {
+            // Mentors only see their own marks — so "Marked" status is per-mentor
+            marksQuery = await db.query(
+                'SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3',
+                [start_date, end_date, user.id]
+            );
+        } else {
+            // Admin/Principal: see all marks (session shown as completed if anyone marked it)
+            marksQuery = await db.query(
+                'SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2',
+                [start_date, end_date]
+            );
+        }
 
         res.json({
             success: true,
             cancellations: cancels.rows,
-            marks: marks.rows
+            marks: marksQuery.rows
         });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -578,11 +590,11 @@ export const markAttendance = async (req: Request, res: Response) => {
             [userId, date]
         );
 
-        // Record the Master Class Completion Marker
+        // Record the Master Class Completion Marker — scoped per mentor
         const result = await db.query(
-            `INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at) 
+            `INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at)
              VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (schedule_id, date) DO UPDATE SET updated_at = NOW(), marked_by = EXCLUDED.marked_by RETURNING *`,
+             ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`,
             [schedule_id, date, userId]
         );
 
