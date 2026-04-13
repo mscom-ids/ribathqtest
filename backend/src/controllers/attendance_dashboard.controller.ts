@@ -448,10 +448,14 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                 // Leave is active if: status='approved' AND date >= start_datetime AND date <= end_datetime
                 const leavesRes = await db.query(
                     `SELECT DISTINCT student_id FROM student_leaves
-                     WHERE status = 'approved'
-                       AND student_id = ANY($1)
-                       AND start_datetime::date <= $2::date
-                       AND end_datetime::date >= $2::date`,
+                     WHERE student_id = ANY($1)
+                       AND (
+                         -- Approved (not yet exited): check date range
+                         (status = 'approved' AND start_datetime::date <= $2::date AND end_datetime::date >= $2::date)
+                         OR
+                         -- Outside (already exited, not yet returned): always mark as outside regardless of overdue
+                         (status = 'outside')
+                       )`,
                     [studentIds, date]
                 );
                 const leaveStudentIds = new Set(leavesRes.rows.map((r: any) => r.student_id));

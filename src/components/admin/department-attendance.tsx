@@ -174,7 +174,12 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             const mentorParam = selectedMentorId !== 'all' ? `&mentor_id=${selectedMentorId}` : ''
             const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}`)
             if (res.data.success) {
-                const students: StudentMark[] = res.data.students.map((st: any) => ({ ...st, status: 'present' }))
+                const students: StudentMark[] = res.data.students.map((st: any) => ({
+                    ...st,
+                    status: st.is_on_leave ? 'outside' : 'present',
+                    is_on_leave: st.is_on_leave || false,
+                    attendance_status: st.attendance_status || (st.is_on_leave ? 'outside' : 'pending')
+                }))
                 setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: selectedMentorId })
             }
         } catch (e: any) {
