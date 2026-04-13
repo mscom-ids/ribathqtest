@@ -90,6 +90,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [logId, setLogId] = useState<string | null>(null)
     const [student, setStudent] = useState<{ adm_no: string; name: string } | null>(null)
     const [assignedUsthadId, setAssignedUsthadId] = useState<string | null>(null)
+    const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
 
     const today = new Date()
@@ -123,6 +124,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 if (sRes.data.success) {
                     setStudent(sRes.data.student)
                     setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
+                    setIsOutside(!!sRes.data.student.is_outside)
                 }
             } catch (e) { console.error(e) }
 
@@ -334,6 +336,31 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const isOldDate = isBefore(new Date(form.watch("date")), minDate)
 
     if (!mounted) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
+
+    // Block recording for outside students
+    if (isOutside) {
+        return (
+            <div className="p-4 max-w-lg mx-auto pb-20">
+                <div className="flex items-center mb-4">
+                    <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-8 w-8">
+                        <ArrowLeft className="w-4 h-4" />
+                    </Button>
+                    <h1 className="ml-2 text-lg font-bold text-slate-800 dark:text-slate-100">{student?.name || "Student"}</h1>
+                </div>
+                <div className="rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-950/20 p-6 text-center space-y-3">
+                    <div className="text-4xl">🚫</div>
+                    <h2 className="font-bold text-orange-700 dark:text-orange-400 text-base">Student is Currently Outside</h2>
+                    <p className="text-sm text-orange-600 dark:text-orange-500">
+                        Hifz records cannot be added for students who are outside the institution.
+                        Please wait until the student returns.
+                    </p>
+                    <Button variant="outline" onClick={() => router.back()} className="mt-2 border-orange-300 text-orange-700 hover:bg-orange-100">
+                        Go Back
+                    </Button>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="p-4 max-w-lg mx-auto pb-20">

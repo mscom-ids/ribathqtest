@@ -548,6 +548,10 @@ export default function StaffDashboard() {
                                                         <Button size="sm" disabled className="h-7 text-[10px] bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-gray-500">
                                                             <Clock className="h-3 w-3" /> Delegated
                                                         </Button>
+                                                    ) : isOnLeave ? (
+                                                        <Button size="sm" disabled className="h-7 text-[10px] bg-orange-100 text-orange-500 dark:bg-orange-900/30 dark:text-orange-400 cursor-not-allowed">
+                                                            Outside
+                                                        </Button>
                                                     ) : (
                                                         <Link href={`/staff/entry/${student.adm_no}`}>
                                                             <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">

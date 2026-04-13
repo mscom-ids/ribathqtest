@@ -202,13 +202,17 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     const submitRoster = async () => {
         if (!rosterModal) return
         try {
-            const payload = {
+            const payload: any = {
                 schedule_id: rosterModal.schedule.id,
                 date: rosterModal.dateStr,
                 // Only include students NOT on leave
                 student_marks: rosterModal.students
                     .filter(s => !s.is_on_leave)
                     .map(s => ({ student_id: s.adm_no, status: s.status }))
+            }
+            // If admin is marking on behalf of a specific mentor, attribute the mark to them
+            if (rosterModal.mentorId && rosterModal.mentorId !== 'all') {
+                payload.on_behalf_of = rosterModal.mentorId
             }
             const res = await api.post('/attendance/mark', payload)
             if (res.data.success) { setRosterModal(null); fetchData() }

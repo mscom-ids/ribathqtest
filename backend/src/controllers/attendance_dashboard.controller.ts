@@ -492,9 +492,14 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 export const markAttendance = async (req: Request, res: Response) => {
     try {
         // Now handles a bulk payload of student_marks
-        const { schedule_id, date, student_marks } = req.body;
+        const { schedule_id, date, student_marks, on_behalf_of } = req.body;
         const userRole = (req as any).user.role;
         const userId = (req as any).user.id;
+
+        // If an admin/principal is marking on behalf of a specific mentor,
+        // store the mark under the mentor's ID so their portal shows it as "Marked"
+        const ADMIN_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+        const effectiveMarkedBy = ADMIN_ROLES.includes(userRole) && on_behalf_of ? on_behalf_of : userId;
 
         const schedRes = await db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
@@ -575,9 +580,9 @@ export const markAttendance = async (req: Request, res: Response) => {
                 await db.query(
                     `INSERT INTO student_attendance_marks (schedule_id, student_id, date, status, marked_by)
                      VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (schedule_id, student_id, date) DO UPDATE 
+                     ON CONFLICT (schedule_id, student_id, date) DO UPDATE
                      SET status = EXCLUDED.status, marked_by = EXCLUDED.marked_by`,
-                    [schedule_id, item.student_id, date, item.status, userId]
+                    [schedule_id, item.student_id, date, item.status, effectiveMarkedBy]
                 );
             }
         }
@@ -595,7 +600,7 @@ export const markAttendance = async (req: Request, res: Response) => {
             `INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at)
              VALUES ($1, $2, $3, NOW())
              ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`,
-            [schedule_id, date, userId]
+            [schedule_id, date, effectiveMarkedBy]
         );
 
         await db.query('COMMIT');

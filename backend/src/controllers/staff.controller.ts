@@ -480,7 +480,7 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
 
         // Fetch today's attendance
         const attResult = await db.query(
-            `SELECT student_id, status FROM attendance WHERE student_id = ANY($1) AND date = $2`,
+            `SELECT student_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`,
             [studentIds, todayDate]
         );
         const attendance = attResult.rows;

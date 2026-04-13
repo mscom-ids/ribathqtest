@@ -53,8 +53,15 @@ export const getStudentById = async (req: Request, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Student not found' });
     }
+
+    // Check if student is currently outside (has active leave)
+    const leaveRes = await db.query(
+      `SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside' LIMIT 1`,
+      [id]
+    );
+    const is_outside = leaveRes.rows.length > 0;
     
-    res.json({ success: true, student: result.rows[0] });
+    res.json({ success: true, student: { ...result.rows[0], is_outside } });
   } catch (err) {
     console.error('Error fetching student:', err);
     res.status(500).json({ success: false, error: 'Failed to fetch student' });
