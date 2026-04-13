@@ -5,11 +5,15 @@ const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const ROLE_LIMITS = {
     staff: 3, // 3 days for mentors
-    admin: 30, // 30 days for admins
+    usthad: 3, // same window for usthad role
+    mentor: 3, // same window for mentor role
+    admin: 30,
     principal: 30,
     vice_principal: 30,
     controller: 30
 };
+// All roles treated as a mentor (filtered access)
+const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 // Helper: calculate next occurrence of a day_of_week from a given date
 function getNextOccurrence(dayOfWeek, fromDate = new Date()) {
     const current = fromDate.getDay(); // 0=Sun, but our system: 1=Mon..6=Sat
@@ -44,7 +48,7 @@ const getSchedules = async (req, res) => {
         const params = [];
         let paramCount = 1;
         if (academic_year_id) {
-            conditions.push(`a.academic_year_id = $${paramCount}`);
+            conditions.push(`(a.academic_year_id = $${paramCount} OR a.academic_year_id IS NULL)`);
             params.push(academic_year_id);
             paramCount++;
         }
@@ -110,6 +114,7 @@ const getSchedulesForDate = async (req, res) => {
             return res.status(400).json({ success: false, error: 'date is required (YYYY-MM-DD)' });
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
+        const user = req.user;
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
                      FROM attendance_schedules a
                      LEFT JOIN staff s ON a.mentor_id = s.id
@@ -126,6 +131,39 @@ const getSchedulesForDate = async (req, res) => {
         }
         query += ` ORDER BY a.start_time`;
         const result = await db_1.db.query(query, params);
+        // ── For mentor roles: filter to only schedules where they have students ──
+        if (MENTOR_ROLES.includes(user?.role)) {
+            const mentorId = await (0, staff_utils_1.getStaffId)(req);
+            if (!mentorId)
+                return res.json({ success: true, data: [] });
+            const mentorColMap = {
+                hifz: 'hifz_mentor_id',
+                school: 'school_mentor_id',
+                madrasa: 'madrasa_mentor_id',
+                madrassa: 'madrasa_mentor_id',
+            };
+            const filteredSchedules = [];
+            for (const schedule of result.rows) {
+                const classType = (schedule.class_type || '').toLowerCase();
+                const mentorCol = mentorColMap[classType];
+                if (!mentorCol)
+                    continue;
+                const rawStds = typeof schedule.standards === 'string'
+                    ? JSON.parse(schedule.standards || '[]')
+                    : (schedule.standards || []);
+                const dbStds = rawStds.map(normalizeScheduleStandard);
+                const countRes = await db_1.db.query(`SELECT COUNT(*) AS cnt
+                     FROM students
+                     WHERE status = 'active'
+                       AND standard = ANY($1)
+                       AND ${mentorCol} = $2`, [dbStds, mentorId]);
+                const studentCount = parseInt(countRes.rows[0]?.cnt || '0', 10);
+                if (studentCount > 0) {
+                    filteredSchedules.push({ ...schedule, student_count: studentCount });
+                }
+            }
+            return res.json({ success: true, data: filteredSchedules });
+        }
         res.json({ success: true, data: result.rows });
     }
     catch (err) {
@@ -220,11 +258,11 @@ const getMentorSchedules = async (req, res) => {
         if (mentorStudentStds.length === 0) {
             return res.json({ success: true, schedule_ids: [], mentor_standards: [] });
         }
-        // Get all schedules for this academic year
-        let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules';
+        // Get all active (non-deleted) schedules for this academic year
+        let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL)';
         const params = [];
         if (academic_year_id) {
-            schedQuery += ' WHERE academic_year_id = $1';
+            schedQuery += ' AND (academic_year_id = $1 OR academic_year_id IS NULL)';
             params.push(academic_year_id);
         }
         const allScheds = await db_1.db.query(schedQuery, params);
@@ -269,7 +307,8 @@ const getStudentsForSchedule = async (req, res) => {
     try {
         let { schedule_id, date, mentor_id } = req.query;
         const user = req.user;
-        if (user.role === 'staff') {
+        // Resolve mentor_id for ALL mentor-type roles (not just 'staff')
+        if (MENTOR_ROLES.includes(user?.role)) {
             const resolvedId = await (0, staff_utils_1.getStaffId)(req);
             if (resolvedId)
                 mentor_id = resolvedId;
@@ -283,9 +322,7 @@ const getStudentsForSchedule = async (req, res) => {
             ? JSON.parse(schedRes.rows[0].standards || '[]')
             : (schedRes.rows[0].standards || []);
         const classType = (schedRes.rows[0].class_type || '').toLowerCase();
-        // ── Normalize schedule pill-labels → actual student DB values ──
-        // Schedule stores: "6th Standard", "+1 (Plus One)", "Hifz Only"
-        // Students table:  "6th",          "Plus One",      "Hifz"
+        // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
         // Map class_type to the mentor_id column on the students table
         const mentorColMap = {
@@ -295,22 +332,71 @@ const getStudentsForSchedule = async (req, res) => {
             madrassa: 'madrasa_mentor_id',
         };
         const mentorCol = mentorColMap[classType];
-        let students;
+        let permanentStudents = [];
+        let delegatedStudents = [];
         if (mentor_id && mentorCol) {
-            students = await db_1.db.query(`SELECT adm_no, name, standard, photo_url
+            // Fetch permanently assigned students
+            const permRes = await db_1.db.query(`SELECT adm_no, name, standard, photo_url
                  FROM students
                  WHERE status = 'active'
                    AND standard = ANY($1)
                    AND ${mentorCol} = $2
                  ORDER BY standard, name`, [dbStds, mentor_id]);
+            permanentStudents = permRes.rows.map((s) => ({ ...s, is_temp: false }));
+            // Fetch delegated students (from mentors who delegated TO the current mentor)
+            // mentor_delegations is a global mentor-level delegation (not per-student)
+            // So: get all students belonging to any mentor who delegated to us
+            try {
+                const delRes = await db_1.db.query(`SELECT s.adm_no, s.name, s.standard, s.photo_url
+                     FROM mentor_delegations d
+                     JOIN students s ON s.${mentorCol} = d.from_staff_id
+                     WHERE d.to_staff_id = $1
+                       AND d.status = 'approved'
+                       AND s.status = 'active'
+                       AND s.standard = ANY($2)
+                     ORDER BY s.name`, [mentor_id, dbStds]);
+                // Only include students not already in permanent list
+                const permIds = new Set(permanentStudents.map((s) => s.adm_no));
+                delegatedStudents = delRes.rows
+                    .filter((s) => !permIds.has(s.adm_no))
+                    .map((s) => ({ ...s, is_temp: true }));
+            }
+            catch (delErr) {
+                console.warn('Delegation query skipped:', delErr.message);
+            }
         }
         else {
-            students = await db_1.db.query(`SELECT adm_no, name, standard, photo_url
+            // Admin/principal: return all students unfiltered
+            const allRes = await db_1.db.query(`SELECT adm_no, name, standard, photo_url
                  FROM students
                  WHERE status = 'active' AND standard = ANY($1)
                  ORDER BY standard, name`, [dbStds]);
+            permanentStudents = allRes.rows.map((s) => ({ ...s, is_temp: false }));
         }
-        res.json({ success: true, students: students.rows });
+        const students = [...permanentStudents, ...delegatedStudents];
+        let studentsWithLeave = students;
+        if (students.length > 0 && date) {
+            try {
+                const studentIds = students.map((s) => s.adm_no);
+                // Check if any of these students are on leave for this specific date
+                // Leave is active if: status='approved' AND date >= start_datetime AND date <= end_datetime
+                const leavesRes = await db_1.db.query(`SELECT DISTINCT student_id FROM student_leaves
+                     WHERE status = 'approved'
+                       AND student_id = ANY($1)
+                       AND start_datetime::date <= $2::date
+                       AND end_datetime::date >= $2::date`, [studentIds, date]);
+                const leaveStudentIds = new Set(leavesRes.rows.map((r) => r.student_id));
+                studentsWithLeave = students.map((s) => ({
+                    ...s,
+                    is_on_leave: leaveStudentIds.has(s.adm_no),
+                    attendance_status: leaveStudentIds.has(s.adm_no) ? 'outside' : 'pending'
+                }));
+            }
+            catch (leaveErr) {
+                console.warn('Leave check failed:', leaveErr.message);
+            }
+        }
+        res.json({ success: true, students: studentsWithLeave });
     }
     catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -327,6 +413,46 @@ const markAttendance = async (req, res) => {
         if (schedRes.rows.length === 0)
             return res.status(404).json({ success: false, error: "Schedule not found" });
         const schedule = schedRes.rows[0];
+        // ── Security Guard: mentor roles may only mark their own students ──
+        if (MENTOR_ROLES.includes(userRole) && student_marks?.length > 0) {
+            const mentorId = await (0, staff_utils_1.getStaffId)(req);
+            if (mentorId) {
+                const classType = (schedule.class_type || '').toLowerCase();
+                const mentorColMap = {
+                    hifz: 'hifz_mentor_id',
+                    school: 'school_mentor_id',
+                    madrasa: 'madrasa_mentor_id',
+                    madrassa: 'madrasa_mentor_id',
+                };
+                const mentorCol = mentorColMap[classType];
+                const submittedIds = student_marks.map((m) => m.student_id);
+                if (mentorCol) {
+                    // Fetch permanently assigned students
+                    const permRes = await db_1.db.query(`SELECT adm_no FROM students WHERE adm_no = ANY($1) AND ${mentorCol} = $2`, [submittedIds, mentorId]);
+                    const permIds = new Set(permRes.rows.map((r) => r.adm_no));
+                    // Fetch delegated students (from mentors who delegated TO the current mentor)
+                    let delegatedIds = new Set();
+                    try {
+                        const delRes = await db_1.db.query(`SELECT s.adm_no FROM mentor_delegations d
+                             JOIN students s ON s.${mentorCol} = d.from_staff_id
+                             WHERE d.to_staff_id = $1
+                               AND d.status = 'approved'
+                               AND s.adm_no = ANY($2)`, [mentorId, submittedIds]);
+                        delegatedIds = new Set(delRes.rows.map((r) => r.adm_no));
+                    }
+                    catch (delErr) {
+                        console.warn('Delegation check skipped:', delErr.message);
+                    }
+                    const unauthorizedIds = submittedIds.filter((id) => !permIds.has(id) && !delegatedIds.has(id));
+                    if (unauthorizedIds.length > 0) {
+                        return res.status(403).json({
+                            success: false,
+                            error: `Access denied: Not assigned to student(s): ${unauthorizedIds.join(', ')}`
+                        });
+                    }
+                }
+            }
+        }
         const cancelCheck = await db_1.db.query('SELECT id FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
         if (cancelCheck.rows.length > 0)
             return res.status(400).json({ success: false, error: "Cannot mark attendance for cancelled sessions" });

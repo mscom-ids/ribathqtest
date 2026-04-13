@@ -18,6 +18,10 @@ router.get('/me/leaves', staff_controller_1.getMyLeaves);
 router.post('/cancel-session', staff_controller_1.cancelSession);
 // GET /api/staff/:id/students
 router.get('/:id/students', staff_controller_1.getStaffStudents);
+// POST /api/staff/:id/assign
+router.post('/:id/assign', staff_controller_1.assignStudentsToMentor);
+// POST /api/staff/:id/unassign
+router.post('/:id/unassign', staff_controller_1.unassignStudentFromMentor);
 // GET /api/staff
 router.get('/', staff_controller_1.getAllStaff);
 // POST /api/staff
@@ -28,6 +32,8 @@ router.post('/:id/login', staff_controller_1.createStaffLogin);
 router.put('/:id/archive', staff_controller_1.archiveStaff);
 // PUT /api/staff/:id/restore
 router.put('/:id/restore', staff_controller_1.restoreStaff);
+// GET /api/staff/:id
+router.get('/:id', staff_controller_1.getStaffById);
 // PUT /api/staff/:id
 router.put('/:id', staff_controller_1.updateStaffProfile);
 exports.default = router;

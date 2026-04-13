@@ -15,6 +15,8 @@ router.post('/conversations/group', (0, auth_middleware_1.requireRole)(['admin',
 // Group management (admin only)
 router.put('/conversations/:id/members', (0, auth_middleware_1.requireRole)(['admin', 'principal']), chat_controller_1.updateGroupMembers);
 router.get('/conversations/:id/members', chat_controller_1.getGroupMembers);
+// Admin: delete entire conversation/group
+router.delete('/conversations/:id', (0, auth_middleware_1.requireRole)(['admin']), chat_controller_1.deleteConversation);
 // Messages
 router.get('/conversations/:id/messages', chat_controller_1.getMessages);
 router.post('/conversations/:id/messages', chat_controller_1.sendMessage);

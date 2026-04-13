@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown } from "lucide-react"
+import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, AlertCircle } from "lucide-react"
 import api from "@/lib/api"
 import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
 
-type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string }
+type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; attendance_status?: string }
 type StaffMember = { id: string; name: string; role: string; photo_url?: string }
 
 function toLocalDateStr(d: Date) {
@@ -184,6 +184,8 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     const toggleStudent = (idx: number) => {
         if (!rosterModal) return
+        // Don't allow toggling if student is on leave
+        if (rosterModal.students[idx].is_on_leave) return
         const updated = [...rosterModal.students]
         const cur = updated[idx].status
         if (cur === 'present') updated[idx].status = 'late'
@@ -198,7 +200,10 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             const payload = {
                 schedule_id: rosterModal.schedule.id,
                 date: rosterModal.dateStr,
-                student_marks: rosterModal.students.map(s => ({ student_id: s.adm_no, status: s.status }))
+                // Only include students NOT on leave
+                student_marks: rosterModal.students
+                    .filter(s => !s.is_on_leave)
+                    .map(s => ({ student_id: s.adm_no, status: s.status }))
             }
             const res = await api.post('/attendance/mark', payload)
             if (res.data.success) { setRosterModal(null); fetchData() }
@@ -224,12 +229,14 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         return { bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', badge: 'bg-blue-500', text: 'text-blue-700 dark:text-blue-300' }
     }
 
-    const statusBadgeStyle = (status: string) => {
+    const statusBadgeStyle = (status: string, isOnLeave: boolean = false) => {
+        if (isOnLeave) return "bg-purple-500/10 text-purple-600 border-purple-500/30"
         if (status === 'present') return "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30"
         if (status === 'late') return "bg-amber-500/10 text-amber-600 border-amber-500/30"
         return "bg-rose-500/10 text-rose-500 border-rose-500/30"
     }
-    const statusIcon = (status: string) => {
+    const statusIcon = (status: string, isOnLeave: boolean = false) => {
+        if (isOnLeave) return <AlertCircle className="w-3.5 h-3.5" />
         if (status === 'present') return <CheckCircle2 className="w-3.5 h-3.5" />
         if (status === 'late') return <Clock className="w-3.5 h-3.5" />
         return <XCircle className="w-3.5 h-3.5" />
@@ -589,13 +596,16 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                             {/* Count badges */}
                             <div className="flex gap-2 mt-3 flex-wrap">
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#22c55e]/10 text-[#22c55e]">
-                                    Present: {rosterModal.students.filter(s => s.status === 'present').length}
+                                    Present: {rosterModal.students.filter(s => s.status === 'present' && !s.is_on_leave).length}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600">
-                                    Late: {rosterModal.students.filter(s => s.status === 'late').length}
+                                    Late: {rosterModal.students.filter(s => s.status === 'late' && !s.is_on_leave).length}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500">
-                                    Absent: {rosterModal.students.filter(s => s.status === 'absent').length}
+                                    Absent: {rosterModal.students.filter(s => s.status === 'absent' && !s.is_on_leave).length}
+                                </span>
+                                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-500/10 text-purple-600">
+                                    Outside: {rosterModal.students.filter(s => s.is_on_leave).length}
                                 </span>
                                 <span className="ml-auto px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">
                                     Total: {rosterModal.students.length}
@@ -628,7 +638,11 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                         <div
                                             key={st.adm_no}
                                             onClick={() => toggleStudent(i)}
-                                            className="grid grid-cols-[auto_1fr_auto] gap-3 items-center p-3 border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
+                                            className={cn("grid grid-cols-[auto_1fr_auto] gap-3 items-center p-3 border rounded-lg transition",
+                                                st.is_on_leave
+                                                    ? "border-purple-200 dark:border-purple-800/50 bg-purple-50/30 dark:bg-purple-900/10 cursor-not-allowed"
+                                                    : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer"
+                                            )}
                                         >
                                             <span className="text-[13px] font-bold text-slate-400 w-6 text-center">{i + 1}</span>
                                             <div className="flex items-center gap-3 min-w-0">
@@ -643,9 +657,9 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                                     <p className="text-[12px] text-slate-500">{st.standard} • {st.adm_no}</p>
                                                 </div>
                                             </div>
-                                            <div className={cn("px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border min-w-[90px] justify-center transition-all", statusBadgeStyle(st.status))}>
-                                                {statusIcon(st.status)}
-                                                <span className="capitalize">{st.status}</span>
+                                            <div className={cn("px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border min-w-[90px] justify-center transition-all", statusBadgeStyle(st.status, st.is_on_leave))}>
+                                                {statusIcon(st.status, st.is_on_leave)}
+                                                <span className="capitalize">{st.is_on_leave ? 'outside' : st.status}</span>
                                             </div>
                                         </div>
                                     ))}

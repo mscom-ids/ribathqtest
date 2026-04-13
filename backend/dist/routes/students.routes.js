@@ -13,6 +13,10 @@ router.use(auth_middleware_1.verifyDelegation);
 router.get('/next-id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'staff', 'usthad', 'mentor']), students_helpers_1.getNextStudentId);
 // GET /api/students/staff (Helper)
 router.get('/staff', (0, auth_middleware_1.requireRole)(['admin', 'principal']), students_helpers_1.getStaff);
+// GET /api/students/export (JSON)
+router.get('/export', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'staff']), students_controller_1.exportStudents);
+// GET /api/students/download-excel
+router.get('/download-excel', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'staff']), students_controller_1.downloadStudentsExcel);
 // GET /api/students
 router.get('/', (0, auth_middleware_1.requireRole)(['admin', 'staff', 'principal', 'usthad', 'mentor']), students_controller_1.getAllStudents);
 // GET /api/students/:id

@@ -1,11 +1,45 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateStudent = exports.createStudent = exports.getStudentById = exports.getAllStudents = void 0;
+exports.downloadStudentsExcel = exports.exportStudents = exports.updateStudent = exports.createStudent = exports.getStudentById = exports.getAllStudents = void 0;
+const XLSX = __importStar(require("xlsx"));
 const db_1 = require("../config/db");
 const getAllStudents = async (req, res) => {
     try {
         const { search, class: className, status } = req.query;
-        let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE 1=1';
+        let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number FROM students WHERE 1=1';
         const params = [];
         let paramCount = 1;
         if (search) {
@@ -96,7 +130,7 @@ const createStudent = async (req, res) => {
             'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
             'photo_url', 'status', 'comprehensive_details',
             'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
-            'place', 'local_body', 'aadhar', 'id_mark', 'country'
+            'place', 'local_body', 'aadhar', 'id_mark', 'country', 'phone_number'
         ];
         const values = [];
         const placeholders = [];
@@ -145,7 +179,7 @@ const updateStudent = async (req, res) => {
             'email', 'batch_year', 'standard', 'hifz_mentor_id', 'school_mentor_id', 'madrasa_mentor_id',
             'photo_url', 'status', 'comprehensive_details',
             'gender', 'admission_date', 'nationality', 'pincode', 'post', 'district', 'state',
-            'place', 'local_body', 'aadhar', 'id_mark', 'country'
+            'place', 'local_body', 'aadhar', 'id_mark', 'country', 'phone_number'
         ];
         const keysToUpdate = Object.keys(updateData).filter(key => validColumns.includes(key));
         if (keysToUpdate.length === 0) {
@@ -187,3 +221,46 @@ const updateStudent = async (req, res) => {
     }
 };
 exports.updateStudent = updateStudent;
+// ── Export students as JSON ────────────────────────────────────
+const exportStudents = async (req, res) => {
+    try {
+        const result = await db_1.db.query(`SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
+        const data = result.rows.map((s) => ({
+            rollNo: s.adm_no,
+            name: s.name,
+            phoneNumber: s.phone_number || ''
+        }));
+        res.json({ success: true, students: data });
+    }
+    catch (err) {
+        console.error('Error exporting students:', err);
+        res.status(500).json({ success: false, error: 'Failed to export students' });
+    }
+};
+exports.exportStudents = exportStudents;
+// ── Download students as Excel (.xlsx) ────────────────────────
+const downloadStudentsExcel = async (req, res) => {
+    try {
+        const result = await db_1.db.query(`SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
+        const rows = result.rows.map((s, i) => ({
+            'S.No': i + 1,
+            'Roll No': s.adm_no,
+            'Student Name': s.name,
+            'Phone Number': s.phone_number || ''
+        }));
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(rows);
+        // Column widths
+        ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 30 }, { wch: 15 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Students');
+        const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Disposition', 'attachment; filename="students.xlsx"');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.send(buf);
+    }
+    catch (err) {
+        console.error('Error generating Excel:', err);
+        res.status(500).json({ success: false, error: 'Failed to generate Excel file' });
+    }
+};
+exports.downloadStudentsExcel = downloadStudentsExcel;

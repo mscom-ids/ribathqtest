@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMyLeaves = exports.getMyStudentsWithStats = exports.createStaff = exports.updateStaffProfile = exports.getAllStaff = exports.restoreStaff = exports.archiveStaff = exports.createStaffLogin = exports.cancelSession = exports.getMyAssignedStudents = exports.getStaffStudents = exports.getMyStaffProfile = void 0;
+exports.getMyLeaves = exports.getMyStudentsWithStats = exports.createStaff = exports.updateStaffProfile = exports.getStaffById = exports.getAllStaff = exports.restoreStaff = exports.archiveStaff = exports.createStaffLogin = exports.cancelSession = exports.getMyAssignedStudents = exports.unassignStudentFromMentor = exports.assignStudentsToMentor = exports.getStaffStudents = exports.getMyStaffProfile = void 0;
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const supabase_1 = require("../config/supabase");
@@ -29,7 +29,6 @@ exports.getMyStaffProfile = getMyStaffProfile;
 const getStaffStudents = async (req, res) => {
     try {
         const { id: staffId } = req.params;
-        console.log('getStaffStudents staffId:', staffId);
         if (!staffId) {
             return res.status(400).json({ success: false, error: 'id required' });
         }
@@ -37,12 +36,14 @@ const getStaffStudents = async (req, res) => {
         if (staffResult.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff not found' });
         }
-        const result = await db_1.db.query(`SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year
+        const result = await db_1.db.query(`SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year,
+                    (hifz_mentor_id = $1)    AS is_hifz,
+                    (school_mentor_id = $1)  AS is_school,
+                    (madrasa_mentor_id = $1) AS is_madrasa
              FROM students
              WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
                AND status = $2
              ORDER BY name`, [staffId, 'active']);
-        console.log('getStaffStudents data:', result.rows);
         res.json({ success: true, students: result.rows });
     }
     catch (err) {
@@ -54,6 +55,51 @@ const getStaffStudents = async (req, res) => {
     }
 };
 exports.getStaffStudents = getStaffStudents;
+const assignStudentsToMentor = async (req, res) => {
+    try {
+        const { id } = req.params; // staff id
+        const { student_ids, section } = req.body;
+        if (!student_ids?.length || !section) {
+            return res.status(400).json({ success: false, error: 'student_ids and section are required' });
+        }
+        const fieldMap = {
+            hifz: 'hifz_mentor_id',
+            school: 'school_mentor_id',
+            madrasa: 'madrasa_mentor_id',
+        };
+        const field = fieldMap[section];
+        if (!field)
+            return res.status(400).json({ success: false, error: 'Invalid section' });
+        await db_1.db.query(`UPDATE students SET ${field} = $1 WHERE adm_no = ANY($2::text[])`, [id, student_ids]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('assignStudentsToMentor error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to assign students' });
+    }
+};
+exports.assignStudentsToMentor = assignStudentsToMentor;
+const unassignStudentFromMentor = async (req, res) => {
+    try {
+        const { id } = req.params; // staff id
+        const { student_id, section } = req.body;
+        const fieldMap = {
+            hifz: 'hifz_mentor_id',
+            school: 'school_mentor_id',
+            madrasa: 'madrasa_mentor_id',
+        };
+        const field = fieldMap[section];
+        if (!field)
+            return res.status(400).json({ success: false, error: 'Invalid section' });
+        await db_1.db.query(`UPDATE students SET ${field} = NULL WHERE adm_no = $1 AND ${field} = $2`, [student_id, id]);
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error('unassignStudentFromMentor error:', err);
+        res.status(500).json({ success: false, error: err.message || 'Failed to unassign student' });
+    }
+};
+exports.unassignStudentFromMentor = unassignStudentFromMentor;
 const getMyAssignedStudents = async (req, res) => {
     try {
         const { staff_id } = req.query;
@@ -172,6 +218,27 @@ const getAllStaff = async (req, res) => {
     }
 };
 exports.getAllStaff = getAllStaff;
+const getStaffById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await db_1.db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Staff not found' });
+        }
+        const studentCount = await db_1.db.query(`SELECT COUNT(*) FROM students
+             WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
+               AND status = 'active'`, [id]);
+        res.json({
+            success: true,
+            staff: result.rows[0],
+            student_count: parseInt(studentCount.rows[0].count, 10),
+        });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch staff member' });
+    }
+};
+exports.getStaffById = getStaffById;
 const updateStaffProfile = async (req, res) => {
     try {
         const { id } = req.params;
@@ -351,6 +418,15 @@ const getMyStudentsWithStats = async (req, res) => {
             WHERE d.from_staff_id = $1 AND d.status = 'approved'
         `, [staffId]);
         const outgoingDelegations = outgoingDelegationsRes.rows;
+        // Fetch last recited ayah (most recent "New Verses" mode log)
+        const lastHifzResult = await db_1.db.query(`SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date 
+             FROM hifz_logs 
+             WHERE student_id = ANY($1) AND mode = 'New Verses' 
+             ORDER BY student_id, entry_date DESC, created_at DESC`, [studentIds]);
+        const lastHifzMap = {};
+        lastHifzResult.rows.forEach(r => {
+            lastHifzMap[r.student_id] = r;
+        });
         // Enrich students with today's stats
         const enriched = students.map((student) => {
             const delegation = outgoingDelegations.find(d => d.student_id === student.adm_no || d.student_id === null);
@@ -398,6 +474,7 @@ const getMyStudentsWithStats = async (req, res) => {
                 is_outside: !!activeLeaveMeta,
                 is_delegated: !!delegation,
                 delegated_to: delegation ? delegation.receiver_name : null,
+                last_hifz: lastHifzMap[student.adm_no] || null,
                 active_leave: activeLeaveMeta ? {
                     leave_type: activeLeaveMeta.leave_type,
                     reason: activeLeaveMeta.reason_category || activeLeaveMeta.remarks || 'On Leave',

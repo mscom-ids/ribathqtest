@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.pollMessages = exports.getStaffList = exports.deleteMessage = exports.markAsRead = exports.sendImageMessage = exports.sendMessage = exports.getMessages = exports.getGroupMembers = exports.updateGroupMembers = exports.createGroupChat = exports.startPrivateChat = exports.getConversations = void 0;
+exports.deleteConversation = exports.pollMessages = exports.getStaffList = exports.deleteMessage = exports.markAsRead = exports.sendImageMessage = exports.sendMessage = exports.getMessages = exports.getGroupMembers = exports.updateGroupMembers = exports.createGroupChat = exports.startPrivateChat = exports.getConversations = void 0;
 const db_1 = require("../config/db");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
@@ -387,7 +387,7 @@ exports.markAsRead = markAsRead;
 const deleteMessage = async (req, res) => {
     try {
         const user = req.user;
-        const staffRes = await db_1.db.query('SELECT id, role FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        const staffRes = await db_1.db.query('SELECT id, role FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
         if (staffRes.rows.length === 0)
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         const operator = staffRes.rows[0];
@@ -456,3 +456,45 @@ const pollMessages = async (req, res) => {
     }
 };
 exports.pollMessages = pollMessages;
+// ═══════════════════════════════════════════════════════════════════════════════
+// DELETE /chat/conversations/:id — Delete entire conversation (admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+const deleteConversation = async (req, res) => {
+    try {
+        const user = req.user;
+        const staffRes = await db_1.db.query('SELECT id, role FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        if (staffRes.rows.length === 0)
+            return res.status(404).json({ success: false, error: 'Staff profile not found' });
+        const operator = staffRes.rows[0];
+        if (operator.role !== 'admin') {
+            return res.status(403).json({ success: false, error: 'Only admins can delete conversations' });
+        }
+        const id = req.params.id;
+        const conv = await db_1.db.query('SELECT id FROM chat_conversations WHERE id = $1', [id]);
+        if (conv.rows.length === 0)
+            return res.status(404).json({ success: false, error: 'Conversation not found' });
+        const client = await db_1.db.getClient();
+        try {
+            await client.query('BEGIN');
+            // Delete messages and participants (they have a foreign key to conversation_id)
+            await client.query('DELETE FROM chat_messages WHERE conversation_id = $1', [id]);
+            await client.query('DELETE FROM chat_participants WHERE conversation_id = $1', [id]);
+            // Delete the conversation itself
+            await client.query('DELETE FROM chat_conversations WHERE id = $1', [id]);
+            await client.query('COMMIT');
+            res.json({ success: true, message: 'Conversation deleted successfully' });
+        }
+        catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        }
+        finally {
+            client.release();
+        }
+    }
+    catch (err) {
+        console.error('Error deleting conversation:', err);
+        res.status(500).json({ success: false, error: 'Failed' });
+    }
+};
+exports.deleteConversation = deleteConversation;

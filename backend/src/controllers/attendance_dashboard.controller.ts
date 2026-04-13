@@ -441,20 +441,25 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const students = [...permanentStudents, ...delegatedStudents];
         
         let studentsWithLeave = students;
-        if (students.length > 0) {
+        if (students.length > 0 && date) {
             try {
                 const studentIds = students.map((s: any) => s.adm_no);
-                // Check if any of these students are currently on leave (status = 'outside')
+                // Check if any of these students are on leave for this specific date
+                // Leave is active if: status='approved' AND date >= start_datetime AND date <= end_datetime
                 const leavesRes = await db.query(
-                    `SELECT student_id FROM student_leaves WHERE status = 'outside' AND student_id = ANY($1)`,
-                    [studentIds]
+                    `SELECT DISTINCT student_id FROM student_leaves
+                     WHERE status = 'approved'
+                       AND student_id = ANY($1)
+                       AND start_datetime::date <= $2::date
+                       AND end_datetime::date >= $2::date`,
+                    [studentIds, date]
                 );
                 const leaveStudentIds = new Set(leavesRes.rows.map((r: any) => r.student_id));
-                
+
                 studentsWithLeave = students.map((s: any) => ({
                     ...s,
                     is_on_leave: leaveStudentIds.has(s.adm_no),
-                    attendance_status: leaveStudentIds.has(s.adm_no) ? 'outside' : 'pending' // optional standard field
+                    attendance_status: leaveStudentIds.has(s.adm_no) ? 'outside' : 'pending'
                 }));
             } catch (leaveErr: any) {
                 console.warn('Leave check failed:', leaveErr.message);

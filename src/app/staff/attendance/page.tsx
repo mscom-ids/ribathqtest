@@ -46,6 +46,7 @@ type Student = {
     photo_url: string | null
     standard: string
     is_temp?: boolean
+    is_on_leave?: boolean
 }
 
 type CalendarPolicy = {
@@ -251,19 +252,20 @@ export default function StaffAttendancePage() {
                 return
             }
 
-            // Step 2: fetch leaves, dashboard marks, and existing attendance IN PARALLEL
-            const idsParam = studentIds.join(',')
-            const [leavesRes, existingAttRes] = await Promise.all([
-                api.get('/leaves/active', { params: { student_ids: idsParam } }),
-                api.get('/academics/attendance', {
-                    params: { date: dateStr, session_id: session.id, student_ids: idsParam }
-                }).catch(() => ({ data: { data: [] } })),  // graceful fallback
-            ])
-
+            // Build locks from is_on_leave field returned by backend
             const locks: Record<string, string> = {}
-            const activeLeaves = leavesRes.data?.leaves || []
-            activeLeaves.forEach((l: any) => { locks[l.student_id] = l.leave_type })
+            scheduleStudents.forEach((s: Student) => {
+                if (s.is_on_leave) {
+                    locks[s.adm_no] = 'approved'  // Mark as locked due to approved leave
+                }
+            })
             setLockedLeaves(locks)
+
+            // Step 2: fetch existing attendance
+            const idsParam = studentIds.join(',')
+            const existingAttRes = await api.get('/academics/attendance', {
+                params: { date: dateStr, session_id: session.id, student_ids: idsParam }
+            }).catch(() => ({ data: { data: [] } }))
 
             // Build attendance map: default Present, Leave if on active leave
             const map: Record<string, "Present" | "Absent" | "Leave"> = {}
@@ -271,7 +273,7 @@ export default function StaffAttendancePage() {
                 map[s.adm_no] = locks[s.adm_no] ? "Leave" : "Present"
             })
 
-            // Override with any existing saved marks
+            // Override with any existing saved marks (but not for leave-locked students)
             const existingAtt = existingAttRes.data?.data || []
             existingAtt.forEach((a: any) => {
                 if (!locks[a.student_id]) {
