@@ -47,7 +47,7 @@ export const getSchedules = async (req: Request, res: Response) => {
         let paramCount = 1;
         
         if (academic_year_id) {
-            conditions.push(`a.academic_year_id = $${paramCount}`);
+            conditions.push(`(a.academic_year_id = $${paramCount} OR a.academic_year_id IS NULL)`);
             params.push(academic_year_id);
             paramCount++;
         }
@@ -304,11 +304,11 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
             return res.json({ success: true, schedule_ids: [], mentor_standards: [] });
         }
 
-        // Get all schedules for this academic year
-        let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules';
+        // Get all active (non-deleted) schedules for this academic year
+        let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL)';
         const params: any[] = [];
         if (academic_year_id) {
-            schedQuery += ' WHERE academic_year_id = $1';
+            schedQuery += ' AND (academic_year_id = $1 OR academic_year_id IS NULL)';
             params.push(academic_year_id);
         }
         const allScheds = await db.query(schedQuery, params);

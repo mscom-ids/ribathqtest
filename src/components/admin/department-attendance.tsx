@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, AlertCircle, ChevronDown } from "lucide-react"
+import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown } from "lucide-react"
 import api from "@/lib/api"
 import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
@@ -12,9 +12,10 @@ type StaffMember = { id: string; name: string; role: string; photo_url?: string 
 function toLocalDateStr(d: Date) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-function jsDayToOur(d: Date) {
-    const wd = d.getDay()
-    return wd === 0 ? 7 : wd
+// Use JS standard getDay() values (0=Sun, 1=Mon ... 6=Sat)
+// which matches how attendance_schedules.day_of_week values are stored
+function getDayOfWeek(d: Date) {
+    return d.getDay() // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
 }
 
 export function DepartmentAttendance({ department }: { department: "hifz" | "school" | "madrassa" }) {
@@ -128,10 +129,9 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     }
 
     const viewDateStr = toLocalDateStr(viewDate)
-    const viewDayOfWeek = jsDayToOur(viewDate)
+    const viewDayOfWeek = getDayOfWeek(viewDate)
     const isToday = diffFromToday === 0
     const isYesterday = diffFromToday === 1
-    const isSunday = viewDate.getDay() === 0
     const now = new Date()
 
     // ── Mentor context ──────────────────────────────────────────────────────────
@@ -458,12 +458,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                     <span className="text-[12px] font-bold text-slate-400">{daySchedules.length} slot{daySchedules.length !== 1 ? 's' : ''}</span>
                 </div>
 
-                {isSunday ? (
-                    <div className="flex flex-col items-center justify-center py-16 gap-3">
-                        <AlertCircle className="h-10 w-10 text-slate-300" />
-                        <p className="text-[14px] text-slate-500 font-medium">Sunday — No classes scheduled</p>
-                    </div>
-                ) : loading ? (
+                {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <RefreshCw className="h-5 w-5 animate-spin text-slate-400" />
                     </div>
