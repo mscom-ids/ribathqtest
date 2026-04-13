@@ -17,6 +17,7 @@ export default function TimetableViewerPage() {
     const [staffList, setStaffList] = useState<any[]>([])
     const [selectedMentorId, setSelectedMentorId] = useState<string>('')
     const [mentorScheduleIds, setMentorScheduleIds] = useState<string[]>([])
+    const [mentorStandards, setMentorStandards] = useState<string[]>([])
 
     // Class states
     const [availableStandards, setAvailableStandards] = useState<string[]>([])
@@ -71,6 +72,7 @@ export default function TimetableViewerPage() {
                 const res = await api.get(`/attendance/mentor-schedules?mentor_id=${selectedMentorId}`)
                 if (res.data.success) {
                     setMentorScheduleIds(res.data.schedule_ids || [])
+                    setMentorStandards(res.data.mentor_standards || [])
                 }
             } catch (e) { console.error("Failed to fetch mentor schedule list", e) }
         }
@@ -235,11 +237,18 @@ export default function TimetableViewerPage() {
                                                             <span className={cn("text-[9px] font-black text-white px-1.5 py-0.5 rounded-sm uppercase tracking-wider", getBadgeColor(sched.class_type))}>
                                                                 {sched.class_type}
                                                             </span>
-                                                            {viewMode === 'mentor' && stds.map((std: string, i: number) => (
-                                                                <span key={i} className="bg-white/90 dark:bg-black/40 rounded-sm px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-700">
-                                                                    {std}
-                                                                </span>
-                                                            ))}
+                                                            {viewMode === 'mentor' && (
+                                                                (() => {
+                                                                    const displayStds = mentorStandards.length > 0
+                                                                        ? stds.filter((s: string) => mentorStandards.includes(s))
+                                                                        : stds
+                                                                    return displayStds.map((std: string, i: number) => (
+                                                                        <span key={i} className="bg-white/90 dark:bg-black/40 rounded-sm px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-300 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                                            {std}
+                                                                        </span>
+                                                                    ))
+                                                                })()
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )

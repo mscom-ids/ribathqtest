@@ -439,7 +439,29 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         }
 
         const students = [...permanentStudents, ...delegatedStudents];
-        res.json({ success: true, students });
+        
+        let studentsWithLeave = students;
+        if (students.length > 0) {
+            try {
+                const studentIds = students.map((s: any) => s.adm_no);
+                // Check if any of these students are currently on leave (status = 'outside')
+                const leavesRes = await db.query(
+                    `SELECT student_id FROM student_leaves WHERE status = 'outside' AND student_id = ANY($1)`,
+                    [studentIds]
+                );
+                const leaveStudentIds = new Set(leavesRes.rows.map((r: any) => r.student_id));
+                
+                studentsWithLeave = students.map((s: any) => ({
+                    ...s,
+                    is_on_leave: leaveStudentIds.has(s.adm_no),
+                    attendance_status: leaveStudentIds.has(s.adm_no) ? 'outside' : 'pending' // optional standard field
+                }));
+            } catch (leaveErr: any) {
+                console.warn('Leave check failed:', leaveErr.message);
+            }
+        }
+
+        res.json({ success: true, students: studentsWithLeave });
     } catch (e: any) {
         res.status(500).json({ success: false, error: e.message });
     }

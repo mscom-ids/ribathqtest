@@ -34,6 +34,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     const [selectedMentorId, setSelectedMentorId] = useState<string>("all")
     const [isMentorDropdownOpen, setIsMentorDropdownOpen] = useState(false)
     const [mentorSchedules, setMentorSchedules] = useState<string[]>([])
+    const [mentorStandards, setMentorStandards] = useState<string[]>([])
 
     // Roster modal
     const [rosterModal, setRosterModal] = useState<{ isOpen: boolean, schedule: any, dateStr: string, students: StudentMark[], mentorId: string } | null>(null)
@@ -104,12 +105,14 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         const fetchMentorSchedules = async () => {
             if (selectedMentorId === 'all' || !selectedYearId) {
                 setMentorSchedules([])
+                setMentorStandards([])
                 return
             }
             try {
                 const res = await api.get(`/attendance/mentor-schedules?mentor_id=${selectedMentorId}&academic_year_id=${selectedYearId}`)
                 if (res.data.success) {
                     setMentorSchedules(res.data.schedule_ids || [])
+                    setMentorStandards(res.data.mentor_standards || [])
                 }
             } catch (e) { console.error("Failed to load mentor schedules", e) }
         }
@@ -518,12 +521,21 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                     <div className="flex items-start gap-1.5 flex-wrap mt-2">
                                         <Users className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
                                         <div className="flex flex-wrap gap-1">
-                                            {stds.slice(0, 3).map((std: string, i: number) => (
-                                                <span key={i} className="bg-white/80 dark:bg-black/30 rounded px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
-                                                    {std}
-                                                </span>
-                                            ))}
-                                            {stds.length > 3 && <span className="text-[11px] text-slate-500">+{stds.length - 3} more</span>}
+                                            {(() => {
+                                                const displayStds = selectedMentorId !== 'all' && mentorStandards.length > 0
+                                                    ? stds.filter((s: string) => mentorStandards.includes(s))
+                                                    : stds
+                                                return (
+                                                    <>
+                                                        {displayStds.slice(0, 3).map((std: string, i: number) => (
+                                                            <span key={i} className="bg-white/80 dark:bg-black/30 rounded px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+                                                                {std}
+                                                            </span>
+                                                        ))}
+                                                        {displayStds.length > 3 && <span className="text-[11px] text-slate-500">+{displayStds.length - 3} more</span>}
+                                                    </>
+                                                )
+                                            })()}
                                         </div>
                                     </div>
 
