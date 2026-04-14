@@ -560,7 +560,7 @@ export const markAttendance = async (req: Request, res: Response) => {
         const cancelCheck = await db.query('SELECT id FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
         if (cancelCheck.rows.length > 0) return res.status(400).json({ success: false, error: "Cannot mark attendance for cancelled sessions" });
 
-        const classDateTimeStr = `${date}T${schedule.start_time}`;
+        const classDateTimeStr = `${date}T${schedule.start_time}+05:30`;
         const classDateObj = new Date(classDateTimeStr);
         const now = new Date();
         
@@ -631,6 +631,28 @@ export const cancelSession = async (req: Request, res: Response) => {
         await db.query('DELETE FROM attendance_marks WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
 
         res.json({ success: true, data: result.rows[0] });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+export const getStudentMarksForSchedule = async (req: Request, res: Response) => {
+    try {
+        const { schedule_id, date, student_ids } = req.query;
+        if (!schedule_id || !date) return res.status(400).json({ success: false, error: "Missing required parameters" });
+        
+        let query = 'SELECT student_id, status FROM student_attendance_marks WHERE schedule_id = $1 AND date = $2';
+        const params: any[] = [schedule_id, date];
+        if (student_ids && typeof student_ids === 'string') {
+            const ids = student_ids.split(',');
+            if (ids.length > 0) {
+                const placeholders = ids.map((_, i) => `$${3 + i}`).join(',');
+                query += ` AND student_id IN (${placeholders})`;
+                params.push(...ids);
+            }
+        }
+        const result = await db.query(query, params);
+        res.json({ success: true, data: result.rows });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }

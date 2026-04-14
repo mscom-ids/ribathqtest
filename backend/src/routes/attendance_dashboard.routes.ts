@@ -12,6 +12,7 @@ import {
     getBreaks,
     updateBreak,
     getStudentsForSchedule,
+    getStudentMarksForSchedule,
     getDailyAttendanceStats
 } from '../controllers/attendance_dashboard.controller';
 
@@ -33,8 +34,9 @@ router.delete('/schedules/:id', requireRole(['admin', 'principal']), deleteSched
 router.get('/dashboard', getDashboardData);
 router.get('/mentor-schedules', getMentorSchedules);
 
-// Attendance & Cancelling Status
+// Attendance marks
 router.get('/students', getStudentsForSchedule);
+router.get('/marks', getStudentMarksForSchedule);
 router.post('/mark', markAttendance);
 router.post('/cancel', cancelSession);
 

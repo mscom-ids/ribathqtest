@@ -261,10 +261,10 @@ export default function StaffAttendancePage() {
             })
             setLockedLeaves(locks)
 
-            // Step 2: fetch existing attendance
+            // Step 2: fetch existing attendance from the new dashboard marks sync
             const idsParam = studentIds.join(',')
-            const existingAttRes = await api.get('/academics/attendance', {
-                params: { date: dateStr, session_id: session.id, student_ids: idsParam }
+            const existingAttRes = await api.get('/attendance/marks', {
+                params: { date: dateStr, schedule_id: session.id, student_ids: idsParam }
             }).catch(() => ({ data: { data: [] } }))
 
             // Build attendance map: default Present, Leave if on active leave
