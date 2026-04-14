@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import api from "@/lib/api"
 import { calculatePages } from "@/lib/quran-pages"
-import { getSurahId } from "@/lib/hifz-progress"
+import { getSurahId, formatHifzLogLabel } from "@/lib/hifz-progress"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Log = {
@@ -57,31 +57,8 @@ function getPhotoUrl(url?: string | null) {
     return url.startsWith("http") ? url : `http://localhost:5000${url}`
 }
 
-const arabicSurahs: Record<string, string> = {
-    "Al-Fatiha": "الفاتحة", "Al-Baqarah": "البقرة", "Al-Imran": "آل عمران",
-    "An-Nisa": "النساء", "Al-Ma'idah": "المائدة", "Al-An'am": "الأنعام",
-    "Al-A'raf": "الأعراف", "Al-Anfal": "الأنفال", "At-Tawbah": "التوبة",
-    "Yunus": "يونس", "Hud": "هود", "Yusuf": "يوسف", "Ar-Ra'd": "الرعد",
-    "Ibrahim": "إبراهيم", "Al-Hijr": "الحجر", "An-Nahl": "النحل",
-    "Al-Isra": "الإسراء", "Al-Kahf": "الكهف", "Maryam": "مريم",
-    "Ta-Ha": "طه", "Al-Anbiya": "الأنبياء", "Al-Hajj": "الحج",
-    "Al-Mu'minun": "المؤمنون", "An-Nur": "النور", "Al-Furqan": "الفرقان",
-    "Ash-Shu'ara": "الشعراء", "An-Naml": "النمل", "Al-Qasas": "القصص",
-    "Ar-Rahman": "الرحمن", "Al-Mulk": "الملك", "Al-Ikhlas": "الإخلاص",
-    "Al-Falaq": "الفلق", "An-Nas": "الناس",
-}
-const getArabic = (name?: string) =>
-    name && arabicSurahs[name] ? arabicSurahs[name] : name || ""
-
 function logLabel(log: Log) {
-    if (log.mode === "Juz Revision")
-        return `Juz ${log.juz_number ?? "?"} (${log.juz_portion || "Full"})`
-    if (log.surah_name) {
-        const range = log.start_v && log.end_v ? ` (${log.start_v}–${log.end_v})` : ""
-        return `${log.surah_name}${range}`
-    }
-    if (log.start_page && log.end_page) return `Pages ${log.start_page}–${log.end_page}`
-    return "—"
+    return formatHifzLogLabel(log);
 }
 
 const MODE_DOT: Record<string, string> = {
@@ -132,17 +109,9 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             const isPresent = att.some(r => r.status === "Present")
             const isAbsent = att.some(r => r.status === "Absent")
 
-            const newHifzEntries = newVerses.map(l =>
-                `${getArabic(l.surah_name)} ${l.start_v ? `(${l.start_v}-${l.end_v})` : l.start_page ? `P${l.start_page}-${l.end_page}` : ""}`
-            ).filter(Boolean)
-
-            const recentRevEntries = recentRev.map(l =>
-                `${getArabic(l.surah_name)} ${l.start_page ? `P${l.start_page}-${l.end_page}` : ""}`
-            ).filter(Boolean)
-
-            const juzRevEntries = juzRev.map(l =>
-                `J${l.juz_number ?? "?"} (${l.juz_portion || "Full"})`
-            ).filter(Boolean)
+            const newHifzEntries = newVerses.map(l => formatHifzLogLabel(l)).filter(Boolean)
+            const recentRevEntries = recentRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
+            const juzRevEntries = juzRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
 
             return {
                 date: day,

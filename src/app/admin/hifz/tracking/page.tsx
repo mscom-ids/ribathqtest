@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { formatHifzLogLabel } from "@/lib/hifz-progress"
 
 interface Student {
     adm_no: string
@@ -117,16 +118,7 @@ export default function HifzTrackingPage() {
 
     // Format log display
     const formatLogDisplay = (log: HifzLog) => {
-        if (log.mode === "New Verses" || log.mode === "Recent Revision") {
-            if (log.surah_name) {
-                return `${log.surah_name} ${log.start_v}-${log.end_v}`
-            } else if (log.start_page) {
-                return `Pages ${log.start_page}-${log.end_page}`
-            }
-        } else if (log.mode === "Juz Revision") {
-            return `Juz ${log.juz_number} (${log.juz_portion})`
-        }
-        return "-"
+        return formatHifzLogLabel(log);
     }
 
     const handleDeleteLog = async (logId: string) => {
