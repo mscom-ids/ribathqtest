@@ -155,6 +155,18 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
         }
         const inserted = [];
         for (const log of logs) {
+            // For New Verses: skip exact duplicates (same student, date, session, surah, start_v, end_v)
+            if (log.mode === 'New Verses' && log.surah_name && log.start_v && log.end_v) {
+                const existing = await db.query(
+                    `SELECT id FROM hifz_logs
+                     WHERE student_id=$1 AND entry_date=$2 AND session_type=$3
+                     AND mode='New Verses' AND surah_name=$4 AND start_v=$5 AND end_v=$6
+                     LIMIT 1`,
+                    [log.student_id, log.entry_date, log.session_type,
+                     log.surah_name, log.start_v, log.end_v]
+                );
+                if (existing.rows.length > 0) continue; // Already exists, skip
+            }
             const result = await db.query(
                 `INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
                  surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
@@ -163,7 +175,7 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
                  log.surah_name || null, log.start_v || null, log.end_v || null, log.start_page || null,
                  log.end_page || null, log.juz_number || null, log.juz_portion || null]
             );
-            inserted.push(result.rows[0]);
+            if (result.rows.length > 0) inserted.push(result.rows[0]);
         }
         res.json({ success: true, logs: inserted });
     } catch (err) {

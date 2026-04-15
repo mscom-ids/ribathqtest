@@ -65,17 +65,63 @@ export function ProgressTab({ student }: { student: Student }) {
             }))
             setAttendanceRecords(attendRes.data?.data || [])
 
-            let lifetimePages = 0;
-            const lifetimeLogs = lifetimeLogsRes.data?.logs || [];
+            // ── Lifetime Hifz Pages (merge all ranges, then page-boundary check) ──
+            const lifetimeLogs = lifetimeLogsRes.data?.logs || []
+            const lifetimeRanges: { start: number; end: number }[] = []
+            let lifetimeFallbackPages = 0
+
             lifetimeLogs.forEach((log: any) => {
-                const sId = getSurahId(log.surah_name || "");
+                const sId = getSurahId(log.surah_name || '')
                 if (sId && log.start_v && log.end_v) {
-                    lifetimePages += calculatePages(sId, log.start_v, sId, log.end_v);
+                    const startG = toGlobalVerseIndex(sId, log.start_v)
+                    const endG = toGlobalVerseIndex(sId, log.end_v)
+                    if (startG >= 0 && endG >= 0) {
+                        lifetimeRanges.push({ start: Math.min(startG, endG), end: Math.max(startG, endG) })
+                    }
                 } else if (log.start_page && log.end_page) {
-                    lifetimePages += (log.end_page - log.start_page + 1);
+                    lifetimeFallbackPages += (log.end_page - log.start_page + 1)
                 }
-            });
-            const calcTotalJuz = Math.floor(lifetimePages / 20);
+            })
+
+            let lifetimePages = lifetimeFallbackPages
+
+            if (lifetimeRanges.length > 0) {
+                lifetimeRanges.sort((a, b) => a.start - b.start)
+                const merged: { start: number; end: number }[] = [lifetimeRanges[0]]
+                for (let i = 1; i < lifetimeRanges.length; i++) {
+                    const cur = merged[merged.length - 1]
+                    const next = lifetimeRanges[i]
+                    if (next.start <= cur.end + 1) {
+                        if (next.end > cur.end) cur.end = next.end
+                    } else {
+                        merged.push({ ...next })
+                    }
+                }
+                // Count fully-covered pages using MUSHAF_PAGES boundaries
+                const pageBounds = MUSHAF_PAGES.map((p, i) => {
+                    const startGlobal = toGlobalVerseIndex(p.surah, p.ayah)
+                    let endGlobal: number
+                    if (i + 1 < MUSHAF_PAGES.length) {
+                        const next = MUSHAF_PAGES[i + 1]
+                        endGlobal = toGlobalVerseIndex(next.surah, next.ayah) - 1
+                    } else {
+                        endGlobal = toGlobalVerseIndex(114, 6)
+                    }
+                    return { startGlobal, endGlobal }
+                })
+                for (const pb of pageBounds) {
+                    for (const range of merged) {
+                        if (range.start <= pb.endGlobal && range.end >= pb.endGlobal) {
+                            lifetimePages++
+                            break
+                        }
+                    }
+                }
+            }
+
+            // Cap at 30 Juz (604 pages max)
+            const calcTotalJuz = Math.min(Math.floor(lifetimePages / 20), 30)
+
 
             if (logs.length > 0) {
                 const last30Days = logs.filter((l: any) => new Date(l.entry_date) >= subDays(today, 30))
