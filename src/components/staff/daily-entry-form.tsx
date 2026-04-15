@@ -93,6 +93,15 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
 
+    // ── Range Entry mode state ──────────────────────────────────────────────
+    const [entryMode, setEntryMode] = useState<'daily' | 'range'>('daily')
+    type RangeEntry = { fromSurah: number | undefined; fromAyah: number | undefined; toSurah: number | undefined; toAyah: number | undefined }
+    const [ranges, setRanges] = useState<RangeEntry[]>([{ fromSurah: undefined, fromAyah: undefined, toSurah: undefined, toAyah: undefined }])
+    const [rangeDate, setRangeDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+    const [rangeSaving, setRangeSaving] = useState(false)
+    const [rangeError, setRangeError] = useState<string | null>(null)
+    const [rangeSuccess, setRangeSuccess] = useState(false)
+
     const today = new Date()
     const minDate = subDays(today, 7)
 
@@ -333,6 +342,90 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         setLoading(false)
     }
 
+    // ── Range Entry helpers ───────────────────────────────────────────────────
+    function expandRangeToLogs(fromSurahId: number, fromAyah: number, toSurahId: number, toAyah: number) {
+        const records: { surah_name: string; start_v: number; end_v: number }[] = []
+        for (let sid = fromSurahId; sid <= toSurahId; sid++) {
+            const surah = typedSurahList.find(s => s.id === sid)
+            if (!surah) continue
+            const startV = sid === fromSurahId ? fromAyah : 1
+            const endV = sid === toSurahId ? toAyah : surah.totalVerses
+            records.push({ surah_name: surah.name, start_v: startV, end_v: endV })
+        }
+        return records
+    }
+
+    function rangePreview(r: RangeEntry): string {
+        if (!r.fromSurah || !r.toSurah) return '—'
+        const from = typedSurahList.find(s => s.id === r.fromSurah)
+        const to = typedSurahList.find(s => s.id === r.toSurah)
+        const surahCount = (r.toSurah ?? 0) - (r.fromSurah ?? 0) + 1
+        return `${from?.name ?? ''} ${r.fromAyah ?? '?'} → ${to?.name ?? ''} ${r.toAyah ?? '?'} · ${surahCount} surah(s)`
+    }
+
+    async function handleRangeSave() {
+        setRangeError(null)
+        setRangeSuccess(false)
+        // Validate
+        for (let i = 0; i < ranges.length; i++) {
+            const r = ranges[i]
+            if (!r.fromSurah || !r.fromAyah || !r.toSurah || !r.toAyah) {
+                setRangeError(`Range ${i + 1}: all fields are required`)
+                return
+            }
+            const toSurahData = typedSurahList.find(s => s.id === r.toSurah)
+            if (r.fromSurah > r.toSurah) {
+                setRangeError(`Range ${i + 1}: Start surah must be before end surah`)
+                return
+            }
+            if (r.fromSurah === r.toSurah && (r.fromAyah ?? 0) > (r.toAyah ?? 0)) {
+                setRangeError(`Range ${i + 1}: Start ayah must be ≤ end ayah`)
+                return
+            }
+            if (toSurahData && (r.toAyah ?? 0) > toSurahData.totalVerses) {
+                setRangeError(`Range ${i + 1}: End ayah exceeds total verses of ${toSurahData.name} (${toSurahData.totalVerses})`)
+                return
+            }
+        }
+        setRangeSaving(true)
+        try {
+            let targetUsthadId = null
+            const profileRes = await api.get('/staff/me')
+            if (profileRes.data.success) {
+                const staff = profileRes.data.staff
+                targetUsthadId = staff.id
+                if (['admin', 'principal', 'vice_principal'].includes(staff.role || '') && assignedUsthadId) {
+                    targetUsthadId = assignedUsthadId
+                }
+            }
+
+            const allLogs: any[] = []
+            for (const r of ranges) {
+                const expanded = expandRangeToLogs(r.fromSurah!, r.fromAyah!, r.toSurah!, r.toAyah!)
+                for (const rec of expanded) {
+                    allLogs.push({
+                        student_id: studentId,
+                        usthad_id: targetUsthadId,
+                        entry_date: rangeDate,
+                        session_type: 'Subh',
+                        mode: 'New Verses',
+                        surah_name: rec.surah_name,
+                        start_v: rec.start_v,
+                        end_v: rec.end_v,
+                        start_page: null, end_page: null, juz_number: null, juz_portion: null
+                    })
+                }
+            }
+            await api.post('/hifz/logs/bulk', { logs: allLogs })
+            setRangeSuccess(true)
+            setRanges([{ fromSurah: undefined, fromAyah: undefined, toSurah: undefined, toAyah: undefined }])
+            setTimeout(() => setRangeSuccess(false), 3000)
+        } catch (err: any) {
+            setRangeError(err?.response?.data?.error || err.message || 'Save failed')
+        }
+        setRangeSaving(false)
+    }
+
     const isOldDate = isBefore(new Date(form.watch("date")), minDate)
 
     if (!mounted) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
@@ -371,7 +464,137 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 <h1 className="ml-2 text-lg font-bold text-slate-800 dark:text-slate-100">{student?.name || "Loading..."}</h1>
             </div>
 
-            <Form {...form}>
+            {/* ── Mode Toggle ───────────────────────────────────────────── */}
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-full mb-3">
+                <button
+                    type="button"
+                    onClick={() => setEntryMode('daily')}
+                    className={`flex-1 py-1.5 px-4 rounded-full text-xs font-bold transition-all ${
+                        entryMode === 'daily' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    Daily Entry
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setEntryMode('range')}
+                    className={`flex-1 py-1.5 px-4 rounded-full text-xs font-bold transition-all ${
+                        entryMode === 'range' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                >
+                    Range Entry
+                </button>
+            </div>
+
+            {/* ── RANGE ENTRY MODE ──────────────────────────────────────── */}
+            {entryMode === 'range' && (
+                <div className="space-y-3">
+                    {/* Date picker — free, no lock */}
+                    <div className="bg-white dark:bg-slate-900 border border-emerald-900/10 rounded-xl p-3 shadow-sm">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">Entry Date (Historical)</p>
+                        <input
+                            type="date"
+                            value={rangeDate}
+                            onChange={e => setRangeDate(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm"
+                        />
+                    </div>
+
+                    {/* Range cards */}
+                    <div className="bg-white dark:bg-slate-900 border border-emerald-900/10 rounded-xl shadow-sm overflow-hidden">
+                        <div className="p-3 pb-1.5 bg-emerald-50/30 dark:bg-emerald-950/10 border-b border-emerald-900/5">
+                            <p className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Recitation Ranges</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Each range is saved as individual surah records</p>
+                        </div>
+                        <div className="p-3 space-y-3">
+                            {ranges.map((r, idx) => (
+                                <div key={idx} className="p-3 border-l-2 border-emerald-500 bg-emerald-950/10 rounded-r-lg space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs uppercase tracking-wider text-emerald-500/80 font-semibold">Range {idx + 1}</span>
+                                        {ranges.length > 1 && (
+                                            <button type="button" onClick={() => setRanges(prev => prev.filter((_, i) => i !== idx))}
+                                                className="text-[10px] font-bold text-red-500 hover:text-red-400 flex items-center gap-1">
+                                                <Trash2 size={12} /> Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* FROM */}
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">From</p>
+                                        <div className="grid grid-cols-[1fr_80px] gap-2">
+                                            <select
+                                                value={r.fromSurah ?? ''}
+                                                onChange={e => setRanges(prev => prev.map((x, i) => i === idx ? { ...x, fromSurah: e.target.value ? parseInt(e.target.value) : undefined, fromAyah: undefined } : x))}
+                                                className="h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm w-full"
+                                            >
+                                                <option value="">Select Surah</option>
+                                                {typedSurahList.map(s => <option key={s.id} value={s.id}>{s.id}. {s.name}</option>)}
+                                            </select>
+                                            <input type="number" placeholder="Ayah"
+                                                value={r.fromAyah ?? ''}
+                                                min={1}
+                                                max={r.fromSurah ? typedSurahList.find(s => s.id === r.fromSurah)?.totalVerses : undefined}
+                                                onChange={e => setRanges(prev => prev.map((x, i) => i === idx ? { ...x, fromAyah: e.target.value ? parseInt(e.target.value) : undefined } : x))}
+                                                className="h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm w-full"
+                                            />
+                                        </div>
+                                    </div>
+                                    {/* TO */}
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">To</p>
+                                        <div className="grid grid-cols-[1fr_80px] gap-2">
+                                            <select
+                                                value={r.toSurah ?? ''}
+                                                onChange={e => setRanges(prev => prev.map((x, i) => i === idx ? { ...x, toSurah: e.target.value ? parseInt(e.target.value) : undefined, toAyah: undefined } : x))}
+                                                className="h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm w-full"
+                                            >
+                                                <option value="">Select Surah</option>
+                                                {typedSurahList.map(s => <option key={s.id} value={s.id}>{s.id}. {s.name}</option>)}
+                                            </select>
+                                            <input type="number" placeholder="Ayah"
+                                                value={r.toAyah ?? ''}
+                                                min={1}
+                                                max={r.toSurah ? typedSurahList.find(s => s.id === r.toSurah)?.totalVerses : undefined}
+                                                onChange={e => setRanges(prev => prev.map((x, i) => i === idx ? { ...x, toAyah: e.target.value ? parseInt(e.target.value) : undefined } : x))}
+                                                className="h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm w-full"
+                                            />
+                                        </div>
+                                    </div>
+                                    {/* Preview */}
+                                    {r.fromSurah && r.toSurah && (
+                                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pt-1 border-t border-emerald-900/10">
+                                            📖 {rangePreview(r)}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                            <button type="button"
+                                onClick={() => setRanges(prev => [...prev, { fromSurah: undefined, fromAyah: undefined, toSurah: undefined, toAyah: undefined }])}
+                                className="w-full h-8 border border-dashed border-emerald-800/30 rounded-md text-[11px] font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1"
+                            >
+                                <PlusCircle size={13} /> Add another Range
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Feedback */}
+                    {rangeError && <p className="text-xs text-red-500 font-medium px-1">{rangeError}</p>}
+                    {rangeSuccess && <p className="text-xs text-emerald-600 font-bold px-1">✅ Saved successfully!</p>}
+
+                    <Button
+                        type="button"
+                        onClick={handleRangeSave}
+                        disabled={rangeSaving}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-sm font-bold shadow-md"
+                    >
+                        {rangeSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2 h-4 w-4" />Save Range</>}
+                    </Button>
+                </div>
+            )}
+
+            {/* ── DAILY ENTRY MODE ──────────────────────────────────────── */}
+            {entryMode === 'daily' && (
+                <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
                     console.log("Form validation errors:", errors)
                     const firstError = Object.values(errors)[0]
@@ -637,7 +860,9 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         </div>
                     </div>
                 </form>
-            </Form>
+                </Form>
+            )}
+
         </div>
     )
 }
