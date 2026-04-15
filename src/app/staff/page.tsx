@@ -38,6 +38,7 @@ type Student = {
         revision: number
         juz: number
         attendance: string
+        session_marks?: { schedule_id: string; status: string }[]
     }
     last_hifz?: {
         surah_name?: string
