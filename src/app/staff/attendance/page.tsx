@@ -90,6 +90,7 @@ export default function StaffAttendancePage() {
     const [saving, setSaving] = useState(false)
     const [cancelling, setCancelling] = useState(false)
     const [lockedLeaves, setLockedLeaves] = useState<Record<string, string>>({})
+    const [futureLeaves, setFutureLeaves] = useState<Record<string, string>>({})
     const [modalLoading, setModalLoading] = useState(false)
 
     const router = useRouter()
@@ -233,6 +234,7 @@ export default function StaffAttendancePage() {
         setSessionStudents([])
         setAttendanceMap({})
         setLockedLeaves({})
+        setFutureLeaves({})
         setModalLoading(true)
         setModalOpen(true)  // ← open instantly, show spinner inside
 
@@ -247,19 +249,27 @@ export default function StaffAttendancePage() {
 
             if (studentIds.length === 0) {
                 setLockedLeaves({})
+                setFutureLeaves({})
                 setAttendanceMap({})
                 setModalLoading(false)
                 return
             }
 
-            // Build locks from is_on_leave field returned by backend
+            // Build locks from computed flags returned by backend
             const locks: Record<string, string> = {}
-            scheduleStudents.forEach((s: Student) => {
-                if (s.is_on_leave) {
-                    locks[s.adm_no] = 'approved'  // Mark as locked due to approved leave
+            const futures: Record<string, string> = {}
+            scheduleStudents.forEach((s: any) => {
+                if (s.is_locked_outside) {
+                    locks[s.adm_no] = 'approved'  // Mark as strictly locked due to leave overlap
+                }
+                if (s.went_outside_later) {
+                    // Prevent manually clicking "Outside" on UI because session happened BEFORE leave
+                    const timeStr = s.leave_start_time ? new Date(s.leave_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later';
+                    futures[s.adm_no] = timeStr;
                 }
             })
             setLockedLeaves(locks)
+            setFutureLeaves(futures)
 
             // Step 2: fetch existing attendance from the new dashboard marks sync
             const idsParam = studentIds.join(',')
@@ -298,7 +308,9 @@ export default function StaffAttendancePage() {
             const current = prev[admNo]
             let next: "Present" | "Absent" | "Leave" = "Present"
             if (current === "Present") next = "Absent"
-            else if (current === "Absent") next = "Leave"
+            else if (current === "Absent") {
+                next = futureLeaves[admNo] ? "Present" : "Leave"
+            }
             else next = "Present"
             return { ...prev, [admNo]: next }
         })
@@ -748,22 +760,29 @@ export default function StaffAttendancePage() {
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {lockedLeaves[student.adm_no] ? (
-                                                    <Badge variant="outline" className="w-24 h-8 justify-center border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 shadow-sm flex items-center gap-1.5 cursor-not-allowed">
+                                                    <Badge variant="outline" className="w-24 h-8 justify-center border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 shadow-sm flex items-center gap-1.5 cursor-not-allowed mx-auto">
                                                         <Lock className="h-3 w-3" />
                                                         OUTSIDE
                                                     </Badge>
                                                 ) : (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className={cn(
-                                                            "w-24 h-8 font-semibold text-xs transition-all rounded-full border shadow-sm",
-                                                            getStudentStatusColor(status)
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className={cn(
+                                                                "w-24 h-8 font-semibold text-xs transition-all rounded-full border shadow-sm",
+                                                                getStudentStatusColor(status)
+                                                            )}
+                                                            onClick={(e) => { e.stopPropagation(); toggleStatus(student.adm_no) }}
+                                                        >
+                                                            {status}
+                                                        </Button>
+                                                        {futureLeaves[student.adm_no] && (
+                                                            <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full px-2 py-0.5 pointer-events-none mb-[-14px]">
+                                                                Left {futureLeaves[student.adm_no]}
+                                                            </span>
                                                         )}
-                                                        onClick={(e) => { e.stopPropagation(); toggleStatus(student.adm_no) }}
-                                                    >
-                                                        {status}
-                                                    </Button>
+                                                    </div>
                                                 )}
                                             </TableCell>
                                         </TableRow>

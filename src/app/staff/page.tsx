@@ -213,9 +213,50 @@ export default function StaffDashboard() {
 
     const presentCount = myStudents.filter(s => s.today_stats?.attendance === "Present" || s.today_stats?.attendance === "present").length
     const absentCount = myStudents.filter(s => s.today_stats?.attendance === "Absent").length
+    const leaveCount = myStudents.filter(s => s.today_stats?.attendance === "Leave" || s.today_stats?.attendance === "Outside").length
     const entryCount = myStudents.filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0)).length
     const attendancePct = myStudents.length > 0 ? Math.round((presentCount / myStudents.length) * 100) : 0
     const entryPct = myStudents.length > 0 ? Math.round((entryCount / myStudents.length) * 100) : 0
+
+    // Feature 1: Session-Based Attendance
+    const totalRecords = myStudents.length * todaySessions.length
+    let totalPresentMarks = 0
+    let totalAbsentMarks = 0
+    let totalOutsideMarks = 0
+    myStudents.forEach(s => {
+        if (s.today_stats?.session_marks) {
+            s.today_stats.session_marks.forEach((m: any) => {
+                if (m.status === 'Present') totalPresentMarks++;
+                else if (m.status === 'Absent') totalAbsentMarks++;
+                else if (m.status === 'Leave' || m.status === 'Outside') totalOutsideMarks++;
+            });
+        }
+    })
+    const sessionAttendancePct = totalRecords > 0 ? Math.round((totalPresentMarks / totalRecords) * 100) : 0
+
+    // Feature 2: Last Session Attendance (Live Status)
+    const currentTimeString = format(currentTime || new Date(), "HH:mm:ss")
+    let activeSession = null
+    for (let i = 0; i < todaySessions.length; i++) {
+        if ((todaySessions[i].start_time || "") <= currentTimeString) {
+            activeSession = todaySessions[i]
+        }
+    }
+    const targetSessionObj = activeSession
+    
+    let lastPresent = 0
+    let lastAbsent = 0
+    let lastOutside = 0
+    if (targetSessionObj) {
+        myStudents.forEach(s => {
+            const mark = s.today_stats?.session_marks?.find((m: any) => m.schedule_id === targetSessionObj.id)
+            if (mark) {
+                if (mark.status === 'Present') lastPresent++;
+                else if (mark.status === 'Absent') lastAbsent++;
+                else if (mark.status === 'Leave' || mark.status === 'Outside') lastOutside++;
+            }
+        })
+    }
 
     const topPerformers = useMemo(() => [...myStudents]
         .filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0))
@@ -400,10 +441,10 @@ export default function StaffDashboard() {
                             </div>
                         </div>
 
-                        {/* Today's Attendance */}
+                        {/* Student Attendance (Daily Presence) */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Attendance</h3>
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Student Attendance <span className="text-xs text-slate-400 font-normal">(Daily Presence)</span></h3>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="relative flex items-center justify-center">
@@ -411,10 +452,59 @@ export default function StaffDashboard() {
                                     <div className="absolute text-lg font-bold">{attendancePct}%</div>
                                 </div>
                                 <div className="space-y-1 flex-1">
-                                    <div className="text-xs text-slate-500 dark:text-gray-300">Present: <b className="dark:text-white">{presentCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Present (Any): <b className="dark:text-white">{presentCount}</b></div>
                                     <div className="text-xs text-slate-500 dark:text-gray-300">Absent: <b className="dark:text-white">{absentCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Outside: <b className="dark:text-white">{leaveCount}</b></div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Session Attendance */}
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Session Attendance</h3>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <div className="relative flex items-center justify-center">
+                                    <DonutRing pct={sessionAttendancePct} color="#3b82f6" />
+                                    <div className="absolute text-lg font-bold">{sessionAttendancePct}%</div>
+                                </div>
+                                <div className="space-y-1 flex-1">
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Present: <b className="dark:text-white">{totalPresentMarks}</b> <span className="text-slate-400">/ {totalRecords}</span></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Absent: <b className="dark:text-white">{totalAbsentMarks}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Outside: <b className="dark:text-white">{totalOutsideMarks}</b></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Last Session Attendance */}
+                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Last Session Attendance</h3>
+                            </div>
+                            {targetSessionObj ? (
+                                <div>
+                                    <p className="text-xs font-semibold mb-2 text-slate-700 dark:text-slate-300">{targetSessionObj.name} <span className="font-normal text-slate-500 ml-1">({targetSessionObj.start_time?.slice(0, 5)} - {targetSessionObj.end_time?.slice(0, 5)})</span></p>
+                                    <div className="grid grid-cols-3 gap-2 mt-3">
+                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg text-center border border-emerald-100 dark:border-emerald-800/30">
+                                            <div className="text-lg font-bold">{lastPresent}</div>
+                                            <div className="text-[10px] uppercase font-bold tracking-wider">Present</div>
+                                        </div>
+                                        <div className="bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 p-2 rounded-lg text-center border border-rose-100 dark:border-rose-800/30">
+                                            <div className="text-lg font-bold">{lastAbsent}</div>
+                                            <div className="text-[10px] uppercase font-bold tracking-wider">Absent</div>
+                                        </div>
+                                        <div className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-2 rounded-lg text-center border border-orange-100 dark:border-orange-800/30">
+                                            <div className="text-lg font-bold">{lastOutside}</div>
+                                            <div className="text-[10px] uppercase font-bold tracking-wider">Outside</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="py-2 text-center border border-dashed rounded-lg border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800/50">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Pending (No session started)</p>
+                                </div>
+                            )}
                         </div>
                     </div>
 

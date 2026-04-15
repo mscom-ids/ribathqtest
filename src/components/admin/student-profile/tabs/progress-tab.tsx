@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { calculatePages } from "@/lib/quran-pages"
-import { getSurahId, formatHifzLogLabel } from "@/lib/hifz-progress"
+import { getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 
 export function ProgressTab({ student }: { student: Student }) {
     const [data, setData] = useState<any[]>([])
@@ -95,33 +95,78 @@ export function ProgressTab({ student }: { student: Student }) {
                 const recentRevisionDates = new Set<string>()
                 let juzRevisionTotal = 0
 
+                // Collect all New Verses ranges to merge before counting pages
+                interface VerseRange { startSurah: number; startVerse: number; endSurah: number; endVerse: number }
+                const newVerseRanges: VerseRange[] = []
+
                 currentMonthLogs.forEach((log: any) => {
-                    const pages = (log.page_end - log.page_start + 1) || 0
-                    if (log.mode === 'New Verses' || log.mode === 'Recent Revision') {
-                        if (log.mode === 'Recent Revision') {
-                            recentRevisionDates.add(format(new Date(log.entry_date), 'yyyy-MM-dd'))
-                            return; // Don't add to pages count
-                        }
-                        
-                        const surahId = getSurahId(log.surah_name || "");
-                        let calculated = 0;
+                    if (log.mode === 'Recent Revision') {
+                        recentRevisionDates.add(format(new Date(log.entry_date), 'yyyy-MM-dd'))
+                        return
+                    }
+
+                    if (log.mode === 'New Verses') {
+                        const surahId = getSurahId(log.surah_name || '')
                         if (surahId && log.start_v && log.end_v) {
-                            calculated = calculatePages(surahId, log.start_v, surahId, log.end_v);
-                        } else {
-                            calculated = (log.start_page === log.end_page) ? 0.5 : pages;
-                        }
-                        
-                        if (log.mode === 'New Verses') {
-                            hifzPages += calculated;
+                            newVerseRanges.push({
+                                startSurah: surahId,
+                                startVerse: log.start_v,
+                                endSurah: surahId,
+                                endVerse: log.end_v
+                            })
+                        } else if (log.start_page && log.end_page) {
+                            // Fallback for page-based entries: treat each page as 1
+                            hifzPages += (log.end_page - log.start_page + 1)
                         }
                     } else if (log.mode === 'Juz Revision') {
-                        const portion = log.juz_portion;
-                        if (portion === 'Full') juzRevisionTotal += 1;
-                        else if (portion?.includes('Half')) juzRevisionTotal += 0.5;
-                        else if (portion?.startsWith('Q')) juzRevisionTotal += 0.25;
-                        else juzRevisionTotal += 1; // Default to 1 if not specified
+                        const portion = log.juz_portion
+                        if (portion === 'Full') juzRevisionTotal += 1
+                        else if (portion?.includes('Half')) juzRevisionTotal += 0.5
+                        else if (portion?.startsWith('Q')) juzRevisionTotal += 0.25
+                        else juzRevisionTotal += 1
                     }
                 })
+
+                // Merge overlapping verse ranges and compute actual pages
+                if (newVerseRanges.length > 0) {
+                    // Convert to global verse indices for merging
+                    type GlobalRange = { start: number; end: number; startSurah: number; startVerse: number; endSurah: number; endVerse: number }
+                    const globalRanges: GlobalRange[] = newVerseRanges
+                        .map(r => {
+                            const startG = toGlobalVerseIndex(r.startSurah, r.startVerse)
+                            const endG = toGlobalVerseIndex(r.endSurah, r.endVerse)
+                            return { start: Math.min(startG, endG), end: Math.max(startG, endG), ...r }
+                        })
+                        .filter(r => r.start >= 0 && r.end >= 0)
+                        .sort((a, b) => a.start - b.start)
+
+                    if (globalRanges.length > 0) {
+                        const merged: GlobalRange[] = [globalRanges[0]]
+                        for (let i = 1; i < globalRanges.length; i++) {
+                            const cur = merged[merged.length - 1]
+                            const next = globalRanges[i]
+                            if (next.start <= cur.end + 1) {
+                                // Expand the merged range end if next goes further
+                                if (next.end > cur.end) {
+                                    cur.end = next.end
+                                    cur.endSurah = next.endSurah
+                                    cur.endVerse = next.endVerse
+                                }
+                            } else {
+                                merged.push({ ...next })
+                            }
+                        }
+
+                        // Sum actual pages from all merged ranges
+                        let totalPages = 0
+                        merged.forEach(r => {
+                            const pages = calculatePages(r.startSurah, r.startVerse, r.endSurah, r.endVerse)
+                            totalPages += pages
+                        })
+                        hifzPages += totalPages
+                    }
+                }
+
 
                 setMonthlyStats(prev => ({
                     ...prev,

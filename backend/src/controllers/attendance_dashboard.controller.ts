@@ -379,13 +379,14 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
         if (!schedule_id) return res.status(400).json({ success: false, error: "schedule_id required" });
 
-        const schedRes = await db.query('SELECT standards, class_type FROM attendance_schedules WHERE id = $1', [schedule_id]);
+        const schedRes = await db.query('SELECT standards, class_type, start_time, end_time FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
 
         const rawStds: string[] = typeof schedRes.rows[0].standards === 'string'
             ? JSON.parse(schedRes.rows[0].standards || '[]')
             : (schedRes.rows[0].standards || []);
         const classType = (schedRes.rows[0].class_type || '').toLowerCase();
+        const sessionEndStr = schedRes.rows[0].end_time; // 'HH:mm:ss'
 
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
@@ -456,27 +457,59 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         if (students.length > 0 && date) {
             try {
                 const studentIds = students.map((s: any) => s.adm_no);
-                // Check if any of these students are on leave for this specific date
-                // Leave is active if: status='approved' AND date >= start_datetime AND date <= end_datetime
+                // Explicitly check exact overlap of session bounds with leaves today
                 const leavesRes = await db.query(
-                    `SELECT DISTINCT student_id FROM student_leaves
+                    `SELECT student_id, start_datetime 
+                     FROM student_leaves
                      WHERE student_id = ANY($1)
                        AND (
-                         -- Approved (not yet exited): check date range
                          (status = 'approved' AND start_datetime::date <= $2::date AND end_datetime::date >= $2::date)
-                         OR
-                         -- Outside (already exited, not yet returned): always mark as outside regardless of overdue
-                         (status = 'outside')
-                       )`,
+                         OR 
+                         (status = 'outside' AND start_datetime::date <= $2::date)
+                         OR 
+                         (status = 'returned' AND start_datetime::date <= $2::date AND COALESCE(actual_return_datetime, end_datetime)::date >= $2::date)
+                       )
+                     ORDER BY start_datetime DESC`,
                     [studentIds, date]
                 );
-                const leaveStudentIds = new Set(leavesRes.rows.map((r: any) => r.student_id));
+                
+                const leaveMap = new Map();
+                for (const r of leavesRes.rows) {
+                    if (!leaveMap.has(r.student_id)) {
+                        leaveMap.set(r.student_id, r.start_datetime); // keep most recent leave of the day
+                    }
+                }
 
-                studentsWithLeave = students.map((s: any) => ({
-                    ...s,
-                    is_on_leave: leaveStudentIds.has(s.adm_no),
-                    attendance_status: leaveStudentIds.has(s.adm_no) ? 'outside' : 'pending'
-                }));
+                // If no exact session end time is known, fallback to now
+                const referenceTimeStr = sessionEndStr || "23:59:00"; 
+                // Build a precise timestamp object for when the session finished
+                const sessionEndDateTimeObj = new Date(`${date}T${referenceTimeStr}+05:30`);
+
+                studentsWithLeave = students.map((s: any) => {
+                    const lStart = leaveMap.get(s.adm_no);
+                    let isLockedOutside = false;
+                    let wentOutsideLater = false;
+
+                    if (lStart) {
+                        const leaveStartObj = new Date(lStart);
+                        if (sessionEndDateTimeObj >= leaveStartObj) {
+                            // Leave happened before or during the session completion
+                            isLockedOutside = true;
+                        } else {
+                            // Session ended cleanly before the student left campus
+                            wentOutsideLater = true;
+                        }
+                    }
+
+                    return {
+                        ...s,
+                        is_locked_outside: isLockedOutside,
+                        went_outside_later: wentOutsideLater,
+                        leave_start_time: lStart || null,
+                        is_on_leave: isLockedOutside, // backwards compat
+                        attendance_status: isLockedOutside ? 'outside' : 'pending' // backwards compat
+                    };
+                });
             } catch (leaveErr: any) {
                 console.warn('Leave check failed:', leaveErr.message);
             }

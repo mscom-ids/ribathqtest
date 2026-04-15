@@ -480,7 +480,7 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
 
         // Fetch today's attendance
         const attResult = await db.query(
-            `SELECT student_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`,
+            `SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`,
             [studentIds, todayDate]
         );
         const attendance = attResult.rows;
@@ -562,8 +562,9 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
                     hifz: parseFloat(hifzPages.toFixed(1)),
                     revision: revPages,
                     juz: parseFloat(juzCount.toFixed(1)),
-                    attendance: activeLeaveMeta ? 'Leave' : globalAttStatus
-                } : (activeLeaveMeta ? { hifz: 0, revision: 0, juz: 0, attendance: 'Leave' } : undefined)
+                    attendance: globalAttStatus,
+                    session_marks: sAtts.map((a: any) => ({ schedule_id: a.schedule_id, status: a.status }))
+                } : undefined
             };
         });
 
