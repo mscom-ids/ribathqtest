@@ -7,7 +7,7 @@ import { format, subDays, startOfMonth, endOfMonth, isWithinInterval, eachDayOfI
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { calculatePages } from "@/lib/quran-pages"
+import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
 import { getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 
 export function ProgressTab({ student }: { student: Student }) {
@@ -127,43 +127,63 @@ export function ProgressTab({ student }: { student: Student }) {
                     }
                 })
 
-                // Merge overlapping verse ranges and compute actual pages
+                // Merge overlapping verse ranges, then count only fully-covered pages
                 if (newVerseRanges.length > 0) {
-                    // Convert to global verse indices for merging
-                    type GlobalRange = { start: number; end: number; startSurah: number; startVerse: number; endSurah: number; endVerse: number }
+                    type GlobalRange = { start: number; end: number }
                     const globalRanges: GlobalRange[] = newVerseRanges
                         .map(r => {
                             const startG = toGlobalVerseIndex(r.startSurah, r.startVerse)
                             const endG = toGlobalVerseIndex(r.endSurah, r.endVerse)
-                            return { start: Math.min(startG, endG), end: Math.max(startG, endG), ...r }
+                            return { start: Math.min(startG, endG), end: Math.max(startG, endG) }
                         })
                         .filter(r => r.start >= 0 && r.end >= 0)
                         .sort((a, b) => a.start - b.start)
 
                     if (globalRanges.length > 0) {
+                        // Merge adjacent/overlapping ranges
                         const merged: GlobalRange[] = [globalRanges[0]]
                         for (let i = 1; i < globalRanges.length; i++) {
                             const cur = merged[merged.length - 1]
                             const next = globalRanges[i]
                             if (next.start <= cur.end + 1) {
-                                // Expand the merged range end if next goes further
-                                if (next.end > cur.end) {
-                                    cur.end = next.end
-                                    cur.endSurah = next.endSurah
-                                    cur.endVerse = next.endVerse
-                                }
+                                if (next.end > cur.end) cur.end = next.end
                             } else {
                                 merged.push({ ...next })
                             }
                         }
 
-                        // Sum actual pages from all merged ranges
-                        let totalPages = 0
-                        merged.forEach(r => {
-                            const pages = calculatePages(r.startSurah, r.startVerse, r.endSurah, r.endVerse)
-                            totalPages += pages
+                        // Build page boundaries in global verse indices
+                        // Each MUSHAF_PAGES entry is the START of that page
+                        // The END of each page = toGlobalVerseIndex of next page's start - 1
+                        type PageBound = { page: number; startGlobal: number; endGlobal: number }
+                        const pageBounds: PageBound[] = MUSHAF_PAGES.map((p, i) => {
+                            const startGlobal = toGlobalVerseIndex(p.surah, p.ayah)
+                            let endGlobal: number
+                            if (i + 1 < MUSHAF_PAGES.length) {
+                                const next = MUSHAF_PAGES[i + 1]
+                                endGlobal = toGlobalVerseIndex(next.surah, next.ayah) - 1
+                            } else {
+                                // Last page ends at Surah 114, Ayah 6
+                                endGlobal = toGlobalVerseIndex(114, 6)
+                            }
+                            return { page: p.page, startGlobal, endGlobal }
                         })
-                        hifzPages += totalPages
+
+                        // Count pages where any merged range covers the page's LAST ayah
+                        // (and the range overlaps with the page at all)
+                        let pageCount = 0
+                        for (const pb of pageBounds) {
+                            for (const range of merged) {
+                                if (
+                                    range.start <= pb.endGlobal &&  // range overlaps this page
+                                    range.end >= pb.endGlobal       // range covers to end of page
+                                ) {
+                                    pageCount++
+                                    break
+                                }
+                            }
+                        }
+                        hifzPages += pageCount
                     }
                 }
 
