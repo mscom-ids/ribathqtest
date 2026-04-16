@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
+import { countCompletedJuz } from '../utils/quran-juz';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 
 export const getHifzStudents = async (req: Request, res: Response) => {
@@ -238,20 +239,31 @@ export const upsertMonthlyReport = async (req: Request, res: Response) => {
 
 export const getProgressSummary = async (req: Request, res: Response) => {
     try {
-        const result = await db.query(`
-            SELECT student_id, COUNT(DISTINCT split_part(juz_part, ' ', 2)) as progress 
-            FROM hifz_logs 
-            WHERE mode = 'Juz Revision' AND juz_part LIKE 'Juz %'
-            GROUP BY student_id
-        `);
-        
+        // Fetch all New Verses logs in one query
+        const result = await db.query(
+            `SELECT student_id, surah_name, start_v, end_v
+             FROM hifz_logs
+             WHERE mode = 'New Verses'
+               AND surah_name IS NOT NULL
+               AND start_v IS NOT NULL
+               AND end_v IS NOT NULL`
+        );
+
+        // Group logs by student_id
+        const byStudent: Record<string, { surah_name: string | null; start_v: number | null; end_v: number | null }[]> = {};
+        for (const row of result.rows) {
+            if (!byStudent[row.student_id]) byStudent[row.student_id] = [];
+            byStudent[row.student_id].push(row);
+        }
+
+        // Compute completed juz count per student using proper boundary check
         const progressMap: Record<string, number> = {};
-        result.rows.forEach(row => {
-            progressMap[row.student_id] = parseInt(row.progress, 10);
-        });
-        
+        for (const [studentId, logs] of Object.entries(byStudent)) {
+            progressMap[studentId] = countCompletedJuz(logs);
+        }
+
         res.json({ success: true, progressMap });
-    } catch (err) {
+    } catch (err: any) {
         console.error('Error fetching progress summary:', err);
         res.status(500).json({ success: false, error: 'Failed' });
     }
