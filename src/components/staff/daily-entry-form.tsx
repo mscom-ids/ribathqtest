@@ -33,7 +33,7 @@ const formSchema = z.object({
     date: z.string(), // YYYY-MM-DD
     session: z.enum(["Subh", "Breakfast", "Lunch"]),
 
-    mode: z.enum(["New Verses", "Recent Revision", "Juz Revision"]),
+    mode: z.enum(["New Verses", "Recent Revision", "Juz Revision", "Juz Revision (New)", "Juz Revision (Old)"]),
 
     // New Verses - Array of entries
     new_verses: z.array(z.object({
@@ -74,7 +74,7 @@ const formSchema = z.object({
             if (!entry.end_v) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Required", path: ["new_verses", index, "end_v"] })
         })
 
-    } else if (data.mode === "Juz Revision") {
+    } else if (data.mode?.startsWith("Juz Revision")) {
         if (!data.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_number"] })
         if (!data.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_portion"] })
     }
@@ -92,6 +92,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [assignedUsthadId, setAssignedUsthadId] = useState<string | null>(null)
     const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
+    const [isHafiz, setIsHafiz] = useState(false)
 
     // ── Range Entry mode state ──────────────────────────────────────────────
     const [entryMode, setEntryMode] = useState<'daily' | 'range'>('daily')
@@ -139,6 +140,17 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             const logIdParam = searchParams.get("log_id")
             let existingLog = null
+            let isStudentHafiz = false
+
+            try {
+                const progRes = await api.get('/hifz/progress-summary', { params: { student_id: studentId } })
+                isStudentHafiz = progRes.data?.data?.summary?.isHafiz ?? false
+                setIsHafiz(isStudentHafiz)
+                
+                if (isStudentHafiz && form.getValues("mode") === "New Verses") {
+                    form.setValue("mode", "Juz Revision (New)")
+                }
+            } catch (error) { console.error(error) }
 
             try {
                 if (logIdParam) {
@@ -681,9 +693,18 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                <SelectItem value="New Verses">New Verses</SelectItem>
-                                                <SelectItem value="Recent Revision">Recent Revision</SelectItem>
-                                                <SelectItem value="Juz Revision">Juz Revision</SelectItem>
+                                                {isHafiz ? (
+                                                    <>
+                                                        <SelectItem value="Juz Revision (New)">Juz Revision (New)</SelectItem>
+                                                        <SelectItem value="Juz Revision (Old)">Juz Revision (Old)</SelectItem>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <SelectItem value="New Verses">New Verses</SelectItem>
+                                                        <SelectItem value="Recent Revision">Recent Revision</SelectItem>
+                                                        <SelectItem value="Juz Revision">Juz Revision</SelectItem>
+                                                    </>
+                                                )}
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
@@ -781,7 +802,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                             )}
 
                              {/* Juz Revision Mode */}
-                            {form.watch("mode") === "Juz Revision" && (
+                            {form.watch("mode")?.startsWith("Juz Revision") && (
                                 <div className="space-y-3 p-3 border border-purple-500/10 bg-purple-50/30 dark:bg-purple-950/10 rounded-lg" key="juz">
                                     <div className="flex gap-3">
                                         <FormField
