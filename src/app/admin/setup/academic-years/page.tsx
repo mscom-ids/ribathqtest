@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Plus, Edit2, Trash2, Calendar, Lock, Unlock, CheckCircle2 } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
@@ -47,7 +48,7 @@ export default function AcademicYearsPage() {
     const fetchYears = async () => {
         try {
             setLoading(true)
-            const res = await api.get('/classes/academic-years')
+            const res = await cachedGet('/classes/academic-years', undefined, 5 * 60_000)
             if (res.data.success) {
                 setYears(res.data.data)
             }
@@ -73,6 +74,7 @@ export default function AcademicYearsPage() {
             const res = await api.post('/classes/academic-years', payload)
             
             if (res.data.success) {
+                invalidateCache('/classes/academic-years')
                 toast({ title: "Success", description: "Academic year saved successfully" })
                 setOpen(false)
                 fetchYears()
@@ -89,6 +91,7 @@ export default function AcademicYearsPage() {
         try {
             const res = await api.delete(`/classes/academic-years/${id}`)
             if (res.data.success) {
+                invalidateCache('/classes/academic-years')
                 toast({ title: "Deleted", description: "Academic year deleted successfully" })
                 fetchYears()
             }

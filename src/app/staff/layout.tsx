@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { ModeToggle } from "@/components/mode-toggle"
 import Cookies from "js-cookie"
+import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 export default function StaffLayout({
     children,
@@ -27,11 +28,6 @@ export default function StaffLayout({
     const [actingAsMentorName, setActingAsMentorName] = useState<string | null>(null)
     const [actingAsStudentName, setActingAsStudentName] = useState<string | null>(null)
     
-    const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined;
-        return url.startsWith('http') ? url : `http://localhost:5000${url}`;
-    }
-
     useEffect(() => {
         setMounted(true)
         const delegationToken = sessionStorage.getItem('delegationToken')

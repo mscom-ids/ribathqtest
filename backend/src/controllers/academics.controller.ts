@@ -82,9 +82,6 @@ export const getStudentsForAttendance = async (req: Request, res: Response) => {
         }
         
         query += ' ORDER BY name';
-        
-        console.log('QUERY IS:', query);
-        console.log('PARAMS ARE:', params);
 
         const result = await db.query(query, params);
         res.json({ success: true, students: result.rows });

@@ -12,6 +12,7 @@ import {
     Edit2, Trash2, Loader2, UserCog
 } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import {
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -196,40 +197,28 @@ export default function AdminDashboardPage() {
     const load = useCallback(async () => {
         setLoading(true)
         try {
-            const [stuRes, staffRes, evtRes, delRes, outsideRes] = await Promise.all([
-                api.get("/students", { params: { status: "all" } }),
-                api.get("/staff"),
-                api.get("/events"),
-                api.get("/delegations/admin/all"),
-                api.get("/leaves/outside-students").catch(() => ({ data: { success: false, students: [] } })),
+            // Was fetching the entire /students payload (with comprehensive_details
+            // JSON blob) just to count rows. Now uses a tiny aggregation endpoint.
+            // /leaves/outside-students is no longer needed — counts include it.
+            const [countsRes, staffRes, evtRes, delRes] = await Promise.all([
+                cachedGet("/students/counts", undefined, 60_000),
+                cachedGet("/staff", undefined, 60_000),
+                cachedGet("/events", undefined, 60_000),
+                // count_only=true skips the 3-table JOIN — we only need the
+                // badge number on the dashboard, not the full request list.
+                api.get("/delegations/admin/all", { params: { count_only: 'true' } }),
             ])
             if (evtRes?.data?.success) {
                 setEvents(evtRes.data.events || [])
             }
             if (delRes?.data?.success) {
-                const pendings = delRes.data.requests?.filter((r: any) => r.status === 'pending') || []
-                setPendingDelegationsCount(pendings.length)
+                setPendingDelegationsCount(delRes.data.pending_count || 0)
             }
 
-            if (stuRes.data.success) {
-                const d: any[] = stuRes.data.students || []
-                let completed = 0, dropout = 0
-                let enrolledCount = 0
-                d.forEach((s: any) => {
-                    const st = (s.status || "active").toLowerCase()
-                    if (st === 'completed') completed++
-                    else if (st === 'dropout') dropout++
-                    else enrolledCount++
-                })
-
-                // Out Campus = unique students with status='outside' in student_leaves
-                // This correctly covers individual leaves, institutional leaves, and return overrides
-                const outsideStudents: any[] = outsideRes.data?.students || []
-                const outCampus = new Set(outsideStudents.map((s: any) => s.student_id || s.adm_no)).size
-                const onCampus = Math.max(0, enrolledCount - outCampus)
-
-                setStudents({ total: enrolledCount, onCampus, outCampus })
-                setAlumni({ total: completed + dropout, completed, dropout })
+            if (countsRes.data.success) {
+                const c = countsRes.data.counts
+                setStudents({ total: c.active, onCampus: c.on_campus, outCampus: c.out_campus })
+                setAlumni({ total: c.alumni, completed: c.completed, dropout: c.dropout })
             }
 
             if (staffRes.data.success) {

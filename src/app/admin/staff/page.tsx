@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Plus, Search, Trash2, Users, Shield, KeyRound, Loader2, Pencil, Phone, RotateCcw, MapPin, Camera, User } from "lucide-react"
@@ -44,7 +44,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
+import { resolveBackendUrl } from "@/lib/utils"
 
 type PhoneContact = {
     number: string
@@ -113,7 +115,7 @@ export default function StaffPage() {
 
     async function loadStaff() {
         try {
-            const res = await api.get('/staff')
+            const res = await cachedGet('/staff', undefined, 60_000)
             if (res.data.success) {
                 setStaff(res.data.staff || [])
             }
@@ -135,6 +137,7 @@ export default function StaffPage() {
         try {
             const result = await api.put(`/staff/${id}/archive`)
             if (result.data.success) {
+                invalidateCache('/staff')
                 toast({ title: "Archived", description: "Mentor has been archived." })
             } else {
                 setStaff(previousStaff)
@@ -150,10 +153,11 @@ export default function StaffPage() {
         // Optimistic Update
         const previousStaff = [...staff]
         setStaff(staff.map(s => s.id === id ? { ...s, is_active: true } : s))
-        
+
         try {
             const result = await api.put(`/staff/${id}/restore`)
             if (result.data.success) {
+                invalidateCache('/staff')
                 toast({ title: "Restored", description: "Mentor has been restored." })
             } else {
                 setStaff(previousStaff)
@@ -179,6 +183,7 @@ export default function StaffPage() {
             })
 
             if (result.data.success) {
+                invalidateCache('/staff')
                 toast({ title: "Success", description: "Login created successfully!" })
                 setLoginDialogOpen(false)
                 setNewPassword("")
@@ -227,6 +232,7 @@ export default function StaffPage() {
             })
 
             if (res.data.success) {
+                invalidateCache('/staff')
                 toast({ title: "Updated", description: "Mentor details updated successfully." })
                 setEditDialogOpen(false)
                 setPhotoFile(null)
@@ -312,18 +318,36 @@ export default function StaffPage() {
         setEditForm({ ...editForm, phone_contacts: updated })
     }
 
-    const activeStaffList = staff.filter(s => s.is_active !== false)
-    const archivedStaffList = staff.filter(s => s.is_active === false)
+    // Single-pass partition + role counts. Was 4 separate .filter() passes
+    // re-running on every render (every keystroke in the search box).
+    const { activeStaffList, archivedStaffList, mentorCount, adminCount } = useMemo(() => {
+        const active: Staff[] = []
+        const archived: Staff[] = []
+        let mentors = 0
+        let admins = 0
+        for (const s of staff) {
+            if (s.is_active === false) {
+                archived.push(s)
+            } else {
+                active.push(s)
+                if (['usthad', 'staff', 'teacher'].includes(s.role)) mentors++
+                else if (['admin', 'principal', 'vice_principal', 'controller'].includes(s.role)) admins++
+            }
+        }
+        return { activeStaffList: active, archivedStaffList: archived, mentorCount: mentors, adminCount: admins }
+    }, [staff])
+
     const displayedStaff = activeTab === "active" ? activeStaffList : archivedStaffList
 
-    const filtered = displayedStaff.filter(s =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        (s.place && s.place.toLowerCase().includes(search.toLowerCase())) ||
-        (s.staff_id && s.staff_id.toLowerCase().includes(search.toLowerCase()))
-    )
-
-    const mentorCount = activeStaffList.filter(s => ['usthad', 'staff', 'teacher'].includes(s.role)).length
-    const adminCount = activeStaffList.filter(s => ['admin', 'principal', 'vice_principal', 'controller'].includes(s.role)).length
+    const filtered = useMemo(() => {
+        const q = search.toLowerCase()
+        if (!q) return displayedStaff
+        return displayedStaff.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            (s.place && s.place.toLowerCase().includes(q)) ||
+            (s.staff_id && s.staff_id.toLowerCase().includes(q))
+        )
+    }, [displayedStaff, search])
 
     // Get primary phone for display
     const getPrimaryPhone = (s: Staff) => {
@@ -496,7 +520,7 @@ export default function StaffPage() {
                                         <TableCell>
                                             {s.photo_url ? (
                                                 <img
-                                                    src={s.photo_url.startsWith('http') ? s.photo_url : `http://localhost:5000${s.photo_url}`}
+                                                    src={resolveBackendUrl(s.photo_url)}
                                                     alt={s.name}
                                                     className="h-10 w-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-900 shadow-sm"
                                                 />
@@ -663,7 +687,7 @@ export default function StaffPage() {
                             <div className="relative">
                                 {(photoFile || selectedStaff?.photo_url) ? (
                                     <img
-                                        src={photoFile ? URL.createObjectURL(photoFile) : (selectedStaff?.photo_url?.startsWith('http') ? selectedStaff.photo_url : `http://localhost:5000${selectedStaff?.photo_url}`)}
+                                        src={photoFile ? URL.createObjectURL(photoFile) : resolveBackendUrl(selectedStaff?.photo_url)}
                                         alt="Photo"
                                         className="h-16 w-16 rounded-full object-cover ring-2 ring-slate-200"
                                     />
@@ -852,7 +876,7 @@ export default function StaffPage() {
                                     {assignedStudents.map((stu) => (
                                         <div key={stu.id || stu.adm_no} className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#1a2234] hover:border-purple-200 dark:hover:border-purple-800/50 transition-colors">
                                             {stu.photo_url ? (
-                                                <img src={`http://localhost:5000${stu.photo_url}`} alt={stu.name} className="h-10 w-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-900" />
+                                                <img src={resolveBackendUrl(stu.photo_url)} alt={stu.name} className="h-10 w-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-900" />
                                             ) : (
                                                 <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
                                                     {stu.name.charAt(0)}

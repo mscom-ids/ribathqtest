@@ -93,6 +93,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [isHafiz, setIsHafiz] = useState(false)
+    // Gate the form render until student + progress + log are all loaded.
+    // Without this gate, the form renders with the default "New Verses" mode
+    // first, then re-renders to "Juz Revision (New)" once the progress check
+    // returns — that's the visible blink for huffaz students.
+    const [initialLoading, setInitialLoading] = useState(true)
 
     // ── Range Entry mode state ──────────────────────────────────────────────
     const [entryMode, setEntryMode] = useState<'daily' | 'range'>('daily')
@@ -127,53 +132,57 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     }, [])
 
     useEffect(() => {
+        let cancelled = false
         async function loadData() {
-            // Load student info
-            try {
-                const sRes = await api.get(`/students/${studentId}`)
-                if (sRes.data.success) {
-                    setStudent(sRes.data.student)
-                    setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
-                    setIsOutside(!!sRes.data.student.is_outside)
-                }
-            } catch (e) { console.error(e) }
-
             const logIdParam = searchParams.get("log_id")
-            let existingLog = null
-            let isStudentHafiz = false
+            const initialDate    = form.getValues("date")
+            const initialSession = form.getValues("session")
+            const initialMode    = form.getValues("mode")
 
-            try {
-                const progRes = await api.get('/hifz/progress-summary', { params: { student_id: studentId } })
-                isStudentHafiz = progRes.data?.data?.summary?.isHafiz ?? false
-                setIsHafiz(isStudentHafiz)
-                
-                if (isStudentHafiz && form.getValues("mode") === "New Verses") {
-                    form.setValue("mode", "Juz Revision (New)")
-                }
-            } catch (error) { console.error(error) }
-
-            try {
-                if (logIdParam) {
-                    const res = await api.get(`/hifz/logs/${logIdParam}`)
-                    if (res.data.success) existingLog = res.data.log
-                } else {
-                    const date = form.getValues("date")
-                    const session = form.getValues("session")
-                    const mode = form.getValues("mode")
-
-                    const res = await api.get('/hifz/logs', {
-                        params: { student_id: studentId, date: date, session_type: session, mode, limit: 1 }
+            // Fire all three calls in parallel. Previously these were
+            // sequential awaits, costing 3 RTTs every time the form opened.
+            const [sRes, progRes, logRes] = await Promise.all([
+                api.get(`/students/${studentId}`, { params: { light: 'true' } }).catch(() => null),
+                api.get('/hifz/progress-summary', { params: { student_id: studentId } }).catch(() => null),
+                (logIdParam
+                    ? api.get(`/hifz/logs/${logIdParam}`)
+                    : api.get('/hifz/logs', {
+                        params: { student_id: studentId, date: initialDate, session_type: initialSession, mode: initialMode, limit: 1 },
                     })
-                    if (res.data.success && res.data.logs?.length > 0) existingLog = res.data.logs[0]
-                }
-            } catch (e) { console.error(e) }
+                ).catch(() => null),
+            ])
+
+            if (cancelled) return
+
+            if (sRes?.data?.success) {
+                setStudent(sRes.data.student)
+                setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
+                setIsOutside(!!sRes.data.student.is_outside)
+            }
+
+            const totalJuzCompleted = progRes?.data?.progressMap?.[studentId] || 0
+            const isStudentHafiz = totalJuzCompleted >= 30
+            setIsHafiz(isStudentHafiz)
+
+            // Resolve the existing log (saved-edit fetch by id, or auto-find for current date/session/mode)
+            let existingLog: any = null
+            if (logIdParam && logRes?.data?.success) {
+                existingLog = logRes.data.log
+            } else if (!logIdParam && logRes?.data?.success && logRes.data.logs?.length > 0) {
+                existingLog = logRes.data.logs[0]
+            }
+
+            // Pick the right starting mode BEFORE rendering — huffaz students
+            // never see the "New Verses" UI flicker first.
+            const resolvedMode =
+                isStudentHafiz && initialMode === "New Verses" ? "Juz Revision (New)" : initialMode
 
             if (existingLog) {
                 setLogId(existingLog.id)
-                let surahId = undefined;
+                let surahId: number | undefined = undefined
                 if (existingLog.surah_name) {
-                    const matched = SURAH_LIST.find(s => s.name === existingLog.surah_name);
-                    surahId = matched?.id;
+                    const matched = SURAH_LIST.find(s => s.name === existingLog.surah_name)
+                    surahId = matched?.id
                 }
 
                 form.reset({
@@ -183,28 +192,29 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     new_verses: [{
                         surah_id: surahId,
                         start_v: existingLog.start_v || undefined,
-                        end_v: existingLog.end_v || undefined
+                        end_v: existingLog.end_v || undefined,
                     }],
                     start_page: existingLog.start_page,
                     end_page: existingLog.end_page,
                     juz_number: existingLog.juz_number,
-                    juz_portion: existingLog.juz_portion as any
+                    juz_portion: existingLog.juz_portion as any,
                 })
             } else {
-                if (!logIdParam) {
-                    setLogId(null)
-                    form.reset({
-                        date: watchedDate || format(today, 'yyyy-MM-dd'),
-                        session: watchedSession || "Subh",
-                        mode: watchedMode || "New Verses",
-                        new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
-                        juz_number: "" as any,
-                        juz_portion: "" as any
-                    })
-                }
+                setLogId(null)
+                form.reset({
+                    date: initialDate,
+                    session: initialSession,
+                    mode: resolvedMode,
+                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                    juz_number: "" as any,
+                    juz_portion: "" as any,
+                })
             }
+
+            setInitialLoading(false)
         }
         loadData()
+        return () => { cancelled = true }
     }, [studentId, form, searchParams])
 
     // Re-fetch when date/session/mode change (track via separate effect)
@@ -213,7 +223,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const watchedMode = form.watch("mode")
 
     useEffect(() => {
-        if (!mounted) return
+        // Wait for the initial parallel-load to finish; otherwise the
+        // form.reset() inside loadData would race with this effect and
+        // cause an extra fetch + flicker right after open.
+        if (!mounted || initialLoading) return
         async function reloadLog() {
             const logIdParam = searchParams.get("log_id")
             if (logIdParam) return
@@ -440,7 +453,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
     const isOldDate = isBefore(new Date(form.watch("date")), minDate)
 
-    if (!mounted) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
+    if (!mounted || initialLoading) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
 
     // Block recording for outside students
     if (isOutside) {

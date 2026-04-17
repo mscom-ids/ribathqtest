@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, AlertCircle, ChevronDown, LogOut } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
 
@@ -56,7 +57,8 @@ export default function StudentAttendancePage() {
 
     const fetchFilters = async () => {
         try {
-            const res = await api.get('/classes/academic-years')
+            // 5 min TTL — academic years rarely change.
+            const res = await cachedGet('/classes/academic-years', undefined, 5 * 60_000)
             if (res.data.success) {
                 setAcademicYears(res.data.data)
                 const current = res.data.data.find((y: any) => y.is_current)
@@ -68,8 +70,8 @@ export default function StudentAttendancePage() {
 
     const fetchStaff = async () => {
         try {
-            const res = await api.get('/staff')
-            // Handle different possible response shapes
+            // 1 min TTL — staff list changes infrequently within a session.
+            const res = await cachedGet('/staff', undefined, 60_000)
             const data = res.data.data || res.data.staff || res.data || []
             setStaffList(Array.isArray(data) ? data : [])
         } catch (e) { console.error("Failed to load staff", e) }

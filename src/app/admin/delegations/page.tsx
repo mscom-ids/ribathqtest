@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import api from "@/lib/api"
 import { toast } from "sonner"
 import { format } from "date-fns"
+import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 type DelegationRequest = {
     id: string
@@ -32,11 +33,6 @@ export default function AdminDelegationsPage() {
     const [requests, setRequests] = useState<DelegationRequest[]>([])
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState<string | null>(null)
-
-    const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined;
-        return url.startsWith('http') ? url : `http://localhost:5000${url}`;
-    }
 
     useEffect(() => {
         loadRequests()
@@ -191,11 +187,6 @@ function NoRequests({ variant }: { variant: string }) {
 }
 
 function RequestCard({ request, onAction, onRevoke, isProcessing }: { request: DelegationRequest, onAction: (id: string, s: 'approved' | 'rejected') => void, onRevoke: (id: string) => void, isProcessing: boolean }) {
-    const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined;
-        return url.startsWith('http') ? url : `http://localhost:5000${url}`;
-    }
-
     const getDurationText = () => {
         if (request.status !== 'terminated' || !request.approved_at || !request.terminated_at) return null;
         const start = new Date(request.approved_at);

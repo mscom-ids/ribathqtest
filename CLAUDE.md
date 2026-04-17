@@ -34,23 +34,27 @@ This is a **monorepo** with two separate applications:
 
 ## Development Commands
 
-### Frontend
+### Both apps together (from repo root)
 ```bash
-# From repo root
-npm run dev       # Start Next.js dev server (port 3000)
-npm run build     # Build for production
+npm run dev           # Runs frontend + backend concurrently (uses `concurrently`)
+npm run dev:frontend  # Next.js only (port 3000)
+npm run dev:backend   # Express only (port 5000) — equivalent to `cd backend && npm run dev`
+```
+
+### Frontend-only commands (from repo root)
+```bash
+npm run build     # Next.js production build
 npm run lint      # Run ESLint
 ```
 
-### Backend
+### Backend-only commands (from `/backend`)
 ```bash
-# From /backend directory
-npm run dev       # Start Express with nodemon + ts-node (port 5000)
+npm run dev       # Express with nodemon + ts-node (port 5000)
 npm run build     # Compile TypeScript → dist/
 npm start         # Run compiled output
 ```
 
-You need **two terminals** — one for frontend, one for backend.
+There are **no test scripts** in this repo — neither app has Jest/Vitest configured. Don't claim a fix is "tested" via test runner; verify changes by running the app and exercising the feature in the browser.
 
 ## Environment Variables
 

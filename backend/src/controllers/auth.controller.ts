@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { db } from '../config/db';
 import { supabaseAdmin } from '../config/supabase';
+import { devLog } from '../utils/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -12,10 +13,10 @@ if (!JWT_SECRET) {
 export const login = async (req: Request, res: Response) => {
   try {
     const { email: rawEmail, password } = req.body;
-    console.log(`[AUTH] Login attempt for email: "${rawEmail}"`);
+    devLog(`[AUTH] Login attempt for email: "${rawEmail}"`);
 
     if (!rawEmail || !password) {
-      console.log(`[AUTH] Missing email or password`);
+      devLog(`[AUTH] Missing email or password`);
       return res.status(400).json({ success: false, error: 'Email and password are required' });
     }
 
@@ -31,8 +32,8 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (authError || !authData.session) {
-        console.log(`[AUTH] Supabase login failed for "${email}":`, authError?.message);
-        console.log(`[AUTH] Attempting legacy bcrypt fallback...`);
+        devLog(`[AUTH] Supabase login failed for "${email}":`, authError?.message);
+        devLog(`[AUTH] Attempting legacy bcrypt fallback...`);
 
         // FALLBACK FOR LEGACY UNMIGRATED ACCOUNTS (Like 'admin')
         const legacyCheck = await db.query(
@@ -48,7 +49,7 @@ export const login = async (req: Request, res: Response) => {
         if (!legacyMatched) {
             return res.status(401).json({ success: false, error: `Supabase Auth Error: ${authError?.message || 'Invalid email or password'}` });
         } else {
-            console.log(`[AUTH] Legacy bcrypt fallback SUCCEEDED for "${email}". Letting them in.`);
+            devLog(`[AUTH] Legacy bcrypt fallback SUCCEEDED for "${email}". Letting them in.`);
             // Since they matched via legacy, their authUserId isn't available from Supabase (null is fine).
         }
     } else {
@@ -64,12 +65,12 @@ export const login = async (req: Request, res: Response) => {
     );
 
     if (staffResult.rows.length === 0) {
-      console.log(`[AUTH] Authenticated successfully but no local staff record found for email: "${email}" or profile_id: "${authUserId}"`);
+      devLog(`[AUTH] Authenticated successfully but no local staff record found for email: "${email}" or profile_id: "${authUserId}"`);
       return res.status(401).json({ success: false, error: 'Your account has not been fully provisioned. Please contact the administrator.' });
     }
 
     const staff = staffResult.rows[0];
-    console.log(`[AUTH] Local staff record successfully mapped: id=${staff.id}, name=${staff.name}, role=${staff.role}`);
+    devLog(`[AUTH] Local staff record successfully mapped: id=${staff.id}, name=${staff.name}, role=${staff.role}`);
 
     // If profile_id is somehow missing on the staff record but they logged in via Supabase, self-heal:
     if (!staff.profile_id && authUserId) {

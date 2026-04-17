@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { cn } from "@/lib/utils"
+import { cn, resolveBackendUrl } from "@/lib/utils"
 import api from "@/lib/api"
 import { calculatePages } from "@/lib/quran-pages"
 import { getSurahId, formatHifzLogLabel } from "@/lib/hifz-progress"
@@ -52,10 +52,7 @@ type Props = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getPhotoUrl(url?: string | null) {
-    if (!url) return undefined
-    return url.startsWith("http") ? url : `http://localhost:5000${url}`
-}
+const getPhotoUrl = (url?: string | null) => resolveBackendUrl(url)
 
 function logLabel(log: Log) {
     return formatHifzLogLabel(log);

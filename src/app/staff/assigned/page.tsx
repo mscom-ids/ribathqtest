@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import api from "@/lib/api"
 import { toast } from "sonner"
+import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 type Assignment = {
     id: string
@@ -23,11 +24,6 @@ type Assignment = {
 export default function AssignedStudentsPage() {
     const [assignments, setAssignments] = useState<Assignment[]>([])
     const [loading, setLoading] = useState(true)
-
-    const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined;
-        return url.startsWith('http') ? url : `http://localhost:5000${url}`;
-    }
 
     useEffect(() => {
         loadAssignments()

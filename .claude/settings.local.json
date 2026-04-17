@@ -4,7 +4,10 @@
       "Bash(npx tsc:*)",
       "Bash(npm run:*)",
       "Bash(psql \"postgresql://postgres.jbsirxvegnxsjqoeszdj:mscomdb%40224@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres\" -f \"d:/NewRQP/supabase/migrations/20260413000000_per_mentor_attendance_marks.sql\")",
-      "Bash(node -e ':*)"
+      "Bash(node -e ':*)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"BACKEND_EXIT=$?\")",
+      "Bash(echo \"FRONTEND_EXIT=$?\")"
     ]
   }
 }

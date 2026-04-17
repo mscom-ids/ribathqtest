@@ -454,14 +454,42 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
         const todayDate = date || new Date().toISOString().split('T')[0];
         const studentIds = students.map((s: any) => s.adm_no);
 
-        // Fetch active outside leaves for these students
-        const activeLeaveResult = await db.query(
-            `SELECT student_id, leave_type, reason_category, remarks, end_datetime
-             FROM student_leaves 
-             WHERE student_id = ANY($1) AND status = 'outside'
-             ORDER BY created_at DESC`,
-            [studentIds]
-        );
+        // Fire all 5 dependent queries in parallel — none depend on each other,
+        // they only depend on studentIds + staffId + todayDate. Previously each
+        // awaited the next, costing ~5 sequential round-trips per request.
+        const [activeLeaveResult, logsResult, attResult, outgoingDelegationsRes, lastHifzResult] = await Promise.all([
+            db.query(
+                `SELECT student_id, leave_type, reason_category, remarks, end_datetime
+                 FROM student_leaves
+                 WHERE student_id = ANY($1) AND status = 'outside'
+                 ORDER BY created_at DESC`,
+                [studentIds]
+            ),
+            db.query(
+                `SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
+                 FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`,
+                [studentIds, todayDate]
+            ),
+            db.query(
+                `SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`,
+                [studentIds, todayDate]
+            ),
+            db.query(
+                `SELECT d.student_id, s.name as receiver_name
+                 FROM mentor_delegations d
+                 JOIN staff s ON d.to_staff_id = s.id
+                 WHERE d.from_staff_id = $1 AND d.status = 'approved'`,
+                [staffId]
+            ),
+            db.query(
+                `SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date
+                 FROM hifz_logs
+                 WHERE student_id = ANY($1) AND mode = 'New Verses'
+                 ORDER BY student_id, entry_date DESC, created_at DESC`,
+                [studentIds]
+            ),
+        ]);
+
         // Build a map: student_id -> leave info
         const activeLeaveMap: Record<string, any> = {};
         activeLeaveResult.rows.forEach((l: any) => {
@@ -470,38 +498,10 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
             }
         });
 
-        // Fetch today's hifz logs
-        const logsResult = await db.query(
-            `SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
-             FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`,
-            [studentIds, todayDate]
-        );
         const logs = logsResult.rows;
-
-        // Fetch today's attendance
-        const attResult = await db.query(
-            `SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`,
-            [studentIds, todayDate]
-        );
         const attendance = attResult.rows;
-
-        // Fetch ANY active outgoing delegations from this mentor (could be specific students or ALL)
-        const outgoingDelegationsRes = await db.query(`
-            SELECT d.student_id, s.name as receiver_name 
-            FROM mentor_delegations d
-            JOIN staff s ON d.to_staff_id = s.id
-            WHERE d.from_staff_id = $1 AND d.status = 'approved'
-        `, [staffId]);
         const outgoingDelegations = outgoingDelegationsRes.rows;
 
-        // Fetch last recited ayah (most recent "New Verses" mode log)
-        const lastHifzResult = await db.query(
-            `SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date 
-             FROM hifz_logs 
-             WHERE student_id = ANY($1) AND mode = 'New Verses' 
-             ORDER BY student_id, entry_date DESC, created_at DESC`,
-            [studentIds]
-        );
         const lastHifzMap: Record<string, any> = {};
         lastHifzResult.rows.forEach(r => {
             lastHifzMap[r.student_id] = r;

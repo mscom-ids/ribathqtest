@@ -17,6 +17,7 @@ import {
     Users
 } from "lucide-react"
 import api from "@/lib/api"
+import { resolveBackendUrl } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -341,7 +342,7 @@ export default function AlumniPage() {
                                 <div className="flex gap-2">
                                     {tcTargetStudent.comprehensive_details.tc_photos.map((photo: string, i: number) => (
                                         <a key={i} href={photo} target="_blank" rel="noreferrer">
-                                            <img src={"http://localhost:5000" + photo} alt="TC" className="h-16 w-16 object-cover rounded-md border" />
+                                            <img src={resolveBackendUrl(photo)} alt="TC" className="h-16 w-16 object-cover rounded-md border" />
                                         </a>
                                     ))}
                                 </div>

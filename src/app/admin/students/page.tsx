@@ -288,8 +288,7 @@ function StudentsPageContent() {
                 const merged = (res.data as any).map((s: any) => ({
                     ...s,
                     dob: s.dob || s.date_of_birth,
-                    gender: s.gender || s.comprehensive_details?.basic?.gender,
-                    date_of_join: s.date_of_join || s.admission_date || s.comprehensive_details?.admission?.admission_date,
+                    date_of_join: s.date_of_join || s.admission_date,
                     progress: 0
                 }))
 
@@ -321,13 +320,19 @@ function StudentsPageContent() {
         initialLoad()
     }, [])
 
-    // ── Auto-poll every 30s ───────────────────────────────────
+    // ── Auto-poll every 3 min ───────────────────────────────────
+    // Was 30s, which constantly re-pulled the full /students list (heavy
+    // query) plus /leaves/outside-students every 30 seconds while the page
+    // was just sitting idle. Student list rarely changes; 3 min is plenty.
     useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const res = await getActiveStudents()
-                if (res.success && res.data) {
-                    const merged = (res.data as any).map((s: any) => ({
+                const [stuRes, leaveRes] = await Promise.all([
+                    getActiveStudents(),
+                    api.get('/leaves/outside-students').catch(() => ({ data: { success: false, students: [] } })),
+                ])
+                if (stuRes.success && stuRes.data) {
+                    const merged = (stuRes.data as any).map((s: any) => ({
                         ...s,
                         dob: s.dob || s.date_of_birth,
                         gender: s.gender || s.comprehensive_details?.basic?.gender,
@@ -335,7 +340,6 @@ function StudentsPageContent() {
                         progress: 0
                     }))
                     setStudents(prev => {
-                        // Preserve progress
                         merged.forEach((s: any) => {
                             const existing = prev.find(st => st.adm_no === s.adm_no)
                             if (existing) s.progress = existing.progress || 0
@@ -343,16 +347,11 @@ function StudentsPageContent() {
                         return merged
                     })
                 }
-                
-                // Fetch Out Campus count dynamically
-                try {
-                    const leaveRes = await api.get('/leaves/outside-students')
-                    if (leaveRes.data.success) {
-                        setOutCampusCount(leaveRes.data.students?.length || 0)
-                    }
-                } catch (_) {}
+                if (leaveRes.data?.success) {
+                    setOutCampusCount(leaveRes.data.students?.length || 0)
+                }
             } catch (_) {}
-        }, 30_000)
+        }, 180_000)
         return () => clearInterval(interval)
     }, [])
 
@@ -382,12 +381,20 @@ function StudentsPageContent() {
     const totalPages = Math.ceil(filtered.length / rowsPerPage)
     const paginatedStudents = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
 
-    const statusCounts = {
-        all: students.length,
-        active: students.filter(s => (s.status || 'active') === 'active').length,
-        on_campus: Math.max(0, students.filter(s => (s.status || 'active') === 'active').length - outCampusCount),
-        out_campus: outCampusCount,
-    }
+    // Memoized — was running 3 .filter() passes over the full student list on
+    // every render, including every keystroke in the search box.
+    const statusCounts = useMemo(() => {
+        const activeCount = students.reduce(
+            (n, s) => n + ((s.status || 'active') === 'active' ? 1 : 0),
+            0
+        )
+        return {
+            all: students.length,
+            active: activeCount,
+            on_campus: Math.max(0, activeCount - outCampusCount),
+            out_campus: outCampusCount,
+        }
+    }, [students, outCampusCount])
 
     return (
         <div className="space-y-6">

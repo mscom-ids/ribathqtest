@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import api from "@/lib/api"
+import { resolveBackendUrl } from "@/lib/utils"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Conversation = {
@@ -35,10 +36,7 @@ const POLL_INTERVAL = 3000
 
 const EMOJI_LIST = ['😀','😂','❤️','👍','🔥','🙏','😊','🎉','💯','✅','👏','😍','🤔','😢','🤣','😎','💪','⭐','🌟','💡','📌','✨','🥇','📚','🎓']
 
-function getPhotoUrl(url: string | null | undefined) {
-    if (!url) return undefined
-    return url.startsWith('http') ? url : `http://localhost:5000${url}`
-}
+const getPhotoUrl = (url: string | null | undefined) => resolveBackendUrl(url)
 
 function formatTime(dateStr: string) {
     const d = new Date(dateStr)

@@ -79,14 +79,13 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
             `, [name, start_datetime, end_datetime, JSON.stringify(target_classes), is_entire_institution, user.id]);
             const inst_id = instLeaveRes.rows[0].id;
 
-            // 2. Insert exceptions
+            // 2. Bulk-insert exceptions in ONE round trip (was N+1)
             if (exceptions && exceptions.length > 0) {
-                for (const stu_id of exceptions) {
-                    await client.query(`
-                        INSERT INTO leave_exceptions (institutional_leave_id, student_id)
-                        VALUES ($1, $2)
-                    `, [inst_id, stu_id]);
-                }
+                await client.query(
+                    `INSERT INTO leave_exceptions (institutional_leave_id, student_id)
+                     SELECT $1, sid FROM unnest($2::text[]) AS t(sid)`,
+                    [inst_id, exceptions]
+                );
             }
 
             // 3. Find target students
@@ -106,20 +105,27 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
             const exceptionSet = new Set(exceptions || []);
             targetStudents = targetStudents.filter(id => !exceptionSet.has(id));
 
-            // 4. Create student_leaves & student_movements
-            for (const s_id of targetStudents) {
-                const slRes = await client.query(`
-                    INSERT INTO student_leaves (student_id, institutional_leave_id, leave_type, start_datetime, end_datetime, status)
-                    VALUES ($1, $2, 'institutional', $3, $4, 'outside')
-                    RETURNING id
-                `, [s_id, inst_id, start_datetime, end_datetime]);
-                
-                const sl_id = slRes.rows[0].id;
-                
-                await client.query(`
-                    INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                    VALUES ($1, $2, 'out', $3, $4)
-                `, [s_id, sl_id, start_datetime, user.id]);
+            // 4. Bulk insert student_leaves (one round trip), capture returned ids,
+            // then bulk insert student_movements paired with them. Was 2N round trips.
+            if (targetStudents.length > 0) {
+                const slBulk = await client.query(
+                    `INSERT INTO student_leaves
+                         (student_id, institutional_leave_id, leave_type, start_datetime, end_datetime, status)
+                     SELECT sid, $2, 'institutional', $3, $4, 'outside'
+                     FROM unnest($1::text[]) AS t(sid)
+                     RETURNING id, student_id`,
+                    [targetStudents, inst_id, start_datetime, end_datetime]
+                );
+
+                const movementStudentIds = slBulk.rows.map((r: any) => r.student_id);
+                const movementLeaveIds   = slBulk.rows.map((r: any) => r.id);
+
+                await client.query(
+                    `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                     SELECT sid, lid, 'out', $1, $2
+                     FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                    [start_datetime, user.id, movementStudentIds, movementLeaveIds]
+                );
             }
 
             // 5. Cancel relevant class schedules for these dates
@@ -251,20 +257,23 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
                 return res.json({ success: true, message: "No pending students found to return in this group.", count: 0 });
             }
 
-            for (const leave of pending.rows) {
-                // Update leave
-                await client.query(`
-                    UPDATE student_leaves 
-                    SET status = 'returned', actual_return_datetime = $1, return_status = $2
-                    WHERE id = $3
-                `, [return_datetime, 'normal', leave.id]);
+            // Bulk UPDATE + bulk INSERT (was 2N round trips).
+            const leaveIds = pending.rows.map((r: any) => r.id);
+            const studentIds = pending.rows.map((r: any) => r.student_id);
 
-                // Movement
-                await client.query(`
-                    INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                    VALUES ($1, $2, 'in', $3, $4)
-                `, [leave.student_id, leave.id, return_datetime, user.id]);
-            }
+            await client.query(
+                `UPDATE student_leaves
+                 SET status = 'returned', actual_return_datetime = $1, return_status = 'normal'
+                 WHERE id = ANY($2::uuid[])`,
+                [return_datetime, leaveIds]
+            );
+
+            await client.query(
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                 SELECT sid, lid, 'in', $1, $2
+                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                [return_datetime, user.id, studentIds, leaveIds]
+            );
 
             await client.query('COMMIT');
             res.json({ success: true, count: pending.rows.length });
@@ -331,18 +340,23 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
                 return res.json({ success: true, message: "No pending students found to return in this group.", count: 0 });
             }
 
-            for (const leave of pending.rows) {
-                await client.query(`
-                    UPDATE student_leaves 
-                    SET status = 'returned', actual_return_datetime = $1, return_status = 'normal'
-                    WHERE id = $2
-                `, [return_datetime, leave.id]);
+            // Bulk UPDATE + bulk INSERT (was 2N round trips).
+            const leaveIds = pending.rows.map((r: any) => r.id);
+            const studentIds = pending.rows.map((r: any) => r.student_id);
 
-                await client.query(`
-                    INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                    VALUES ($1, $2, 'in', $3, $4)
-                `, [leave.student_id, leave.id, return_datetime, user.id]);
-            }
+            await client.query(
+                `UPDATE student_leaves
+                 SET status = 'returned', actual_return_datetime = $1, return_status = 'normal'
+                 WHERE id = ANY($2::uuid[])`,
+                [return_datetime, leaveIds]
+            );
+
+            await client.query(
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                 SELECT sid, lid, 'in', $1, $2
+                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                [return_datetime, user.id, studentIds, leaveIds]
+            );
 
             await client.query('COMMIT');
             res.json({ success: true, count: pending.rows.length });
@@ -456,20 +470,27 @@ export const createGroupLeave = async (req: Request, res: Response) => {
 
             const group_id = crypto.randomUUID();
 
-            for (const s_id of targetStudents) {
-                const insRes = await client.query(`
-                    INSERT INTO student_leaves (student_id, leave_type, start_datetime, end_datetime, reason_category, remarks, status, group_id, group_type, group_value, created_by)
-                    VALUES ($1, $2, $3, $4, $5, $6, 'outside', $7, $8, $9, $10)
-                    RETURNING id
-                `, [s_id, leave_type, start_datetime, end_datetime, reason_category, remarks, group_id, group_type, String(group_value), user.id]);
+            // Bulk insert student_leaves + paired student_movements in 2 round trips
+            // (was 2N round trips for groups of any size).
+            const slBulk = await client.query(
+                `INSERT INTO student_leaves
+                     (student_id, leave_type, start_datetime, end_datetime, reason_category, remarks, status, group_id, group_type, group_value, created_by)
+                 SELECT sid, $2, $3, $4, $5, $6, 'outside', $7, $8, $9, $10
+                 FROM unnest($1::text[]) AS t(sid)
+                 RETURNING id, student_id`,
+                [targetStudents, leave_type, start_datetime, end_datetime, reason_category, remarks,
+                 group_id, group_type, String(group_value), user.id]
+            );
 
-                const leave_id = insRes.rows[0].id;
+            const movStudentIds = slBulk.rows.map((r: any) => r.student_id);
+            const movLeaveIds   = slBulk.rows.map((r: any) => r.id);
 
-                await client.query(`
-                    INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                    VALUES ($1, $2, 'out', $3, $4)
-                `, [s_id, leave_id, start_datetime, user.id]);
-            }
+            await client.query(
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                 SELECT sid, lid, 'out', $1, $2
+                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                [start_datetime, user.id, movStudentIds, movLeaveIds]
+            );
 
             await client.query('COMMIT');
             res.status(201).json({ success: true, count: targetStudents.length });

@@ -15,6 +15,7 @@ import api from "@/lib/api"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
 import { HifzProgressModal } from "@/components/staff/HifzProgressModal"
+import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Student = {
@@ -138,11 +139,6 @@ export default function StaffDashboard() {
         return () => clearInterval(timer)
     }, [])
 
-    const getPhotoUrl = (url: string | null | undefined) => {
-        if (!url) return undefined
-        return url.startsWith("http") ? url : `http://localhost:5000${url}`
-    }
-
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file || !staffId) return
@@ -163,22 +159,26 @@ export default function StaffDashboard() {
         }
     }
 
-    // Load my assigned students + sessions (only once todayStr is ready)
+    // Load my assigned students + sessions (only once todayStr is ready).
+    // All 3 calls fire in parallel — /staff/me/students and /attendance/schedules-for-date
+    // resolve the staff id from the JWT on the backend, so they don't need
+    // /staff/me to complete first.
     useEffect(() => {
         if (!todayStr) return
         async function load() {
             setLoading(true)
             try {
-                const profileRes = await api.get("/staff/me")
+                const [profileRes, studRes, sessRes] = await Promise.all([
+                    api.get("/staff/me"),
+                    api.get("/staff/me/students", { params: { date: todayStr } }),
+                    api.get("/attendance/schedules-for-date", { params: { date: todayStr } }),
+                ])
+
                 if (!profileRes.data.success) { router.push("/login"); return }
                 setStaffName(profileRes.data.staff.name || "")
                 setStaffId(profileRes.data.staff.id || "")
                 setStaffPhoto(profileRes.data.staff.photo_url || "")
 
-                const [studRes, sessRes] = await Promise.all([
-                    api.get("/staff/me/students", { params: { date: todayStr } }),
-                    api.get("/attendance/schedules-for-date", { params: { date: todayStr } }),
-                ])
                 if (studRes.data.success) setMyStudents(studRes.data.students || [])
                 if (sessRes.data.data) setSessions(sessRes.data.data.map((s: any) => ({
                     ...s,

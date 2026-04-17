@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
+import { resolveBackendUrl } from "@/lib/utils"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -445,7 +446,7 @@ export default function MentorDetailPage() {
                             <div className="h-[88px] w-[88px] rounded-xl overflow-hidden bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-4xl font-bold text-white mb-4">
                                 {staffData.photo_url ? (
                                     <img
-                                        src={staffData.photo_url.startsWith("http") ? staffData.photo_url : `http://localhost:5000${staffData.photo_url}`}
+                                        src={resolveBackendUrl(staffData.photo_url)}
                                         alt="Profile" className="h-full w-full object-cover"
                                     />
                                 ) : (

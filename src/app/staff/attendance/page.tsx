@@ -105,34 +105,31 @@ export default function StaffAttendancePage() {
     const isEditable = daysDiff >= 0 && daysDiff <= maxEditDays
     const isFutureDate = daysDiff < 0
 
-    // Initial auth + staff lookup
+    // Initial auth + staff lookup — all 3 calls fire in parallel
     useEffect(() => {
         async function init() {
             setLoading(true)
             try {
-                const { data: { user } } = await api.get('/auth/me');
-                if (!user) { router.push("/login"); return }
+                const [meRes, staffRes, studentsRes] = await Promise.all([
+                    api.get('/auth/me'),
+                    api.get('/staff/me'),
+                    api.get('/staff/me/students'),
+                ])
 
+                const user = meRes.data?.user
+                if (!user) { router.push("/login"); return }
                 setUserRole(user.role)
 
-                // Get staff ID
-                const { data: { staff } } = await api.get('/staff/me');
-
-                // If staff profile misses or auth fails
+                const staff = staffRes.data?.staff
                 if (!staff) {
                     toast.error("Staff profile not found")
-                    setLoading(false)
                     router.push("/login")
                     return
                 }
-
                 setStaffId(staff.id)
 
-                // Load assigned students
-                const { data: { students: studentsData } } = await api.get('/staff/me/students');
-
+                const studentsData = studentsRes.data?.students
                 if (studentsData) setStudents(studentsData)
-
             } catch (error) {
                 console.warn("Auth init error:", error)
                 router.push("/login")
@@ -143,48 +140,41 @@ export default function StaffAttendancePage() {
         init()
     }, [router])
 
-    // Load sessions for the selected date — now reads from attendance_schedules
+    // Load sessions for the selected date — fires all 3 calls in parallel.
+    // (Previously each awaited the next, adding ~3 RTTs to every date change.)
     const loadDateSessions = useCallback(async () => {
         if (!staffId) return
         setLoadingSessions(true)
 
         try {
-            // Load calendar policy for this date
-            const { data: { calendar: policyData } } = await api.get(`/academics/calendar/${dateStr}`);
-            const pol = policyData as CalendarPolicy | null
-            setPolicy(pol)
+            const [calendarRes, schedulesRes, dashRes] = await Promise.all([
+                api.get(`/academics/calendar/${dateStr}`),
+                api.get('/attendance/schedules-for-date', { params: { date: dateStr } }),
+                api.get('/attendance/dashboard', {
+                    params: { start_date: dateStr, end_date: dateStr },
+                }),
+            ])
 
+            const pol = (calendarRes.data?.calendar ?? null) as CalendarPolicy | null
+            setPolicy(pol)
             const cancelledMap = pol?.cancelled_sessions || {}
 
-            // Load schedules active on this date (date-effective filtering done server-side)
-            const { data: { data: schedulesData } } = await api.get('/attendance/schedules-for-date', {
-                params: { date: dateStr }
-            });
-
-            const activeSessions: SessionInfo[] = (schedulesData || []).map((s: any) => ({
+            const activeSessions: SessionInfo[] = (schedulesRes.data?.data || []).map((s: any) => ({
                 ...s,
                 name: s.name || `${s.class_type} Class`,
             }))
 
-            // Load attendance records for all students on this date
             if (students.length === 0) {
                 setSessionRows([])
-                setLoadingSessions(false)
                 return
             }
 
-            // Check which schedules already have attendance marks
-            const { data: dashData } = await api.get('/attendance/dashboard', {
-                params: { start_date: dateStr, end_date: dateStr }
-            });
-            const marks = dashData?.marks || []
+            const marks = dashRes.data?.marks || []
             const markedScheduleIds = new Set(marks.map((m: any) => m.schedule_id))
 
-            // Build session rows
             const rows: SessionRow[] = activeSessions.map(session => {
                 const isCancelled = !!cancelledMap[session.id]
                 const isMarked = markedScheduleIds.has(session.id)
-
                 return {
                     session,
                     status: isCancelled ? "cancelled" : isMarked ? "marked" : "pending",
@@ -228,7 +218,10 @@ export default function StaffAttendancePage() {
         }
     }, [loadingSessions, sessionRows, daysDiff, isEditable])
 
-    // Open attendance marking modal — opens immediately, loads data in background
+    // Open attendance marking modal — opens immediately, loads data in background.
+    // Both API calls now fire in parallel; previously call #2 awaited #1 because
+    // it filtered by student IDs, but the backend filter is optional and the
+    // map-by-id matching already ignores any extra rows.
     const openMarkingModal = async (session: SessionInfo) => {
         setActiveSession(session)
         setSessionStudents([])
@@ -239,19 +232,19 @@ export default function StaffAttendancePage() {
         setModalOpen(true)  // ← open instantly, show spinner inside
 
         try {
-            // Step 1: fetch students first (needed for subsequent parallel calls)
-            const { data: stuData } = await api.get('/attendance/students', {
-                params: { schedule_id: session.id, date: dateStr }
-            });
-            const scheduleStudents: Student[] = stuData?.students || []
-            const studentIds = scheduleStudents.map((s: Student) => s.adm_no)
+            const [stuRes, attRes] = await Promise.all([
+                api.get('/attendance/students', { params: { schedule_id: session.id, date: dateStr } }),
+                api.get('/attendance/marks', { params: { date: dateStr, schedule_id: session.id } })
+                    .catch(() => ({ data: { data: [] } })),
+            ])
+
+            const scheduleStudents: Student[] = stuRes.data?.students || []
             setSessionStudents(scheduleStudents)
 
-            if (studentIds.length === 0) {
+            if (scheduleStudents.length === 0) {
                 setLockedLeaves({})
                 setFutureLeaves({})
                 setAttendanceMap({})
-                setModalLoading(false)
                 return
             }
 
@@ -260,10 +253,9 @@ export default function StaffAttendancePage() {
             const futures: Record<string, string> = {}
             scheduleStudents.forEach((s: any) => {
                 if (s.is_locked_outside) {
-                    locks[s.adm_no] = 'approved'  // Mark as strictly locked due to leave overlap
+                    locks[s.adm_no] = 'approved'
                 }
                 if (s.went_outside_later) {
-                    // Prevent manually clicking "Outside" on UI because session happened BEFORE leave
                     const timeStr = s.leave_start_time ? new Date(s.leave_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later';
                     futures[s.adm_no] = timeStr;
                 }
@@ -271,22 +263,17 @@ export default function StaffAttendancePage() {
             setLockedLeaves(locks)
             setFutureLeaves(futures)
 
-            // Step 2: fetch existing attendance from the new dashboard marks sync
-            const idsParam = studentIds.join(',')
-            const existingAttRes = await api.get('/attendance/marks', {
-                params: { date: dateStr, schedule_id: session.id, student_ids: idsParam }
-            }).catch(() => ({ data: { data: [] } }))
-
             // Build attendance map: default Present, Leave if on active leave
             const map: Record<string, "Present" | "Absent" | "Leave"> = {}
             scheduleStudents.forEach((s: Student) => {
                 map[s.adm_no] = locks[s.adm_no] ? "Leave" : "Present"
             })
 
-            // Override with any existing saved marks (but not for leave-locked students)
-            const existingAtt = existingAttRes.data?.data || []
+            // Override with any existing saved marks (but not for leave-locked students).
+            // Map-by-id naturally ignores any rows that aren't in this roster.
+            const existingAtt = attRes.data?.data || []
             existingAtt.forEach((a: any) => {
-                if (!locks[a.student_id]) {
+                if (map[a.student_id] !== undefined && !locks[a.student_id]) {
                     map[a.student_id] = a.status
                 }
             })

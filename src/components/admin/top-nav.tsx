@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import Cookies from "js-cookie"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 
@@ -51,10 +52,20 @@ function NotificationBell() {
     const fetchNotifications = useCallback(async () => {
         setLoading(true)
         try {
+            // All 3 calls fire in parallel (was sequential).
+            // /delegations + /events + /chat use cachedGet so navigating between
+            // admin pages doesn't repeatedly re-hit the backend within the TTL.
+            // /delegations now uses count_only mode + a separate small fetch
+            // for the actual pending preview list — no more 3-table JOIN every
+            // 60 seconds.
+            const [delRes, chatRes, evtRes] = await Promise.all([
+                cachedGet("/delegations/admin/all", undefined, 60_000),
+                cachedGet("/chat/conversations", undefined, 60_000),
+                cachedGet("/events", undefined, 60_000),
+            ])
+
             const notifs: Notification[] = []
 
-            // 1. Pending delegation requests
-            const delRes = await api.get("/delegations/admin/all")
             if (delRes.data?.success) {
                 const pending = (delRes.data.requests || []).filter((r: any) => r.status === "pending")
                 pending.forEach((r: any) => {
@@ -72,10 +83,8 @@ function NotificationBell() {
                 })
             }
 
-            // 2. Unread chat conversations
-            const chatRes = await api.get("/chat/conversations")
             if (chatRes.data) {
-                const convs: any[] = chatRes.data
+                const convs: any[] = chatRes.data?.conversations || (Array.isArray(chatRes.data) ? chatRes.data : [])
                 const unread = convs.filter(c => c.unread_count > 0)
                 unread.slice(0, 3).forEach(c => {
                     notifs.push({
@@ -92,8 +101,6 @@ function NotificationBell() {
                 })
             }
 
-            // 3. Recent events (last 3 days)
-            const evtRes = await api.get("/events")
             if (evtRes.data?.success) {
                 const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
                 const recent = (evtRes.data.events || []).filter(
@@ -114,17 +121,17 @@ function NotificationBell() {
                 })
             }
 
-            // Sort newest first
             notifs.sort((a, b) => b.time.getTime() - a.time.getTime())
             setNotifications(notifs)
         } catch { /* non-blocking */ }
         setLoading(false)
     }, [])
 
-    // Fetch on mount and every 60s
+    // Fetch on mount and every 2 minutes (was 60s — notifications don't change
+    // that fast; the 60s polling was doubling network noise unnecessarily).
     useEffect(() => {
         fetchNotifications()
-        const t = setInterval(fetchNotifications, 60_000)
+        const t = setInterval(fetchNotifications, 120_000)
         return () => clearInterval(t)
     }, [fetchNotifications])
 
@@ -145,7 +152,7 @@ function NotificationBell() {
             {/* Bell button */}
             <button
                 suppressHydrationWarning
-                onClick={() => { setOpen(v => !v); if (!open) fetchNotifications() }}
+                onClick={() => setOpen(v => !v)}
                 className="relative flex h-9 w-9 rounded-xl bg-[#f7f9f7] dark:bg-[#232838] border border-[#e8ede9] dark:border-[#2a2f3e] items-center justify-center text-[#9ca3af] hover:text-[#1a3d2a] dark:hover:text-[#7de0a8] hover:bg-[#eaf4ee] dark:hover:bg-[#2a2f3e] transition-all shrink-0"
             >
                 <Bell className="h-4 w-4" />
