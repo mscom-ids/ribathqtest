@@ -16,8 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn, resolveBackendUrl } from "@/lib/utils"
 import api from "@/lib/api"
-import { calculatePages } from "@/lib/quran-pages"
-import { getSurahId, formatHifzLogLabel } from "@/lib/hifz-progress"
+import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
+import { getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Log = {
@@ -62,6 +62,8 @@ const MODE_DOT: Record<string, string> = {
     "New Verses": "bg-blue-500",
     "Recent Revision": "bg-orange-500",
     "Juz Revision": "bg-emerald-500",
+    "Juz Revision (New)": "bg-blue-500",
+    "Juz Revision (Old)": "bg-emerald-500",
 }
 
 // ── Week grouper (same logic as admin progress-tab) ──────────────────────────
@@ -98,6 +100,8 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             const newVerses = dayLogs.filter(l => l.mode === "New Verses")
             const recentRev = dayLogs.filter(l => l.mode === "Recent Revision")
             const juzRev = dayLogs.filter(l => l.mode === "Juz Revision")
+            const newRevHafiz = dayLogs.filter(l => l.mode === "Juz Revision (New)")
+            const oldRevHafiz = dayLogs.filter(l => l.mode === "Juz Revision (Old)")
 
             const att = attendanceRecords.filter(
                 r => format(new Date(r.date), "yyyy-MM-dd") === dateStr &&
@@ -109,6 +113,8 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             const newHifzEntries = newVerses.map(l => formatHifzLogLabel(l)).filter(Boolean)
             const recentRevEntries = recentRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
             const juzRevEntries = juzRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
+            const newRevHafizEntries = newRevHafiz.map(l => formatHifzLogLabel(l)).filter(Boolean)
+            const oldRevHafizEntries = oldRevHafiz.map(l => formatHifzLogLabel(l)).filter(Boolean)
 
             return {
                 date: day,
@@ -122,8 +128,13 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
                 newHifzEntries,
                 recentRevEntries,
                 juzRevEntries,
+                newRevHafizEntries,
+                oldRevHafizEntries,
             }
         })
+
+        const totalNewHafiz = dayRows.filter(d => d.newRevHafizEntries.length > 0).length
+        const totalOldHafiz = dayRows.filter(d => d.oldRevHafizEntries.length > 0).length
 
         return {
             weekNum: week.weekNum,
@@ -132,6 +143,8 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
                 totalNew: dayRows.filter(d => d.newHifzEntries.length > 0).length,
                 totalRecent: dayRows.filter(d => d.recentRevEntries.length > 0).length,
                 totalJuz: dayRows.filter(d => d.juzRevEntries.length > 0).length,
+                totalNewHafiz,
+                totalOldHafiz,
             },
         }
     })
@@ -144,6 +157,7 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
     const [allLogs, setAllLogs] = useState<Log[]>([])
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
     const [lifetimeLogs, setLifetimeLogs] = useState<Log[]>([])
+    const [isHafiz, setIsHafiz] = useState(false)
 
     // Reset month when a new student is opened
     useEffect(() => {
@@ -205,6 +219,8 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
         let hifzPages = 0
         const recentRevDates = new Set<string>()
         let juzRevTotal = 0
+        let newRevCount = 0
+        let oldRevCount = 0
 
         monthLogs.forEach(log => {
             if (log.mode === "New Verses") {
@@ -218,30 +234,81 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                 hifzPages += p
             } else if (log.mode === "Recent Revision") {
                 recentRevDates.add(format(new Date(log.entry_date), "yyyy-MM-dd"))
-            } else if (log.mode === "Juz Revision") {
+            } else if (log.mode?.startsWith("Juz Revision")) {
                 const p = log.juz_portion
                 if (p === "Full") juzRevTotal += 1
                 else if (p?.includes("Half")) juzRevTotal += 0.5
                 else if (p?.startsWith("Q")) juzRevTotal += 0.25
                 else juzRevTotal += 1
+
+                if (log.mode === "Juz Revision (New)") newRevCount += 1
+                if (log.mode === "Juz Revision (Old)") oldRevCount += 1
             }
         })
 
-        let lifetimePages = 0
+        // ── Lifetime Hifz Pages (merge ranges + MUSHAF_PAGES boundary check) ──
+        const lifetimeRanges: { start: number; end: number }[] = []
+        let lifetimeFallbackPages = 0
+
         lifetimeLogs.forEach(log => {
-            const sid = getSurahId(log.surah_name || "")
-            if (sid && log.start_v && log.end_v) {
-                lifetimePages += calculatePages(sid, log.start_v, sid, log.end_v)
+            const sId = getSurahId(log.surah_name || "")
+            if (sId && log.start_v && log.end_v) {
+                const startG = toGlobalVerseIndex(sId, log.start_v)
+                const endG = toGlobalVerseIndex(sId, log.end_v)
+                if (startG >= 0 && endG >= 0) {
+                    lifetimeRanges.push({ start: Math.min(startG, endG), end: Math.max(startG, endG) })
+                }
             } else if (log.start_page && log.end_page) {
-                lifetimePages += log.end_page - log.start_page + 1
+                lifetimeFallbackPages += (log.end_page - log.start_page + 1)
             }
         })
+
+        let lifetimePages = lifetimeFallbackPages
+
+        if (lifetimeRanges.length > 0) {
+            lifetimeRanges.sort((a, b) => a.start - b.start)
+            const merged: { start: number; end: number }[] = [lifetimeRanges[0]]
+            for (let i = 1; i < lifetimeRanges.length; i++) {
+                const cur = merged[merged.length - 1]
+                const next = lifetimeRanges[i]
+                if (next.start <= cur.end + 1) {
+                    if (next.end > cur.end) cur.end = next.end
+                } else {
+                    merged.push({ ...next })
+                }
+            }
+            // Count fully-covered pages using MUSHAF_PAGES boundaries
+            const pageBounds = MUSHAF_PAGES.map((p, i) => {
+                const startGlobal = toGlobalVerseIndex(p.surah, p.ayah)
+                let endGlobal: number
+                if (i + 1 < MUSHAF_PAGES.length) {
+                    const nextP = MUSHAF_PAGES[i + 1]
+                    endGlobal = toGlobalVerseIndex(nextP.surah, nextP.ayah) - 1
+                } else {
+                    endGlobal = toGlobalVerseIndex(114, 6)
+                }
+                return { startGlobal, endGlobal }
+            })
+            for (const pb of pageBounds) {
+                for (const range of merged) {
+                    if (range.start <= pb.endGlobal && range.end >= pb.endGlobal) {
+                        lifetimePages++
+                        break
+                    }
+                }
+            }
+        }
+
+        const calcTotalJuz = Math.min(Math.floor(lifetimePages / 20), 30)
+        setIsHafiz(calcTotalJuz >= 30)
 
         return {
             hifzPages: parseFloat(hifzPages.toFixed(2)),
             recentRevisionDays: recentRevDates.size,
             juzRevision: parseFloat(juzRevTotal.toFixed(2)),
-            totalJuz: Math.floor(lifetimePages / 20),
+            totalJuz: calcTotalJuz,
+            newRevisionCount: newRevCount,
+            oldRevisionCount: oldRevCount,
         }
     }, [allLogs, lifetimeLogs, reportMonth])
 
@@ -259,7 +326,12 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             .reverse()
     }, [allLogs])
 
-    const statCards = [
+    const statCards = isHafiz ? [
+        { label: "Total Juz Rev.",  value: stats.juzRevision,         color: "bg-orange-50 text-orange-600", icon: BookMarked },
+        { label: "New Rev.",        value: stats.newRevisionCount,     color: "bg-blue-50 text-blue-600",     icon: BookOpen },
+        { label: "Old Rev.",        value: stats.oldRevisionCount,     color: "bg-emerald-50 text-emerald-600",icon: RotateCcw },
+        { label: "Total Juz",      value: stats.totalJuz,             color: "bg-purple-50 text-purple-600", icon: TrendingUp },
+    ] : [
         { label: "Hifz Pages",  value: stats.hifzPages,          color: "bg-blue-50 text-blue-600",     icon: BookOpen },
         { label: "Rev. Days",   value: stats.recentRevisionDays,  color: "bg-orange-50 text-orange-600", icon: RotateCcw },
         { label: "Juz Rev.",    value: stats.juzRevision,         color: "bg-emerald-50 text-emerald-600",icon: BookMarked },
@@ -384,9 +456,18 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                                                         </tr>
                                                         <tr className="bg-slate-100 dark:bg-[#1a2035] text-xs text-slate-500 dark:text-slate-400">
                                                             <th className="py-1.5 px-3 text-left font-semibold w-[70px]">Date</th>
-                                                            <th className="py-1.5 px-2 text-left font-semibold">حفظ يومي (New Hifz)</th>
-                                                            <th className="py-1.5 px-2 text-left font-semibold">تسميع (Revision)</th>
-                                                            <th className="py-1.5 px-2 text-left font-semibold">مراجعة (Juz Rev)</th>
+                                                            {isHafiz ? (
+                                                                <>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold">مراجعة جديدة (New Revision)</th>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold">مراجعة قديمة (Old Revision)</th>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold">حفظ يومي (New Hifz)</th>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold">تسميع (Revision)</th>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold">مراجعة (Juz Rev)</th>
+                                                                </>
+                                                            )}
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -404,46 +485,84 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                                                                     <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{day.dayNum}</span>
                                                                     <span className="text-slate-400 text-[10px] ml-1">{day.dayName}</span>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 align-top">
-                                                                    {day.newHifzEntries.length > 0 ? (
-                                                                        <div className="flex flex-wrap gap-1">
-                                                                            {day.newHifzEntries.map((txt, idx) => (
-                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] sm:text-xs font-medium border border-blue-100 dark:border-blue-800 break-words whitespace-normal leading-tight">
-                                                                                    {txt}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
-                                                                </td>
-                                                                <td className="py-1.5 px-2 align-top">
-                                                                    {day.recentRevEntries.length > 0 ? (
-                                                                        <div className="flex flex-wrap gap-1">
-                                                                            {day.recentRevEntries.map((txt, idx) => (
-                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 text-[10px] sm:text-xs font-medium border border-orange-100 dark:border-orange-800 break-words whitespace-normal leading-tight">
-                                                                                    {txt}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
-                                                                </td>
-                                                                <td className="py-1.5 px-2 align-top">
-                                                                    {day.juzRevEntries.length > 0 ? (
-                                                                        <div className="flex flex-wrap gap-1">
-                                                                            {day.juzRevEntries.map((txt, idx) => (
-                                                                                <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] sm:text-xs font-medium border border-emerald-100 dark:border-emerald-800 break-words whitespace-normal leading-tight">
-                                                                                    {txt}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
-                                                                </td>
+                                                                {isHafiz ? (
+                                                                    <>
+                                                                        <td className="py-1.5 px-2 align-top">
+                                                                            {day.newRevHafizEntries.length > 0 ? (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {day.newRevHafizEntries.map((txt: string, idx: number) => (
+                                                                                        <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] sm:text-xs font-medium border border-blue-100 dark:border-blue-800 break-words whitespace-normal leading-tight">
+                                                                                            {txt}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                                                                        </td>
+                                                                        <td className="py-1.5 px-2 align-top">
+                                                                            {day.oldRevHafizEntries.length > 0 ? (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {day.oldRevHafizEntries.map((txt: string, idx: number) => (
+                                                                                        <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] sm:text-xs font-medium border border-emerald-100 dark:border-emerald-800 break-words whitespace-normal leading-tight">
+                                                                                            {txt}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                                                                        </td>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <td className="py-1.5 px-2 align-top">
+                                                                            {day.newHifzEntries.length > 0 ? (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {day.newHifzEntries.map((txt, idx) => (
+                                                                                        <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] sm:text-xs font-medium border border-blue-100 dark:border-blue-800 break-words whitespace-normal leading-tight">
+                                                                                            {txt}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                                                                        </td>
+                                                                        <td className="py-1.5 px-2 align-top">
+                                                                            {day.recentRevEntries.length > 0 ? (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {day.recentRevEntries.map((txt, idx) => (
+                                                                                        <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 text-[10px] sm:text-xs font-medium border border-orange-100 dark:border-orange-800 break-words whitespace-normal leading-tight">
+                                                                                            {txt}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                                                                        </td>
+                                                                        <td className="py-1.5 px-2 align-top">
+                                                                            {day.juzRevEntries.length > 0 ? (
+                                                                                <div className="flex flex-wrap gap-1">
+                                                                                    {day.juzRevEntries.map((txt, idx) => (
+                                                                                        <span key={idx} className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] sm:text-xs font-medium border border-emerald-100 dark:border-emerald-800 break-words whitespace-normal leading-tight">
+                                                                                            {txt}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                                                                        </td>
+                                                                    </>
+                                                                )}
                                                             </tr>
                                                         ))}
                                                         <tr className="bg-slate-100 dark:bg-[#1a2035] border-t border-slate-200 dark:border-slate-700 text-xs font-semibold">
                                                             <td className="py-2 px-3 text-slate-500">Summary</td>
-                                                            <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNew} entries</td>
-                                                            <td className="py-2 px-2 text-orange-600 dark:text-orange-400">{week.summary.totalRecent} entries</td>
-                                                            <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalJuz} entries</td>
+                                                            {isHafiz ? (
+                                                                <>
+                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNewHafiz} entries</td>
+                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalOldHafiz} entries</td>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNew} entries</td>
+                                                                    <td className="py-2 px-2 text-orange-600 dark:text-orange-400">{week.summary.totalRecent} entries</td>
+                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalJuz} entries</td>
+                                                                </>
+                                                            )}
                                                         </tr>
                                                     </tbody>
                                                 </table>

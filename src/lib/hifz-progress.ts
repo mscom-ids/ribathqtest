@@ -207,7 +207,7 @@ export const toArabicNum = (num: number | string | undefined | null) => {
 };
 
 export function formatHifzLogLabel(log: Partial<HifzLog> | any) {
-    if (log.mode === "Juz Revision") {
+    if (log.mode?.startsWith("Juz Revision")) {
         const j = toArabicNum(log.juz_number || log.juz);
         const p = log.juz_portion || log.juz_part || "Full";
         

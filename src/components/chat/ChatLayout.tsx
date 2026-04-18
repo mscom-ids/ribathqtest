@@ -32,7 +32,12 @@ type Message = {
 }
 type StaffMember = { id: string; name: string; photo_url: string | null; role: string }
 
+// Active-conversation message polling stays snappy (3s) for real-time chat.
+// Conversation-LIST polling (sidebar) backs off to 15s — new conversations
+// rarely appear that often, and the list was causing constant /chat/conversations
+// noise even when the user wasn't looking at chat at all.
 const POLL_INTERVAL = 3000
+const LIST_POLL_INTERVAL = 15000
 
 const EMOJI_LIST = ['😀','😂','❤️','👍','🔥','🙏','😊','🎉','💯','✅','👏','😍','🤔','😢','🤣','😎','💪','⭐','🌟','💡','📌','✨','🥇','📚','🎓']
 
@@ -99,7 +104,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
 
     useEffect(() => {
         fetchConversations().then(() => setLoading(false))
-        const interval = setInterval(fetchConversations, POLL_INTERVAL)
+        const interval = setInterval(fetchConversations, LIST_POLL_INTERVAL)
         return () => clearInterval(interval)
     }, [fetchConversations])
 
