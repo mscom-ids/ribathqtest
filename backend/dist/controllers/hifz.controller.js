@@ -3,21 +3,37 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = exports.getProgressSummary = exports.upsertMonthlyReport = exports.getMonthlyReports = exports.deleteHifzLog = exports.bulkCreateHifzLogs = exports.updateHifzLog = exports.createHifzLog = exports.getMaxJuzForStudent = exports.getHifzLog = exports.getHifzLogsList = exports.getHifzStudents = void 0;
 const db_1 = require("../config/db");
 const hifz_calculator_1 = require("../utils/hifz-calculator");
+const quran_juz_1 = require("../utils/quran-juz");
 const date_fns_1 = require("date-fns");
 const getHifzStudents = async (req, res) => {
     try {
-        const result = await db_1.db.query(`SELECT 
-                s.adm_no, 
-                s.name, 
+        // Replaced 2 correlated subqueries (re-running once per student row)
+        // with LATERAL JOINs. PG can use the new (student_id, mode, entry_date)
+        // index to fetch the latest matching log per student in one pass.
+        const result = await db_1.db.query(`SELECT
+                s.adm_no,
+                s.name,
                 s.standard,
-                s.hifz_standard, 
-                (SELECT surah_name FROM hifz_logs WHERE student_id = s.adm_no AND mode = 'New Verses' ORDER BY entry_date DESC LIMIT 1) as current_surah, 
-                (SELECT juz_number FROM hifz_logs WHERE student_id = s.adm_no AND mode = 'Juz Revision' ORDER BY entry_date DESC LIMIT 1) as current_juz,
-                st.name as usthad_name,
-                st.phone as usthad_phone
+                s.hifz_standard,
+                nv.surah_name AS current_surah,
+                jr.juz_number AS current_juz,
+                st.name      AS usthad_name,
+                st.phone     AS usthad_phone
              FROM students s
              LEFT JOIN staff st ON s.hifz_mentor_id = st.id
-             WHERE s.status = $1 
+             LEFT JOIN LATERAL (
+                 SELECT surah_name FROM hifz_logs
+                 WHERE student_id = s.adm_no AND mode = 'New Verses'
+                 ORDER BY entry_date DESC
+                 LIMIT 1
+             ) nv ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT juz_number FROM hifz_logs
+                 WHERE student_id = s.adm_no AND mode = 'Juz Revision'
+                 ORDER BY entry_date DESC
+                 LIMIT 1
+             ) jr ON TRUE
+             WHERE s.status = $1
              ORDER BY s.name`, ['active']);
         res.json({ success: true, students: result.rows });
     }
@@ -144,16 +160,48 @@ const bulkCreateHifzLogs = async (req, res) => {
         if (!Array.isArray(logs) || logs.length === 0) {
             return res.status(400).json({ success: false, error: 'logs array is required' });
         }
-        const inserted = [];
-        for (const log of logs) {
-            const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
-                 surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [log.student_id, log.usthad_id || null, log.entry_date, log.session_type, log.mode,
-                log.surah_name || null, log.start_v || null, log.end_v || null, log.start_page || null,
-                log.end_page || null, log.juz_number || null, log.juz_portion || null]);
-            inserted.push(result.rows[0]);
+        // ── Step 1: bulk-fetch existing 'New Verses' rows that could collide
+        // with any candidate, in a SINGLE query. Replaces the per-row SELECT
+        // dedup that ran inside the original loop.
+        const dedupCandidates = logs.filter((l) => l.mode === 'New Verses' && l.surah_name && l.start_v && l.end_v);
+        const dupKey = (l) => `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.session_type}|${l.surah_name}|${l.start_v}|${l.end_v}`;
+        const existingKeys = new Set();
+        if (dedupCandidates.length > 0) {
+            const studentIds = [...new Set(dedupCandidates.map((l) => l.student_id))];
+            const dates = [...new Set(dedupCandidates.map((l) => String(l.entry_date).slice(0, 10)))];
+            const existing = await db_1.db.query(`SELECT student_id,
+                        to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
+                        session_type, surah_name, start_v, end_v
+                 FROM hifz_logs
+                 WHERE mode = 'New Verses'
+                   AND student_id = ANY($1::text[])
+                   AND entry_date = ANY($2::date[])`, [studentIds, dates]);
+            existing.rows.forEach((r) => existingKeys.add(dupKey(r)));
         }
-        res.json({ success: true, logs: inserted });
+        // Filter out duplicates (only applies to qualifying New Verses rows)
+        const toInsert = logs.filter((l) => {
+            if (l.mode === 'New Verses' && l.surah_name && l.start_v && l.end_v) {
+                return !existingKeys.has(dupKey(l));
+            }
+            return true;
+        });
+        if (toInsert.length === 0) {
+            return res.json({ success: true, logs: [] });
+        }
+        // ── Step 2: ONE multi-row INSERT for the survivors.
+        const placeholders = [];
+        const values = [];
+        let i = 1;
+        for (const log of toInsert) {
+            placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+            values.push(log.student_id, log.usthad_id || null, log.entry_date, log.session_type, log.mode, log.surah_name || null, log.start_v || null, log.end_v || null, log.start_page || null, log.end_page || null, log.juz_number || null, log.juz_portion || null);
+        }
+        const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
+                                    surah_name, start_v, end_v, start_page, end_page,
+                                    juz_number, juz_portion)
+             VALUES ${placeholders.join(',')}
+             RETURNING *`, values);
+        res.json({ success: true, logs: result.rows });
     }
     catch (err) {
         console.error('Error bulk creating hifz logs:', err);
@@ -215,16 +263,35 @@ const upsertMonthlyReport = async (req, res) => {
 exports.upsertMonthlyReport = upsertMonthlyReport;
 const getProgressSummary = async (req, res) => {
     try {
-        const result = await db_1.db.query(`
-            SELECT student_id, COUNT(DISTINCT split_part(juz_part, ' ', 2)) as progress 
-            FROM hifz_logs 
-            WHERE mode = 'Juz Revision' AND juz_part LIKE 'Juz %'
-            GROUP BY student_id
-        `);
+        // Optional ?student_id= scope. Without it we still scan all logs
+        // (kept for the admin dashboard); WITH it we only read that one
+        // student — used by the daily-entry form so it doesn't pay for
+        // the institution-wide scan on every open.
+        const { student_id } = req.query;
+        const params = [];
+        let where = `WHERE mode = 'New Verses'
+                       AND surah_name IS NOT NULL
+                       AND start_v IS NOT NULL
+                       AND end_v IS NOT NULL`;
+        if (student_id) {
+            params.push(student_id);
+            where += ` AND student_id = $1`;
+        }
+        const result = await db_1.db.query(`SELECT student_id, surah_name, start_v, end_v
+             FROM hifz_logs
+             ${where}`, params);
+        // Group logs by student_id
+        const byStudent = {};
+        for (const row of result.rows) {
+            if (!byStudent[row.student_id])
+                byStudent[row.student_id] = [];
+            byStudent[row.student_id].push(row);
+        }
+        // Compute completed juz count per student using proper boundary check
         const progressMap = {};
-        result.rows.forEach(row => {
-            progressMap[row.student_id] = parseInt(row.progress, 10);
-        });
+        for (const [studentId, logs] of Object.entries(byStudent)) {
+            progressMap[studentId] = (0, quran_juz_1.countCompletedJuz)(logs);
+        }
         res.json({ success: true, progressMap });
     }
     catch (err) {

@@ -23,7 +23,13 @@ const pool = new pg_1.Pool({
     // If connecting to external Supabase from localhost, SSL is required
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    // Tuned for several concurrent mentors hitting the dashboard at once.
+    // pg defaults are max=10 / no idle timeout, which causes "waiting for
+    // connection" stalls under multi-user load.
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
 });
 pool.on('error', (err, client) => {
     console.error('Unexpected error on idle pg client', err);

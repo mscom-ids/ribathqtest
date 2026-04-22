@@ -7,6 +7,7 @@ exports.issueDelegationToken = exports.revokeDelegation = exports.updateDelegati
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
+const logger_1 = require("../utils/logger");
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
@@ -94,8 +95,14 @@ exports.getAssignedToMe = getAssignedToMe;
 // 4. Admin views all requests (pending, approved, rejected)
 const getAdminAllRequests = async (req, res) => {
     try {
+        // ?count_only=true returns just the pending count for the admin
+        // dashboard badge — avoids the 3-table JOIN when no row data is needed.
+        if (req.query.count_only === 'true') {
+            const c = await db_1.db.query(`SELECT COUNT(*)::int AS pending FROM mentor_delegations WHERE status = 'pending'`);
+            return res.json({ success: true, pending_count: c.rows[0].pending });
+        }
         const result = await db_1.db.query(`
-            SELECT d.*, 
+            SELECT d.*,
                    f.name as from_mentor_name, f.photo_url as from_mentor_photo,
                    t.name as to_mentor_name, t.photo_url as to_mentor_photo,
                    stu.name as student_name
@@ -151,7 +158,7 @@ const revokeDelegation = async (req, res) => {
         const delegation = delRes.rows[0];
         const isAdmin = ['admin', 'principal', 'vice_principal'].includes(user?.role);
         // Log for debugging 403 issues
-        console.log(`Revoke attempt by ${user.role} (staffId: ${staffId}) for delegation from ${delegation.from_staff_id}`);
+        (0, logger_1.devLog)(`Revoke attempt by ${user.role} (staffId: ${staffId}) for delegation from ${delegation.from_staff_id}`);
         // Allow ONLY if owner OR admin
         if (!isAdmin && delegation.from_staff_id !== staffId) {
             return res.status(403).json({ success: false, error: `Forbidden. You are logged as ${user.role}.` });

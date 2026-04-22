@@ -85,8 +85,11 @@ const getMonthlyFeesForCurrentMonth = async (req, res) => {
 exports.getMonthlyFeesForCurrentMonth = getMonthlyFeesForCurrentMonth;
 const getActiveStudents = async (req, res) => {
     try {
+        // Dropped `s.comprehensive_details` from the SELECT — it's a large JSONB
+        // blob per student and was only used as a UI fallback. With 500+
+        // students it dominates payload size and serialization time.
         const result = await db_1.db.query(`SELECT s.adm_no, s.name, s.batch_year, s.standard, s.photo_url, s.dob as date_of_birth, s.status,
-                    s.gender, s.admission_date as date_of_join, s.comprehensive_details,
+                    s.gender, s.admission_date as date_of_join,
                     s.hifz_mentor_id, s.school_mentor_id, s.madrasa_mentor_id,
                     h.name as hifz_mentor_name, sc.name as school_mentor_name, m.name as madrasa_mentor_name
              FROM students s

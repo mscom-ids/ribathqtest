@@ -149,14 +149,41 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     // ── Slot status ─────────────────────────────────────────────────────────────
     const getSlotStatus = (sched: any) => {
         const cancelled = dashboardData.cancellations?.find(
-            (c: any) => c.schedule_id === sched.id && c.date?.split('T')[0] === viewDateStr
+            (c: any) => c.schedule_id === sched.id && new Date(c.date).toLocaleDateString('en-CA') === viewDateStr
         )
         if (cancelled) return { state: 'cancelled' as const }
 
-        const marked = dashboardData.marks?.find(
-            (m: any) => m.schedule_id === sched.id && m.date?.split('T')[0] === viewDateStr
-        )
-        if (marked) return { state: 'completed' as const }
+        const marksForSched = dashboardData.marks?.filter((m: any) => {
+            if (m.schedule_id !== sched.id) return false;
+            // Handle timezone offset for Postgres DATE strings
+            const localDateStr = new Date(m.date).toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD
+            return localDateStr === viewDateStr || m.date?.startsWith(viewDateStr);
+        }) || [];
+
+        // If viewing a specific mentor
+        if (selectedMentorId !== 'all') {
+            const marked = marksForSched.find((m: any) => m.marked_by === selectedMentorId);
+            if (marked) return { state: 'completed' as const, markedBy: [selectedMentorId] };
+        } 
+        // If viewing all mentors
+        else {
+            const expected = sched.expected_mentors || [];
+            const markedByIds = marksForSched.map((m: any) => m.marked_by);
+            
+            if (expected.length > 0) {
+                const markedExpected = expected.filter((em: any) => markedByIds.includes(em.id));
+                const pendingExpected = expected.filter((em: any) => !markedByIds.includes(em.id));
+                const unexpectedMarks = marksForSched.filter((m: any) => !expected.find((em: any) => em.id === m.marked_by));
+                
+                if (markedExpected.length === expected.length || unexpectedMarks.length > 0) {
+                    return { state: 'completed' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected, unexpectedMarks };
+                } else if (markedExpected.length > 0) {
+                    return { state: 'partial' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected };
+                }
+            } else if (marksForSched.length > 0) {
+                return { state: 'completed' as const, markedBy: markedByIds };
+            }
+        }
 
         if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const }
 
@@ -254,7 +281,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     const totalCount = daySchedules.length
     const completedCount = daySchedules.filter(s => getSlotStatus(s).state === 'completed').length
     const cancelledCount = daySchedules.filter(s => getSlotStatus(s).state === 'cancelled').length
-    const pendingCount = daySchedules.filter(s => ['active', 'upcoming'].includes(getSlotStatus(s).state)).length
+    const pendingCount = daySchedules.filter(s => ['active', 'upcoming', 'partial'].includes(getSlotStatus(s).state)).length
 
     const dateLabel = isToday ? "Today" : isYesterday ? "Yesterday" : viewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
@@ -494,10 +521,11 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                             const stds = typeof sched.standards === 'string' ? JSON.parse(sched.standards || '[]') : (sched.standards || [])
                             const isCancelled = status.state === 'cancelled'
                             const isCompleted = status.state === 'completed'
+                            const isPartial = status.state === 'partial'
                             const isActive = status.state === 'active'
                             const isUpcoming = status.state === 'upcoming'
                             const isLocked = status.state === 'locked'
-                            const isClickable = isActive || isCompleted
+                            const isClickable = isActive || isCompleted || isPartial
 
                             return (
                                 <div
@@ -522,6 +550,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                             {isCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Cancelled</span>}
                                             {isLocked && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="h-2.5 w-2.5"/>Locked</span>}
                                             {isCompleted && <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />}
+                                            {isPartial && <AlertCircle className="h-5 w-5 text-amber-500" />}
                                             {isUpcoming && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Upcoming</span>}
                                             {isActive && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4f46e5] opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-[#4f46e5]"></span></span>}
                                         </div>
@@ -558,7 +587,40 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                     {/* Footer hint */}
                                     <div className="mt-3 pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
                                         {isActive && <p className="text-[11px] font-bold text-[#4f46e5] dark:text-[#818cf8]">Click to Mark Attendance →</p>}
-                                        {isCompleted && <p className="text-[11px] font-bold text-[#22c55e]">✓ Submitted — Click to Review</p>}
+                                        {isCompleted && (
+                                            <div className="flex flex-col gap-0.5">
+                                                <p className="text-[11px] font-bold text-[#22c55e]">✓ Submitted — Click to Review</p>
+                                                {selectedMentorId === 'all' && (
+                                                    <>
+                                                        {(status as any).unexpectedMarks?.length > 0 && (
+                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                                                                Marked by: {(status as any).unexpectedMarks.map((m: any) => staffList.find(s => s.id === m.marked_by)?.name.split(' ')[0] || 'Admin').join(', ')}
+                                                            </p>
+                                                        )}
+                                                        {(status as any).markedExpected?.length > 0 && (status as any).unexpectedMarks?.length === 0 && (
+                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={(status as any).markedExpected.map((m: any) => m.name).join(', ')}>
+                                                                By: {(status as any).markedExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
+                                                            </p>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                        {isPartial && (
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-[11px] font-bold text-amber-500">⚠ Partially Submitted</p>
+                                                {selectedMentorId === 'all' && (status as any).expected?.length > 0 && (
+                                                    <>
+                                                        <p className="text-[10px] text-[#22c55e] truncate" title={(status as any).markedExpected.map((m: any) => m.name).join(', ')}>
+                                                            ✓ {(status as any).markedExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
+                                                        </p>
+                                                        <p className="text-[10px] text-rose-500 truncate" title={(status as any).pendingExpected.map((m: any) => m.name).join(', ')}>
+                                                            ✗ {(status as any).pendingExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
+                                                        </p>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
                                         {isUpcoming && (
                                             <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                                                 <Clock className="h-3 w-3" />

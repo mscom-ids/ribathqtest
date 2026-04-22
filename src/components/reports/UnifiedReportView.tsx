@@ -293,29 +293,44 @@ export default function UnifiedReportView() {
                         {/* Attendance Summary */}
                         <div>
                             <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Session Attendance</h3>
-                            {reportData.attendance.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {reportData.attendance.map((att: any, i: number) => {
-                                        const total = Number(att.total) || 1
-                                        const pct = Math.round((Number(att.present) / total) * 100) || 0
-                                        return (
-                                            <div key={i} className="border border-slate-200 rounded-lg p-4 print:border-slate-300 print:break-inside-avoid">
-                                                <p className="text-sm font-bold text-slate-700 mb-2">{att.class_type} @ {att.session}</p>
-                                                <div className="flex justify-between items-end">
-                                                    <div className="space-y-1">
-                                                        <p className="text-xs text-slate-600">Present: <span className="font-semibold text-emerald-600">{att.present}</span></p>
-                                                        <p className="text-xs text-slate-600">Absent: <span className="font-semibold text-red-600">{att.absent}</span></p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <span className="text-2xl font-black text-slate-800">{pct}%</span>
-                                                        <p className="text-[10px] text-slate-400 font-medium">total marked: {att.total}</p>
+                            {reportData.attendance.length > 0 ? (() => {
+                                // Deduplicate by session name — merge present/absent/total for same-named sessions
+                                const merged = new Map<string, any>()
+                                reportData.attendance.forEach((att: any) => {
+                                    const key = att.session || 'Session'
+                                    if (merged.has(key)) {
+                                        const ex = merged.get(key)
+                                        ex.present += Number(att.present)
+                                        ex.absent  += Number(att.absent)
+                                        ex.total   += Number(att.total)
+                                    } else {
+                                        merged.set(key, { ...att, present: Number(att.present), absent: Number(att.absent), total: Number(att.total) })
+                                    }
+                                })
+                                return (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {Array.from(merged.values()).map((att: any, i: number) => {
+                                            const total = att.total || 1
+                                            const pct = Math.round((att.present / total) * 100) || 0
+                                            return (
+                                                <div key={i} className="border border-slate-200 rounded-lg p-4 print:border-slate-300 print:break-inside-avoid">
+                                                    <p className="text-sm font-bold text-slate-700 mb-2">{att.session}</p>
+                                                    <div className="flex justify-between items-end">
+                                                        <div className="space-y-1">
+                                                            <p className="text-xs text-slate-600">Present: <span className="font-semibold text-emerald-600">{att.present}</span></p>
+                                                            <p className="text-xs text-slate-600">Absent: <span className="font-semibold text-red-600">{att.absent}</span></p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-2xl font-black text-slate-800">{pct}%</span>
+                                                            <p className="text-[10px] text-slate-400 font-medium">total marked: {att.total}</p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            ) : (
+                                            )
+                                        })}
+                                    </div>
+                                )
+                            })() : (
                                 <div className="bg-slate-50 print:bg-transparent rounded-lg p-6 text-center border-dashed border-2 print:border-slate-300 text-slate-500 text-sm">
                                     No attendance data recorded in this timeframe.
                                 </div>

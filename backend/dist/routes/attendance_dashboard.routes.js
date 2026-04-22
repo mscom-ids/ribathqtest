@@ -17,8 +17,9 @@ router.delete('/schedules/:id', (0, auth_middleware_1.requireRole)(['admin', 'pr
 // Dashboard data fetches
 router.get('/dashboard', attendance_dashboard_controller_1.getDashboardData);
 router.get('/mentor-schedules', attendance_dashboard_controller_1.getMentorSchedules);
-// Attendance & Cancelling Status
+// Attendance marks
 router.get('/students', attendance_dashboard_controller_1.getStudentsForSchedule);
+router.get('/marks', attendance_dashboard_controller_1.getStudentMarksForSchedule);
 router.post('/mark', attendance_dashboard_controller_1.markAttendance);
 router.post('/cancel', attendance_dashboard_controller_1.cancelSession);
 // Breaks endpoints

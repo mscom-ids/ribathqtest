@@ -11,6 +11,8 @@ router.use(auth_middleware_1.verifyToken);
 router.use(auth_middleware_1.verifyDelegation);
 // GET /api/students/next-id (Helper)
 router.get('/next-id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'staff', 'usthad', 'mentor']), students_helpers_1.getNextStudentId);
+// GET /api/students/counts (Lightweight aggregation for the admin dashboard)
+router.get('/counts', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), students_controller_1.getStudentCounts);
 // GET /api/students/staff (Helper)
 router.get('/staff', (0, auth_middleware_1.requireRole)(['admin', 'principal']), students_helpers_1.getStaff);
 // GET /api/students/export (JSON)

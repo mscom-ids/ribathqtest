@@ -79,8 +79,6 @@ const getStudentsForAttendance = async (req, res) => {
             params.push(...allowed_standards);
         }
         query += ' ORDER BY name';
-        console.log('QUERY IS:', query);
-        console.log('PARAMS ARE:', params);
         const result = await db_1.db.query(query, params);
         res.json({ success: true, students: result.rows });
     }

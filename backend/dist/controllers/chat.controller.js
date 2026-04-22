@@ -168,9 +168,10 @@ const createGroupChat = async (req, res) => {
             await client.query('BEGIN');
             const convRes = await client.query(`INSERT INTO chat_conversations (type, name, created_by) VALUES ('group', $1, $2) RETURNING id`, [name, staffId]);
             const convId = convRes.rows[0].id;
-            for (const memberId of allMembers) {
-                await client.query('INSERT INTO chat_participants (conversation_id, staff_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [convId, memberId]);
-            }
+            // Bulk-insert all participants in one round trip (was N round trips).
+            await client.query(`INSERT INTO chat_participants (conversation_id, staff_id)
+                 SELECT $1, sid FROM unnest($2::uuid[]) AS t(sid)
+                 ON CONFLICT DO NOTHING`, [convId, allMembers]);
             await client.query('COMMIT');
             res.json({ success: true, conversationId: convId });
         }

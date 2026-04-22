@@ -150,7 +150,36 @@ export const getSchedules = async (req: Request, res: Response) => {
             return res.json({ success: true, data: filteredSchedules });
         }
 
-        res.json({ success: true, data: schedules });
+        // For Admins/Principals, attach expected mentors to each schedule
+        const studentsRes = await db.query(
+            `SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`
+        );
+        const staffRes = await db.query(`SELECT id, name FROM staff`);
+        const staffMap = new Map(staffRes.rows.map((s: any) => [s.id, s.name]));
+
+        const schedulesWithMentors = schedules.map(schedule => {
+            const classType = (schedule.class_type || '').toLowerCase();
+            const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
+            const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
+            const dbStds = rawStds.map(normalizeScheduleStandard);
+            const mentorIds = new Set<string>();
+
+            if (mentorCol) {
+                for (const student of studentsRes.rows) {
+                    if (dbStds.includes(student.standard)) {
+                        const mid = student[mentorCol];
+                        if (mid) mentorIds.add(mid);
+                    }
+                }
+            }
+
+            return {
+                ...schedule,
+                expected_mentors: Array.from(mentorIds).map(id => ({ id, name: staffMap.get(id) || 'Unknown' }))
+            };
+        });
+
+        res.json({ success: true, data: schedulesWithMentors });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -204,7 +233,36 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
             return res.json({ success: true, data: filteredSchedules });
         }
 
-        res.json({ success: true, data: result.rows });
+        // For Admins/Principals, attach expected mentors to each schedule
+        const studentsRes = await db.query(
+            `SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`
+        );
+        const staffRes = await db.query(`SELECT id, name FROM staff`);
+        const staffMap = new Map(staffRes.rows.map((s: any) => [s.id, s.name]));
+
+        const schedulesWithMentors = result.rows.map((schedule: any) => {
+            const classType = (schedule.class_type || '').toLowerCase();
+            const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
+            const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
+            const dbStds = rawStds.map(normalizeScheduleStandard);
+            const mentorIds = new Set<string>();
+
+            if (mentorCol) {
+                for (const student of studentsRes.rows) {
+                    if (dbStds.includes(student.standard)) {
+                        const mid = student[mentorCol];
+                        if (mid) mentorIds.add(mid);
+                    }
+                }
+            }
+
+            return {
+                ...schedule,
+                expected_mentors: Array.from(mentorIds).map(id => ({ id, name: staffMap.get(id) || 'Unknown' }))
+            };
+        });
+
+        res.json({ success: true, data: schedulesWithMentors });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -285,9 +343,10 @@ export const getDashboardData = async (req: Request, res: Response) => {
         let marksQuery: { rows: any[] };
         if (MENTOR_ROLES.includes(user?.role)) {
             // Mentors only see their own marks — so "Marked" status is per-mentor
+            const mentorId = await getStaffId(req);
             marksQuery = await db.query(
                 'SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3',
-                [start_date, end_date, user.id]
+                [start_date, end_date, mentorId || user.id]
             );
         } else {
             // Admin/Principal: see all marks (session shown as completed if anyone marked it)
@@ -529,11 +588,12 @@ export const markAttendance = async (req: Request, res: Response) => {
         const { schedule_id, date, student_marks, on_behalf_of } = req.body;
         const userRole = (req as any).user.role;
         const userId = (req as any).user.id;
+        const staffId = await getStaffId(req); // Resolve the actual staff ID
 
         // If an admin/principal is marking on behalf of a specific mentor,
         // store the mark under the mentor's ID so their portal shows it as "Marked"
         const ADMIN_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
-        const effectiveMarkedBy = ADMIN_ROLES.includes(userRole) && on_behalf_of ? on_behalf_of : userId;
+        const effectiveMarkedBy = ADMIN_ROLES.includes(userRole) && on_behalf_of ? on_behalf_of : (staffId || userId);
 
         const schedRes = await db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
@@ -541,8 +601,7 @@ export const markAttendance = async (req: Request, res: Response) => {
 
         // ── Security Guard: mentor roles may only mark their own students ──
         if (MENTOR_ROLES.includes(userRole) && student_marks?.length > 0) {
-            const mentorId = await getStaffId(req);
-            if (mentorId) {
+            if (staffId) {
                 const classType = (schedule.class_type || '').toLowerCase();
                 const mentorColMap: Record<string, string> = {
                     hifz:     'hifz_mentor_id',
@@ -557,7 +616,7 @@ export const markAttendance = async (req: Request, res: Response) => {
                     // Fetch permanently assigned students
                     const permRes = await db.query(
                         `SELECT adm_no FROM students WHERE adm_no = ANY($1) AND ${mentorCol} = $2`,
-                        [submittedIds, mentorId]
+                        [submittedIds, staffId]
                     );
                     const permIds = new Set(permRes.rows.map((r: any) => r.adm_no));
 
@@ -570,7 +629,7 @@ export const markAttendance = async (req: Request, res: Response) => {
                              WHERE d.to_staff_id = $1
                                AND d.status = 'approved'
                                AND s.adm_no = ANY($2)`,
-                            [mentorId, submittedIds]
+                            [staffId, submittedIds]
                         );
                         delegatedIds = new Set(delRes.rows.map((r: any) => r.adm_no));
                     } catch (delErr: any) {
@@ -635,7 +694,7 @@ export const markAttendance = async (req: Request, res: Response) => {
                 `INSERT INTO staff_attendance (staff_id, date, status)
                  VALUES ($1, $2, 'present')
                  ON CONFLICT (staff_id, date) DO UPDATE SET status = 'present'`,
-                [userId, date]
+                [staffId || userId, date]
             );
 
             // Record the Master Class Completion Marker — scoped per mentor

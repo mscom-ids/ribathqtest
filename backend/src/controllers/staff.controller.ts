@@ -528,18 +528,27 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
                 }
             }
 
-            let hifzPages = 0, revPages = 0, juzCount = 0;
+            let hifzLines = 0, revLines = 0, juzCount = 0;
             sLogs.forEach((log: any) => {
-                if (log.mode === 'New Verses') hifzPages += 0.5;
-                else if (log.mode === 'Recent Revision') {
-                    if (log.start_page && log.end_page) revPages += (log.end_page - log.start_page + 1);
-                } else if (log.mode === 'Juz Revision') {
+                // Helper: count lines/verses from a log entry
+                const verseCount = (log.start_v && log.end_v) ? (log.end_v - log.start_v + 1) : 0;
+                const pageCount = (log.start_page && log.end_page) ? (log.end_page - log.start_page + 1) : 0;
+                // Use page count if available, otherwise fall back to verse count
+                const lineScore = pageCount > 0 ? pageCount : verseCount;
+
+                if (log.mode === 'New Verses') {
+                    hifzLines += lineScore || 0.5; // 0.5 only if no page/verse data at all
+                } else if (log.mode === 'Recent Revision') {
+                    revLines += lineScore;
+                } else if (log.mode === 'Juz Revision' || log.mode === 'Juz Revision (Old)') {
                     if (log.juz_portion === 'Full') juzCount += 1;
                     else if (log.juz_portion === '1st Half' || log.juz_portion === '2nd Half') juzCount += 0.5;
                     else if (log.juz_portion?.startsWith('Q')) juzCount += 0.25;
                     else juzCount += 1;
                 }
             });
+            const hifzPages = hifzLines;
+            const revPages = revLines;
 
             const activeLeaveMeta = activeLeaveMap[student.adm_no];
 

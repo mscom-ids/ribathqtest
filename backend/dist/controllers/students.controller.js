@@ -33,13 +33,23 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.downloadStudentsExcel = exports.exportStudents = exports.updateStudent = exports.createStudent = exports.getStudentById = exports.getAllStudents = void 0;
+exports.downloadStudentsExcel = exports.exportStudents = exports.updateStudent = exports.createStudent = exports.getStudentById = exports.getStudentCounts = exports.getAllStudents = void 0;
 const XLSX = __importStar(require("xlsx"));
 const db_1 = require("../config/db");
+const logger_1 = require("../utils/logger");
+// Columns required for the listing/grid views and the dashboard. Excludes the
+// heavy `comprehensive_details` JSON blob and `address` text — callers that
+// actually need those should fetch the single student via /students/:id.
+const LIGHT_STUDENT_COLS = 'adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date, place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number';
+const FULL_STUDENT_COLS = LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
 const getAllStudents = async (req, res) => {
     try {
-        const { search, class: className, status } = req.query;
-        let query = 'SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, address, gender, admission_date, nationality, pincode, post, district, state, place, local_body, aadhar, id_mark, comprehensive_details, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number FROM students WHERE 1=1';
+        const { search, class: className, status, light } = req.query;
+        // ?light=true skips the heavy comprehensive_details JSON column —
+        // the listing pages don't need it and dropping it cuts payload size
+        // and serialization time significantly when there are many students.
+        const cols = light === 'true' ? LIGHT_STUDENT_COLS : FULL_STUDENT_COLS;
+        let query = `SELECT ${cols} FROM students WHERE 1=1`;
         const params = [];
         let paramCount = 1;
         if (search) {
@@ -75,14 +85,64 @@ const getAllStudents = async (req, res) => {
     }
 };
 exports.getAllStudents = getAllStudents;
+// Lightweight counts for the admin dashboard. Single aggregation query
+// instead of fetching every row and counting in JS.
+const getStudentCounts = async (_req, _res) => {
+    try {
+        const [statusRes, outsideRes] = await Promise.all([
+            db_1.db.query(`SELECT
+            COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active,
+            COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+            COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dropout,
+            COUNT(*) AS total
+          FROM students`),
+            db_1.db.query(`SELECT COUNT(DISTINCT student_id) AS out_campus
+         FROM student_leaves
+         WHERE status = 'outside'`),
+        ]);
+        const r = statusRes.rows[0];
+        const active = parseInt(r.active, 10) || 0;
+        const completed = parseInt(r.completed, 10) || 0;
+        const dropout = parseInt(r.dropout, 10) || 0;
+        const total = parseInt(r.total, 10) || 0;
+        const outCampus = parseInt(outsideRes.rows[0].out_campus, 10) || 0;
+        const onCampus = Math.max(0, active - outCampus);
+        _res.json({
+            success: true,
+            counts: {
+                total,
+                active,
+                completed,
+                dropout,
+                on_campus: onCampus,
+                out_campus: outCampus,
+                alumni: completed + dropout,
+            },
+        });
+    }
+    catch (err) {
+        console.error('Error fetching student counts:', err);
+        _res.status(500).json({ success: false, error: 'Failed to fetch student counts' });
+    }
+};
+exports.getStudentCounts = getStudentCounts;
 const getStudentById = async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await db_1.db.query('SELECT * FROM students WHERE adm_no = $1', [id]);
+        const { light } = req.query;
+        // ?light=true skips the heavy comprehensive_details JSON for callers like
+        // the daily-entry form that only need name + a couple of flags.
+        const cols = light === 'true' ? LIGHT_STUDENT_COLS : '*';
+        // Both queries are independent — fire in parallel (was sequential).
+        const [result, leaveRes] = await Promise.all([
+            db_1.db.query(`SELECT ${cols} FROM students WHERE adm_no = $1`, [id]),
+            db_1.db.query(`SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside' LIMIT 1`, [id]),
+        ]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
-        res.json({ success: true, student: result.rows[0] });
+        const is_outside = leaveRes.rows.length > 0;
+        res.json({ success: true, student: { ...result.rows[0], is_outside } });
     }
     catch (err) {
         console.error('Error fetching student:', err);
@@ -166,7 +226,7 @@ const updateStudent = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Student ID is required' });
         }
         const updateData = req.body;
-        console.log('[updateStudent] id:', id, 'keys:', Object.keys(updateData));
+        (0, logger_1.devLog)('[updateStudent] id:', id, 'keys:', Object.keys(updateData));
         // Safety check - don't allow updating ID
         delete updateData.id;
         // Map legacy/frontend fields to db fields if they exist
