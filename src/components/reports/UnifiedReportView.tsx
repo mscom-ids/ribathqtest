@@ -297,14 +297,17 @@ export default function UnifiedReportView() {
                                 // Deduplicate by session name — merge present/absent/total for same-named sessions
                                 const merged = new Map<string, any>()
                                 reportData.attendance.forEach((att: any) => {
-                                    const key = att.session || 'Session'
+                                    const rawSession = (att.session || 'Session').trim()
+                                    const key = rawSession.toLowerCase()
                                     if (merged.has(key)) {
                                         const ex = merged.get(key)
                                         ex.present += Number(att.present)
                                         ex.absent  += Number(att.absent)
                                         ex.total   += Number(att.total)
                                     } else {
-                                        merged.set(key, { ...att, present: Number(att.present), absent: Number(att.absent), total: Number(att.total) })
+                                        // Normalize "HIfz" typo to "Hifz" for display
+                                        const cleanSession = rawSession.replace(/^hifz/i, 'Hifz')
+                                        merged.set(key, { ...att, session: cleanSession, present: Number(att.present), absent: Number(att.absent), total: Number(att.total) })
                                     }
                                 })
                                 return (

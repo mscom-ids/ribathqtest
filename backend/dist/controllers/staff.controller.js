@@ -398,6 +398,7 @@ const getMyStudentsWithStats = async (req, res) => {
             db_1.db.query(`SELECT student_id, leave_type, reason_category, remarks, end_datetime
                  FROM student_leaves
                  WHERE student_id = ANY($1) AND status = 'outside'
+                   AND leave_type <> 'outdoor'
                  ORDER BY created_at DESC`, [studentIds]),
             db_1.db.query(`SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
                  FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`, [studentIds, todayDate]),
@@ -443,19 +444,20 @@ const getMyStudentsWithStats = async (req, res) => {
                     globalAttStatus = sAtts[0].status; // Leave, Late, etc
                 }
             }
-            let hifzPages = 0, revPages = 0, juzCount = 0;
+            let hifzLines = 0, revLines = 0, juzCount = 0;
             sLogs.forEach((log) => {
+                // Helper: count lines/verses from a log entry
+                const verseCount = (log.start_v && log.end_v) ? (log.end_v - log.start_v + 1) : 0;
+                const pageCount = (log.start_page && log.end_page) ? (log.end_page - log.start_page + 1) : 0;
+                // Use page count if available, otherwise fall back to verse count
+                const lineScore = pageCount > 0 ? pageCount : verseCount;
                 if (log.mode === 'New Verses') {
-                    if (log.start_page && log.end_page)
-                        hifzPages += (log.end_page - log.start_page + 1);
-                    else
-                        hifzPages += 0.5; // fallback if page data is missing
+                    hifzLines += lineScore || 0.5; // 0.5 only if no page/verse data at all
                 }
                 else if (log.mode === 'Recent Revision') {
-                    if (log.start_page && log.end_page)
-                        revPages += (log.end_page - log.start_page + 1);
+                    revLines += lineScore;
                 }
-                else if (log.mode === 'Juz Revision') {
+                else if (log.mode === 'Juz Revision' || log.mode === 'Juz Revision (Old)') {
                     if (log.juz_portion === 'Full')
                         juzCount += 1;
                     else if (log.juz_portion === '1st Half' || log.juz_portion === '2nd Half')
@@ -466,6 +468,8 @@ const getMyStudentsWithStats = async (req, res) => {
                         juzCount += 1;
                 }
             });
+            const hifzPages = hifzLines;
+            const revPages = revLines;
             const activeLeaveMeta = activeLeaveMap[student.adm_no];
             return {
                 ...student,
@@ -507,12 +511,25 @@ const getMyLeaves = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
         const staffId = staffResult.rows[0].id;
-        const result = await db_1.db.query(`SELECT sl.*, s.name as student_name, s.standard, s.adm_no
-             FROM student_leaves sl
-             JOIN students s ON sl.student_id = s.adm_no
-             WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
-             ORDER BY sl.created_at DESC`, [staffId]);
-        const leaves = result.rows.map((row) => ({
+        // Run both queries in parallel:
+        // 1. Out-campus/personal leaves only for this mentor's assigned students
+        // 2. ALL on-campus/internal leaves (campus-wide visibility for mentors)
+        const [assignedLeavesRes, oncampusLeavesRes] = await Promise.all([
+            db_1.db.query(`SELECT sl.*, s.name as student_name, s.standard, s.adm_no
+                 FROM student_leaves sl
+                 JOIN students s ON sl.student_id = s.adm_no
+                 WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
+                   AND sl.leave_type NOT IN ('on-campus', 'internal', 'outdoor')
+                 ORDER BY sl.created_at DESC`, [staffId]),
+            db_1.db.query(`SELECT sl.*, s.name as student_name, s.standard, s.adm_no
+                 FROM student_leaves sl
+                 JOIN students s ON sl.student_id = s.adm_no
+                 WHERE sl.leave_type IN ('on-campus', 'internal')
+                 ORDER BY sl.created_at DESC`, []),
+        ]);
+        const allRows = [...assignedLeavesRes.rows, ...oncampusLeavesRes.rows]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const leaves = allRows.map((row) => ({
             ...row,
             student: { name: row.student_name, standard: row.standard, adm_no: row.adm_no }
         }));

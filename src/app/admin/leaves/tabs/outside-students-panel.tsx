@@ -28,8 +28,10 @@ interface OutsideStudent {
     leave_type: string
     reason_category: string | null
     remarks: string | null
+    companion_name: string | null
+    companion_relationship: string | null
     start_datetime: string
-    end_datetime: string
+    end_datetime: string | null
     institutional_leave_name: string | null
     group_type: string | null
     group_value: string | null
@@ -62,6 +64,13 @@ function leaveTypeBadge(type: string, institutionalName?: string | null) {
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 border border-orange-200 dark:border-orange-700">
                     <MapPin className="h-2.5 w-2.5" />
                     Out-Campus
+                </span>
+            )
+        case 'outdoor':
+            return (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700">
+                    <MapPin className="h-2.5 w-2.5" />
+                    Outdoor
                 </span>
             )
         case 'on-campus':
@@ -107,6 +116,8 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
                 <div className={`h-11 w-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 ${
                     student.leave_type === 'institutional'
                         ? 'bg-gradient-to-br from-purple-500 to-indigo-600'
+                        : student.leave_type === 'outdoor'
+                        ? 'bg-gradient-to-br from-emerald-400 to-teal-500'
                         : student.leave_type === 'out-campus' || student.leave_type === 'personal'
                         ? 'bg-gradient-to-br from-orange-400 to-amber-500'
                         : 'bg-gradient-to-br from-blue-400 to-cyan-500'
@@ -145,6 +156,14 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
                 </p>
             )}
 
+            {(student.companion_name || student.companion_relationship) && (
+                <div className="text-[11px] bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5 border border-emerald-100 dark:border-emerald-800">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">With: </span>
+                    <span className="text-slate-600 dark:text-slate-300">{student.companion_name || "-"}</span>
+                    {student.companion_relationship && <span className="text-slate-400"> ({student.companion_relationship})</span>}
+                </div>
+            )}
+
             {/* Time info */}
             <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-2">
@@ -159,9 +178,9 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
                     )}
                 </div>
                 <div className={`rounded-lg p-2 ${isOverdue ? 'bg-red-100 dark:bg-red-900/30' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-                    <p className="text-slate-400 mb-0.5">Expected Return</p>
+                    <p className="text-slate-400 mb-0.5">{student.end_datetime ? "Expected Return" : "Return"}</p>
                     <p className={`font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                        {format(new Date(student.end_datetime), 'dd MMM, h:mm a')}
+                        {student.end_datetime ? format(new Date(student.end_datetime), 'dd MMM, h:mm a') : 'Open'}
                     </p>
                 </div>
             </div>
@@ -304,6 +323,7 @@ export function OutsideStudentsPanel() {
             filterType === 'all' ||
             (filterType === 'institutional' && s.leave_type === 'institutional') ||
             (filterType === 'out-campus' && (s.leave_type === 'out-campus' || s.leave_type === 'personal')) ||
+            (filterType === 'outdoor' && s.leave_type === 'outdoor') ||
             (filterType === 'on-campus' && (s.leave_type === 'on-campus' || s.leave_type === 'internal'))
         return matchesSearch && matchesType
     })
@@ -311,6 +331,7 @@ export function OutsideStudentsPanel() {
     const counts = {
         institutional: students.filter(s => s.leave_type === 'institutional').length,
         outCampus: students.filter(s => s.leave_type === 'out-campus' || s.leave_type === 'personal').length,
+        outdoor: students.filter(s => s.leave_type === 'outdoor').length,
         onCampus: students.filter(s => s.leave_type === 'on-campus' || s.leave_type === 'internal').length,
         overdue: students.filter(s => s.end_datetime && isPast(new Date(s.end_datetime))).length,
     }
@@ -338,8 +359,8 @@ export function OutsideStudentsPanel() {
                     </div>
                 ) : (
                     <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{counts.onCampus}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">On-Campus</div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{counts.outdoor}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Outdoor</div>
                     </div>
                 )}
             </div>
@@ -365,6 +386,7 @@ export function OutsideStudentsPanel() {
                             <SelectItem value="all">All Types</SelectItem>
                             <SelectItem value="institutional">Institutional</SelectItem>
                             <SelectItem value="out-campus">Out-Campus</SelectItem>
+                            {counts.outdoor > 0 && <SelectItem value="outdoor">Outdoor</SelectItem>}
                             <SelectItem value="on-campus">On-Campus</SelectItem>
                         </SelectContent>
                     </Select>

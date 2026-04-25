@@ -1,20 +1,22 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { UserCheck, Building2, MapPin, ArrowLeftRight, History } from "lucide-react"
+import { UserCheck, Building2, MapPin, ArrowLeftRight, History, Route } from "lucide-react"
 import { InstitutionalLeavesTab } from "./tabs/institutional-leaves"
 import { OutCampusLeavesTab } from "./tabs/out-campus-leaves"
 import { OnCampusLeavesTab } from "./tabs/on-campus-leaves"
+import { OutdoorLeavesTab } from "./tabs/outdoor-leaves"
 import { MovementHistoryTab } from "./tabs/movement-history"
 import { OutsideStudentsPanel } from "./tabs/outside-students-panel"
 import api from "@/lib/api"
 
-type TabKey = "outside_now" | "institutional" | "out-campus" | "on-campus" | "movements"
+type TabKey = "outside_now" | "institutional" | "out-campus" | "outdoor" | "on-campus" | "movements"
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: "outside_now", label: "Outside", icon: UserCheck },
     { key: "institutional", label: "Institution", icon: Building2 },
     { key: "out-campus", label: "Out-Campus", icon: MapPin },
+    { key: "outdoor", label: "Outdoor", icon: Route },
     { key: "on-campus", label: "On-Campus", icon: ArrowLeftRight },
     { key: "movements", label: "History", icon: History },
 ]
@@ -77,6 +79,7 @@ export default function AdminLeavesPage() {
                     {activeTab === "outside_now" && <OutsideStudentsPanel />}
                     {activeTab === "institutional" && <InstitutionalLeavesTab />}
                     {activeTab === "out-campus" && <OutCampusLeavesTab />}
+                    {activeTab === "outdoor" && <OutdoorLeavesTab />}
                     {activeTab === "on-campus" && <OnCampusLeavesTab />}
                     {activeTab === "movements" && <MovementHistoryTab />}
                 </div>

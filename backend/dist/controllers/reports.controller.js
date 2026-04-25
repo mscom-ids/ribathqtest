@@ -126,7 +126,7 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                FROM students s
                WHERE s.adm_no = $1`, [student_id]),
             db_1.db.query(`SELECT
-                    COALESCE(sch.class_type, 'General') as class_type,
+                    sch.id as schedule_id,
                     COALESCE(sch.name, 'Session') as session,
                     SUM(CASE WHEN m.status = 'Present' THEN 1 ELSE 0 END) as present,
                     SUM(CASE WHEN m.status = 'Absent' THEN 1 ELSE 0 END) as absent,
@@ -135,7 +135,7 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                  FROM student_attendance_marks m
                  LEFT JOIN attendance_schedules sch ON m.schedule_id = sch.id
                  WHERE m.student_id = $1 AND m.date >= $2 AND m.date <= $3
-                 GROUP BY sch.class_type, sch.name`, [student_id, start_date, end_date]),
+                 GROUP BY sch.id, sch.name`, [student_id, start_date, end_date]),
             db_1.db.query(`SELECT *
                  FROM hifz_logs
                  WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`, [student_id, start_date, end_date]),

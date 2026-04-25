@@ -140,7 +140,8 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4 py-4">
                         
-                        {students.length > 0 ? (
+                        {type !== 'personal' ? (
+                            students.length > 0 ? (
                             <div className="space-y-4">
                                 <div className="space-y-2">
                                     <Label>Filter by Class</Label>
@@ -195,7 +196,7 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                                 <p className="text-sm text-slate-500">No students are currently pending return for this leave.</p>
                                 <p className="text-xs text-slate-400 mt-1">If students haven't left yet, they won't appear here.</p>
                             </div>
-                        )}
+                        )) : null}
 
                         <div className="space-y-2">
                             <Label>Return Date & Time</Label>
@@ -211,7 +212,7 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
 
                         <DialogFooter className="pt-2">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                            <Button type="submit" disabled={loading || (students.length > 0 && !isBulkReturn && !selectedLeaveId) || students.length === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                            <Button type="submit" disabled={loading || (type !== 'personal' && students.length === 0) || (type !== 'personal' && !isBulkReturn && !selectedLeaveId) || (type === 'personal' && !selectedLeaveId)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 {isBulkReturn ? "Bulk Apply Inbound Move" : "Record Inbound Move"}
                             </Button>

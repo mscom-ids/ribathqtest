@@ -45,6 +45,8 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
     const [endDatetime, setEndDatetime] = useState("")
     const [reasonCategory, setReasonCategory] = useState("")
     const [remarks, setRemarks] = useState("")
+    const [companionName, setCompanionName] = useState("")
+    const [companionRelationship, setCompanionRelationship] = useState("")
 
     // Individual
     const [studentId, setStudentId] = useState("")
@@ -73,6 +75,8 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
             setEndDatetime("")
             setReasonCategory("")
             setRemarks("")
+            setCompanionName("")
+            setCompanionRelationship("")
             setGroupValue("")
             setExceptions([])
         }
@@ -82,6 +86,9 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
         e.preventDefault()
         if (!startDatetime || !endDatetime || !reasonCategory) return toast.error("Please fill required fields")
         if (reasonCategory === "Other" && !remarks) return toast.error("Please enter remarks for 'Other' reason")
+        if (type === 'out-campus' && (!companionName.trim() || !companionRelationship.trim())) {
+            return toast.error("Please enter who the student is going with and their relationship")
+        }
 
         setLoading(true)
         try {
@@ -94,7 +101,9 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                     end_datetime: new Date(endDatetime).toISOString(),
                     reason: reasonCategory === "Other" ? remarks : reasonCategory,
                     reason_category: reasonCategory,
-                    remarks: remarks
+                    remarks: remarks,
+                    companion_name: companionName,
+                    companion_relationship: companionRelationship
                 })
             } else {
                 if (!groupValue) return toast.error(`Enter ${mode} value`)
@@ -106,6 +115,8 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                     end_datetime: new Date(endDatetime).toISOString(),
                     reason_category: reasonCategory,
                     remarks: remarks,
+                    companion_name: companionName,
+                    companion_relationship: companionRelationship,
                     exceptions: exceptions
                 })
             }
@@ -276,6 +287,29 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                             required={reasonCategory === "Other"}
                         />
                     </div>
+
+                    {type === 'out-campus' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Going With <span className="text-red-500">*</span></Label>
+                                <Input
+                                    placeholder="Person name"
+                                    value={companionName}
+                                    onChange={(e) => setCompanionName(e.target.value)}
+                                    className="bg-white dark:bg-slate-950"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Relationship <span className="text-red-500">*</span></Label>
+                                <Input
+                                    placeholder="Parent, uncle, driver..."
+                                    value={companionRelationship}
+                                    onChange={(e) => setCompanionRelationship(e.target.value)}
+                                    className="bg-white dark:bg-slate-950"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">

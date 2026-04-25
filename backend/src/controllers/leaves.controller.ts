@@ -379,36 +379,69 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
 
 export const createPersonalLeave = async (req: Request, res: Response) => {
     try {
-        const { student_id, leave_type, start_datetime, end_datetime, reason, reason_category, remarks } = req.body;
+        const { student_id, leave_type, start_datetime, end_datetime, reason, reason_category, remarks, companion_name, companion_relationship } = req.body;
         const user = (req as any).user;
 
-        if (new Date(end_datetime) <= new Date(start_datetime)) {
+        if (!student_id || !leave_type || !start_datetime) {
+            return res.status(400).json({ success: false, error: 'Student, leave type, and start datetime are required' });
+        }
+
+        if (leave_type !== 'outdoor' && !end_datetime) {
+            return res.status(400).json({ success: false, error: 'Expected return is required' });
+        }
+
+        if (end_datetime && new Date(end_datetime) <= new Date(start_datetime)) {
             return res.status(400).json({ success: false, error: 'End datetime must be after start datetime' });
         }
 
-        if (!['out-campus', 'on-campus'].includes(leave_type)) {
+        if (!['out-campus', 'on-campus', 'outdoor'].includes(leave_type)) {
             return res.status(400).json({ success: false, error: 'Invalid leave type' });
+        }
+
+        if (leave_type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+            return res.status(403).json({ success: false, error: 'Outdoor movements can only be created by admin users' });
+        }
+
+        if (['out-campus', 'outdoor'].includes(leave_type) && (!companion_name?.trim() || !companion_relationship?.trim())) {
+            return res.status(400).json({ success: false, error: 'Going with and relationship are required' });
         }
 
         const client = await db.getClient();
         try {
             await client.query('BEGIN');
             
-            // If out-campus, they shouldn't already be outside
-            if (leave_type === 'out-campus') {
+            // If the movement takes them outside, they shouldn't already be outside
+            if (leave_type === 'out-campus' || leave_type === 'outdoor') {
                 const outCheck = await client.query(`SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside'`, [student_id]);
                 if (outCheck.rows.length > 0) {
                     throw new Error('Student is already outside campus');
                 }
             }
 
-            const initialStatus = leave_type === 'out-campus' ? 'outside' : 'pending'; 
+            // on-campus leaves are directly authorized (status='approved'); outside movements start 'outside'
+            const initialStatus = (leave_type === 'out-campus' || leave_type === 'outdoor') ? 'outside' : 'approved';
+            const finalEndDatetime = leave_type === 'outdoor' ? null : end_datetime;
+            const finalReason = leave_type === 'outdoor' ? 'Outdoor' : reason;
+            const finalReasonCategory = leave_type === 'outdoor' ? 'Outdoor' : reason_category;
 
             const insRes = await client.query(`
-                INSERT INTO student_leaves (student_id, leave_type, start_datetime, end_datetime, reason, reason_category, remarks, status, created_by)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                INSERT INTO student_leaves
+                    (student_id, leave_type, start_datetime, end_datetime, reason, reason_category, remarks, companion_name, companion_relationship, status, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING id
-            `, [student_id, leave_type, start_datetime, end_datetime, reason, reason_category, remarks, initialStatus, user.id]);
+            `, [
+                student_id,
+                leave_type,
+                start_datetime,
+                finalEndDatetime,
+                finalReason,
+                finalReasonCategory,
+                remarks || null,
+                companion_name || null,
+                companion_relationship || null,
+                initialStatus,
+                user.id
+            ]);
             
             const leave_id = insRes.rows[0].id;
 
@@ -435,11 +468,15 @@ export const createPersonalLeave = async (req: Request, res: Response) => {
 
 export const createGroupLeave = async (req: Request, res: Response) => {
     try {
-        const { group_type, group_value, leave_type, start_datetime, end_datetime, reason_category, remarks, exceptions } = req.body;
+        const { group_type, group_value, leave_type, start_datetime, end_datetime, reason_category, remarks, exceptions, companion_name, companion_relationship } = req.body;
         const user = (req as any).user;
 
         if (new Date(end_datetime) <= new Date(start_datetime)) {
             return res.status(400).json({ success: false, error: 'End datetime must be after start datetime' });
+        }
+
+        if (leave_type === 'out-campus' && (!companion_name?.trim() || !companion_relationship?.trim())) {
+            return res.status(400).json({ success: false, error: 'Going with and relationship are required' });
         }
 
         const client = await db.getClient();
@@ -474,12 +511,12 @@ export const createGroupLeave = async (req: Request, res: Response) => {
             // (was 2N round trips for groups of any size).
             const slBulk = await client.query(
                 `INSERT INTO student_leaves
-                     (student_id, leave_type, start_datetime, end_datetime, reason_category, remarks, status, group_id, group_type, group_value, created_by)
-                 SELECT sid, $2, $3, $4, $5, $6, 'outside', $7, $8, $9, $10
+                     (student_id, leave_type, start_datetime, end_datetime, reason_category, remarks, companion_name, companion_relationship, status, group_id, group_type, group_value, created_by)
+                 SELECT sid, $2, $3, $4, $5, $6, $7, $8, 'outside', $9, $10, $11, $12
                  FROM unnest($1::text[]) AS t(sid)
                  RETURNING id, student_id`,
                 [targetStudents, leave_type, start_datetime, end_datetime, reason_category, remarks,
-                 group_id, group_type, String(group_value), user.id]
+                 companion_name || null, companion_relationship || null, group_id, group_type, String(group_value), user.id]
             );
 
             const movStudentIds = slBulk.rows.map((r: any) => r.student_id);
@@ -509,6 +546,12 @@ export const createGroupLeave = async (req: Request, res: Response) => {
 export const getLeavesFilter = async (req: Request, res: Response) => {
     try {
         const { type } = req.query; // 'out-campus', 'on-campus'
+        const user = (req as any).user;
+
+        if (type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+            return res.status(403).json({ success: false, error: 'Outdoor movements are admin-only' });
+        }
+
         const query = `
             SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
             FROM student_leaves sl
@@ -575,16 +618,24 @@ export const recordReturn = async (req: Request, res: Response) => {
             if (leaveRes.rows.length === 0) throw new Error('Leave not found');
             const leave = leaveRes.rows[0];
 
-            if (leave.status === 'returned') throw new Error('Student has already returned for this leave');
+            if (leave.leave_type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+                await client.query('ROLLBACK');
+                return res.status(403).json({ success: false, error: 'Outdoor movements can only be controlled by admin users' });
+            }
 
-            const endDateTime = new Date(leave.end_datetime);
+            if (leave.status === 'returned' || leave.status === 'completed') throw new Error('Leave has already been closed');
+
+            // on-campus leaves transition approved→completed; out-campus leaves transition outside→returned
+
             const actualReturn = new Date(return_datetime);
             
             if (actualReturn < new Date(leave.start_datetime)) {
                 throw new Error('Return time cannot be earlier than exit time');
             }
 
-            const returnStatus = actualReturn > endDateTime ? 'late' : 'normal';
+            const returnStatus = leave.end_datetime && actualReturn > new Date(leave.end_datetime) ? 'late' : 'normal';
+            // on-campus leaves close as 'completed', out-campus close as 'returned'
+            const closedStatus = leave.leave_type === 'on-campus' ? 'completed' : 'returned';
 
             await client.query(`
                 INSERT INTO student_movements (student_id, leave_id, direction, timestamp, is_late, recorded_by)
@@ -593,9 +644,9 @@ export const recordReturn = async (req: Request, res: Response) => {
 
             await client.query(`
                 UPDATE student_leaves 
-                SET status = 'returned', actual_return_datetime = $1, return_status = $2, updated_at = NOW()
+                SET status = $4, actual_return_datetime = $1, return_status = $2, updated_at = NOW()
                 WHERE id = $3
-            `, [return_datetime, returnStatus, leave_id]);
+            `, [return_datetime, returnStatus, leave_id, closedStatus]);
 
             await client.query('COMMIT');
             res.json({ success: true });
@@ -661,6 +712,9 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
  */
 export const getOutsideStudents = async (req: Request, res: Response) => {
     try {
+        const user = (req as any).user;
+        const canViewOutdoor = ['admin', 'principal', 'vice_principal', 'controller'].includes(user.role);
+
         // Step 1: get all outside leaves with student + institutional leave info + mentor names
         const leavesRes = await db.query(`
             SELECT 
@@ -669,6 +723,8 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
                 sl.leave_type,
                 sl.reason_category,
                 sl.remarks,
+                sl.companion_name,
+                sl.companion_relationship,
                 sl.start_datetime,
                 sl.end_datetime,
                 sl.group_type,
@@ -690,8 +746,9 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
             LEFT JOIN staff sm2 ON s.school_mentor_id = sm2.id
             LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
             WHERE sl.status = 'outside'
+              AND ($1::boolean OR sl.leave_type <> 'outdoor')
             ORDER BY sl.start_datetime DESC
-        `);
+        `, [canViewOutdoor]);
 
         if (leavesRes.rows.length === 0) {
             return res.json({ success: true, students: [] });

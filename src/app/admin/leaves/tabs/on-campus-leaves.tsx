@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import api from "@/lib/api"
 import { PersonalLeaveModal } from "../personal-modal"
+import { RecordReturnModal } from "../record-return-modal"
 
 export function OnCampusLeavesTab() {
     const [leaves, setLeaves] = useState<any[]>([])
@@ -25,6 +26,7 @@ export function OnCampusLeavesTab() {
     const [pageSize, setPageSize] = useState(10)
 
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [leaveForRecord, setLeaveForRecord] = useState<{ id: string, type: 'personal' } | null>(null)
 
     const fetchLeaves = async () => {
         setLoading(true)
@@ -124,6 +126,7 @@ export function OnCampusLeavesTab() {
                                 <TableHead>To</TableHead>
                                 {activeTab === "ended" && <TableHead>Ended By</TableHead>}
                                 <TableHead className="text-center">Status</TableHead>
+                                {activeTab === "ongoing" && <TableHead className="text-right">Action</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -180,6 +183,18 @@ export function OnCampusLeavesTab() {
                                             <Badge className="bg-slate-100 text-slate-700 border-slate-300">COMPLETED</Badge>
                                         )}
                                     </TableCell>
+                                    {activeTab === "ongoing" && (
+                                        <TableCell className="text-right">
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                onClick={() => setLeaveForRecord({ id: leave.id, type: 'personal' })}
+                                                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                            >
+                                                Mark Returned
+                                            </Button>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -254,6 +269,14 @@ export function OnCampusLeavesTab() {
             </Card>
 
             <PersonalLeaveModal type="on-campus" open={isModalOpen} onOpenChange={setIsModalOpen} onSuccess={fetchLeaves} />
+
+            {leaveForRecord && (
+                <RecordReturnModal
+                    leaveId={leaveForRecord.id} type={leaveForRecord.type}
+                    open={!!leaveForRecord} onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
+                    onSuccess={fetchLeaves}
+                />
+            )}
         </div>
     )
 }

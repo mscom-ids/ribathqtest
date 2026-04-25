@@ -88,6 +88,7 @@ export function OutCampusLeavesTab() {
                                 <TableHead className="w-[50px]">#</TableHead>
                                 <TableHead>Student</TableHead>
                                 <TableHead>Reason & Remarks</TableHead>
+                                <TableHead>Going With</TableHead>
                                 <TableHead>Duration</TableHead>
                                 <TableHead className="text-center">Status</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
@@ -95,9 +96,9 @@ export function OutCampusLeavesTab() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={6} className="text-center h-32">Loading...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="text-center h-32">Loading...</TableCell></TableRow>
                             ) : paginatedData.length === 0 ? (
-                                <TableRow><TableCell colSpan={6} className="text-center h-48 text-slate-500">
+                                <TableRow><TableCell colSpan={7} className="text-center h-48 text-slate-500">
                                     <div className="flex flex-col items-center justify-center">
                                         <AlertCircle className="h-8 w-8 mb-2 opacity-20" />
                                         <p>No out-campus leaves found</p>
@@ -125,6 +126,12 @@ export function OutCampusLeavesTab() {
                                                     "{leave.remarks}"
                                                 </div>
                                             )}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col gap-0.5 text-sm">
+                                            <span className="font-medium text-slate-800 dark:text-slate-200">{leave.companion_name || "-"}</span>
+                                            <span className="text-xs text-slate-500">{leave.companion_relationship || "-"}</span>
                                         </div>
                                     </TableCell>
                                     <TableCell>

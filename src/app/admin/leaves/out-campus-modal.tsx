@@ -45,10 +45,14 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
     const [studentOpen, setStudentOpen] = useState(false)
     const [reasonCategory, setReasonCategory] = useState("")
     const [otherRemark, setOtherRemark] = useState("")
+    const [companionName, setCompanionName] = useState("")
+    const [companionRelationship, setCompanionRelationship] = useState("")
 
     // Class / Batch
     const [groupValue, setGroupValue] = useState("")
     const [groupRemarks, setGroupRemarks] = useState("")
+    const [groupCompanionName, setGroupCompanionName] = useState("")
+    const [groupCompanionRelationship, setGroupCompanionRelationship] = useState("")
     const [exceptions, setExceptions] = useState<string[]>([])
     const [exceptionsSearch, setExceptionsSearch] = useState("")
 
@@ -76,8 +80,12 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
             setEndDatetime("")
             setReasonCategory("")
             setOtherRemark("")
+            setCompanionName("")
+            setCompanionRelationship("")
             setGroupValue("")
             setGroupRemarks("")
+            setGroupCompanionName("")
+            setGroupCompanionRelationship("")
             setExceptions([])
             setExceptionsSearch("")
             setMode("individual")
@@ -95,6 +103,7 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
             if (mode === "individual") {
                 if (!studentId) return toast.error("Please select a student")
                 if (!reasonCategory) return toast.error("Please select a reason category")
+                if (!companionName.trim() || !companionRelationship.trim()) return toast.error("Please enter who the student is going with and their relationship")
                 if (reasonCategory === "Other" && !otherRemark.trim()) return toast.error("Please enter a remark for 'Other' reason")
 
                 await api.post('/leaves/personal', {
@@ -104,11 +113,14 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                     end_datetime: new Date(endDatetime).toISOString(),
                     reason: reasonCategory === "Other" ? otherRemark : reasonCategory,
                     reason_category: reasonCategory,
-                    remarks: otherRemark
+                    remarks: otherRemark,
+                    companion_name: companionName,
+                    companion_relationship: companionRelationship
                 })
             } else {
                 if (!groupValue) return toast.error(`Please enter the ${mode === 'class' ? 'class' : 'batch year'}`)
                 if (!groupRemarks.trim()) return toast.error("Please enter the reason/remarks")
+                if (!groupCompanionName.trim() || !groupCompanionRelationship.trim()) return toast.error("Please enter who the students are going with and their relationship")
 
                 await api.post('/leaves/group', {
                     group_type: mode,
@@ -118,6 +130,8 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                     end_datetime: new Date(endDatetime).toISOString(),
                     reason_category: mode === 'class' ? 'Class Leave' : 'Batch Leave',
                     remarks: groupRemarks,
+                    companion_name: groupCompanionName,
+                    companion_relationship: groupCompanionRelationship,
                     exceptions: exceptions
                 })
             }
@@ -235,6 +249,27 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                 </Select>
                             </div>
 
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Going With <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Person name"
+                                        value={companionName}
+                                        onChange={(e) => setCompanionName(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Relationship <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Parent, uncle, driver..."
+                                        value={companionRelationship}
+                                        onChange={(e) => setCompanionRelationship(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Remark – only required if 'Other' */}
                             {reasonCategory === "Other" && (
                                 <div className="space-y-2">
@@ -277,6 +312,27 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                     className="bg-white dark:bg-slate-950"
                                     rows={3}
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Going With <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Person name"
+                                        value={groupCompanionName}
+                                        onChange={(e) => setGroupCompanionName(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Relationship <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Parent, staff, driver..."
+                                        value={groupCompanionRelationship}
+                                        onChange={(e) => setGroupCompanionRelationship(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
                             </div>
 
                             {/* Exceptions */}
@@ -348,6 +404,27 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                     className="bg-white dark:bg-slate-950"
                                     rows={3}
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Going With <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Person name"
+                                        value={groupCompanionName}
+                                        onChange={(e) => setGroupCompanionName(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Relationship <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        placeholder="Parent, staff, driver..."
+                                        value={groupCompanionRelationship}
+                                        onChange={(e) => setGroupCompanionRelationship(e.target.value)}
+                                        className="bg-white dark:bg-slate-950"
+                                    />
+                                </div>
                             </div>
 
                             {/* Exceptions */}

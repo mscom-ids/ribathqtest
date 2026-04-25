@@ -5,16 +5,16 @@ import { Plus, Search, RefreshCw, UserCheck, Building2, ArrowLeftRight, MapPin }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
-import { LeaveModal } from "@/app/admin/leaves/leave-modal"
+import { PersonalLeaveModal } from "@/app/admin/leaves/personal-modal"
 import { OutsideStudentsPanel } from "@/app/admin/leaves/tabs/outside-students-panel"
 import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
 
 export interface StudentLeave {
     id: string
     student_id: string
-    leave_type: "personal" | "internal" | "institutional" | "out-campus" | "on-campus"
+    leave_type: "personal" | "internal" | "institutional" | "out-campus" | "on-campus" | "outdoor"
     start_datetime: string
-    end_datetime: string
+    end_datetime: string | null
     reason?: string
     reason_category?: string
     remarks?: string
@@ -40,9 +40,11 @@ export default function StaffLeavesPage() {
     const [leaves, setLeaves] = useState<StudentLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
-    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
     const [outsideCount, setOutsideCount] = useState(0)
     const [activeTab, setActiveTab] = useState<TabKey>("outside")
+
+    // null = closed, 'out-campus' or 'on-campus' = which modal is open
+    const [leaveModalType, setLeaveModalType] = useState<'out-campus' | 'on-campus' | null>(null)
 
     const fetchLeaves = async () => {
         setLoading(true)
@@ -66,12 +68,25 @@ export default function StaffLeavesPage() {
         l.student_id.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    const internalLeaves = filtered.filter(l => l.leave_type === "internal")
+    const internalLeaves = filtered.filter(l => l.leave_type === "internal" || l.leave_type === "on-campus")
     const institutionalLeaves = filtered.filter(l => l.leave_type === "institutional")
+
+    const handleOnCampusReturn = async (leave: StudentLeave) => {
+        try {
+            await api.post('/leaves/record-return', {
+                leave_id: leave.id,
+                return_datetime: new Date().toISOString(),
+            })
+            await fetchLeaves()
+        } catch (err: any) {
+            console.error('Failed to record return:', err)
+            alert(err?.response?.data?.error || 'Failed to record return')
+        }
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-[#020617]">
-            <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+            <div className="max-w-7xl mx-auto px-4 py-5 space-y-5">
 
                 {/* ── Header ── */}
                 <div>
@@ -81,14 +96,23 @@ export default function StaffLeavesPage() {
                     </p>
                 </div>
 
-                {/* ── Authorize Button ── */}
-                <Button
-                    onClick={() => setIsLeaveModalOpen(true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 h-auto rounded-xl gap-2"
-                >
-                    <Plus className="h-4 w-4" />
-                    Authorize Leave
-                </Button>
+                {/* ── Authorize Buttons (two separate actions) ── */}
+                <div className="grid grid-cols-2 gap-2">
+                    <Button
+                        onClick={() => setLeaveModalType('out-campus')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 h-auto rounded-xl gap-2"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Out-Campus Leave
+                    </Button>
+                    <Button
+                        onClick={() => setLeaveModalType('on-campus')}
+                        className="bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 h-auto rounded-xl gap-2"
+                    >
+                        <MapPin className="h-4 w-4" />
+                        On-Campus Leave
+                    </Button>
+                </div>
 
                 {/* ── Stats Row ── */}
                 <div className="grid grid-cols-3 gap-3">
@@ -158,20 +182,35 @@ export default function StaffLeavesPage() {
                                 className="pl-9 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl"
                             />
                         </div>
-                        <div className="flex justify-end">
+                        <div className="flex justify-between items-center">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Shows on-campus &amp; internal leaves</p>
                             <Button variant="outline" size="sm" onClick={fetchLeaves} className="gap-2 rounded-lg border-gray-200 dark:border-gray-700">
                                 <RefreshCw className="h-3.5 w-3.5" />
                                 Refresh
                             </Button>
                         </div>
-                        <LeaveTable leaves={internalLeaves} isLoading={loading} />
+                        <LeaveTable
+                            leaves={internalLeaves}
+                            isLoading={loading}
+                            showReturnAction
+                            onMarkReturn={handleOnCampusReturn}
+                        />
                     </div>
                 )}
             </div>
 
-            <LeaveModal
-                open={isLeaveModalOpen}
-                onOpenChange={setIsLeaveModalOpen}
+            {/* Out-Campus Leave Modal */}
+            <PersonalLeaveModal
+                type="out-campus"
+                open={leaveModalType === 'out-campus'}
+                onOpenChange={(open) => !open && setLeaveModalType(null)}
+                onSuccess={fetchLeaves}
+            />
+            {/* On-Campus Leave Modal */}
+            <PersonalLeaveModal
+                type="on-campus"
+                open={leaveModalType === 'on-campus'}
+                onOpenChange={(open) => !open && setLeaveModalType(null)}
                 onSuccess={fetchLeaves}
             />
         </div>

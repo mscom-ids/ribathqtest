@@ -138,8 +138,36 @@ madrasa / madrassa → madrasa_mentor_id
 
 - **Student ID format**: `R001`, `R002`, ... (auto-generated)
 - **Schedule standards** are stored as JSON arrays; normalize display labels → DB values via `normalizeScheduleStandard()` in `attendance_dashboard.controller.ts`
-- **Photo URLs**: backend stores relative paths; prefix with `http://localhost:5000` for display
+- **Photo URLs**: backend stores relative paths (e.g. `/public/avatars/x.jpg`). Use `resolveBackendUrl(url)` from `@/lib/utils` to convert — it derives the origin from `NEXT_PUBLIC_API_URL` so dev and prod both work. **Never hardcode `http://localhost:5000`** — that breaks production.
 - **Staff portal** (`/staff`) is the "Mentor Portal" — same codebase for `staff`, `usthad`, and `mentor` roles
+
+## Shared Frontend Helpers
+
+- **`@/lib/api`** — the configured axios instance. Use for one-off requests and all writes (POST/PUT/DELETE). Logs every request in dev only (gated on `NODE_ENV`).
+- **`@/lib/api-cache`** — `cachedGet(url, params?, ttlMs?)` for static-ish endpoints (`/staff`, `/classes/academic-years`, `/events`, etc.) plus an in-flight request dedup so multiple components requesting the same data share one network call. Call `invalidateCache(urlPrefix)` after a write that affects the cached resource. Already wired into the notification bell, admin home, admin/staff, admin/student-attendance, and academic-years pages.
+- **`@/lib/utils`** — `cn()` for class merging, `resolveBackendUrl()` for photo/file URLs, `BACKEND_ORIGIN` constant.
+
+## Backend Performance Patterns
+
+Several patterns are used consistently throughout controllers — keep them when adding new endpoints:
+
+- **Transactions**: always use `const client = await db.getClient()` + `client.query('BEGIN'/'COMMIT'/'ROLLBACK')` + `client.release()` in `finally`. **Never** use `db.query('BEGIN')` on the pool directly — the pool routes statements to different clients, silently breaking atomicity.
+- **Bulk inserts/updates**: use Postgres `unnest($1::text[], $2::uuid[]) AS t(a, b)` to insert N rows in one round trip rather than looping with per-row queries. Examples: `markAttendance`, `bulkCreateHifzLogs`, `createGroupLeave`, `bulkRecordReturn`.
+- **Parallel independent queries**: wrap them in `Promise.all` — applied to `getMyStudentsWithStats` (5 queries), `getStudentsForSchedule` (3 phases), and all 3 reports endpoints.
+- **N+1 avoidance**: when a query needs an aggregate per N rows, fetch once and build a JS `Map` for O(1) lookup, OR use a `LATERAL JOIN`. Examples: `getMentorStudentCounts` in `attendance_dashboard.controller.ts`, `getHifzStudents` LATERAL joins.
+- **Dev-only logging**: import `devLog` from `backend/src/utils/logger` for trace/debug noise. Keep `console.error` for actual errors. Don't add raw `console.log` to controllers.
+- **PG pool config** (in `backend/src/config/db.ts`): tuned to `max: 20`, `idleTimeoutMillis: 30s`, `connectionTimeoutMillis: 5s` for multi-mentor concurrent load.
+
+## Hot-Path Indexes
+
+The migration `supabase/migrations/20260417120000_perf_hot_path_indexes.sql` adds composite indexes on the hot tables (`student_attendance_marks`, `attendance_marks`, `attendance_schedules`, `hifz_logs`, `mentor_delegations`, `student_leaves`, `staff_attendance`) and partial indexes on `students.{hifz,school,madrasa}_mentor_id`. Most existing query patterns assume these indexes exist. When writing new queries on these tables, prefer column orderings that match the existing indexes rather than adding new ones for marginal gains.
+
+## Polling
+
+Background polling intervals are intentionally tuned — don't tighten without reason:
+- `NotificationBell` (`src/components/admin/top-nav.tsx`): 120s, uses `cachedGet` (60s TTL).
+- `ChatLayout` conversation list: 15s. Active-conversation message poll: 3s (real-time chat).
+- Admin students page auto-refresh: 3 min.
 
 ## Duplicate Admin Attendance Pages
 

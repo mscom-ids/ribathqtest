@@ -439,7 +439,7 @@ const getStudentsForSchedule = async (req, res) => {
                          (status = 'outside'
                             AND start_datetime <  ($2::date + 1))
                          OR
-                         (status = 'returned'
+                         (status IN ('returned', 'completed')
                             AND start_datetime <  ($2::date + 1)
                             AND COALESCE(actual_return_datetime, end_datetime) >= $2::date)
                        )
