@@ -18,11 +18,17 @@ const api = axios.create({
   withCredentials: true, // send httpOnly cookies with cross-origin requests
 });
 
-// Request interceptor to automatically add the server-issued delegation token
+// Request interceptor to add auth + delegation tokens
 api.interceptors.request.use(
   (config) => {
-    // Attach server-issued delegation token if active
     if (typeof window !== 'undefined') {
+      // Primary: attach JWT as Authorization Bearer (works cross-domain, no cookie issues)
+      const authToken = localStorage.getItem('auth_token');
+      if (authToken) {
+        config.headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      // Attach server-issued delegation token if active
       const delegationToken = sessionStorage.getItem('delegationToken');
       if (delegationToken) {
         config.headers['x-delegation-token'] = delegationToken;
@@ -52,8 +58,9 @@ api.interceptors.response.use(
     }
 
     if (error.response && error.response.status === 401) {
-      // Token is invalid or expired
+      // Token is invalid or expired — clear all auth state
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
         sessionStorage.removeItem('delegationToken');
         sessionStorage.removeItem('delegationMentorName');
         sessionStorage.removeItem('delegationStudentName');

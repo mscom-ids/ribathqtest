@@ -66,6 +66,7 @@ export default function StaffLayout({
 
     const handleSignOut = async () => {
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
+        localStorage.removeItem('auth_token')
         Cookies.remove('auth_token', { path: '/' })
         document.cookie = 'auth_token=; path=/; max-age=0'
         sessionStorage.removeItem('delegationToken')

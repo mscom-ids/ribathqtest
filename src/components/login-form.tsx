@@ -60,6 +60,10 @@ export default function LoginForm() {
             if (data.success && data.user) {
                 const profile = data.user
                 if (profile) {
+                    // Store token in localStorage for Bearer-based auth (works cross-domain reliably)
+                    if (data.token) {
+                        localStorage.setItem('auth_token', data.token)
+                    }
                     const path = getRedirectPathForRole(profile.role)
                     console.log('[LOGIN] Redirecting to:', path, '(role:', profile.role, ')')
                     // Force a hard redirect so Server Components read the new cookie correctly

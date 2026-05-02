@@ -169,6 +169,7 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
+      token, // also return token in body for localStorage-based auth (cross-domain)
       user: {
         id: staff.id,
         email: staff.email,

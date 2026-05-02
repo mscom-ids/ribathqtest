@@ -240,7 +240,7 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
 
     useEffect(() => {
         setMounted(true)
-        const token = Cookies.get('auth_token')
+        const token = localStorage.getItem('auth_token')
         if (token) setUser(decodeUser(token))
     }, [])
 

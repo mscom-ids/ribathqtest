@@ -116,7 +116,7 @@ export function AdminSidebar({
     const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
     useEffect(() => {
-        const token = Cookies.get('auth_token')
+        const token = localStorage.getItem('auth_token')
         if (token) setUser(decodeUser(token))
     }, [])
 
@@ -131,6 +131,7 @@ export function AdminSidebar({
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch {}
+        localStorage.removeItem('auth_token')
         document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push('/login')
     }
