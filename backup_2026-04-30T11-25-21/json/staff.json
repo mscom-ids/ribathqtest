@@ -1,0 +1,347 @@
+[
+  {
+    "id": "a7f16768-e654-425f-ac56-77541f6331c4",
+    "profile_id": "e0e9cb10-be9e-4ce9-b32b-000aeef4b29b",
+    "name": "Hafiz Naeem Adany Kuttur",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775255728080-492566422.jpeg",
+    "email": "hnaeemk@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-03T22:35:32.136358+00:00",
+    "is_exam_controller": false,
+    "phone": "8591786313",
+    "is_active": true,
+    "password_hash": "$2b$10$19CO9v8XG41FC21sDC0szuFaEHvNbnMPGWX2R04hWec4uL5xzx/46",
+    "address": "Valiyakkathodi (H)  Kannattipadi (po) Vengara (via)",
+    "place": "KUTTUR",
+    "phone_contacts": [
+      {
+        "number": "8591786313",
+        "relation": "Personal"
+      },
+      {
+        "number": "9847398699",
+        "relation": "Father"
+      }
+    ],
+    "staff_id": "SR05-2021-06"
+  },
+  {
+    "id": "fadf0a2b-e0dc-44ba-ac50-4bfdedb5954c",
+    "profile_id": "acbafd44-3b67-44c2-bf9f-0b5799ad0cf2",
+    "name": "Hafiz Siraj Ahmad Adany Alingal",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775255167584-741692805.jpg",
+    "email": "hafizsiraja@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-03T22:24:53.43789+00:00",
+    "is_exam_controller": false,
+    "phone": "9791122586",
+    "is_active": true,
+    "password_hash": "$2b$10$lVUk7GvxT.bFO6xFrc7YAOJmaW/RYuYCsW0TbhP4kCc2ANLQOPNcq",
+    "address": "Kizhakkepeediyekkal ",
+    "place": "Alingal, Tirur",
+    "phone_contacts": [
+      {
+        "number": "9791122586",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR03-2020-06"
+  },
+  {
+    "id": "cf91ce19-d4b2-4bed-83b3-b1b991a6c14f",
+    "profile_id": "9865b228-2bfc-425d-a1a4-e44a45361e5e",
+    "name": "Admin User",
+    "photo_url": null,
+    "email": "adminrq@rquran.in",
+    "role": "admin",
+    "created_at": "2026-04-03T18:55:05.335497+00:00",
+    "is_exam_controller": false,
+    "phone": null,
+    "is_active": true,
+    "password_hash": null,
+    "address": null,
+    "place": null,
+    "phone_contacts": [],
+    "staff_id": null
+  },
+  {
+    "id": "ca38a3ae-e6d1-4886-9e3a-73c2aed60c9f",
+    "profile_id": "e01316a4-0136-449e-8afb-54e038bfffce",
+    "name": "Hafiz Muhammad Afzal Adany Vazhalippadam",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775407207017-877934008.webp",
+    "email": "hafizafzalv@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-05T15:58:22.00763+00:00",
+    "is_exam_controller": false,
+    "phone": "8136871370",
+    "is_active": true,
+    "password_hash": "$2b$10$gGsfh2UnRWpCQ1AOrWS9qOR7amYhJj7NKhG3Cn0jjmwGTK8KGv/KK",
+    "address": null,
+    "place": "Vazhalippadam",
+    "phone_contacts": [
+      {
+        "number": "8136871370",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR10-2026-02"
+  },
+  {
+    "id": "f7668803-b5c4-4e1f-8d25-22aa97ae8a6b",
+    "profile_id": null,
+    "name": "Admin User M",
+    "photo_url": null,
+    "email": "mswabeehcom@gmail.com",
+    "role": "admin",
+    "created_at": "2026-02-03T10:27:31.478975+00:00",
+    "is_exam_controller": false,
+    "phone": null,
+    "is_active": false,
+    "password_hash": "$2b$10$BgkGBisjuY1UGEkRrCvT7ONiGO88cbpfLB2bjBTaz1SYlbVFHl8FW",
+    "address": null,
+    "place": null,
+    "phone_contacts": [],
+    "staff_id": null
+  },
+  {
+    "id": "64854628-9637-4e3b-8405-56ae05096763",
+    "profile_id": "56274074-0b6f-40db-a009-3d54569cd639",
+    "name": "Hafiz Muhammed Riyas Adany Ullanam",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775254831032-36187829.jpg",
+    "email": "hafizriyasu@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-03T22:20:36.750499+00:00",
+    "is_exam_controller": false,
+    "phone": "9567356370",
+    "is_active": true,
+    "password_hash": "$2b$10$XXBVS.KxhFKwOLJAv7iXFuGVyibgI6cpsLMzrTFM0GJIBqJXB3rZ.",
+    "address": "Pulikkalakath Ammarambath",
+    "place": "Ullanam North",
+    "phone_contacts": [
+      {
+        "number": "9567356370",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR02-2022-04"
+  },
+  {
+    "id": "18c67897-7c11-4254-b0b0-3a8bca680565",
+    "profile_id": "fdc01161-33cf-4541-8d6d-11d8d7c09b5b",
+    "name": "Hafiz Muhammed Akbar Adany Kuttipala",
+    "photo_url": null,
+    "email": "hafizakbark@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-05T14:56:23.980543+00:00",
+    "is_exam_controller": false,
+    "phone": "9633679224",
+    "is_active": true,
+    "password_hash": "$2b$10$YogCcTtQH4XwfeDT2gPdAORnbwUcpL//rbEErNLo6LPkUvI4cf2qK",
+    "address": "palakkathotti",
+    "place": "Kuttippala",
+    "phone_contacts": [
+      {
+        "number": "9633679224",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR09-2018-06"
+  },
+  {
+    "id": "cd93288d-0b37-4b8b-a6e9-07eaf59d8c9c",
+    "profile_id": "88197c53-23b6-414e-b084-22e936f9a352",
+    "name": "Hafiz Hamid Mushthaq Adany Kollam",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775255468415-359727610.jpg",
+    "email": "hhamidk@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-03T22:30:01.28998+00:00",
+    "is_exam_controller": false,
+    "phone": "8304838959",
+    "is_active": true,
+    "password_hash": "$2b$10$Z0Wou7dYt1Vbyk0cw3uHzex0Kisynjnq2PBDyPzVbei7zpmSiIEx6",
+    "address": "Darussalam, Muttakkavu,nedumpana po.",
+    "place": "MUTTAKKAVU ",
+    "phone_contacts": [
+      {
+        "number": "8304838959",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR04-2022-06"
+  },
+  {
+    "id": "585d0e26-68f8-4a23-a2e9-e322c12ca86d",
+    "profile_id": "1ae4e30a-87cf-4dc0-9165-0d5b890f762b",
+    "name": "Hafiz Mohammed Shibil Adany Irumbuzhi",
+    "photo_url": null,
+    "email": "hshibilii@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-05T09:10:12.520836+00:00",
+    "is_exam_controller": false,
+    "phone": "9744874670",
+    "is_active": true,
+    "password_hash": "$2b$10$rFa.fmDXGuO4URXlHpBG7.TEWsVGBNu3STvxaAMkZ5gclNN4QP3IS",
+    "address": "Meenattukuzhi House",
+    "place": "Vadakkummuri",
+    "phone_contacts": [
+      {
+        "number": "9744874670",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR08-2021-06"
+  },
+  {
+    "id": "18ff905f-48ee-4ef2-a2e5-2852d4860ced",
+    "profile_id": "ea704d31-b08b-41ba-acaa-f8d1e3c8d96d",
+    "name": "Hafiz Shahid Abdullah Valamgalam",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775398765607-634367248.jpg",
+    "email": "hshahidv@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-04T11:14:20.828414+00:00",
+    "is_exam_controller": false,
+    "phone": "8089840313",
+    "is_active": true,
+    "password_hash": "$2b$10$kB5dEuabJYsIffXmX.Xhpu0GprhZrg3ZNAQ2FpTPoLgcNsNhMC5U2",
+    "address": "Pazhayoorthodi House",
+    "place": "Valamangalam",
+    "phone_contacts": [
+      {
+        "number": "8089840313",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR06-2021-04"
+  },
+  {
+    "id": "c04060ad-7320-4502-8af9-65ed61f04c2f",
+    "profile_id": "f4574aa3-46e0-4c7f-b324-81c099cf8e25",
+    "name": "Hafiz Muhammed Unais Adany Othalur",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1775399558825-107704737.jpg",
+    "email": "hafizunaiso@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-05T09:05:41.084279+00:00",
+    "is_exam_controller": false,
+    "phone": "8714105313",
+    "is_active": true,
+    "password_hash": "$2b$10$NEf6.GpS0WG7sdO1F2SRoeKgowhrn14Gv2DxnOL8/cYWnixkESYC2",
+    "address": "Manamakkavil House, Thrithala VIA",
+    "place": "Othalur",
+    "phone_contacts": [
+      {
+        "number": "8714105313",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR07-2019-06"
+  },
+  {
+    "id": "9beaae69-1854-490f-97f4-394c5d03f191",
+    "profile_id": "2d63f616-5d9d-476e-9b2d-1012b6c47ca0",
+    "name": "Hafiz Muhammed Swalih Adany Andona",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1776148481865-319453109.jpeg",
+    "email": "hafizswaliha@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-14T06:34:47.218281+00:00",
+    "is_exam_controller": false,
+    "phone": "9744630696",
+    "is_active": true,
+    "password_hash": "$2b$10$ZdtWpJB3WVpaiOdxa.I3TuhFBmZkeyJcIafEELFLy9.NxqfJpfnZO",
+    "address": "Thottumolayil(H), Thamarassery, Parappanpoyil(Po)",
+    "place": "Andona ",
+    "phone_contacts": [
+      {
+        "number": "9744630696",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR14-2022-05"
+  },
+  {
+    "id": "aea0f4e9-708b-44c6-a6fe-69e166877a77",
+    "profile_id": null,
+    "name": "Hafiz Sayyid Fuad Jeelani Al Azhari",
+    "photo_url": null,
+    "email": "sayyidfuadvp@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-12T05:18:04.043263+00:00",
+    "is_exam_controller": false,
+    "phone": "9037403313",
+    "is_active": false,
+    "password_hash": "$2b$10$XxI7v1FR3ary0F45UEbUFuSRtpYCJ4sg56osEnCDcd7.s7eBc1IV.",
+    "address": null,
+    "place": "Aakode",
+    "phone_contacts": [
+      {
+        "number": "9037403313",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR11-2018-06"
+  },
+  {
+    "id": "6339284f-fc94-49aa-9590-6e8d5850aedb",
+    "profile_id": "c1dc53c2-2fcd-42f8-9a0c-28d6d3cb42db",
+    "name": "Hafiz Muhammed Swalih Adany Parappur",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1776244625195-597800370.jpeg",
+    "email": "hafizswalihp@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-03T21:57:59.022533+00:00",
+    "is_exam_controller": false,
+    "phone": "6282442296",
+    "is_active": true,
+    "password_hash": "$2b$10$cfwHS6sxQAbBAG7/7qbcn.G7JkTd6Gdc3xCNEnnPujELpIJelvRsW",
+    "address": "ALANGADAN HOUSE",
+    "place": "PARAPPUR",
+    "phone_contacts": [
+      {
+        "number": "6282442296",
+        "relation": "Personal"
+      },
+      {
+        "number": "9946812671",
+        "relation": "Father"
+      }
+    ],
+    "staff_id": "SR01-2025-11"
+  },
+  {
+    "id": "1d728c79-a31e-495f-8180-5cbf56a28fe9",
+    "profile_id": "b173016b-bdb7-4731-8a8b-b20a0fb6be2c",
+    "name": "Hafiz Unais Adany CP Puthuparamb",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1776148242696-356383418.jpeg",
+    "email": "hafizunaiscp@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-14T06:30:49.144388+00:00",
+    "is_exam_controller": false,
+    "phone": "9605783294",
+    "is_active": true,
+    "password_hash": "$2b$10$TE86XPwqLoyMP7DctXvfOuGCGexs/Ao4At/.B.WpBnSWkQCGM2hce",
+    "address": "Cholakkapparamban",
+    "place": "Puthuparamb",
+    "phone_contacts": [
+      {
+        "number": "9605783294",
+        "relation": "Personal"
+      }
+    ],
+    "staff_id": "SR13-2020-06"
+  },
+  {
+    "id": "df369b8b-7453-4969-bdf4-ea74471a2c2a",
+    "profile_id": "565fee90-c6ae-451a-8559-db308127df87",
+    "name": "Hafiz Sayyid Fuad Al Azhari",
+    "photo_url": "https://jbsirxvegnxsjqoeszdj.supabase.co/storage/v1/object/public/avatars/avatar-1776491179438-35658911.jpg",
+    "email": "sayyidfuadvpa@rquran.in",
+    "role": "usthad",
+    "created_at": "2026-04-12T05:24:32.410043+00:00",
+    "is_exam_controller": false,
+    "phone": null,
+    "is_active": true,
+    "password_hash": "$2b$10$C7gwg91dE3eE3/PgQ7kUvO3cyJReevi4Hffuh94CT6dxov6SJtJ9O",
+    "address": null,
+    "place": null,
+    "phone_contacts": [],
+    "staff_id": "SR12-2018-06"
+  }
+]

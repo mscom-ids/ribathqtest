@@ -8,7 +8,7 @@ import { OnCampusLeavesTab } from "./tabs/on-campus-leaves"
 import { OutdoorLeavesTab } from "./tabs/outdoor-leaves"
 import { MovementHistoryTab } from "./tabs/movement-history"
 import { OutsideStudentsPanel } from "./tabs/outside-students-panel"
-import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 
 type TabKey = "outside_now" | "institutional" | "out-campus" | "outdoor" | "on-campus" | "movements"
 
@@ -26,7 +26,7 @@ export default function AdminLeavesPage() {
     const [activeTab, setActiveTab] = useState<TabKey>("outside_now")
 
     useEffect(() => {
-        api.get('/leaves/outside-students')
+        cachedGet('/leaves/outside-students', undefined, 30_000)
             .then(res => { if (res.data.success) setOutsideCount(res.data.students?.length || 0) })
             .catch(() => {})
     }, [])

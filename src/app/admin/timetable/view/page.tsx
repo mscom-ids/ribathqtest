@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Clock, BookMarked, Layers, Search, AlertCircle, RefreshCw } from "lucide-react"
+import { Users, Clock, BookMarked, Layers, RefreshCw } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
-import Cookies from "js-cookie"
 
 export default function TimetableViewerPage() {
     const [loading, setLoading] = useState(true)
@@ -23,16 +23,12 @@ export default function TimetableViewerPage() {
     const [availableStandards, setAvailableStandards] = useState<string[]>([])
     const [selectedStandard, setSelectedStandard] = useState<string>('')
 
-    useEffect(() => {
-        fetchData()
-    }, [])
-
-    const fetchData = async () => {
+    async function fetchData(force = false) {
         setLoading(true)
         try {
             const [schedRes, staffRes] = await Promise.all([
-                api.get('/attendance/schedules'),
-                api.get('/staff')
+                force ? api.get('/attendance/schedules') : cachedGet('/attendance/schedules', undefined, 5 * 60_000),
+                force ? api.get('/staff') : cachedGet('/staff', undefined, 5 * 60_000)
             ])
 
             if (schedRes.data.success) {
@@ -63,13 +59,19 @@ export default function TimetableViewerPage() {
         setLoading(false)
     }
 
+    useEffect(() => {
+        queueMicrotask(() => {
+            void fetchData()
+        })
+    }, [])
+
     // Fetch mentor specific schedules
     useEffect(() => {
         const fetchMentorSchedules = async () => {
             if (viewMode !== 'mentor' || !selectedMentorId) return
             try {
                 // Determine active academic year. Let's just pass nothing to get current.
-                const res = await api.get(`/attendance/mentor-schedules?mentor_id=${selectedMentorId}`)
+                const res = await cachedGet('/attendance/mentor-schedules', { mentor_id: selectedMentorId }, 60_000)
                 if (res.data.success) {
                     setMentorScheduleIds(res.data.schedule_ids || [])
                     setMentorStandards(res.data.mentor_standards || [])
@@ -91,9 +93,9 @@ export default function TimetableViewerPage() {
 
     function formatTime(t: string | undefined) {
         if (!t) return ""
-        let [h, m] = t.split(':')
+        const [h, m] = t.split(':')
         let hour = parseInt(h)
-        let ampm = hour >= 12 ? 'PM' : 'AM'
+        const ampm = hour >= 12 ? 'PM' : 'AM'
         hour = hour % 12 || 12
         return `${hour < 10 ? '0'+hour : hour}:${m} ${ampm}`
     }
@@ -184,7 +186,7 @@ export default function TimetableViewerPage() {
                                 </select>
                             )}
                         </div>
-                        <button onClick={fetchData} className="px-3 h-[42px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-100 transition text-slate-500">
+                        <button onClick={() => fetchData(true)} className="px-3 h-[42px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-100 transition text-slate-500">
                             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
                         </button>
                     </div>

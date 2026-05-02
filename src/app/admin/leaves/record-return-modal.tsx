@@ -10,16 +10,32 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import api from "@/lib/api"
+
+type ReturnStudent = {
+    leave_id: string
+    student_id: string
+    status: string
+    return_status?: string
+    actual_return_datetime?: string
+    name: string
+    standard?: string
+    adm_no: string
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    const maybeError = error as { response?: { data?: { error?: string } } }
+    return maybeError.response?.data?.error || fallback
+}
 
 export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChange, onSuccess }: { leaveId: string, type?: 'personal' | 'institutional' | 'group', open: boolean, onOpenChange: (open: boolean) => void, onSuccess: () => void }) {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(false)
-    const [students, setStudents] = useState<any[]>([])
+    const [students, setStudents] = useState<ReturnStudent[]>([])
     const [selectedClass, setSelectedClass] = useState<string>("All")
     const [selectedLeaveId, setSelectedLeaveId] = useState<string>("") // The specific student_leaves.id
+    const [selectedLeaveIds, setSelectedLeaveIds] = useState<string[]>([])
     const [returnDatetime, setReturnDatetime] = useState("")
     const [isBulkReturn, setIsBulkReturn] = useState(false)
     const [mounted, setMounted] = useState(false)
@@ -53,14 +69,14 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                     if (endpoint) {
                         const res = await api.get(endpoint)
                         if (res.data.success && res.data.students.length > 0) {
-                            setStudents(res.data.students.filter((s:any) => s.status === 'outside'))
+                            setStudents(res.data.students.filter((s: ReturnStudent) => s.status === 'outside'))
                         } else {
                             setSelectedLeaveId(leaveId)
                         }
                     } else {
                         setSelectedLeaveId(leaveId)
                     }
-                } catch (e) {
+                } catch {
                     setSelectedLeaveId(leaveId)
                 } finally {
                     setFetching(false)
@@ -71,29 +87,32 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
             setStudents([])
             setSelectedClass("All")
             setSelectedLeaveId("")
+            setSelectedLeaveIds([])
             setIsBulkReturn(false)
         }
-    }, [open, leaveId])
+    }, [open, leaveId, type])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!isBulkReturn && !selectedLeaveId) return toast.error("Please select a student to record return for")
+        if (type !== 'personal' && !isBulkReturn && selectedLeaveIds.length === 0) return toast.error("Please select at least one student to record return for")
+        if (type === 'personal' && !selectedLeaveId) return toast.error("Please select a student to record return for")
         if (!returnDatetime) return toast.error("Please enter a return date/time")
 
         setLoading(true)
         try {
-            if (isBulkReturn) {
-                let endpoint = type === 'group' 
+            if (type !== 'personal' && (isBulkReturn || selectedLeaveIds.length > 0)) {
+                const endpoint = type === 'group'
                     ? `/leaves/group/${leaveId}/bulk-return` 
                     : `/leaves/institutional/${leaveId}/bulk-return`;
                 
                 const res = await api.post(endpoint, {
                     return_datetime: new Date(returnDatetime).toISOString(),
-                    standard: selectedClass
+                    standard: isBulkReturn ? selectedClass : undefined,
+                    leave_ids: isBulkReturn ? undefined : selectedLeaveIds
                 })
                 
                 if (res.data.success) {
-                    toast.success(`Bulk return recorded successfully! (${res.data.count} students)`)
+                    toast.success(`Return recorded successfully! (${res.data.count} students)`)
                     onSuccess()
                     onOpenChange(false)
                 }
@@ -115,8 +134,8 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                     }
                 }
             }
-        } catch (error: any) {
-            toast.error(error?.response?.data?.error || "Failed to record return. Maybe they already returned?")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to record return. Maybe they already returned?"))
         } finally {
             setLoading(false)
         }
@@ -124,10 +143,30 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
 
     const classes = ["All", ...Array.from(new Set(students.map(s => s.standard).filter(Boolean)))]
     const filteredStudents = selectedClass === "All" ? students : students.filter(s => s.standard === selectedClass)
+    const filteredLeaveIds = filteredStudents.map(s => s.leave_id)
+    const allFilteredSelected = filteredLeaveIds.length > 0 && filteredLeaveIds.every(id => selectedLeaveIds.includes(id))
+
+    const toggleStudent = (leaveIdToToggle: string) => {
+        setSelectedLeaveIds(prev =>
+            prev.includes(leaveIdToToggle)
+                ? prev.filter(id => id !== leaveIdToToggle)
+                : [...prev, leaveIdToToggle]
+        )
+    }
+
+    const toggleFilteredStudents = () => {
+        setSelectedLeaveIds(prev => {
+            if (allFilteredSelected) {
+                return prev.filter(id => !filteredLeaveIds.includes(id))
+            }
+
+            return Array.from(new Set([...prev, ...filteredLeaveIds]))
+        })
+    }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+                <DialogContent className="max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Record Entry</DialogTitle>
                     <DialogDescription>
@@ -145,7 +184,11 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                             <div className="space-y-4">
                                 <div className="space-y-2">
                                     <Label>Filter by Class</Label>
-                                    <Select value={selectedClass} onValueChange={setSelectedClass}>
+                                    <Select value={selectedClass} onValueChange={(value) => {
+                                        setSelectedClass(value)
+                                        setSelectedLeaveIds([])
+                                        setSelectedLeaveId("")
+                                    }}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="All Classes" />
                                         </SelectTrigger>
@@ -165,7 +208,10 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                                         checked={isBulkReturn}
                                         onCheckedChange={(c) => {
                                             setIsBulkReturn(c as boolean)
-                                            if (c) setSelectedLeaveId("")
+                                            if (c) {
+                                                setSelectedLeaveId("")
+                                                setSelectedLeaveIds([])
+                                            }
                                         }}
                                     />
                                     <Label htmlFor="bulk-return" className="font-semibold cursor-pointer">
@@ -175,26 +221,37 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
 
                                 {!isBulkReturn && (
                                     <div className="space-y-2">
-                                        <Label>Select Student (Pending Return)</Label>
-                                        <Select value={selectedLeaveId} onValueChange={setSelectedLeaveId}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Choose student..." />
-                                            </SelectTrigger>
-                                            <SelectContent className="max-h-60">
-                                                {filteredStudents.map(s => (
-                                                    <SelectItem key={s.leave_id} value={s.leave_id}>
-                                                        {s.name} ({s.adm_no} - {s.standard || "N/A"})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <Label>Select Students (Pending Return)</Label>
+                                            <Button type="button" variant="outline" size="sm" onClick={toggleFilteredStudents}>
+                                                {allFilteredSelected ? "Clear" : "Select All"}
+                                            </Button>
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto rounded-md border bg-white dark:bg-slate-950 divide-y">
+                                            {filteredStudents.map(s => (
+                                                <label key={s.leave_id} htmlFor={`return-${s.leave_id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer">
+                                                    <Checkbox
+                                                        id={`return-${s.leave_id}`}
+                                                        checked={selectedLeaveIds.includes(s.leave_id)}
+                                                        onCheckedChange={() => toggleStudent(s.leave_id)}
+                                                    />
+                                                    <span className="min-w-0 flex-1 text-sm">
+                                                        <span className="block truncate font-medium">{s.name}</span>
+                                                        <span className="block text-xs text-slate-500">{s.adm_no} - {s.standard || "N/A"}</span>
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-blue-600 font-medium">
+                                            {selectedLeaveIds.length} student(s) selected
+                                        </p>
                                     </div>
                                 )}
                             </div>
                         ) : (
                             <div className="text-center py-6 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-800">
                                 <p className="text-sm text-slate-500">No students are currently pending return for this leave.</p>
-                                <p className="text-xs text-slate-400 mt-1">If students haven't left yet, they won't appear here.</p>
+                                <p className="text-xs text-slate-400 mt-1">Students without an exit record will not appear here.</p>
                             </div>
                         )) : null}
 
@@ -212,9 +269,9 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
 
                         <DialogFooter className="pt-2">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                            <Button type="submit" disabled={loading || (type !== 'personal' && students.length === 0) || (type !== 'personal' && !isBulkReturn && !selectedLeaveId) || (type === 'personal' && !selectedLeaveId)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                            <Button type="submit" disabled={loading || (type !== 'personal' && students.length === 0) || (type !== 'personal' && !isBulkReturn && selectedLeaveIds.length === 0) || (type === 'personal' && !selectedLeaveId)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {isBulkReturn ? "Bulk Apply Inbound Move" : "Record Inbound Move"}
+                                {type !== 'personal' && !isBulkReturn && selectedLeaveIds.length > 1 ? `Record ${selectedLeaveIds.length} Inbound Moves` : isBulkReturn ? "Bulk Apply Inbound Move" : "Record Inbound Move"}
                             </Button>
                         </DialogFooter>
                     </form>

@@ -10,9 +10,29 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
 }
 
+const AUTH_PROVIDER_TIMEOUT_MS = 8_000;
+
+const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
 export const login = async (req: Request, res: Response) => {
   try {
     const { email: rawEmail, password } = req.body;
+    const startedAt = Date.now();
     devLog(`[AUTH] Login attempt for email: "${rawEmail}"`);
 
     if (!rawEmail || !password) {
@@ -23,53 +43,85 @@ export const login = async (req: Request, res: Response) => {
     const email = String(rawEmail).trim().toLowerCase();
 
     let authUserId: string | null = null;
-    let authDataSession = null;
+    let staff = null;
 
-    // 1. Authenticate with Supabase as the source of truth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+    const localStaffResult = await db.query(
+      'SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1',
+      [email]
+    );
+    const localStaff = localStaffResult.rows[0] || null;
+
+    const supabaseAuthPromise = withTimeout(supabaseAdmin.auth.signInWithPassword({
         email,
         password
+    }), AUTH_PROVIDER_TIMEOUT_MS, 'Supabase Auth');
+
+    const legacyPasswordPromise = localStaff?.password_hash
+      ? bcrypt.compare(password, localStaff.password_hash)
+      : Promise.resolve(false);
+
+    let supabaseAuthError: string | undefined;
+    let authenticated = false;
+
+    const legacyMatched = await legacyPasswordPromise.catch((reason) => {
+      devLog(`[AUTH] Legacy bcrypt check failed for "${email}":`, reason);
+      return false;
     });
 
-    if (authError || !authData.session) {
-        devLog(`[AUTH] Supabase login failed for "${email}":`, authError?.message);
-        devLog(`[AUTH] Attempting legacy bcrypt fallback...`);
-
-        // FALLBACK FOR LEGACY UNMIGRATED ACCOUNTS (Like 'admin')
-        const legacyCheck = await db.query(
-            'SELECT id, email, password_hash, profile_id FROM staff WHERE LOWER(TRIM(email)) = $1',
-            [email]
-        );
-
-        let legacyMatched = false;
-        if (legacyCheck.rows.length > 0 && legacyCheck.rows[0].password_hash) {
-            legacyMatched = await bcrypt.compare(password, legacyCheck.rows[0].password_hash);
-        }
-
-        if (!legacyMatched) {
-            return res.status(401).json({ success: false, error: `Supabase Auth Error: ${authError?.message || 'Invalid email or password'}` });
-        } else {
-            devLog(`[AUTH] Legacy bcrypt fallback SUCCEEDED for "${email}". Letting them in.`);
-            // Since they matched via legacy, their authUserId isn't available from Supabase (null is fine).
-        }
+    if (legacyMatched) {
+      authenticated = true;
+      devLog(`[AUTH] Legacy bcrypt fallback succeeded for "${email}".`);
+      supabaseAuthPromise.catch((reason) => {
+        devLog(`[AUTH] Supabase login unavailable after legacy success for "${email}":`, reason);
+      });
     } else {
-        authUserId = authData.user.id;
-        authDataSession = authData.session;
+      const supabaseAuthResult = await supabaseAuthPromise
+        .then((value) => ({ status: 'fulfilled' as const, value }))
+        .catch((reason) => ({ status: 'rejected' as const, reason }));
+
+      if (supabaseAuthResult.status === 'fulfilled') {
+        const { data: authData, error: authError } = supabaseAuthResult.value;
+        if (!authError && authData.session) {
+          authenticated = true;
+          authUserId = authData.user.id;
+        } else {
+          supabaseAuthError = authError?.message || 'Invalid email or password';
+          devLog(`[AUTH] Supabase login failed for "${email}":`, supabaseAuthError);
+        }
+      } else {
+        supabaseAuthError = supabaseAuthResult.reason instanceof Error
+          ? supabaseAuthResult.reason.message
+          : 'Supabase Auth failed';
+        devLog(`[AUTH] Supabase login unavailable for "${email}":`, supabaseAuthError);
+      }
+    }
+
+    if (!authenticated) {
+      return res.status(401).json({
+        success: false,
+        error: supabaseAuthError?.includes('timed out')
+          ? 'Authentication provider timed out. Please try again.'
+          : `Supabase Auth Error: ${supabaseAuthError || 'Invalid email or password'}`
+      });
     }
 
     // 2. Query the staff table to get local application profile details
     // If authUserId is present, search by both. If fallback used, we only have email.
-    const staffResult = await db.query(
-      'SELECT id, email, name, role, photo_url, profile_id FROM staff WHERE LOWER(TRIM(email)) = $1 OR (profile_id = $2 AND $2 IS NOT NULL)',
-      [email, authUserId]
-    );
+    if (localStaff && (localStaff.email?.trim().toLowerCase() === email || !authUserId || localStaff.profile_id === authUserId)) {
+      staff = localStaff;
+    } else {
+      const staffResult = await db.query(
+        'SELECT id, email, name, role, photo_url, profile_id FROM staff WHERE LOWER(TRIM(email)) = $1 OR (profile_id = $2 AND $2 IS NOT NULL) LIMIT 1',
+        [email, authUserId]
+      );
+      staff = staffResult.rows[0] || null;
+    }
 
-    if (staffResult.rows.length === 0) {
+    if (!staff) {
       devLog(`[AUTH] Authenticated successfully but no local staff record found for email: "${email}" or profile_id: "${authUserId}"`);
       return res.status(401).json({ success: false, error: 'Your account has not been fully provisioned. Please contact the administrator.' });
     }
 
-    const staff = staffResult.rows[0];
     devLog(`[AUTH] Local staff record successfully mapped: id=${staff.id}, name=${staff.name}, role=${staff.role}`);
 
     // If profile_id is somehow missing on the staff record but they logged in via Supabase, self-heal:
@@ -117,7 +169,6 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      token, // still returned for backward compat during migration
       user: {
         id: staff.id,
         email: staff.email,
@@ -126,6 +177,7 @@ export const login = async (req: Request, res: Response) => {
         photo_url: staff.photo_url
       }
     });
+    devLog(`[AUTH] Login completed for "${email}" in ${Date.now() - startedAt}ms`);
 
   } catch (err: any) {
     console.error('Login error:', err);

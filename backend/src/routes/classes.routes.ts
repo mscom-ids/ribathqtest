@@ -9,6 +9,7 @@ import {
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
+const CLASS_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 
 // Protect all class routes
 router.use(verifyToken);
@@ -37,8 +38,8 @@ router.delete('/schedule/:id', requireRole(['admin', 'principal', 'vice_principa
 
 // Class Events
 router.get('/events', getClassEvents);
-router.post('/events/generate', generateDailyEvents);
-router.post('/events/manual', createManualClassEvent);
-router.patch('/events/:id/status', updateClassEventStatus);
+router.post('/events/generate', requireRole(CLASS_MANAGE_ROLES), generateDailyEvents);
+router.post('/events/manual', requireRole(CLASS_MANAGE_ROLES), createManualClassEvent);
+router.patch('/events/:id/status', requireRole(CLASS_MANAGE_ROLES), updateClassEventStatus);
 
 export default router;

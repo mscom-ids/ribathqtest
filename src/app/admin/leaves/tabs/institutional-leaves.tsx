@@ -1,17 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Users, CalendarDays, History, Trash2 } from "lucide-react"
+import { LogOut, Plus, Search, Users, CalendarDays, History, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import api from "@/lib/api"
 import { InstitutionalModal } from "../institutional-modal"
+import { InstitutionalExitModal } from "../institutional-exit-modal"
 import { RecordReturnModal } from "../record-return-modal"
 import {
     AlertDialog,
@@ -36,12 +37,18 @@ type InstitutionalLeave = {
     created_at: string
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+    const maybeError = error as { response?: { data?: { error?: string } } }
+    return maybeError.response?.data?.error || fallback
+}
+
 export function InstitutionalLeavesTab() {
     const [leaves, setLeaves] = useState<InstitutionalLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+    const [leaveForExit, setLeaveForExit] = useState<InstitutionalLeave | null>(null)
     const [leaveForRecord, setLeaveForRecord] = useState<string | null>(null)
     const [leaveToDelete, setLeaveToDelete] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
@@ -78,8 +85,8 @@ export function InstitutionalLeavesTab() {
                 toast.success("Leave deleted successfully")
                 fetchLeaves()
             }
-        } catch (error: any) {
-            toast.error(error?.response?.data?.error || "Failed to delete leave")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "Failed to delete leave"))
         } finally {
             setDeleting(false)
             setLeaveToDelete(null)
@@ -152,10 +159,12 @@ export function InstitutionalLeavesTab() {
                                         <div className="text-sm">
                                             <div className="flex items-center gap-1 text-slate-600">
                                                 <Users className="h-3.5 w-3.5" />
-                                                <span>{total} Affected</span>
+                                                <span>{total} Exited</span>
                                             </div>
                                             {pendingReturn > 0 ? (
                                                 <span className="text-xs text-amber-600 dark:text-amber-400 block mt-0.5">{pendingReturn} pending return</span>
+                                            ) : total === 0 ? (
+                                                <span className="text-xs text-slate-500 block mt-0.5">No exits recorded</span>
                                             ) : (
                                                 <span className="text-xs text-emerald-600 dark:text-emerald-400 block mt-0.5">All returned</span>
                                             )}
@@ -172,6 +181,15 @@ export function InstitutionalLeavesTab() {
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setLeaveForExit(leave)}
+                                                className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/30"
+                                            >
+                                                <LogOut className="h-4 w-4 mr-1.5" />
+                                                Mark Exit
+                                            </Button>
                                             <Button 
                                                 variant="outline" 
                                                 size="sm" 
@@ -201,6 +219,13 @@ export function InstitutionalLeavesTab() {
             <InstitutionalModal
                 open={isCreateModalOpen}
                 onOpenChange={setIsCreateModalOpen}
+                onSuccess={fetchLeaves}
+            />
+
+            <InstitutionalExitModal
+                leave={leaveForExit}
+                open={!!leaveForExit}
+                onOpenChange={(op: boolean) => !op && setLeaveForExit(null)}
                 onSuccess={fetchLeaves}
             />
 

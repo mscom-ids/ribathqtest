@@ -9,6 +9,8 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const path_1 = __importDefault(require("path"));
+const compression_1 = __importDefault(require("compression"));
+const logger_1 = require("./utils/logger");
 // Load env BEFORE any module that reads process.env
 dotenv_1.default.config();
 // ── Req 9: Startup environment validation ──
@@ -41,7 +43,7 @@ const PORT = process.env.PORT || 5000;
 // ── Core middleware ──
 const allowedOrigins = process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
-    : ['http://localhost:3000'];
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
         // Allow requests with no origin (mobile apps, curl, Postman)
@@ -53,6 +55,25 @@ app.use((0, cors_1.default)({
     },
     credentials: true
 }));
+app.use((0, compression_1.default)());
+app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    const originalWriteHead = res.writeHead.bind(res);
+    res.writeHead = (...args) => {
+        const durationMs = Number(process.hrtime.bigint() - start) / 1000000;
+        if (!res.headersSent) {
+            res.setHeader('X-Response-Time', `${durationMs.toFixed(1)}ms`);
+        }
+        return originalWriteHead.apply(res, args);
+    };
+    res.on('finish', () => {
+        const durationMs = Number(process.hrtime.bigint() - start) / 1000000;
+        if (durationMs >= 500) {
+            (0, logger_1.devLog)(`[SLOW API] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
+        }
+    });
+    next();
+});
 app.use(express_1.default.json());
 app.use((0, cookie_parser_1.default)());
 // ── Req 7: Rate limit auth routes ──

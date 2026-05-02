@@ -27,10 +27,15 @@ export const getMyChildren = async (req: Request, res: Response) => {
 export const submitLeaveRequest = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const { student_id, leave_type, start_datetime, end_datetime, reason, status } = req.body;
+        const { student_id, leave_type, start_datetime, end_datetime, reason } = req.body;
 
         if (!student_id || !leave_type || !start_datetime || !end_datetime) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+
+        const allowedParentLeaveTypes = ['out-campus', 'on-campus'];
+        if (!allowedParentLeaveTypes.includes(leave_type)) {
+            return res.status(400).json({ success: false, error: 'Invalid leave type' });
         }
 
         // Verify this student actually belongs to this parent
@@ -46,7 +51,7 @@ export const submitLeaveRequest = async (req: Request, res: Response) => {
         const result = await db.query(
             `INSERT INTO student_leaves (student_id, leave_type, start_datetime, end_datetime, reason, status)
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [student_id, leave_type, start_datetime, end_datetime, reason || null, status || 'pending']
+            [student_id, leave_type, start_datetime, end_datetime, reason || null, 'pending']
         );
 
         res.json({ success: true, leave: result.rows[0] });

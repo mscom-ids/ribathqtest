@@ -3,6 +3,12 @@ import { db } from '../config/db';
 import { getStaffId, getDelegationContext } from '../utils/staff.utils';
 import { supabaseAdmin } from '../config/supabase';
 
+const SAFE_STAFF_COLUMNS = `
+    id, profile_id, name, role, phone, email, photo_url, address, place,
+    phone_contacts, staff_id, is_active, created_at
+`;
+const STAFF_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
+
 export const getMyStaffProfile = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
@@ -14,7 +20,7 @@ export const getMyStaffProfile = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
 
-        const result = await db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [staffId]);
+        const result = await db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [staffId]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
@@ -167,6 +173,10 @@ export const createStaffLogin = async (req: Request, res: Response) => {
     try {
         const { id } = req.params; // Staff ID
         const { password } = req.body;
+
+        if (!password || String(password).length < 8) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+        }
         
         const bcrypt = require('bcrypt'); // Lazy load
         const salt = await bcrypt.genSalt(10);
@@ -235,7 +245,7 @@ export const restoreStaff = async (req: Request, res: Response) => {
 
 export const getAllStaff = async (req: Request, res: Response) => {
     try {
-        const result = await db.query('SELECT * FROM staff ORDER BY name ASC');
+        const result = await db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff ORDER BY name ASC`);
         res.json({ success: true, staff: result.rows });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch staff' });
@@ -245,7 +255,7 @@ export const getAllStaff = async (req: Request, res: Response) => {
 export const getStaffById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const result = await db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [id]);
+        const result = await db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [id]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff not found' });
         }
@@ -297,7 +307,7 @@ export const updateStaffProfile = async (req: Request, res: Response) => {
 
         values.push(id);
         const result = await db.query(
-            `UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+            `UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING ${SAFE_STAFF_COLUMNS}`,
             values
         );
         res.json({ success: true, staff: result.rows[0] });
@@ -316,6 +326,12 @@ export const createStaff = async (req: Request, res: Response) => {
         }
 
         const selectedRole = role || 'usthad';
+        if (!STAFF_ROLES.includes(selectedRole)) {
+            return res.status(400).json({ success: false, error: 'Invalid staff role' });
+        }
+        if (password && String(password).length < 8) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+        }
         const finalEmail = email || `dummy-${Date.now()}@example.com`;
 
         let authUserId = null;
@@ -393,7 +409,7 @@ export const createStaff = async (req: Request, res: Response) => {
 
             const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
             const staffInsert = await client.query(
-                `INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+                `INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING ${SAFE_STAFF_COLUMNS}`,
                 values
             );
 

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "38f733f1-ebc0-429b-941f-c18946c34f53",
+    "title": "june exam",
+    "type": "School",
+    "start_date": "2026-04-04",
+    "end_date": "2026-04-06",
+    "is_active": true,
+    "created_at": "2026-04-04T12:25:08.460544+00:00",
+    "department": "School"
+  }
+]

@@ -3,6 +3,9 @@ import { db } from '../config/db';
 import crypto from 'crypto';
 import { getStaffId } from '../utils/staff.utils';
 
+const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+
 /** =============================
  *  SHARED / HELPERS
  *  ============================= */
@@ -20,7 +23,7 @@ export const getEligibleStudents = async (req: Request, res: Response) => {
         const params: any[] = [];
         let paramCount = 1;
 
-        if (user.role === 'staff') {
+        if (MENTOR_ROLES.includes(user.role)) {
             const staffId = await getStaffId(req);
             if (staffId) {
                 query += ` AND (s.hifz_mentor_id = $${paramCount} OR s.school_mentor_id = $${paramCount} OR s.madrasa_mentor_id = $${paramCount})`;
@@ -88,47 +91,7 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
                 );
             }
 
-            // 3. Find target students
-            let stuQuery = `SELECT adm_no, standard, school_standard, hifz_standard, madrassa_standard FROM students WHERE status = 'active'`;
-            const stuParams: any[] = [];
-            
-            if (!is_entire_institution && target_classes && target_classes.length > 0) {
-                const placeholders = target_classes.map((_: any, i: number) => `$${i + 1}`).join(',');
-                // Check if any standard matches
-                stuQuery += ` AND (standard IN (${placeholders}) OR school_standard IN (${placeholders}) OR hifz_standard IN (${placeholders}) OR madrassa_standard IN (${placeholders}))`;
-                stuParams.push(...target_classes);
-            }
-            const studentsRes = await client.query(stuQuery, stuParams);
-            let targetStudents = studentsRes.rows.map(s => s.adm_no);
-
-            // Filter out exceptions (stay in campus)
-            const exceptionSet = new Set(exceptions || []);
-            targetStudents = targetStudents.filter(id => !exceptionSet.has(id));
-
-            // 4. Bulk insert student_leaves (one round trip), capture returned ids,
-            // then bulk insert student_movements paired with them. Was 2N round trips.
-            if (targetStudents.length > 0) {
-                const slBulk = await client.query(
-                    `INSERT INTO student_leaves
-                         (student_id, institutional_leave_id, leave_type, start_datetime, end_datetime, status)
-                     SELECT sid, $2, 'institutional', $3, $4, 'outside'
-                     FROM unnest($1::text[]) AS t(sid)
-                     RETURNING id, student_id`,
-                    [targetStudents, inst_id, start_datetime, end_datetime]
-                );
-
-                const movementStudentIds = slBulk.rows.map((r: any) => r.student_id);
-                const movementLeaveIds   = slBulk.rows.map((r: any) => r.id);
-
-                await client.query(
-                    `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                     SELECT sid, lid, 'out', $1, $2
-                     FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
-                    [start_datetime, user.id, movementStudentIds, movementLeaveIds]
-                );
-            }
-
-            // 5. Cancel relevant class schedules for these dates
+            // 3. Cancel relevant class schedules for these dates
             // (For simplicity, if it's entire institution, we cancel all sessions on those dates)
             if (is_entire_institution) {
                 // Find all schedules
@@ -138,7 +101,7 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
             }
 
             await client.query('COMMIT');
-            res.status(201).json({ success: true, count: targetStudents.length, institutional_leave_id: inst_id });
+            res.status(201).json({ success: true, count: 0, institutional_leave_id: inst_id });
         } catch (e) {
             await client.query('ROLLBACK');
             throw e;
@@ -148,6 +111,189 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
     } catch (err) {
         console.error('Error creating institutional leave:', err);
         res.status(500).json({ success: false, error: 'Failed to create institutional leave' });
+    }
+};
+
+export const getInstitutionalEligibleStudents = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const user = (req as any).user;
+
+        const leaveRes = await db.query(`SELECT * FROM institutional_leaves WHERE id = $1`, [id]);
+        if (leaveRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Institutional leave not found' });
+        }
+
+        const leave = leaveRes.rows[0];
+        const targetClasses = Array.isArray(leave.target_classes) ? leave.target_classes : [];
+        const params: any[] = [id];
+        let query = `
+            SELECT s.adm_no, s.name,
+                   COALESCE(s.standard, s.school_standard, s.hifz_standard, s.madrassa_standard, 'Common') as standard,
+                   EXISTS (
+                       SELECT 1 FROM student_leaves sl
+                       WHERE sl.student_id = s.adm_no AND sl.status = 'outside'
+                   ) as is_outside,
+                   EXISTS (
+                       SELECT 1 FROM student_leaves sl
+                       WHERE sl.student_id = s.adm_no AND sl.institutional_leave_id = $1
+                   ) as has_institutional_record
+            FROM students s
+            WHERE s.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM leave_exceptions le
+                  WHERE le.institutional_leave_id = $1 AND le.student_id = s.adm_no
+              )
+        `;
+
+        if (!leave.is_entire_institution) {
+            params.push(targetClasses);
+            query += ` AND (
+                s.standard = ANY($2::text[])
+                OR s.school_standard = ANY($2::text[])
+                OR s.hifz_standard = ANY($2::text[])
+                OR s.madrassa_standard = ANY($2::text[])
+            )`;
+        }
+
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            const idx = params.length + 1;
+            query += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+            params.push(staffId);
+        }
+
+        query += ` ORDER BY s.name`;
+        const result = await db.query(query, params);
+        res.json({ success: true, students: result.rows });
+    } catch (err) {
+        console.error('Error fetching institutional eligible students:', err);
+        res.status(500).json({ success: false, error: 'Failed to fetch students' });
+    }
+};
+
+export const markInstitutionalExit = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { student_id, student_ids, exit_datetime, companion_name, companion_relationship } = req.body;
+        const user = (req as any).user;
+        const requestedIds = Array.isArray(student_ids) ? student_ids : (student_id ? [student_id] : []);
+
+        if (requestedIds.length === 0) {
+            return res.status(400).json({ success: false, error: 'Select at least one student' });
+        }
+        if (!exit_datetime) {
+            return res.status(400).json({ success: false, error: 'Exit time is required' });
+        }
+        if (!companion_name?.trim() || !companion_relationship?.trim()) {
+            return res.status(400).json({ success: false, error: 'Going with and relationship are required' });
+        }
+
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+
+            const leaveRes = await client.query(`SELECT * FROM institutional_leaves WHERE id = $1 FOR UPDATE`, [id]);
+            if (leaveRes.rows.length === 0) {
+                throw new Error('Institutional leave not found');
+            }
+
+            const inst = leaveRes.rows[0];
+            const exitTime = new Date(exit_datetime);
+            if (exitTime < new Date(inst.start_datetime) || exitTime > new Date(inst.end_datetime)) {
+                throw new Error('Exit time must be within the institutional leave window');
+            }
+
+            const targetClasses = Array.isArray(inst.target_classes) ? inst.target_classes : [];
+            const params: any[] = [requestedIds, id];
+            let studentQuery = `
+                SELECT s.adm_no
+                FROM students s
+                WHERE s.status = 'active'
+                  AND s.adm_no = ANY($1::text[])
+                  AND NOT EXISTS (
+                      SELECT 1 FROM leave_exceptions le
+                      WHERE le.institutional_leave_id = $2 AND le.student_id = s.adm_no
+                  )
+            `;
+
+            if (!inst.is_entire_institution) {
+                params.push(targetClasses);
+                studentQuery += ` AND (
+                    s.standard = ANY($3::text[])
+                    OR s.school_standard = ANY($3::text[])
+                    OR s.hifz_standard = ANY($3::text[])
+                    OR s.madrassa_standard = ANY($3::text[])
+                )`;
+            }
+
+            if (MENTOR_ROLES.includes(user.role)) {
+                const staffId = await getStaffId(req);
+                if (!staffId) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ success: false, error: 'Staff profile not found' });
+                }
+                const idx = params.length + 1;
+                studentQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+                params.push(staffId);
+            }
+
+            const studentsRes = await client.query(studentQuery, params);
+            const allowedIds = studentsRes.rows.map((r: any) => r.adm_no);
+            if (allowedIds.length !== requestedIds.length) {
+                throw new Error('One or more selected students are not eligible for this institutional leave');
+            }
+
+            const openCheck = await client.query(
+                `SELECT student_id FROM student_leaves WHERE student_id = ANY($1::text[]) AND status = 'outside'`,
+                [allowedIds]
+            );
+            if (openCheck.rows.length > 0) {
+                throw new Error('One or more selected students are already outside campus');
+            }
+
+            const existingCheck = await client.query(
+                `SELECT student_id FROM student_leaves WHERE student_id = ANY($1::text[]) AND institutional_leave_id = $2`,
+                [allowedIds, id]
+            );
+            if (existingCheck.rows.length > 0) {
+                throw new Error('Exit has already been recorded for one or more selected students');
+            }
+
+            const slBulk = await client.query(
+                `INSERT INTO student_leaves
+                     (student_id, institutional_leave_id, leave_type, start_datetime, end_datetime, reason, reason_category,
+                      companion_name, companion_relationship, status, created_by)
+                 SELECT sid, $2, 'institutional', $3, $4, $5, 'Institutional Leave', $6, $7, 'outside', $8
+                 FROM unnest($1::text[]) AS t(sid)
+                 RETURNING id, student_id`,
+                [allowedIds, id, exit_datetime, inst.end_datetime, inst.name, companion_name.trim(), companion_relationship.trim(), user.id]
+            );
+
+            const movementStudentIds = slBulk.rows.map((r: any) => r.student_id);
+            const movementLeaveIds = slBulk.rows.map((r: any) => r.id);
+
+            await client.query(
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                 SELECT sid, lid, 'out', $1, $2
+                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                [exit_datetime, user.id, movementStudentIds, movementLeaveIds]
+            );
+
+            await client.query('COMMIT');
+            res.status(201).json({ success: true, count: allowedIds.length });
+        } catch (e: any) {
+            await client.query('ROLLBACK');
+            res.status(400).json({ success: false, error: e.message });
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        console.error('Error marking institutional exit:', err);
+        res.status(500).json({ success: false, error: 'Failed to mark exit' });
     }
 };
 
@@ -228,7 +374,7 @@ export const deleteInstitutionalLeave = async (req: Request, res: Response) => {
 export const bulkRecordReturn = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { return_datetime, standard } = req.body;
+        const { return_datetime, standard, leave_ids } = req.body;
         const user = (req as any).user;
 
         if (!return_datetime) return res.status(400).json({ success: false, error: "Return time required" });
@@ -238,7 +384,7 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
             await client.query('BEGIN');
 
             let studentLeavesQuery = `
-                SELECT sl.id, sl.student_id 
+                SELECT sl.id, sl.student_id, sl.end_datetime
                 FROM student_leaves sl
                 JOIN students s ON sl.student_id = s.adm_no
                 WHERE sl.institutional_leave_id = $1 AND sl.status = 'outside'
@@ -246,8 +392,26 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
             const params: any[] = [id];
 
             if (standard && standard !== "All") {
-                studentLeavesQuery += ` AND s.standard = $2`;
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND s.standard = $${idx}`;
                 params.push(standard);
+            }
+
+            if (Array.isArray(leave_ids) && leave_ids.length > 0) {
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND sl.id = ANY($${idx}::uuid[])`;
+                params.push(leave_ids);
+            }
+
+            if (MENTOR_ROLES.includes(user.role)) {
+                const staffId = await getStaffId(req);
+                if (!staffId) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ success: false, error: 'Staff profile not found' });
+                }
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+                params.push(staffId);
             }
 
             const pending = await client.query(studentLeavesQuery, params);
@@ -263,16 +427,19 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
 
             await client.query(
                 `UPDATE student_leaves
-                 SET status = 'returned', actual_return_datetime = $1, return_status = 'normal'
+                 SET status = 'returned',
+                     actual_return_datetime = $1,
+                     return_status = CASE WHEN end_datetime IS NOT NULL AND $1::timestamptz > end_datetime THEN 'late' ELSE 'normal' END,
+                     updated_at = NOW()
                  WHERE id = ANY($2::uuid[])`,
                 [return_datetime, leaveIds]
             );
 
             await client.query(
-                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                 SELECT sid, lid, 'in', $1, $2
-                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
-                [return_datetime, user.id, studentIds, leaveIds]
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, is_late, recorded_by)
+                 SELECT sid, lid, 'in', $1, $1::timestamptz > end_dt, $2
+                 FROM unnest($3::text[], $4::uuid[], $5::timestamptz[]) AS t(sid, lid, end_dt)`,
+                [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r: any) => r.end_datetime)]
             );
 
             await client.query('COMMIT');
@@ -292,15 +459,27 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
 export const getGroupLeaveStudents = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const query = `
+        const user = (req as any).user;
+        const params: any[] = [id];
+        let query = `
             SELECT sl.id as leave_id, sl.student_id, sl.status, sl.return_status, sl.actual_return_datetime,
                    s.name, COALESCE(s.standard, s.school_standard, s.hifz_standard, 'Common') as standard, s.adm_no
             FROM student_leaves sl
             JOIN students s ON sl.student_id = s.adm_no
             WHERE sl.group_id = $1
-            ORDER BY s.name
         `;
-        const result = await db.query(query, [id]);
+
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            query += ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
+            params.push(staffId);
+        }
+
+        query += ` ORDER BY s.name`;
+        const result = await db.query(query, params);
         res.json({ success: true, students: result.rows });
     } catch (err) {
         console.error('Error fetching group leave students:', err);
@@ -311,7 +490,7 @@ export const getGroupLeaveStudents = async (req: Request, res: Response) => {
 export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { return_datetime, standard } = req.body;
+        const { return_datetime, standard, leave_ids } = req.body;
         const user = (req as any).user;
 
         if (!return_datetime) return res.status(400).json({ success: false, error: "Return time required" });
@@ -321,7 +500,7 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
             await client.query('BEGIN');
 
             let studentLeavesQuery = `
-                SELECT sl.id, sl.student_id 
+                SELECT sl.id, sl.student_id, sl.end_datetime
                 FROM student_leaves sl
                 JOIN students s ON sl.student_id = s.adm_no
                 WHERE sl.group_id = $1 AND sl.status = 'outside'
@@ -329,8 +508,26 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
             const params: any[] = [id];
 
             if (standard && standard !== "All") {
-                studentLeavesQuery += ` AND s.standard = $2`;
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND s.standard = $${idx}`;
                 params.push(standard);
+            }
+
+            if (Array.isArray(leave_ids) && leave_ids.length > 0) {
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND sl.id = ANY($${idx}::uuid[])`;
+                params.push(leave_ids);
+            }
+
+            if (MENTOR_ROLES.includes(user.role)) {
+                const staffId = await getStaffId(req);
+                if (!staffId) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ success: false, error: 'Staff profile not found' });
+                }
+                const idx = params.length + 1;
+                studentLeavesQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+                params.push(staffId);
             }
 
             const pending = await client.query(studentLeavesQuery, params);
@@ -346,16 +543,19 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
 
             await client.query(
                 `UPDATE student_leaves
-                 SET status = 'returned', actual_return_datetime = $1, return_status = 'normal'
+                 SET status = 'returned',
+                     actual_return_datetime = $1,
+                     return_status = CASE WHEN end_datetime IS NOT NULL AND $1::timestamptz > end_datetime THEN 'late' ELSE 'normal' END,
+                     updated_at = NOW()
                  WHERE id = ANY($2::uuid[])`,
                 [return_datetime, leaveIds]
             );
 
             await client.query(
-                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                 SELECT sid, lid, 'in', $1, $2
-                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
-                [return_datetime, user.id, studentIds, leaveIds]
+                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, is_late, recorded_by)
+                 SELECT sid, lid, 'in', $1, end_dt IS NOT NULL AND $1::timestamptz > end_dt, $2
+                 FROM unnest($3::text[], $4::uuid[], $5::timestamptz[]) AS t(sid, lid, end_dt)`,
+                [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r: any) => r.end_datetime)]
             );
 
             await client.query('COMMIT');
@@ -398,12 +598,29 @@ export const createPersonalLeave = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Invalid leave type' });
         }
 
-        if (leave_type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+        if (leave_type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role)) {
             return res.status(403).json({ success: false, error: 'Outdoor movements can only be created by admin users' });
         }
 
         if (['out-campus', 'outdoor'].includes(leave_type) && (!companion_name?.trim() || !companion_relationship?.trim())) {
             return res.status(400).json({ success: false, error: 'Going with and relationship are required' });
+        }
+
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            const assignedRes = await db.query(
+                `SELECT 1 FROM students
+                 WHERE adm_no = $1
+                   AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
+                 LIMIT 1`,
+                [student_id, staffId]
+            );
+            if (assignedRes.rows.length === 0) {
+                return res.status(403).json({ success: false, error: 'Not authorized for this student' });
+            }
         }
 
         const client = await db.getClient();
@@ -548,18 +765,29 @@ export const getLeavesFilter = async (req: Request, res: Response) => {
         const { type } = req.query; // 'out-campus', 'on-campus'
         const user = (req as any).user;
 
-        if (type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+        if (type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role)) {
             return res.status(403).json({ success: false, error: 'Outdoor movements are admin-only' });
         }
 
-        const query = `
+        const params: any[] = [type];
+        let query = `
             SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
             FROM student_leaves sl
             JOIN students s ON sl.student_id = s.adm_no
             WHERE sl.leave_type = $1
-            ORDER BY sl.created_at DESC
         `;
-        const result = await db.query(query, [type]);
+
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            query += ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
+            params.push(staffId);
+        }
+
+        query += ` ORDER BY sl.created_at DESC`;
+        const result = await db.query(query, params);
         
         const leavesMap = new Map();
         const groupedLeaves: any[] = [];
@@ -618,9 +846,28 @@ export const recordReturn = async (req: Request, res: Response) => {
             if (leaveRes.rows.length === 0) throw new Error('Leave not found');
             const leave = leaveRes.rows[0];
 
-            if (leave.leave_type === 'outdoor' && !['admin', 'principal', 'vice_principal', 'controller'].includes(user.role)) {
+            if (leave.leave_type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role)) {
                 await client.query('ROLLBACK');
                 return res.status(403).json({ success: false, error: 'Outdoor movements can only be controlled by admin users' });
+            }
+
+            if (MENTOR_ROLES.includes(user.role)) {
+                const staffId = await getStaffId(req);
+                if (!staffId) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ success: false, error: 'Staff profile not found' });
+                }
+                const assignedRes = await client.query(
+                    `SELECT 1 FROM students
+                     WHERE adm_no = $1
+                       AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
+                     LIMIT 1`,
+                    [leave.student_id, staffId]
+                );
+                if (assignedRes.rows.length === 0) {
+                    await client.query('ROLLBACK');
+                    return res.status(403).json({ success: false, error: 'Not authorized for this student' });
+                }
             }
 
             if (leave.status === 'returned' || leave.status === 'completed') throw new Error('Leave has already been closed');
@@ -688,15 +935,25 @@ export const getMovementHistory = async (req: Request, res: Response) => {
 export const getActiveLeaves = async (req: Request, res: Response) => {
     try {
         const { student_ids } = req.query;
-        let query = `SELECT * FROM student_leaves WHERE status = 'outside'`;
+        const user = (req as any).user;
+        let query = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside'`;
         const params: any[] = [];
         if (student_ids && typeof student_ids === 'string') {
             const ids = student_ids.split(',');
             if (ids.length > 0) {
                 const placeholders = ids.map((_, i) => `$${i+1}`).join(',');
-                query += ` AND student_id IN (${placeholders})`;
+                query += ` AND sl.student_id IN (${placeholders})`;
                 params.push(...ids);
             }
+        }
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            const idx = params.length + 1;
+            query += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+            params.push(staffId);
         }
         const result = await db.query(query, params);
         res.json({ success: true, leaves: result.rows });
@@ -713,7 +970,18 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
 export const getOutsideStudents = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const canViewOutdoor = ['admin', 'principal', 'vice_principal', 'controller'].includes(user.role);
+        const canViewOutdoor = ADMIN_LEAVE_ROLES.includes(user.role);
+        const params: any[] = [canViewOutdoor];
+        let assignmentFilter = '';
+
+        if (MENTOR_ROLES.includes(user.role)) {
+            const staffId = await getStaffId(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            assignmentFilter = ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
+            params.push(staffId);
+        }
 
         // Step 1: get all outside leaves with student + institutional leave info + mentor names
         const leavesRes = await db.query(`
@@ -747,8 +1015,9 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
             LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
             WHERE sl.status = 'outside'
               AND ($1::boolean OR sl.leave_type <> 'outdoor')
+              ${assignmentFilter}
             ORDER BY sl.start_datetime DESC
-        `, [canViewOutdoor]);
+        `, params);
 
         if (leavesRes.rows.length === 0) {
             return res.json({ success: true, students: [] });

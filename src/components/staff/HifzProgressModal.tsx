@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
     format, startOfMonth, endOfMonth, subDays, isWithinInterval,
     eachDayOfInterval, getDay,
@@ -64,6 +64,29 @@ const MODE_DOT: Record<string, string> = {
     "Juz Revision": "bg-emerald-500",
     "Juz Revision (New)": "bg-blue-500",
     "Juz Revision (Old)": "bg-emerald-500",
+}
+
+function getLogPages(log: Log) {
+    const sid = getSurahId(log.surah_name || "")
+    if (sid && log.start_v && log.end_v) {
+        return calculatePages(sid, log.start_v, sid, log.end_v)
+    }
+    if (log.start_page && log.end_page) {
+        return log.start_page === log.end_page ? 0.5 : log.end_page - log.start_page + 1
+    }
+    return 0
+}
+
+function getJuzPortionValue(portion?: string) {
+    if (portion === "Full") return 1
+    if (portion?.includes("Half")) return 0.5
+    if (portion?.startsWith("Q")) return 0.25
+    return portion ? 1 : 0
+}
+
+function formatVolume(value: number, unit: string) {
+    const rounded = Math.round((value + Number.EPSILON) * 100) / 100
+    return `${rounded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`
 }
 
 // ── Week grouper (same logic as admin progress-tab) ──────────────────────────
@@ -133,18 +156,32 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             }
         })
 
-        const totalNewHafiz = dayRows.filter(d => d.newRevHafizEntries.length > 0).length
-        const totalOldHafiz = dayRows.filter(d => d.oldRevHafizEntries.length > 0).length
+        const weekStart = week.days[0]
+        const weekEnd = week.days[week.days.length - 1]
+        const weekLogs = monthLogs.filter(l =>
+            isWithinInterval(new Date(l.entry_date), { start: weekStart, end: weekEnd })
+        )
 
         return {
             weekNum: week.weekNum,
             days: dayRows,
             summary: {
-                totalNew: dayRows.filter(d => d.newHifzEntries.length > 0).length,
-                totalRecent: dayRows.filter(d => d.recentRevEntries.length > 0).length,
-                totalJuz: dayRows.filter(d => d.juzRevEntries.length > 0).length,
-                totalNewHafiz,
-                totalOldHafiz,
+                totalNewPages: weekLogs
+                    .filter(l => l.mode === "New Verses")
+                    .reduce((sum, log) => sum + getLogPages(log), 0),
+                totalRecentPages: weekLogs
+                    .filter(l => l.mode === "Recent Revision")
+                    .reduce((sum, log) => sum + getLogPages(log), 0),
+                totalRecentDays: dayRows.filter(d => d.recentRevEntries.length > 0).length,
+                totalJuz: weekLogs
+                    .filter(l => l.mode === "Juz Revision")
+                    .reduce((sum, log) => sum + getJuzPortionValue(log.juz_portion), 0),
+                totalNewHafizJuz: weekLogs
+                    .filter(l => l.mode === "Juz Revision (New)")
+                    .reduce((sum, log) => sum + getJuzPortionValue(log.juz_portion), 0),
+                totalOldHafizJuz: weekLogs
+                    .filter(l => l.mode === "Juz Revision (Old)")
+                    .reduce((sum, log) => sum + getJuzPortionValue(log.juz_portion), 0),
             },
         }
     })
@@ -157,21 +194,8 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
     const [allLogs, setAllLogs] = useState<Log[]>([])
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
     const [lifetimeLogs, setLifetimeLogs] = useState<Log[]>([])
-    const [isHafiz, setIsHafiz] = useState(false)
 
-    // Reset month when a new student is opened
-    useEffect(() => {
-        if (!open || !student) return
-        setReportMonth(new Date())
-    }, [open, student?.adm_no])
-
-    // Reload on month change
-    useEffect(() => {
-        if (!open || !student) return
-        load()
-    }, [open, student?.adm_no, reportMonth])
-
-    async function load() {
+    const load = useCallback(async () => {
         if (!student) return
         setLoading(true)
         try {
@@ -206,7 +230,21 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             setLifetimeLogs(lifetimeRes.data?.logs || [])
         } catch { /* non-blocking */ }
         setLoading(false)
-    }
+    }, [reportMonth, student])
+
+    // Reset month when a new student is opened
+    useEffect(() => {
+        if (!open || !student) return
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setReportMonth(new Date())
+    }, [open, student])
+
+    // Reload on month change
+    useEffect(() => {
+        if (!open || !student) return
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        load()
+    }, [load, open, student])
 
     // ── Derived stats ────────────────────────────────────────────────────────
     const stats = useMemo(() => {
@@ -300,7 +338,6 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
         }
 
         const calcTotalJuz = Math.min(Math.floor(lifetimePages / 20), 30)
-        setIsHafiz(calcTotalJuz >= 30)
 
         return {
             hifzPages: parseFloat(hifzPages.toFixed(2)),
@@ -311,6 +348,8 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             oldRevisionCount: oldRevCount,
         }
     }, [allLogs, lifetimeLogs, reportMonth])
+
+    const isHafiz = stats.totalJuz >= 30
 
     // ── Weekly report ────────────────────────────────────────────────────────
     const weeklyReport = useMemo(() =>
@@ -553,14 +592,18 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                                                             <td className="py-2 px-3 text-slate-500">Summary</td>
                                                             {isHafiz ? (
                                                                 <>
-                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNewHafiz} entries</td>
-                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalOldHafiz} entries</td>
+                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{formatVolume(week.summary.totalNewHafizJuz, "Juz")}</td>
+                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{formatVolume(week.summary.totalOldHafizJuz, "Juz")}</td>
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{week.summary.totalNew} entries</td>
-                                                                    <td className="py-2 px-2 text-orange-600 dark:text-orange-400">{week.summary.totalRecent} entries</td>
-                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{week.summary.totalJuz} entries</td>
+                                                                    <td className="py-2 px-2 text-blue-600 dark:text-blue-400">{formatVolume(week.summary.totalNewPages, "pages")}</td>
+                                                                    <td className="py-2 px-2 text-orange-600 dark:text-orange-400">
+                                                                        {week.summary.totalRecentPages > 0
+                                                                            ? formatVolume(week.summary.totalRecentPages, "pages")
+                                                                            : `${week.summary.totalRecentDays} days`}
+                                                                    </td>
+                                                                    <td className="py-2 px-2 text-emerald-600 dark:text-emerald-400">{formatVolume(week.summary.totalJuz, "Juz")}</td>
                                                                 </>
                                                             )}
                                                         </tr>

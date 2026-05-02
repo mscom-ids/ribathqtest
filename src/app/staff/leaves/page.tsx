@@ -1,11 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, RefreshCw, UserCheck, Building2, ArrowLeftRight, MapPin } from "lucide-react"
+import { Plus, Search, RefreshCw, UserCheck, Building2, ArrowLeftRight, MapPin, LogOut } from "lucide-react"
+import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import api from "@/lib/api"
 import { PersonalLeaveModal } from "@/app/admin/leaves/personal-modal"
+import { InstitutionalExitModal } from "@/app/admin/leaves/institutional-exit-modal"
 import { OutsideStudentsPanel } from "@/app/admin/leaves/tabs/outside-students-panel"
 import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
 
@@ -28,6 +31,23 @@ export interface StudentLeave {
     }
 }
 
+type InstitutionalLeave = {
+    id: string
+    name: string
+    start_datetime: string
+    end_datetime: string
+    target_classes: string[]
+    is_entire_institution: boolean
+    total_students: string
+    returned_students: string
+    created_at: string
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    const maybeError = error as { response?: { data?: { error?: string } } }
+    return maybeError.response?.data?.error || fallback
+}
+
 type TabKey = "outside" | "institutional" | "internal"
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
@@ -38,6 +58,7 @@ const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
 
 export default function StaffLeavesPage() {
     const [leaves, setLeaves] = useState<StudentLeave[]>([])
+    const [institutionalWindows, setInstitutionalWindows] = useState<InstitutionalLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [outsideCount, setOutsideCount] = useState(0)
@@ -45,23 +66,29 @@ export default function StaffLeavesPage() {
 
     // null = closed, 'out-campus' or 'on-campus' = which modal is open
     const [leaveModalType, setLeaveModalType] = useState<'out-campus' | 'on-campus' | null>(null)
+    const [leaveForExit, setLeaveForExit] = useState<InstitutionalLeave | null>(null)
 
     const fetchLeaves = async () => {
         setLoading(true)
         try {
-            const [leavesRes, outsideRes] = await Promise.all([
+            const [leavesRes, outsideRes, institutionalRes] = await Promise.all([
                 api.get('/staff/me/leaves'),
                 api.get('/leaves/outside-students'),
+                api.get('/leaves/institutional'),
             ])
             if (leavesRes.data.success) setLeaves(leavesRes.data.leaves || [])
             if (outsideRes.data.success) setOutsideCount(outsideRes.data.students?.length || 0)
+            if (institutionalRes.data.success) setInstitutionalWindows(institutionalRes.data.leaves || [])
         } catch (err) {
             console.error("Error fetching leaves:", err)
         }
         setLoading(false)
     }
 
-    useEffect(() => { fetchLeaves() }, [])
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void fetchLeaves()
+    }, [])
 
     const filtered = leaves.filter(l =>
         l.student?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -78,9 +105,9 @@ export default function StaffLeavesPage() {
                 return_datetime: new Date().toISOString(),
             })
             await fetchLeaves()
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to record return:', err)
-            alert(err?.response?.data?.error || 'Failed to record return')
+            alert(getErrorMessage(err, 'Failed to record return'))
         }
     }
 
@@ -164,9 +191,53 @@ export default function StaffLeavesPage() {
 
                 {activeTab === "institutional" && (
                     <div className="space-y-3">
-                        <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                            Institutional leaves are managed by admin. Use <strong className="text-slate-700 dark:text-gray-300">Outside</strong> tab to record student returns.
+                        <div className="flex justify-between items-center">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Select an institutional window and record actual student exits.</p>
+                            <Button variant="outline" size="sm" onClick={fetchLeaves} className="gap-2 rounded-lg border-gray-200 dark:border-gray-700">
+                                <RefreshCw className="h-3.5 w-3.5" />
+                                Refresh
+                            </Button>
                         </div>
+                        {institutionalWindows.length === 0 ? (
+                            <div className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                                No institutional leave windows are available.
+                            </div>
+                        ) : institutionalWindows.map(leave => {
+                            const status = new Date(leave.end_datetime) < new Date()
+                                ? "Ended"
+                                : new Date(leave.start_datetime) > new Date()
+                                    ? "Scheduled"
+                                    : "Active"
+
+                            return (
+                                <div key={leave.id} className="bg-white dark:bg-[#0f172a] rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h2 className="font-semibold text-slate-900 dark:text-white truncate">{leave.name}</h2>
+                                                <Badge variant="outline" className={status === "Active" ? "text-emerald-700 border-emerald-300" : status === "Scheduled" ? "text-blue-600 border-blue-300" : "text-slate-500 border-slate-300"}>
+                                                    {status}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                {format(new Date(leave.start_datetime), "MMM d, h:mm a")} to {format(new Date(leave.end_datetime), "MMM d, h:mm a")}
+                                            </p>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => setLeaveForExit(leave)}
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0"
+                                        >
+                                            <LogOut className="h-3.5 w-3.5" />
+                                            Mark Exit
+                                        </Button>
+                                    </div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                        {leave.is_entire_institution ? "Entire Institution" : `Classes: ${leave.target_classes?.join(", ") || "N/A"}`}
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
                 )}
 
@@ -211,6 +282,12 @@ export default function StaffLeavesPage() {
                 type="on-campus"
                 open={leaveModalType === 'on-campus'}
                 onOpenChange={(open) => !open && setLeaveModalType(null)}
+                onSuccess={fetchLeaves}
+            />
+            <InstitutionalExitModal
+                leave={leaveForExit}
+                open={!!leaveForExit}
+                onOpenChange={(open) => !open && setLeaveForExit(null)}
                 onSuccess={fetchLeaves}
             />
         </div>

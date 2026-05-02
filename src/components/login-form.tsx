@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -12,8 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import api from "@/lib/api"
-import Cookies from "js-cookie"
 import { getRedirectPathForRole } from "@/lib/auth"
 
 const formSchema = z.object({
@@ -22,7 +19,6 @@ const formSchema = z.object({
 })
 
 export default function LoginForm() {
-    const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -41,11 +37,13 @@ export default function LoginForm() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
             
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+            const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+            const API_URL = configuredApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`);
             const res = await fetch(`${API_URL}/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: values.email, password: values.password }),
+                credentials: 'include',
                 signal: controller.signal
             });
             
@@ -59,15 +57,7 @@ export default function LoginForm() {
 
             console.log('[LOGIN] Response:', data.success, 'role:', data.user?.role)
 
-            if (data.success && data.token) {
-                Cookies.set('auth_token', data.token, {
-                    expires: 7,
-                    secure: process.env.NODE_ENV === 'production',
-                    sameSite: 'strict',
-                    path: '/'
-                })
-                console.log('[LOGIN] Token saved to cookie')
-                
+            if (data.success && data.user) {
                 const profile = data.user
                 if (profile) {
                     const path = getRedirectPathForRole(profile.role)
@@ -80,12 +70,13 @@ export default function LoginForm() {
             } else {
                 setError(data.error || "Failed to login")
             }
-        } catch (err: any) {
-            console.error('[LOGIN] Error:', err.name, err.message)
-            if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+            const error = err instanceof Error ? err : new Error("Failed to login")
+            console.error('[LOGIN] Error:', error.name, error.message)
+            if (error.name === 'AbortError') {
                 setError("Login request timed out. Please ensure the backend server is running.");
             } else {
-                setError(err.message || "Failed to login")
+                setError(error.message || "Failed to login")
             }
         } finally {
             setLoading(false)
@@ -96,7 +87,7 @@ export default function LoginForm() {
         <Card className="w-full max-w-md mx-auto shadow-2xl border-emerald-100 dark:border-emerald-900 bg-white/50 dark:bg-slate-950/50 backdrop-blur-xl">
             <CardHeader className="space-y-1">
                 <CardTitle className="text-2xl font-bold text-center text-emerald-800 dark:text-emerald-400">
-                    MA'DIN RIBATHUL QURAN
+                    MA&apos;DIN RIBATHUL QURAN
                 </CardTitle>
                 <CardDescription className="text-center">
                     Enter your credentials to access the portal

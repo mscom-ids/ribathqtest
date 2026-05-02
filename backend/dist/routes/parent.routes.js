@@ -6,6 +6,7 @@ const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 // All parent routes need JWT auth
 router.use(auth_middleware_1.verifyToken);
+router.use((0, auth_middleware_1.requireRole)(['parent']));
 // GET /api/parent/children
 router.get('/children', parent_controller_1.getMyChildren);
 // POST /api/parent/leaves

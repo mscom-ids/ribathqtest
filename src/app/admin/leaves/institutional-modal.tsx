@@ -11,6 +11,18 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import api from "@/lib/api"
 
+type EligibleStudent = {
+    adm_no: string
+    name: string
+    standard: string
+    is_outside: boolean
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    const maybeError = error as { response?: { data?: { error?: string } } }
+    return maybeError.response?.data?.error || fallback
+}
+
 export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: boolean, onOpenChange: (open: boolean) => void, onSuccess: () => void }) {
     const [loading, setLoading] = useState(false)
     const [name, setName] = useState("Monthly Leave")
@@ -20,7 +32,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
     const [targetClasses, setTargetClasses] = useState<string[]>([])
     const [exceptions, setExceptions] = useState<string[]>([])
 
-    const [allStudents, setAllStudents] = useState<any[]>([])
+    const [allStudents, setAllStudents] = useState<EligibleStudent[]>([])
 
     const [searchQuery, setSearchQuery] = useState("")
 
@@ -42,7 +54,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                     const res = await api.get('/leaves/eligible-students')
                     if (res.data.success) {
                         // filter out those currently outside
-                        setAllStudents(res.data.students.filter((s:any) => !s.is_outside))
+                        setAllStudents(res.data.students.filter((s: EligibleStudent) => !s.is_outside))
                     }
                 } catch (e) {
                     console.error(e)
@@ -86,14 +98,14 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
             }
             const res = await api.post('/leaves/institutional', payload)
             if (res.data.success) {
-                toast.success(`Leave created! Affected ${res.data.count} students.`)
+                toast.success("Institutional leave window created")
                 onSuccess()
                 onOpenChange(false)
             } else {
                 toast.error(res.data.error || "Failed to create leave")
             }
-        } catch (error: any) {
-            toast.error(error?.response?.data?.error || "An error occurred")
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, "An error occurred"))
         } finally {
             setLoading(false)
         }
@@ -117,7 +129,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                 <DialogHeader>
                     <DialogTitle>Create Institutional Leave</DialogTitle>
                     <DialogDescription>
-                        This will automatically mark selected students as OUTSIDE the campus and cancel their classes within the date range.
+                        This defines the permission window only. Students are marked outside later when their actual exit is recorded.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -174,7 +186,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
 
                     <div className="space-y-2">
                         <Label className="font-semibold text-base">Exceptions (Stay in Campus)</Label>
-                        <p className="text-xs text-slate-500 pb-1">Students selected here will stay on campus. Their classes will still be cancelled.</p>
+                        <p className="text-xs text-slate-500 pb-1">Students selected here cannot be released under this institutional leave.</p>
 
                         {!hasPool ? (
                             <p className="text-sm text-center py-4 text-slate-400 border rounded-md bg-slate-50 dark:bg-slate-900/50">
@@ -225,7 +237,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
                         <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Create Leave & Release Students
+                            Create Leave Window
                         </Button>
                     </DialogFooter>
                 </form>

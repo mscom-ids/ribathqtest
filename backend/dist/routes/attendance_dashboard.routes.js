@@ -4,6 +4,7 @@ const express_1 = require("express");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const attendance_dashboard_controller_1 = require("../controllers/attendance_dashboard.controller");
 const router = (0, express_1.Router)();
+const ATTENDANCE_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 // Protect all routes
 router.use(auth_middleware_1.verifyToken);
 router.use(auth_middleware_1.verifyDelegation);
@@ -21,7 +22,7 @@ router.get('/mentor-schedules', attendance_dashboard_controller_1.getMentorSched
 router.get('/students', attendance_dashboard_controller_1.getStudentsForSchedule);
 router.get('/marks', attendance_dashboard_controller_1.getStudentMarksForSchedule);
 router.post('/mark', attendance_dashboard_controller_1.markAttendance);
-router.post('/cancel', attendance_dashboard_controller_1.cancelSession);
+router.post('/cancel', (0, auth_middleware_1.requireRole)(ATTENDANCE_MANAGE_ROLES), attendance_dashboard_controller_1.cancelSession);
 // Breaks endpoints
 router.get('/breaks', attendance_dashboard_controller_1.getBreaks);
 router.post('/breaks/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), attendance_dashboard_controller_1.updateBreak);

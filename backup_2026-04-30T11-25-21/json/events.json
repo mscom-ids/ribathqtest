@@ -1,0 +1,15 @@
+[
+  {
+    "id": "11754fca-2b3d-4868-b555-b1da4c63b2b9",
+    "title": "Staff Meeting",
+    "category": "Meeting",
+    "event_for": "All",
+    "target_roles": null,
+    "start_date": "2026-04-15",
+    "end_date": "2026-04-15",
+    "start_time": "11:00:00",
+    "end_time": "13:00:00",
+    "message": "Staff meeting will be held on 15/04/26",
+    "created_at": "2026-04-14T12:36:18.248899"
+  }
+]

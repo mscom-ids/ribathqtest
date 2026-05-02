@@ -37,6 +37,8 @@ exports.downloadStudentsExcel = exports.exportStudents = exports.updateStudent =
 const XLSX = __importStar(require("xlsx"));
 const db_1 = require("../config/db");
 const logger_1 = require("../utils/logger");
+const staff_utils_1 = require("../utils/staff.utils");
+const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 // Columns required for the listing/grid views and the dashboard. Excludes the
 // heavy `comprehensive_details` JSON blob and `address` text — callers that
 // actually need those should fetch the single student via /students/:id.
@@ -52,6 +54,16 @@ const getAllStudents = async (req, res) => {
         let query = `SELECT ${cols} FROM students WHERE 1=1`;
         const params = [];
         let paramCount = 1;
+        const user = req.user;
+        if (MENTOR_ROLES.includes(user?.role)) {
+            const staffId = await (0, staff_utils_1.getStaffId)(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            query += ` AND (hifz_mentor_id = $${paramCount} OR school_mentor_id = $${paramCount} OR madrasa_mentor_id = $${paramCount})`;
+            params.push(staffId);
+            paramCount++;
+        }
         if (search) {
             query += ` AND (name ILIKE $${paramCount} OR adm_no ILIKE $${paramCount})`;
             params.push(`%${search}%`);
@@ -133,9 +145,20 @@ const getStudentById = async (req, res) => {
         // ?light=true skips the heavy comprehensive_details JSON for callers like
         // the daily-entry form that only need name + a couple of flags.
         const cols = light === 'true' ? LIGHT_STUDENT_COLS : '*';
+        const user = req.user;
+        const params = [id];
+        let studentQuery = `SELECT ${cols} FROM students WHERE adm_no = $1`;
+        if (MENTOR_ROLES.includes(user?.role)) {
+            const staffId = await (0, staff_utils_1.getStaffId)(req);
+            if (!staffId) {
+                return res.status(403).json({ success: false, error: 'Staff profile not found' });
+            }
+            studentQuery += ` AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)`;
+            params.push(staffId);
+        }
         // Both queries are independent — fire in parallel (was sequential).
         const [result, leaveRes] = await Promise.all([
-            db_1.db.query(`SELECT ${cols} FROM students WHERE adm_no = $1`, [id]),
+            db_1.db.query(studentQuery, params),
             db_1.db.query(`SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside' LIMIT 1`, [id]),
         ]);
         if (result.rows.length === 0) {

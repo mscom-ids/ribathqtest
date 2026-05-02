@@ -17,6 +17,7 @@ import {
 } from '../controllers/attendance_dashboard.controller';
 
 const router = Router();
+const ATTENDANCE_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 
 // Protect all routes
 router.use(verifyToken);
@@ -38,7 +39,7 @@ router.get('/mentor-schedules', getMentorSchedules);
 router.get('/students', getStudentsForSchedule);
 router.get('/marks', getStudentMarksForSchedule);
 router.post('/mark', markAttendance);
-router.post('/cancel', cancelSession);
+router.post('/cancel', requireRole(ATTENDANCE_MANAGE_ROLES), cancelSession);
 
 // Breaks endpoints
 router.get('/breaks', getBreaks);

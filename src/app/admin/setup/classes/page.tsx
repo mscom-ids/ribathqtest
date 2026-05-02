@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Plus, Edit2, Trash2, GraduationCap, Users, Clock } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,7 +45,7 @@ export default function ClassesPage() {
 
     const fetchYears = async () => {
         try {
-            const res = await api.get('/classes/academic-years')
+            const res = await cachedGet('/classes/academic-years', undefined, 5 * 60_000)
             if (res.data.success) {
                 setYears(res.data.data)
                 // Default to current year
@@ -59,11 +60,13 @@ export default function ClassesPage() {
         }
     }
 
-    const fetchClasses = async (yearId: string) => {
+    const fetchClasses = async (yearId: string, force = false) => {
         setLoading(true)
         setSelectedYearId(yearId)
         try {
-            const res = await api.get(`/classes?academic_year_id=${yearId}`)
+            const res = force
+                ? await api.get('/classes', { params: { academic_year_id: yearId } })
+                : await cachedGet('/classes', { academic_year_id: yearId }, 60_000)
             if (res.data.success) setClasses(res.data.data)
         } catch (error) {
             toast({ title: "Error", description: "Failed to fetch classes", variant: "destructive" })
@@ -83,7 +86,8 @@ export default function ClassesPage() {
             if (res.data.success) {
                 toast({ title: "Success", description: "Class saved successfully" })
                 setOpen(false)
-                fetchClasses(formData.academic_year_id)
+                invalidateCache('/classes')
+                fetchClasses(formData.academic_year_id, true)
             }
         } catch (error) {
             toast({ title: "Error", description: "Failed to save class", variant: "destructive" })
@@ -96,7 +100,8 @@ export default function ClassesPage() {
             const res = await api.delete(`/classes/${id}`)
             if (res.data.success) {
                 toast({ title: "Deleted", description: "Class deleted successfully" })
-                fetchClasses(yearId)
+                invalidateCache('/classes')
+                fetchClasses(yearId, true)
             }
         } catch (error) {
             toast({ title: "Error", description: "Failed to delete component", variant: "destructive" })

@@ -4,6 +4,11 @@ exports.getMyLeaves = exports.getMyStudentsWithStats = exports.createStaff = exp
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const supabase_1 = require("../config/supabase");
+const SAFE_STAFF_COLUMNS = `
+    id, profile_id, name, role, phone, email, photo_url, address, place,
+    phone_contacts, staff_id, is_active, created_at
+`;
+const STAFF_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
 const getMyStaffProfile = async (req, res) => {
     try {
         const user = req.user;
@@ -14,7 +19,7 @@ const getMyStaffProfile = async (req, res) => {
         if (!staffId) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
-        const result = await db_1.db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [staffId]);
+        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [staffId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
@@ -139,6 +144,9 @@ const createStaffLogin = async (req, res) => {
     try {
         const { id } = req.params; // Staff ID
         const { password } = req.body;
+        if (!password || String(password).length < 8) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+        }
         const bcrypt = require('bcrypt'); // Lazy load
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
@@ -210,7 +218,7 @@ const restoreStaff = async (req, res) => {
 exports.restoreStaff = restoreStaff;
 const getAllStaff = async (req, res) => {
     try {
-        const result = await db_1.db.query('SELECT * FROM staff ORDER BY name ASC');
+        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff ORDER BY name ASC`);
         res.json({ success: true, staff: result.rows });
     }
     catch (err) {
@@ -221,7 +229,7 @@ exports.getAllStaff = getAllStaff;
 const getStaffById = async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await db_1.db.query('SELECT * FROM staff WHERE id = $1 LIMIT 1', [id]);
+        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [id]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff not found' });
         }
@@ -264,7 +272,7 @@ const updateStaffProfile = async (req, res) => {
             return res.status(400).json({ success: false, error: 'No valid fields to update' });
         }
         values.push(id);
-        const result = await db_1.db.query(`UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING *`, values);
+        const result = await db_1.db.query(`UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING ${SAFE_STAFF_COLUMNS}`, values);
         res.json({ success: true, staff: result.rows[0] });
     }
     catch (err) {
@@ -280,6 +288,12 @@ const createStaff = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Name is required' });
         }
         const selectedRole = role || 'usthad';
+        if (!STAFF_ROLES.includes(selectedRole)) {
+            return res.status(400).json({ success: false, error: 'Invalid staff role' });
+        }
+        if (password && String(password).length < 8) {
+            return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+        }
         const finalEmail = email || `dummy-${Date.now()}@example.com`;
         let authUserId = null;
         // Create Supabase Auth user if password is provided
@@ -339,7 +353,7 @@ const createStaff = async (req, res) => {
                 }
             }
             const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-            const staffInsert = await client.query(`INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`, values);
+            const staffInsert = await client.query(`INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING ${SAFE_STAFF_COLUMNS}`, values);
             await client.query('COMMIT');
             res.json({ success: true, staffId: staffInsert.rows[0].id, staff: staffInsert.rows[0] });
         }

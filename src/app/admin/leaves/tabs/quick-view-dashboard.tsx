@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, LogOut, BookOpen, AlertCircle, Loader2, PlaneTakeoff, Home } from "lucide-react"
 import { useEffect, useState } from "react"
-import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { format, subDays } from "date-fns"
 
@@ -29,8 +29,8 @@ export function QuickViewDashboard({ staffMode = false }: QuickViewDashboardProp
                 if (staffMode) {
                     // ── Staff mode: fetch only assigned students + their leaves ──
                     const [studentsRes, leavesRes] = await Promise.all([
-                        api.get('/staff/me/students'),
-                        api.get('/staff/me/leaves')
+                        cachedGet('/staff/me/students', undefined, 30_000),
+                        cachedGet('/staff/me/leaves', undefined, 30_000)
                     ])
 
                     const myStudents: any[] = studentsRes.data?.students || []
@@ -67,11 +67,11 @@ export function QuickViewDashboard({ staffMode = false }: QuickViewDashboardProp
 
                 } else {
                     // ── Admin mode: fetch entire institution ──
-                    const [studentsRes, leavesRes] = await Promise.all([
-                        api.get('/students', { params: { status: 'active' } }),
-                        api.get('/leaves')
+                    const [countsRes, leavesRes] = await Promise.all([
+                        cachedGet('/students/counts', undefined, 60_000),
+                        cachedGet('/leaves', undefined, 30_000)
                     ])
-                    const totalStudents = studentsRes.data?.students?.length || 0
+                    const totalStudents = countsRes.data?.counts?.active || 0
                     const allLeaves: any[] = leavesRes.data?.leaves || []
 
                     const outside = allLeaves.filter((l: any) => l.status === 'outside' && (l.leave_type === 'out-campus' || l.leave_type === 'personal')).length

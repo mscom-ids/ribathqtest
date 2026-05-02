@@ -3,11 +3,13 @@ import { getMyStaffProfile, getMyAssignedStudents, getStaffStudents, assignStude
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
+const STAFF_PORTAL_ROLES = ['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller'];
+const STAFF_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 
 // Protect all staff routes
 router.use(verifyToken);
 router.use(verifyDelegation);
-router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
+router.use(requireRole(STAFF_PORTAL_ROLES));
 
 // GET /api/staff/me
 router.get('/me', getMyStaffProfile);
@@ -19,36 +21,36 @@ router.get('/me/students', getMyStudentsWithStats);
 router.get('/me/leaves', getMyLeaves);
 
 // POST /api/staff/cancel-session
-router.post('/cancel-session', cancelSession);
+router.post('/cancel-session', requireRole(STAFF_MANAGE_ROLES), cancelSession);
 
 // GET /api/staff/:id/students
-router.get('/:id/students', getStaffStudents);
+router.get('/:id/students', requireRole(STAFF_MANAGE_ROLES), getStaffStudents);
 
 // POST /api/staff/:id/assign
-router.post('/:id/assign', assignStudentsToMentor);
+router.post('/:id/assign', requireRole(STAFF_MANAGE_ROLES), assignStudentsToMentor);
 
 // POST /api/staff/:id/unassign
-router.post('/:id/unassign', unassignStudentFromMentor);
+router.post('/:id/unassign', requireRole(STAFF_MANAGE_ROLES), unassignStudentFromMentor);
 
 // GET /api/staff
-router.get('/', getAllStaff);
+router.get('/', requireRole(STAFF_MANAGE_ROLES), getAllStaff);
 
 // POST /api/staff
-router.post('/', createStaff);
+router.post('/', requireRole(STAFF_MANAGE_ROLES), createStaff);
 
 // POST /api/staff/:id/login
-router.post('/:id/login', createStaffLogin);
+router.post('/:id/login', requireRole(STAFF_MANAGE_ROLES), createStaffLogin);
 
 // PUT /api/staff/:id/archive
-router.put('/:id/archive', archiveStaff);
+router.put('/:id/archive', requireRole(STAFF_MANAGE_ROLES), archiveStaff);
 
 // PUT /api/staff/:id/restore
-router.put('/:id/restore', restoreStaff);
+router.put('/:id/restore', requireRole(STAFF_MANAGE_ROLES), restoreStaff);
 
 // GET /api/staff/:id
-router.get('/:id', getStaffById);
+router.get('/:id', requireRole(STAFF_MANAGE_ROLES), getStaffById);
 
 // PUT /api/staff/:id
-router.put('/:id', updateStaffProfile);
+router.put('/:id', requireRole(STAFF_MANAGE_ROLES), updateStaffProfile);
 
 export default router;

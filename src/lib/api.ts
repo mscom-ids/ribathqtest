@@ -1,8 +1,10 @@
 import axios from 'axios';
-import Cookies from 'js-cookie';
 
 // In production, NEXT_PUBLIC_API_URL should point to the deployed Express server
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = typeof window === 'undefined'
+  ? configuredApiUrl
+  : configuredApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`);
 
 // Dev-only logger. Prod builds get no per-request console noise.
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -16,14 +18,9 @@ const api = axios.create({
   withCredentials: true, // send httpOnly cookies with cross-origin requests
 });
 
-// Request interceptor to automatically add the JWT token and delegation token
+// Request interceptor to automatically add the server-issued delegation token
 api.interceptors.request.use(
   (config) => {
-    const token = Cookies.get('auth_token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-
     // Attach server-issued delegation token if active
     if (typeof window !== 'undefined') {
       const delegationToken = sessionStorage.getItem('delegationToken');
@@ -56,11 +53,11 @@ api.interceptors.response.use(
 
     if (error.response && error.response.status === 401) {
       // Token is invalid or expired
-      Cookies.remove('auth_token');
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('delegationToken');
         sessionStorage.removeItem('delegationMentorName');
         sessionStorage.removeItem('delegationStudentName');
+        document.cookie = 'auth_token=; path=/; max-age=0';
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login';
         }

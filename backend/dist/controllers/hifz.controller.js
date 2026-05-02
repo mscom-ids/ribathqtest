@@ -160,27 +160,27 @@ const bulkCreateHifzLogs = async (req, res) => {
         if (!Array.isArray(logs) || logs.length === 0) {
             return res.status(400).json({ success: false, error: 'logs array is required' });
         }
-        // ── Step 1: bulk-fetch existing 'New Verses' rows that could collide
+        // ── Step 1: bulk-fetch existing verse-range rows that could collide
         // with any candidate, in a SINGLE query. Replaces the per-row SELECT
         // dedup that ran inside the original loop.
-        const dedupCandidates = logs.filter((l) => l.mode === 'New Verses' && l.surah_name && l.start_v && l.end_v);
-        const dupKey = (l) => `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.session_type}|${l.surah_name}|${l.start_v}|${l.end_v}`;
+        const dedupCandidates = logs.filter((l) => ['New Verses', 'Recent Revision'].includes(l.mode) && l.surah_name && l.start_v && l.end_v);
+        const dupKey = (l) => `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.session_type}|${l.mode}|${l.surah_name}|${l.start_v}|${l.end_v}`;
         const existingKeys = new Set();
         if (dedupCandidates.length > 0) {
             const studentIds = [...new Set(dedupCandidates.map((l) => l.student_id))];
             const dates = [...new Set(dedupCandidates.map((l) => String(l.entry_date).slice(0, 10)))];
             const existing = await db_1.db.query(`SELECT student_id,
                         to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
-                        session_type, surah_name, start_v, end_v
+                        session_type, mode, surah_name, start_v, end_v
                  FROM hifz_logs
-                 WHERE mode = 'New Verses'
+                 WHERE mode = ANY($3::text[])
                    AND student_id = ANY($1::text[])
-                   AND entry_date = ANY($2::date[])`, [studentIds, dates]);
+                   AND entry_date = ANY($2::date[])`, [studentIds, dates, ['New Verses', 'Recent Revision']]);
             existing.rows.forEach((r) => existingKeys.add(dupKey(r)));
         }
-        // Filter out duplicates (only applies to qualifying New Verses rows)
+        // Filter out duplicates (only applies to qualifying verse-range rows)
         const toInsert = logs.filter((l) => {
-            if (l.mode === 'New Verses' && l.surah_name && l.start_v && l.end_v) {
+            if (['New Verses', 'Recent Revision'].includes(l.mode) && l.surah_name && l.start_v && l.end_v) {
                 return !existingKeys.has(dupKey(l));
             }
             return true;

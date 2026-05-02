@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import * as XLSX from 'xlsx';
 import { db } from '../config/db';
 import { devLog } from '../utils/logger';
+import { getStaffId } from '../utils/staff.utils';
+
+const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 
 // Columns required for the listing/grid views and the dashboard. Excludes the
 // heavy `comprehensive_details` JSON blob and `address` text — callers that
@@ -23,6 +26,17 @@ export const getAllStudents = async (req: Request, res: Response) => {
     let query = `SELECT ${cols} FROM students WHERE 1=1`;
     const params: any[] = [];
     let paramCount = 1;
+    const user = (req as any).user;
+
+    if (MENTOR_ROLES.includes(user?.role)) {
+      const staffId = await getStaffId(req);
+      if (!staffId) {
+        return res.status(403).json({ success: false, error: 'Staff profile not found' });
+      }
+      query += ` AND (hifz_mentor_id = $${paramCount} OR school_mentor_id = $${paramCount} OR madrasa_mentor_id = $${paramCount})`;
+      params.push(staffId);
+      paramCount++;
+    }
 
     if (search) {
       query += ` AND (name ILIKE $${paramCount} OR adm_no ILIKE $${paramCount})`;
@@ -113,10 +127,22 @@ export const getStudentById = async (req: Request, res: Response) => {
     // ?light=true skips the heavy comprehensive_details JSON for callers like
     // the daily-entry form that only need name + a couple of flags.
     const cols = light === 'true' ? LIGHT_STUDENT_COLS : '*';
+    const user = (req as any).user;
+    const params: any[] = [id];
+    let studentQuery = `SELECT ${cols} FROM students WHERE adm_no = $1`;
+
+    if (MENTOR_ROLES.includes(user?.role)) {
+      const staffId = await getStaffId(req);
+      if (!staffId) {
+        return res.status(403).json({ success: false, error: 'Staff profile not found' });
+      }
+      studentQuery += ` AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)`;
+      params.push(staffId);
+    }
 
     // Both queries are independent — fire in parallel (was sequential).
     const [result, leaveRes] = await Promise.all([
-      db.query(`SELECT ${cols} FROM students WHERE adm_no = $1`, [id]),
+      db.query(studentQuery, params),
       db.query(
         `SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside' LIMIT 1`,
         [id]

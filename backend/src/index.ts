@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import compression from 'compression';
+import { devLog } from './utils/logger';
 
 // Load env BEFORE any module that reads process.env
 dotenv.config();
@@ -40,7 +42,7 @@ const PORT = process.env.PORT || 5000;
 // ── Core middleware ──
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
-  : ['http://localhost:3000'];
+  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -51,6 +53,25 @@ app.use(cors({
   },
   credentials: true
 }));
+app.use(compression());
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  const originalWriteHead = res.writeHead.bind(res);
+  (res as any).writeHead = (...args: any[]) => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+    if (!res.headersSent) {
+      res.setHeader('X-Response-Time', `${durationMs.toFixed(1)}ms`);
+    }
+    return originalWriteHead.apply(res, args as any);
+  };
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+    if (durationMs >= 500) {
+      devLog(`[SLOW API] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
+    }
+  });
+  next();
+});
 app.use(express.json());
 app.use(cookieParser());
 

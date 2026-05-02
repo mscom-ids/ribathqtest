@@ -4,6 +4,7 @@ const express_1 = require("express");
 const classes_controller_1 = require("../controllers/classes.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
+const CLASS_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 // Protect all class routes
 router.use(auth_middleware_1.verifyToken);
 router.use(auth_middleware_1.verifyDelegation);
@@ -26,7 +27,7 @@ router.post('/schedule', (0, auth_middleware_1.requireRole)(['admin', 'principal
 router.delete('/schedule/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), classes_controller_1.deleteWeeklySchedule);
 // Class Events
 router.get('/events', classes_controller_1.getClassEvents);
-router.post('/events/generate', classes_controller_1.generateDailyEvents);
-router.post('/events/manual', classes_controller_1.createManualClassEvent);
-router.patch('/events/:id/status', classes_controller_1.updateClassEventStatus);
+router.post('/events/generate', (0, auth_middleware_1.requireRole)(CLASS_MANAGE_ROLES), classes_controller_1.generateDailyEvents);
+router.post('/events/manual', (0, auth_middleware_1.requireRole)(CLASS_MANAGE_ROLES), classes_controller_1.createManualClassEvent);
+router.patch('/events/:id/status', (0, auth_middleware_1.requireRole)(CLASS_MANAGE_ROLES), classes_controller_1.updateClassEventStatus);
 exports.default = router;

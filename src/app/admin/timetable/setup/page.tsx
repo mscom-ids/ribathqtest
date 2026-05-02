@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, RefreshCw, Printer, Clock, User, Download, Search, Edit2, Trash2, XCircle, AlertCircle } from "lucide-react"
+import { X, RefreshCw, Printer, Clock, Download, Search, Edit2, Trash2 } from "lucide-react"
 import api from "@/lib/api"
-import Cookies from "js-cookie"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 
 export default function TimeTableSetupPage() {
@@ -13,7 +13,6 @@ export default function TimeTableSetupPage() {
 
     // Auth context
     const [userRole, setUserRole] = useState("")
-    const [userId, setUserId] = useState("")
 
     const [activeTab, setActiveTab] = useState('school')
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -36,24 +35,12 @@ export default function TimeTableSetupPage() {
         "9th Standard", "10th Standard", "+1 (Plus One)", "+2 (Plus Two)"
     ]
 
-    useEffect(() => {
-        const token = Cookies.get('auth_token')
-        if (token) {
-            try {
-                const p = JSON.parse(atob(token.split('.')[1]))
-                setUserRole(p.role)
-                setUserId(p.id)
-            } catch {}
-        }
-        fetchData()
-    }, [])
-
-    const fetchData = async () => {
+    async function fetchData(force = false) {
         setLoading(true)
         try {
             const [schedRes, breaksRes] = await Promise.all([
-                api.get('/attendance/schedules'),
-                api.get('/attendance/breaks')
+                force ? api.get('/attendance/schedules') : cachedGet('/attendance/schedules', undefined, 5 * 60_000),
+                force ? api.get('/attendance/breaks') : cachedGet('/attendance/breaks', undefined, 5 * 60_000)
             ])
             if (schedRes.data.success) setSchedules(schedRes.data.data)
             if (breaksRes.data.success) setBreaks(breaksRes.data.data)
@@ -62,6 +49,19 @@ export default function TimeTableSetupPage() {
         }
         setLoading(false)
     }
+
+    useEffect(() => {
+        api.get('/auth/me')
+            .then(res => {
+                if (res.data?.success && res.data.user) {
+                    setUserRole(res.data.user.role)
+                }
+            })
+            .catch(() => {})
+        queueMicrotask(() => {
+            void fetchData()
+        })
+    }, [])
 
     const handleCreateSchedule = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -77,7 +77,8 @@ export default function TimeTableSetupPage() {
             if (res.data.success) {
                 setIsAddModalOpen(false)
                 setNewSchedule({ class_type: activeTab, name: '', standards: [], day_of_week: 1, start_time: '09:00', end_time: '09:45' })
-                fetchData()
+                invalidateCache('/attendance/schedules')
+                fetchData(true)
             }
         } catch (e: any) {
             alert(e.response?.data?.error || "Failed to create schedule")
@@ -88,7 +89,8 @@ export default function TimeTableSetupPage() {
         try {
             await api.delete(`/attendance/schedules/${id}`)
             setDeleteConfirm(null)
-            fetchData()
+            invalidateCache('/attendance/schedules')
+            fetchData(true)
         } catch (e: any) {
             alert(e.response?.data?.error || "Failed to delete schedule")
         }
@@ -104,7 +106,8 @@ export default function TimeTableSetupPage() {
             })
             if (res.data.success) {
                 setEditBreakModal(null)
-                fetchData()
+                invalidateCache('/attendance/breaks')
+                fetchData(true)
             }
         } catch (e: any) {
             alert(e.response?.data?.error || "Failed to update break")
@@ -140,9 +143,9 @@ export default function TimeTableSetupPage() {
 
     function formatTime(t: string | undefined) {
         if (!t) return ""
-        let [h, m] = t.split(':')
+        const [h, m] = t.split(':')
         let hour = parseInt(h)
-        let ampm = hour >= 12 ? 'PM' : 'AM'
+        const ampm = hour >= 12 ? 'PM' : 'AM'
         hour = hour % 12 || 12
         return `${hour < 10 ? '0'+hour : hour}:${m} ${ampm}`
     }
@@ -160,7 +163,7 @@ export default function TimeTableSetupPage() {
                 <div className="flex items-center flex-wrap gap-2">
 
                     <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded overflow-hidden shadow-sm h-[38px]">
-                        <button onClick={() => fetchData()} className="px-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition border-r border-slate-200 dark:border-slate-700 text-slate-500">
+                        <button onClick={() => fetchData(true)} className="px-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition border-r border-slate-200 dark:border-slate-700 text-slate-500">
                             <RefreshCw className="h-[15px] w-[15px]" />
                         </button>
                         <button className="px-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-2 border-r border-slate-200 dark:border-slate-700 text-slate-600 text-[13px] font-medium">

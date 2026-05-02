@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { format, subDays, isBefore } from "date-fns"
-import { Loader2, Save, ArrowLeft, PlusCircle, Trash2 } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, Save, ArrowLeft, PlusCircle, Trash2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
@@ -13,10 +13,88 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import api from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { SURAH_LIST } from "@/lib/data/surah-list"
 type Surah = { id: number; name: string; totalVerses: number };
 const typedSurahList = SURAH_LIST as Surah[];
+const DEFAULT_HIFZ_SESSION = "Subh"
+
+function SurahPicker({
+    value,
+    onChange,
+    disabled,
+}: {
+    value?: number
+    onChange: (value: number) => void
+    disabled?: boolean
+}) {
+    const [open, setOpen] = useState(false)
+    const selected = typedSurahList.find(s => s.id === value)
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    disabled={disabled}
+                    className="h-9 w-full justify-between bg-white dark:bg-slate-900 px-3 text-sm font-normal"
+                >
+                    <span className="truncate">
+                        {selected ? `${selected.id}. ${selected.name}` : "Select Surah"}
+                    </span>
+                    <span className="ml-2 flex shrink-0 items-center gap-2">
+                        {selected?.totalVerses ? (
+                            <span className="text-[10px] font-bold uppercase text-emerald-600/70">
+                                {selected.totalVerses} Ayahs
+                            </span>
+                        ) : null}
+                        <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                    </span>
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(360px,calc(100vw-2rem))] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="Search Surah..." className="h-9" />
+                    <CommandList className="max-h-[300px]">
+                        <CommandEmpty>No Surah found.</CommandEmpty>
+                        <CommandGroup>
+                            {typedSurahList.map(surah => (
+                                <CommandItem
+                                    key={surah.id}
+                                    value={`${surah.id} ${surah.name}`}
+                                    onSelect={() => {
+                                        onChange(surah.id)
+                                        setOpen(false)
+                                    }}
+                                >
+                                    <span className="flex-1 truncate">
+                                        {surah.id}. {surah.name}
+                                        <span className="ml-2 text-xs text-muted-foreground">({surah.totalVerses} ayahs)</span>
+                                    </span>
+                                    <Check className={cn("ml-2 h-4 w-4", value === surah.id ? "opacity-100" : "opacity-0")} />
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
+function formatVersePreview(entry?: { surah_id?: number; start_v?: number; end_v?: number }) {
+    const surah = typedSurahList.find(s => s.id === entry?.surah_id)
+    if (!surah) return ""
+    const start = entry?.start_v || "?"
+    const end = entry?.end_v || "?"
+    return `${surah.name} (${start} - ${end})`
+}
 
 // Helper: preprocess empty/falsy values to undefined so .optional() works with z.coerce
 const optionalNum = z.preprocess(
@@ -115,7 +193,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         resolver: zodResolver(formSchema) as any,
         defaultValues: {
             date: searchParams.get("date") || format(today, "yyyy-MM-dd"),
-            session: "Subh",
+            session: DEFAULT_HIFZ_SESSION,
             mode: "New Verses",
             new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
         },
@@ -136,7 +214,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         async function loadData() {
             const logIdParam = searchParams.get("log_id")
             const initialDate    = form.getValues("date")
-            const initialSession = form.getValues("session")
             const initialMode    = form.getValues("mode")
 
             // Fire all three calls in parallel. Previously these were
@@ -147,7 +224,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 (logIdParam
                     ? api.get(`/hifz/logs/${logIdParam}`)
                     : api.get('/hifz/logs', {
-                        params: { student_id: studentId, date: initialDate, session_type: initialSession, mode: initialMode, limit: 1 },
+                        params: { student_id: studentId, date: initialDate, mode: initialMode },
                     })
                 ).catch(() => null),
             ])
@@ -164,12 +241,14 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             const isStudentHafiz = totalJuzCompleted >= 30
             setIsHafiz(isStudentHafiz)
 
-            // Resolve the existing log (saved-edit fetch by id, or auto-find for current date/session/mode)
+            // Resolve existing logs across all historical sessions. Old Subh/Breakfast/Lunch
+            // records remain discoverable even though the form no longer exposes sessions.
+            const existingLogs = logIdParam && logRes?.data?.success
+                ? [logRes.data.log]
+                : (logRes?.data?.success ? (logRes.data.logs || []) : [])
             let existingLog: any = null
-            if (logIdParam && logRes?.data?.success) {
-                existingLog = logRes.data.log
-            } else if (!logIdParam && logRes?.data?.success && logRes.data.logs?.length > 0) {
-                existingLog = logRes.data.logs[0]
+            if (existingLogs.length > 0) {
+                existingLog = existingLogs[0]
             }
 
             // Pick the right starting mode BEFORE rendering — huffaz students
@@ -179,21 +258,24 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             if (existingLog) {
                 setLogId(existingLog.id)
-                let surahId: number | undefined = undefined
-                if (existingLog.surah_name) {
-                    const matched = SURAH_LIST.find(s => s.name === existingLog.surah_name)
-                    surahId = matched?.id
-                }
+                const verseLogs = existingLogs.filter((log: any) => log.mode === "New Verses" || log.mode === "Recent Revision")
+                const verseEntries = verseLogs.length > 0
+                    ? verseLogs.map((log: any) => ({
+                        surah_id: SURAH_LIST.find(s => s.name === log.surah_name)?.id,
+                        start_v: log.start_v || undefined,
+                        end_v: log.end_v || undefined,
+                    }))
+                    : [{
+                        surah_id: SURAH_LIST.find(s => s.name === existingLog.surah_name)?.id,
+                        start_v: existingLog.start_v || undefined,
+                        end_v: existingLog.end_v || undefined,
+                    }]
 
                 form.reset({
                     date: existingLog.entry_date ? format(new Date(existingLog.entry_date), 'yyyy-MM-dd') : format(today, 'yyyy-MM-dd'),
-                    session: existingLog.session_type as any,
+                    session: existingLog.session_type || DEFAULT_HIFZ_SESSION,
                     mode: existingLog.mode as any,
-                    new_verses: [{
-                        surah_id: surahId,
-                        start_v: existingLog.start_v || undefined,
-                        end_v: existingLog.end_v || undefined,
-                    }],
+                    new_verses: verseEntries,
                     start_page: existingLog.start_page,
                     end_page: existingLog.end_page,
                     juz_number: existingLog.juz_number,
@@ -203,7 +285,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 setLogId(null)
                 form.reset({
                     date: initialDate,
-                    session: initialSession,
+                    session: DEFAULT_HIFZ_SESSION,
                     mode: resolvedMode,
                     new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
                     juz_number: "" as any,
@@ -217,9 +299,9 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         return () => { cancelled = true }
     }, [studentId, form, searchParams])
 
-    // Re-fetch when date/session/mode change (track via separate effect)
+    // Re-fetch when date/mode change. Sessions are hidden now, so old records
+    // are loaded across all historical session_type values.
     const watchedDate = form.watch("date")
-    const watchedSession = form.watch("session")
     const watchedMode = form.watch("mode")
 
     useEffect(() => {
@@ -233,22 +315,30 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             try {
                 const res = await api.get('/hifz/logs', {
-                    params: { student_id: studentId, date: watchedDate, session_type: watchedSession, mode: watchedMode, limit: 1 }
+                    params: { student_id: studentId, date: watchedDate, mode: watchedMode }
                 })
-                const data = res.data.success && res.data.logs?.length > 0 ? res.data.logs[0] : null
+                const logs = res.data.success ? (res.data.logs || []) : []
+                const data = logs.length > 0 ? logs[0] : null
 
                 if (data) {
                     setLogId(data.id)
-                    let surahId = undefined;
-                    if (data.surah_name) {
-                        const matched = SURAH_LIST.find(s => s.name === data.surah_name);
-                        surahId = matched?.id;
-                    }
+                    const verseLogs = logs.filter((log: any) => log.mode === "New Verses" || log.mode === "Recent Revision")
+                    const verseEntries = verseLogs.length > 0
+                        ? verseLogs.map((log: any) => ({
+                            surah_id: SURAH_LIST.find(s => s.name === log.surah_name)?.id,
+                            start_v: log.start_v || undefined,
+                            end_v: log.end_v || undefined,
+                        }))
+                        : [{
+                            surah_id: SURAH_LIST.find(s => s.name === data.surah_name)?.id,
+                            start_v: data.start_v || undefined,
+                            end_v: data.end_v || undefined,
+                        }]
                     form.reset({
                         date: data.entry_date ? format(new Date(data.entry_date), 'yyyy-MM-dd') : watchedDate,
-                        session: data.session_type as any,
+                        session: data.session_type || DEFAULT_HIFZ_SESSION,
                         mode: data.mode as any,
-                        new_verses: [{ surah_id: surahId, start_v: data.start_v || undefined, end_v: data.end_v || undefined }],
+                        new_verses: verseEntries,
                         start_page: data.start_page,
                         end_page: data.end_page,
                         juz_number: data.juz_number,
@@ -258,7 +348,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     setLogId(null)
                     form.reset({
                         date: watchedDate,
-                        session: watchedSession,
+                        session: DEFAULT_HIFZ_SESSION,
                         mode: watchedMode,
                         new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
                         juz_number: "" as any,
@@ -268,7 +358,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             } catch (e) { console.error(e) }
         }
         reloadLog()
-    }, [watchedDate, watchedSession, watchedMode])
+    }, [watchedDate, watchedMode])
 
     const onSubmit = async (values: FormValues) => {
         setLoading(true)
@@ -291,7 +381,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             student_id: studentId,
             usthad_id: targetUsthadId,
             entry_date: values.date,
-            session_type: values.session,
+            session_type: values.session || DEFAULT_HIFZ_SESSION,
             mode: values.mode
         }
 
@@ -335,7 +425,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 alert("Saved successfully!")
                 form.reset({
                     date: form.getValues("date"),
-                    session: form.getValues("session"),
+                    session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                     mode: form.getValues("mode"),
                     new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
                     juz_number: "" as any,
@@ -432,7 +522,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         student_id: studentId,
                         usthad_id: targetUsthadId,
                         entry_date: rangeDate,
-                        session_type: 'Subh',
+                        session_type: DEFAULT_HIFZ_SESSION,
                         mode: 'New Verses',
                         surah_name: rec.surah_name,
                         start_v: rec.start_v,
@@ -631,44 +721,21 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                     <Card className="border-emerald-900/10 shadow-sm">
                         <CardHeader className="p-3 pb-1.5 border-b border-emerald-900/5">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Session Setup</CardTitle>
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Entry Date</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2.5 p-3 pt-2">
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField
-                                    control={form.control}
-                                    name="date"
-                                    render={({ field }) => (
-                                        <FormItem className="space-y-1">
-                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Date</FormLabel>
-                                            <FormControl>
-                                                <Input type="date" {...field} className="bg-white dark:bg-slate-900 border-input h-9 text-sm px-2 cursor-pointer" />
-                                            </FormControl>
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="session"
-                                    render={({ field }) => (
-                                        <FormItem className="space-y-1">
-                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Session</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
-                                                <FormControl>
-                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="Subh">Subh</SelectItem>
-                                                    <SelectItem value="Breakfast">Breakfast</SelectItem>
-                                                    <SelectItem value="Lunch">Lunch</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
+                            <FormField
+                                control={form.control}
+                                name="date"
+                                render={({ field }) => (
+                                    <FormItem className="space-y-1">
+                                        <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Date</FormLabel>
+                                        <FormControl>
+                                            <Input type="date" {...field} className="bg-white dark:bg-slate-900 border-input h-9 text-sm px-2 cursor-pointer" />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
                         </CardContent>
                     </Card>
 
@@ -689,7 +756,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                 // 1. Force RHF absolute wipe instantly
                                                 form.reset({
                                                     date: form.getValues("date"),
-                                                    session: form.getValues("session"),
+                                                    session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                                                     mode: val as any,
                                                     new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
                                                     juz_number: "" as any,
@@ -749,23 +816,13 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                 name={`new_verses.${index}.surah_id`}
                                                 render={({ field }) => (
                                                      <FormItem className="mb-2">
-                                                        <Select onValueChange={(val) => field.onChange(parseInt(val))} value={field.value?.toString() || ""} disabled={isOldDate}>
                                                             <FormControl>
-                                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
-                                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-600/70 font-bold pointer-events-none uppercase">
-                                                                        {typedSurahList.find(s => s.id === field.value)?.totalVerses ? `${typedSurahList.find(s => s.id === field.value)?.totalVerses} Ayahs` : ''}
-                                                                    </div>
-                                                                    <SelectValue placeholder="Select Surah" />
-                                                                </SelectTrigger>
+                                                                <SurahPicker
+                                                                    value={field.value}
+                                                                    onChange={field.onChange}
+                                                                    disabled={isOldDate}
+                                                                />
                                                             </FormControl>
-                                                            <SelectContent className="max-h-[300px]">
-                                                                {typedSurahList.map((surah) => (
-                                                                    <SelectItem key={surah.id} value={surah.id.toString()}>
-                                                                        {surah.id}. {surah.name} <span className="text-xs text-muted-foreground ml-2">({surah.totalVerses} ayahs)</span>
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
                                                         <FormMessage className="text-[10px]" />
                                                     </FormItem>
                                                 )}
@@ -799,6 +856,12 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                     )}
                                                 />
                                             </div>
+                                            {formatVersePreview(form.watch(`new_verses.${index}`)) && (
+                                                <div className="mt-3 rounded-md border border-emerald-500/20 bg-white/70 px-3 py-2 text-xs text-emerald-700 dark:bg-slate-900/70 dark:text-emerald-300">
+                                                    <span className="font-bold uppercase text-[10px] tracking-wider text-emerald-500">Preview:</span>{" "}
+                                                    {formatVersePreview(form.watch(`new_verses.${index}`))}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                     {!isOldDate && (

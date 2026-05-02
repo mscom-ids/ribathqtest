@@ -10,6 +10,7 @@ import {
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
+const ACADEMIC_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 
 // Protect all academics routes
 router.use(verifyToken);
@@ -32,13 +33,13 @@ router.post('/calendar/bulk', requireRole(['admin', 'principal', 'vice_principal
 router.post('/calendar/generate', requireRole(['admin', 'principal', 'vice_principal']), generateCalendarEntries);
 
 // ---- Attendance ----
-router.post('/attendance/students', getStudentsForAttendance);
-router.get('/attendance', getAttendance);
-router.post('/attendance', upsertAttendance);
+router.post('/attendance/students', requireRole(ACADEMIC_MANAGE_ROLES), getStudentsForAttendance);
+router.get('/attendance', requireRole(ACADEMIC_MANAGE_ROLES), getAttendance);
+router.post('/attendance', requireRole(ACADEMIC_MANAGE_ROLES), upsertAttendance);
 
 // ---- Disciplinary Records (via students route prefix to match frontend) ----
-router.get('/disciplinary', getDisciplinaryRecords);
-router.post('/disciplinary', createDisciplinaryRecord);
-router.delete('/disciplinary/:id', deleteDisciplinaryRecord);
+router.get('/disciplinary', requireRole(ACADEMIC_MANAGE_ROLES), getDisciplinaryRecords);
+router.post('/disciplinary', requireRole(ACADEMIC_MANAGE_ROLES), createDisciplinaryRecord);
+router.delete('/disciplinary/:id', requireRole(ACADEMIC_MANAGE_ROLES), deleteDisciplinaryRecord);
 
 export default router;
