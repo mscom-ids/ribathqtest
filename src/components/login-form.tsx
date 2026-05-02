@@ -60,13 +60,17 @@ export default function LoginForm() {
             if (data.success && data.user) {
                 const profile = data.user
                 if (profile) {
-                    // Store token in localStorage for Bearer-based auth (works cross-domain reliably)
+                    // Store token in localStorage for Bearer-based API auth (cross-domain)
                     if (data.token) {
                         localStorage.setItem('auth_token', data.token)
+                        // Also set a client-side cookie on THIS domain so Next.js
+                        // middleware (which runs on the server and can only read
+                        // cookies, not localStorage) can verify the user is logged in.
+                        document.cookie = `auth_token=${data.token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`
                     }
                     const path = getRedirectPathForRole(profile.role)
                     console.log('[LOGIN] Redirecting to:', path, '(role:', profile.role, ')')
-                    // Force a hard redirect so Server Components read the new cookie correctly
+                    // Force a hard redirect so the middleware sees the new cookie
                     window.location.href = path
                 } else {
                     setError("Profile not found. Contact Admin.")

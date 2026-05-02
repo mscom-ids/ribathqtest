@@ -81,6 +81,7 @@ export default function ParentDashboard() {
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
+        localStorage.removeItem('auth_token')
         document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push("/login")
     }
