@@ -141,12 +141,13 @@ const login = async (req, res) => {
         res.cookie('auth_token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             path: '/'
         });
         res.json({
             success: true,
+            token, // also return token in body for localStorage-based auth (cross-domain)
             user: {
                 id: staff.id,
                 email: staff.email,
@@ -185,7 +186,7 @@ const logout = async (req, res) => {
     res.clearCookie('auth_token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
         path: '/'
     });
     res.clearCookie('token');

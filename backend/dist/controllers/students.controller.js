@@ -44,6 +44,20 @@ const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 // actually need those should fetch the single student via /students/:id.
 const LIGHT_STUDENT_COLS = 'adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date, place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number';
 const FULL_STUDENT_COLS = LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
+const formatJoinedAdmittedBatchYear = (student) => {
+    if (student.admission_date) {
+        const date = new Date(student.admission_date);
+        if (!Number.isNaN(date.getTime())) {
+            return date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+            });
+        }
+        return String(student.admission_date);
+    }
+    return student.batch_year || '';
+};
 const getAllStudents = async (req, res) => {
     try {
         const { search, class: className, status, light } = req.query;
@@ -55,7 +69,9 @@ const getAllStudents = async (req, res) => {
         const params = [];
         let paramCount = 1;
         const user = req.user;
-        if (MENTOR_ROLES.includes(user?.role)) {
+        // By default, mentor roles only see their own assigned students.
+        // Pass ?scope=all to see every student (used by the "All Students" tab).
+        if (MENTOR_ROLES.includes(user?.role) && req.query.scope !== 'all') {
             const staffId = await (0, staff_utils_1.getStaffId)(req);
             if (!staffId) {
                 return res.status(403).json({ success: false, error: 'Staff profile not found' });
@@ -307,10 +323,12 @@ exports.updateStudent = updateStudent;
 // ── Export students as JSON ────────────────────────────────────
 const exportStudents = async (req, res) => {
     try {
-        const result = await db_1.db.query(`SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
+        const result = await db_1.db.query(`SELECT adm_no, name, standard, admission_date, batch_year, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
         const data = result.rows.map((s) => ({
             rollNo: s.adm_no,
             name: s.name,
+            standard: s.standard || '',
+            joinedAdmittedBatchYear: formatJoinedAdmittedBatchYear(s),
             phoneNumber: s.phone_number || ''
         }));
         res.json({ success: true, students: data });
@@ -324,17 +342,19 @@ exports.exportStudents = exportStudents;
 // ── Download students as Excel (.xlsx) ────────────────────────
 const downloadStudentsExcel = async (req, res) => {
     try {
-        const result = await db_1.db.query(`SELECT adm_no, name, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
+        const result = await db_1.db.query(`SELECT adm_no, name, standard, admission_date, batch_year, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`);
         const rows = result.rows.map((s, i) => ({
             'S.No': i + 1,
             'Roll No': s.adm_no,
             'Student Name': s.name,
+            'Class / Standard': s.standard || '',
+            'Joined / Admitted / Batch Year': formatJoinedAdmittedBatchYear(s),
             'Phone Number': s.phone_number || ''
         }));
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(rows);
         // Column widths
-        ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 30 }, { wch: 15 }];
+        ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 30 }, { wch: 18 }, { wch: 28 }, { wch: 15 }];
         XLSX.utils.book_append_sheet(wb, ws, 'Students');
         const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
         res.setHeader('Content-Disposition', 'attachment; filename="students.xlsx"');

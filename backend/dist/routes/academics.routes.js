@@ -24,7 +24,8 @@ router.post('/calendar/bulk', (0, auth_middleware_1.requireRole)(['admin', 'prin
 router.post('/calendar/generate', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), academics_controller_1.generateCalendarEntries);
 // ---- Attendance ----
 router.post('/attendance/students', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.getStudentsForAttendance);
-router.get('/attendance', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.getAttendance);
+// Allow staff/mentor to READ attendance (needed for Hifz progress modal)
+router.get('/attendance', academics_controller_1.getAttendance);
 router.post('/attendance', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.upsertAttendance);
 // ---- Disciplinary Records (via students route prefix to match frontend) ----
 router.get('/disciplinary', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.getDisciplinaryRecords);
