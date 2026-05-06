@@ -28,7 +28,9 @@ export const getAllStudents = async (req: Request, res: Response) => {
     let paramCount = 1;
     const user = (req as any).user;
 
-    if (MENTOR_ROLES.includes(user?.role)) {
+    // By default, mentor roles only see their own assigned students.
+    // Pass ?scope=all to see every student (used by the "All Students" tab).
+    if (MENTOR_ROLES.includes(user?.role) && req.query.scope !== 'all') {
       const staffId = await getStaffId(req);
       if (!staffId) {
         return res.status(403).json({ success: false, error: 'Staff profile not found' });
