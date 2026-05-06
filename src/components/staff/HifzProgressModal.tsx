@@ -201,6 +201,8 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
         try {
             const monthStart = startOfMonth(reportMonth)
             const monthEnd = endOfMonth(reportMonth)
+            // Use yyyy-MM-dd format for date params — the backend's entry_date column
+            // is a DATE type and ISO timestamps can cause timezone mismatch issues
             const startStr = format(monthStart, "yyyy-MM-dd")
             const endStr = format(monthEnd, "yyyy-MM-dd")
 
@@ -208,8 +210,8 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                 api.get("/hifz/logs", {
                     params: {
                         student_id: student.adm_no,
-                        start_date: monthStart.toISOString(),
-                        end_date: monthEnd.toISOString(),
+                        start_date: startStr,
+                        end_date: endStr,
                     },
                 }),
                 api.get("/academics/attendance", {
