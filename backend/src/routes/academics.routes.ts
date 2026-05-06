@@ -34,7 +34,8 @@ router.post('/calendar/generate', requireRole(['admin', 'principal', 'vice_princ
 
 // ---- Attendance ----
 router.post('/attendance/students', requireRole(ACADEMIC_MANAGE_ROLES), getStudentsForAttendance);
-router.get('/attendance', requireRole(ACADEMIC_MANAGE_ROLES), getAttendance);
+// Allow staff/mentor to READ attendance (needed for Hifz progress modal)
+router.get('/attendance', getAttendance);
 router.post('/attendance', requireRole(ACADEMIC_MANAGE_ROLES), upsertAttendance);
 
 // ---- Disciplinary Records (via students route prefix to match frontend) ----

@@ -206,7 +206,9 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             const startStr = format(monthStart, "yyyy-MM-dd")
             const endStr = format(monthEnd, "yyyy-MM-dd")
 
-            const [logsRes, attRes, lifetimeRes] = await Promise.all([
+            // Use allSettled so one failing call (e.g. attendance 403) doesn't
+            // nuke the hifz log data that DID succeed.
+            const [logsRes, attRes, lifetimeRes] = await Promise.allSettled([
                 api.get("/hifz/logs", {
                     params: {
                         student_id: student.adm_no,
@@ -227,10 +229,12 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
                 }),
             ])
 
-            setAllLogs(logsRes.data?.logs || [])
-            setAttendanceRecords(attRes.data?.data || [])
-            setLifetimeLogs(lifetimeRes.data?.logs || [])
-        } catch { /* non-blocking */ }
+            setAllLogs(logsRes.status === "fulfilled" ? (logsRes.value.data?.logs || []) : [])
+            setAttendanceRecords(attRes.status === "fulfilled" ? (attRes.value.data?.data || []) : [])
+            setLifetimeLogs(lifetimeRes.status === "fulfilled" ? (lifetimeRes.value.data?.logs || []) : [])
+        } catch (err) {
+            console.error("[HifzProgressModal] load error:", err)
+        }
         setLoading(false)
     }, [reportMonth, student])
 
