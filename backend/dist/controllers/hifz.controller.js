@@ -424,7 +424,7 @@ const calculateBulkMonthlyReport = async (req, res) => {
                 catch (e) { }
             });
             let juzRevTotal = 0;
-            studentLogs.filter((l) => l.mode === 'Juz Revision').forEach((log) => {
+            studentLogs.filter((l) => l.mode?.startsWith('Juz Revision')).forEach((log) => {
                 const portion = log.juz_portion;
                 if (portion === 'Full')
                     juzRevTotal += 1;

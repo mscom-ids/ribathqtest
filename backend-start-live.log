@@ -1,0 +1,51 @@
+[dotenv@17.3.1] injecting env (4) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[STARTUP] Environment validated — all required variables present.
+[dotenv@17.3.1] injecting env (1) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Server is running on port 5000
+[SLOW API] GET /api/events 304 2093.8ms
+[SLOW API] GET /api/delegations/admin/all 304 2227.6ms
+[SLOW API] GET /api/chat/conversations 304 2441.7ms
+[SLOW API] GET /api/leaves/outside-students 304 2618.1ms
+[SLOW API] GET /api/leaves/outside-students 304 638.2ms
+[SLOW API] GET /api/events 304 1960.2ms
+[SLOW API] GET /api/delegations/admin/all 304 1966.8ms
+[SLOW API] GET /api/chat/conversations 304 2203.8ms
+[SLOW API] GET /api/leaves/outside-students 304 2638.5ms
+[SLOW API] GET /api/leaves/outside-students 304 570.6ms
+[SLOW API] GET /api/leaves/personal?type=out-campus 200 954.9ms
+[SLOW API] GET /api/leaves/personal?type=out-campus 304 802.0ms
+[SLOW API] GET /api/delegations/admin/all 304 1320.2ms
+[SLOW API] GET /api/events 304 1329.7ms
+[SLOW API] GET /api/chat/conversations 304 1500.8ms
+[SLOW API] GET /api/events 304 1281.4ms
+[SLOW API] GET /api/delegations/admin/all 304 2439.5ms
+[SLOW API] GET /api/chat/conversations 304 2439.1ms
+[SLOW API] GET /api/delegations/admin/all 304 1330.8ms
+[SLOW API] GET /api/events 304 1325.7ms
+[SLOW API] GET /api/chat/conversations 304 1516.6ms
+[SLOW API] GET /api/chat/conversations 304 1496.4ms
+[SLOW API] GET /api/events 304 2095.0ms
+[SLOW API] GET /api/delegations/admin/all 500 5010.8ms
+[SLOW API] GET /api/delegations/admin/all 200 1840.7ms
+[SLOW API] GET /api/chat/conversations 304 1840.7ms
+[SLOW API] GET /api/events 304 2614.9ms
+[SLOW API] GET /api/delegations/admin/all 304 1788.0ms
+[SLOW API] GET /api/events 304 1801.1ms
+[SLOW API] GET /api/chat/conversations 304 1991.4ms
+[SLOW API] GET /api/delegations/admin/all 500 5014.9ms
+[SLOW API] GET /api/events 500 5020.3ms
+[SLOW API] GET /api/chat/conversations 500 5031.2ms
+[SLOW API] GET /api/chat/conversations 200 3413.9ms
+[SLOW API] GET /api/delegations/admin/all 500 5008.8ms
+[SLOW API] GET /api/events 200 6909.3ms
+[SLOW API] GET /api/delegations/admin/all 200 1931.1ms
+[SLOW API] GET /api/events 304 2460.1ms
+[SLOW API] GET /api/chat/conversations 304 2857.3ms
+[SLOW API] GET /api/events 304 2877.8ms
+[SLOW API] GET /api/delegations/admin/all 304 3400.9ms
+[SLOW API] GET /api/chat/conversations 304 4183.8ms
+[SLOW API] GET /api/delegations/admin/all 304 1306.6ms
+[SLOW API] GET /api/events 304 1302.6ms
+[SLOW API] GET /api/chat/conversations 304 1482.9ms

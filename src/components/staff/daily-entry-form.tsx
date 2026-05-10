@@ -105,6 +105,10 @@ const optionalNumMin1 = z.preprocess(
     (val) => (val === "" || val === undefined || val === null ? undefined : val),
     z.coerce.number().min(1).optional()
 )
+const juzPortionSchema = z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : val),
+    z.enum(["Full", "1st Half", "2nd Half", "Q1", "Q2", "Q3", "Q4"]).optional()
+)
 
 // Schema
 const formSchema = z.object({
@@ -123,12 +127,13 @@ const formSchema = z.object({
     // Recent Revision (Pages)
     start_page: optionalNumMin1,
     end_page: optionalNumMin1,
-    // Juz Revision
+    // Juz Revision - legacy single entry fields kept for compatibility
     juz_number: optionalNumMin1,
-    juz_portion: z.preprocess(
-        (val) => (val === "" || val === undefined || val === null ? undefined : val),
-        z.enum(["Full", "1st Half", "2nd Half", "Q1", "Q2", "Q3", "Q4"]).optional()
-    ),
+    juz_portion: juzPortionSchema,
+    juz_entries: z.array(z.object({
+        juz_number: optionalNumMin1,
+        juz_portion: juzPortionSchema,
+    })),
     // Common
 }).superRefine((data, ctx) => {
     if (data.mode === "New Verses" || data.mode === "Recent Revision") {
@@ -153,12 +158,27 @@ const formSchema = z.object({
         })
 
     } else if (data.mode?.startsWith("Juz Revision")) {
-        if (!data.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_number"] })
-        if (!data.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_portion"] })
+        data.juz_entries.forEach((entry, index) => {
+            if (!entry.juz_number) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Juz is required", path: ["juz_entries", index, "juz_number"] })
+            if (!entry.juz_portion) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Portion is required", path: ["juz_entries", index, "juz_portion"] })
+        })
     }
 })
 
 type FormValues = z.infer<typeof formSchema>
+type HifzLogRow = {
+    id?: string
+    mode?: string
+    entry_date?: string
+    session_type?: "Subh" | "Breakfast" | "Lunch"
+    surah_name?: string | null
+    start_v?: number | null
+    end_v?: number | null
+    start_page?: number | null
+    end_page?: number | null
+    juz_number?: number | null
+    juz_portion?: FormValues["juz_entries"][number]["juz_portion"] | null
+}
 
 export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const router = useRouter()
@@ -196,13 +216,18 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             session: DEFAULT_HIFZ_SESSION,
             mode: "New Verses",
             new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
+            juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
         },
     })
 
     // Field array for multiple surahs
-    const { fields: versesFields, append: appendVerse, remove: removeVerse, replace: replaceVerses } = useFieldArray({
+    const { fields: versesFields, append: appendVerse, remove: removeVerse } = useFieldArray({
         control: form.control,
         name: "new_verses"
+    });
+    const { fields: juzFields, append: appendJuz, remove: removeJuz } = useFieldArray({
+        control: form.control,
+        name: "juz_entries"
     });
 
     useEffect(() => {
@@ -258,7 +283,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             if (existingLog) {
                 setLogId(existingLog.id)
-                const verseLogs = existingLogs.filter((log: any) => log.mode === "New Verses" || log.mode === "Recent Revision")
+                const verseLogs = (existingLogs as HifzLogRow[]).filter((log) => log.mode === "New Verses" || log.mode === "Recent Revision")
                 const verseEntries = verseLogs.length > 0
                     ? verseLogs.map((log: any) => ({
                         surah_id: SURAH_LIST.find(s => s.name === log.surah_name)?.id,
@@ -270,6 +295,16 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         start_v: existingLog.start_v || undefined,
                         end_v: existingLog.end_v || undefined,
                     }]
+                const juzLogs = (existingLogs as HifzLogRow[]).filter((log) => log.mode?.startsWith("Juz Revision"))
+                const juzEntries = juzLogs.length > 0
+                    ? juzLogs.map((log: any) => ({
+                        juz_number: log.juz_number || undefined,
+                        juz_portion: log.juz_portion || undefined,
+                    }))
+                    : [{
+                        juz_number: existingLog.juz_number || undefined,
+                        juz_portion: existingLog.juz_portion || undefined,
+                    }]
 
                 form.reset({
                     date: existingLog.entry_date ? format(new Date(existingLog.entry_date), 'yyyy-MM-dd') : format(today, 'yyyy-MM-dd'),
@@ -280,6 +315,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     end_page: existingLog.end_page,
                     juz_number: existingLog.juz_number,
                     juz_portion: existingLog.juz_portion as any,
+                    juz_entries: juzEntries,
                 })
             } else {
                 setLogId(null)
@@ -287,9 +323,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     date: initialDate,
                     session: DEFAULT_HIFZ_SESSION,
                     mode: resolvedMode,
-                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
-                    juz_number: "" as any,
-                    juz_portion: "" as any,
+                    new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
+                    juz_number: undefined,
+                    juz_portion: undefined,
+                    juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
                 })
             }
 
@@ -322,7 +359,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                 if (data) {
                     setLogId(data.id)
-                    const verseLogs = logs.filter((log: any) => log.mode === "New Verses" || log.mode === "Recent Revision")
+                    const verseLogs = (logs as HifzLogRow[]).filter((log) => log.mode === "New Verses" || log.mode === "Recent Revision")
                     const verseEntries = verseLogs.length > 0
                         ? verseLogs.map((log: any) => ({
                             surah_id: SURAH_LIST.find(s => s.name === log.surah_name)?.id,
@@ -334,6 +371,16 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                             start_v: data.start_v || undefined,
                             end_v: data.end_v || undefined,
                         }]
+                    const juzLogs = (logs as HifzLogRow[]).filter((log) => log.mode?.startsWith("Juz Revision"))
+                    const juzEntries = juzLogs.length > 0
+                        ? juzLogs.map((log: any) => ({
+                            juz_number: log.juz_number || undefined,
+                            juz_portion: log.juz_portion || undefined,
+                        }))
+                        : [{
+                            juz_number: data.juz_number || undefined,
+                            juz_portion: data.juz_portion || undefined,
+                        }]
                     form.reset({
                         date: data.entry_date ? format(new Date(data.entry_date), 'yyyy-MM-dd') : watchedDate,
                         session: data.session_type || DEFAULT_HIFZ_SESSION,
@@ -342,7 +389,8 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         start_page: data.start_page,
                         end_page: data.end_page,
                         juz_number: data.juz_number,
-                        juz_portion: data.juz_portion as any
+                        juz_portion: data.juz_portion as any,
+                        juz_entries: juzEntries,
                     })
                 } else {
                     setLogId(null)
@@ -350,9 +398,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         date: watchedDate,
                         session: DEFAULT_HIFZ_SESSION,
                         mode: watchedMode,
-                        new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
-                        juz_number: "" as any,
-                        juz_portion: "" as any
+                        new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
+                        juz_number: undefined,
+                        juz_portion: undefined,
+                        juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
                     })
                 }
             } catch (e) { console.error(e) }
@@ -404,18 +453,21 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
                 }
             } else {
-                const singleData = {
+                const recordsToInsert = values.juz_entries.map(j => ({
                     ...commonData,
                     surah_name: null, start_v: null, end_v: null,
                     start_page: null,
                     end_page: null,
-                    juz_number: values.juz_number,
-                    juz_portion: values.juz_portion,
-                }
+                    juz_number: j.juz_number,
+                    juz_portion: j.juz_portion,
+                }))
                 if (logId) {
-                    await api.put(`/hifz/logs/${logId}`, singleData)
+                    await api.put(`/hifz/logs/${logId}`, recordsToInsert[0])
+                    if (recordsToInsert.length > 1) {
+                        await api.post('/hifz/logs/bulk', { logs: recordsToInsert.slice(1) })
+                    }
                 } else {
-                    await api.post('/hifz/logs', singleData)
+                    await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
                 }
             }
 
@@ -428,8 +480,9 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                     mode: form.getValues("mode"),
                     new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
-                    juz_number: "" as any,
-                    juz_portion: "" as any
+                    juz_number: undefined,
+                    juz_portion: undefined,
+                    juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
                 })
             }
         } catch (err: any) {
@@ -758,9 +811,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                     date: form.getValues("date"),
                                                     session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                                                     mode: val as any,
-                                                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
-                                                    juz_number: "" as any,
-                                                    juz_portion: "" as any
+                                                    new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
+                                                    juz_number: undefined,
+                                                    juz_portion: undefined,
+                                                    juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
                                                 });
                                                 setLogId(null);
                                             }} 
@@ -879,59 +933,87 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                              {/* Juz Revision Mode */}
                             {form.watch("mode")?.startsWith("Juz Revision") && (
-                                <div className="space-y-3 p-3 border border-purple-500/10 bg-purple-50/30 dark:bg-purple-950/10 rounded-lg" key="juz">
-                                    <div className="flex gap-3">
-                                        <FormField
-                                            control={form.control}
-                                            name="juz_number"
-                                            render={({ field }) => (
-                                                <FormItem className="flex-1">
-                                                    <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Juz Number</FormLabel>
-                                                    <Select onValueChange={(v) => field.onChange(parseInt(v))} value={field.value?.toString()} disabled={isOldDate}>
-                                                        <FormControl>
-                                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
-                                                                <SelectValue placeholder="Select Juz" />
-                                                            </SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent className="max-h-[200px]">
-                                                            {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
-                                                                <SelectItem key={juz} value={juz.toString()}>
-                                                                    Juz {juz}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage className="text-[10px]" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="juz_portion"
-                                            render={({ field }) => (
-                                                <FormItem className="flex-1">
-                                                    <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Portion</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
-                                                        <FormControl>
-                                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
-                                                                <SelectValue placeholder="Portion" />
-                                                            </SelectTrigger>
-                                                        </FormControl>
-                                                        <SelectContent>
-                                                            <SelectItem value="Full">Full Juz</SelectItem>
-                                                            <SelectItem value="1st Half">1st Half</SelectItem>
-                                                            <SelectItem value="2nd Half">2nd Half</SelectItem>
-                                                            <SelectItem value="Q1">Quarter 1</SelectItem>
-                                                            <SelectItem value="Q2">Quarter 2</SelectItem>
-                                                            <SelectItem value="Q3">Quarter 3</SelectItem>
-                                                            <SelectItem value="Q4">Quarter 4</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage className="text-[10px]" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
+                                <div className="space-y-4" key="juz">
+                                    {juzFields.map((field, index) => (
+                                        <div key={field.id} className="p-4 border-l-2 border-purple-500 bg-purple-950/10 rounded-r-lg relative group">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-xs uppercase tracking-wider text-purple-500/80 font-semibold">Juz Entry {index + 1}</span>
+                                                {juzFields.length > 1 && !isOldDate && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                                        onClick={() => removeJuz(index)}
+                                                    >
+                                                        <Trash2 size={14} className="mr-1" /> Remove
+                                                    </Button>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`juz_entries.${index}.juz_number`}
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex-1">
+                                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Juz Number</FormLabel>
+                                                            <Select onValueChange={(v) => field.onChange(parseInt(v))} value={field.value?.toString()} disabled={isOldDate}>
+                                                                <FormControl>
+                                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
+                                                                        <SelectValue placeholder="Select Juz" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent className="max-h-[200px]">
+                                                                    {Array.from({ length: 30 }, (_, i) => i + 1).map((juz) => (
+                                                                        <SelectItem key={juz} value={juz.toString()}>
+                                                                            Juz {juz}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <FormMessage className="text-[10px]" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name={`juz_entries.${index}.juz_portion`}
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex-1">
+                                                            <FormLabel className="text-[10px] font-bold text-muted-foreground uppercase">Portion</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value} disabled={isOldDate}>
+                                                                <FormControl>
+                                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-input h-9 text-sm">
+                                                                        <SelectValue placeholder="Portion" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Full">Full Juz</SelectItem>
+                                                                    <SelectItem value="1st Half">1st Half</SelectItem>
+                                                                    <SelectItem value="2nd Half">2nd Half</SelectItem>
+                                                                    <SelectItem value="Q1">Quarter 1</SelectItem>
+                                                                    <SelectItem value="Q2">Quarter 2</SelectItem>
+                                                                    <SelectItem value="Q3">Quarter 3</SelectItem>
+                                                                    <SelectItem value="Q4">Quarter 4</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <FormMessage className="text-[10px]" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {!isOldDate && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={() => appendJuz({ juz_number: undefined, juz_portion: undefined })}
+                                            className="w-full h-8 border border-dashed border-purple-800/30 text-[11px] font-bold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                                        >
+                                            <PlusCircle size={14} className="mr-2" /> Add another Juz
+                                        </Button>
+                                    )}
                                 </div>
                             )}
 

@@ -1,0 +1,115 @@
+Error fetching events: Error: Connection terminated due to connection timeout
+    at D:\NewRQP\backend\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getEvents (D:\NewRQP\backend\dist\controllers\events.controller.js:11:24) {
+  [cause]: Error: Connection terminated unexpectedly
+      at Connection.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\client.js:180:73)
+      at Object.onceWrapper (node:events:632:28)
+      at Connection.emit (node:events:518:28)
+      at Socket.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\connection.js:61:12)
+      at Socket.emit (node:events:530:35)
+      at TCP.<anonymous> (node:net:337:12)
+}
+Error fetching conversations: Error: Connection terminated due to connection timeout
+    at D:\NewRQP\backend\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async getStaffId (D:\NewRQP\backend\dist\controllers\chat.controller.js:39:15)
+    at async getConversations (D:\NewRQP\backend\dist\controllers\chat.controller.js:48:25) {
+  [cause]: Error: Connection terminated unexpectedly
+      at Connection.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\client.js:180:73)
+      at Object.onceWrapper (node:events:632:28)
+      at Connection.emit (node:events:518:28)
+      at Socket.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\connection.js:61:12)
+      at Socket.emit (node:events:530:35)
+      at TCP.<anonymous> (node:net:337:12)
+}
+Unexpected error on idle pg client Error: Connection terminated unexpectedly
+    at Connection.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\client.js:180:73)
+    at Object.onceWrapper (node:events:632:28)
+    at Connection.emit (node:events:518:28)
+    at Socket.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\connection.js:61:12)
+    at Socket.emit (node:events:530:35)
+    at TCP.<anonymous> (node:net:337:12) {
+  client: Client {
+    _events: [Object: null prototype] { error: [Function (anonymous)] },
+    _eventsCount: 1,
+    _maxListeners: undefined,
+    connectionParameters: ConnectionParameters {
+      user: 'postgres.jbsirxvegnxsjqoeszdj',
+      database: 'postgres',
+      port: 6543,
+      host: 'aws-1-ap-southeast-2.pooler.supabase.com',
+      binary: false,
+      options: undefined,
+      ssl: [Object],
+      client_encoding: '',
+      replication: undefined,
+      isDomainSocket: false,
+      application_name: undefined,
+      fallback_application_name: undefined,
+      statement_timeout: false,
+      lock_timeout: false,
+      idle_in_transaction_session_timeout: false,
+      query_timeout: false,
+      connect_timeout: 5
+    },
+    user: 'postgres.jbsirxvegnxsjqoeszdj',
+    database: 'postgres',
+    port: 6543,
+    host: 'aws-1-ap-southeast-2.pooler.supabase.com',
+    replication: undefined,
+    _Promise: [Function: Promise],
+    _types: TypeOverrides { _types: [Object], text: {}, binary: {} },
+    _ending: true,
+    _ended: true,
+    _connecting: false,
+    _connected: true,
+    _connectionError: false,
+    _queryable: false,
+    _activeQuery: null,
+    enableChannelBinding: false,
+    connection: Connection {
+      _events: [Object: null prototype],
+      _eventsCount: 23,
+      _maxListeners: undefined,
+      stream: [TLSSocket],
+      _keepAlive: false,
+      _keepAliveInitialDelayMillis: 0,
+      parsedStatements: {},
+      ssl: [Object],
+      _ending: true,
+      _emitMessage: false,
+      _connecting: true,
+      [Symbol(shapeMode)]: false,
+      [Symbol(kCapture)]: false
+    },
+    _queryQueue: [],
+    binary: false,
+    processID: 38745696,
+    secretKey: -712900137,
+    ssl: { rejectUnauthorized: false },
+    _connectionTimeoutMillis: 5000,
+    _connectionCallback: null,
+    connectionTimeoutHandle: Timeout {
+      _idleTimeout: -1,
+      _idlePrev: null,
+      _idleNext: null,
+      _idleStart: 1473281,
+      _onTimeout: null,
+      _timerArgs: undefined,
+      _repeat: null,
+      _destroyed: true,
+      [Symbol(refed)]: false,
+      [Symbol(kHasPrimitive)]: false,
+      [Symbol(asyncId)]: 2953,
+      [Symbol(triggerId)]: 2950
+    },
+    saslSession: null,
+    release: [Function (anonymous)],
+    readyForQuery: true,
+    hasExecuted: true,
+    _poolUseCount: 2,
+    [Symbol(shapeMode)]: false,
+    [Symbol(kCapture)]: false
+  }
+}

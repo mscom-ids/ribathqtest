@@ -1,0 +1,8 @@
+
+> institution-os@0.1.0 dev:backend
+> cd backend && npm run dev
+
+
+> backend@1.0.0 dev
+> nodemon --watch src --exec ts-node src/index.ts
+

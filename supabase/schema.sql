@@ -45,7 +45,7 @@ CREATE TABLE hifz_logs (
   usthad_id UUID REFERENCES staff(id),
   entry_date DATE DEFAULT CURRENT_DATE NOT NULL,
   session_type TEXT CHECK (session_type IN ('Subh', 'Breakfast', 'Lunch')) NOT NULL,
-  mode TEXT CHECK (mode IN ('New Verses', 'Recent Revision', 'Juz Revision')) NOT NULL,
+  mode TEXT CHECK (mode IN ('New Verses', 'Recent Revision', 'Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)')) NOT NULL,
   -- New Verses Mode
   surah_name TEXT,
   start_v INTEGER,

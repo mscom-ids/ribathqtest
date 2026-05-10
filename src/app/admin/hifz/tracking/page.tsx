@@ -259,7 +259,7 @@ export default function HifzTrackingPage() {
                                                         {logs.length > 0 ? (() => {
                                                             const newVerses = logs.filter(l => l.mode === "New Verses");
                                                             const recentRevisions = logs.filter(l => l.mode === "Recent Revision");
-                                                            const juzRevisions = logs.filter(l => l.mode === "Juz Revision");
+                                                            const juzRevisions = logs.filter(l => l.mode?.startsWith("Juz Revision"));
 
                                                             const renderLogBadge = (log: HifzLog) => (
                                                                 <div key={log.id} className="flex items-center gap-1 group bg-slate-50 dark:bg-slate-900 border rounded pr-1 shadow-sm w-fit">
@@ -342,7 +342,7 @@ export default function HifzTrackingPage() {
                             <Card className="bg-purple-50">
                                 <CardContent className="pt-4">
                                     <div className="text-2xl font-bold text-purple-700">
-                                        {Object.values(hifzLogs).flat().filter(l => l.mode === "Juz Revision").length}
+                                        {Object.values(hifzLogs).flat().filter(l => l.mode?.startsWith("Juz Revision")).length}
                                     </div>
                                     <p className="text-sm text-purple-600">Juz Revision</p>
                                 </CardContent>

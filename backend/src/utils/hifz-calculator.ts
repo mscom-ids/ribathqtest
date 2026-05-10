@@ -81,7 +81,7 @@ export function calculateHifzReportPoints(logs: HifzLog[], attendance: Attendanc
 
     // STEP 4: JUZ REVISION POINT
     let totalJuzRecited = 0;
-    logs.filter(l => l.mode === 'Juz Revision').forEach(log => {
+    logs.filter(l => l.mode?.startsWith('Juz Revision')).forEach(log => {
         const portion = log.juz_portion;
         if (portion === 'Full') totalJuzRecited += 1;
         else if (portion?.includes('Half')) totalJuzRecited += 0.5;

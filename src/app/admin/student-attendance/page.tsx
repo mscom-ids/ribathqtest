@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, AlertCircle, ChevronDown, LogOut } from "lucide-react"
+import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, LogOut } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import Cookies from "js-cookie"
@@ -13,9 +13,8 @@ type StaffMember = { id: string; name: string; role: string; photo_url?: string 
 function toLocalDateStr(d: Date) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-function jsDayToOur(d: Date) {
-    const wd = d.getDay()
-    return wd === 0 ? 7 : wd
+function getDayOfWeek(d: Date) {
+    return d.getDay()
 }
 
 export default function StudentAttendancePage() {
@@ -127,10 +126,9 @@ export default function StudentAttendancePage() {
     }
 
     const viewDateStr = toLocalDateStr(viewDate)
-    const viewDayOfWeek = jsDayToOur(viewDate)
+    const viewDayOfWeek = getDayOfWeek(viewDate)
     const isToday = diffFromToday === 0
     const isYesterday = diffFromToday === 1
-    const isSunday = viewDate.getDay() === 0
     const now = new Date()
 
     // ── Mentor context ──────────────────────────────────────────────────────────
@@ -471,12 +469,7 @@ export default function StudentAttendancePage() {
                     <span className="text-[12px] font-bold text-slate-400">{daySchedules.length} slot{daySchedules.length !== 1 ? 's' : ''}</span>
                 </div>
 
-                {isSunday ? (
-                    <div className="flex flex-col items-center justify-center py-16 gap-3">
-                        <AlertCircle className="h-10 w-10 text-slate-300" />
-                        <p className="text-[14px] text-slate-500 font-medium">Sunday — No classes scheduled</p>
-                    </div>
-                ) : loading ? (
+                {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <RefreshCw className="h-5 w-5 animate-spin text-slate-400" />
                     </div>
