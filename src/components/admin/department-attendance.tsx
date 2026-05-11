@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, AlertCircle } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
 
@@ -58,7 +59,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     const fetchFilters = async () => {
         try {
-            const res = await api.get('/classes/academic-years')
+            const res = await cachedGet('/classes/academic-years', undefined, 5 * 60_000)
             if (res.data.success) {
                 setAcademicYears(res.data.data)
                 const current = res.data.data.find((y: any) => y.is_current)
@@ -70,7 +71,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     const fetchStaff = async () => {
         try {
-            const res = await api.get('/staff')
+            const res = await cachedGet('/staff', undefined, 60_000)
             const data = res.data.data || res.data.staff || res.data || []
             setStaffList(Array.isArray(data) ? data : [])
         } catch (e) { console.error("Failed to load staff", e) }
@@ -84,8 +85,8 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         try {
             const dateStr = toLocalDateStr(viewDate)
             const [schedRes, dashRes] = await Promise.all([
-                api.get(`/attendance/schedules?academic_year_id=${selectedYearId}`),
-                api.get(`/attendance/dashboard?start_date=${dateStr}&end_date=${dateStr}`)
+                cachedGet('/attendance/schedules', { academic_year_id: selectedYearId }, 60_000),
+                cachedGet('/attendance/dashboard', { start_date: dateStr, end_date: dateStr }, 15_000)
             ])
             if (schedRes.data.success) {
                 // Filter schedules by department (class_type) natively upon fetch
@@ -109,7 +110,10 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 return
             }
             try {
-                const res = await api.get(`/attendance/mentor-schedules?mentor_id=${selectedMentorId}&academic_year_id=${selectedYearId}`)
+                const res = await cachedGet('/attendance/mentor-schedules', {
+                    mentor_id: selectedMentorId,
+                    academic_year_id: selectedYearId,
+                }, 60_000)
                 if (res.data.success) {
                     setMentorSchedules(res.data.schedule_ids || [])
                     setMentorStandards(res.data.mentor_standards || [])
@@ -242,7 +246,11 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 payload.on_behalf_of = rosterModal.mentorId
             }
             const res = await api.post('/attendance/mark', payload)
-            if (res.data.success) { setRosterModal(null); fetchData() }
+            if (res.data.success) {
+                invalidateCache('/attendance/dashboard')
+                setRosterModal(null)
+                fetchData()
+            }
         } catch (e: any) {
             alert(e.response?.data?.error || "Error submitting attendance")
         }

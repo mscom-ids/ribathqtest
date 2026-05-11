@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, LogOut } from "lucide-react"
 import api from "@/lib/api"
-import { cachedGet } from "@/lib/api-cache"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
 
@@ -84,8 +84,8 @@ export default function StudentAttendancePage() {
         try {
             const dateStr = toLocalDateStr(viewDate)
             const [schedRes, dashRes] = await Promise.all([
-                api.get(`/attendance/schedules?academic_year_id=${selectedYearId}`),
-                api.get(`/attendance/dashboard?start_date=${dateStr}&end_date=${dateStr}`)
+                cachedGet('/attendance/schedules', { academic_year_id: selectedYearId }, 60_000),
+                cachedGet('/attendance/dashboard', { start_date: dateStr, end_date: dateStr }, 15_000)
             ])
             if (schedRes.data.success) setSchedules(schedRes.data.data)
             if (dashRes.data.success) setDashboardData(dashRes.data)
@@ -104,7 +104,10 @@ export default function StudentAttendancePage() {
                 return
             }
             try {
-                const res = await api.get(`/attendance/mentor-schedules?mentor_id=${selectedMentorId}&academic_year_id=${selectedYearId}`)
+                const res = await cachedGet('/attendance/mentor-schedules', {
+                    mentor_id: selectedMentorId,
+                    academic_year_id: selectedYearId,
+                }, 60_000)
                 if (res.data.success) {
                     setMentorSchedules(res.data.schedule_ids || [])
                 }
@@ -209,7 +212,11 @@ export default function StudentAttendancePage() {
                 payload.on_behalf_of = rosterModal.mentorId
             }
             const res = await api.post('/attendance/mark', payload)
-            if (res.data.success) { setRosterModal(null); fetchData() }
+            if (res.data.success) {
+                invalidateCache('/attendance/dashboard')
+                setRosterModal(null)
+                fetchData()
+            }
         } catch (e: any) {
             alert(e.response?.data?.error || "Error submitting attendance")
         }

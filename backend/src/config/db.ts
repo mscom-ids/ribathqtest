@@ -35,9 +35,23 @@ pool.on('error', (err, client) => {
   process.exit(-1);
 });
 
+const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);
+
+function summarizeSql(text: string) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 220);
+}
+
 export const db = {
-  query: (text: string, params?: any[]) => {
-    return pool.query(text, params);
+  query: async (text: string, params?: any[]) => {
+    const startedAt = Date.now();
+    try {
+      return await pool.query(text, params);
+    } finally {
+      const duration = Date.now() - startedAt;
+      if (duration >= SLOW_QUERY_MS) {
+        console.warn(`[SLOW DB] ${duration}ms params=${params?.length || 0} sql="${summarizeSql(text)}"`);
+      }
+    }
   },
   getClient: () => {
     return pool.connect();

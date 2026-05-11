@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDailyAttendanceStats = exports.updateBreak = exports.getBreaks = exports.getStudentMarksForSchedule = exports.cancelSession = exports.markAttendance = exports.getStudentsForSchedule = exports.getMentorSchedules = exports.getDashboardData = exports.deleteSchedule = exports.createSchedule = exports.getSchedulesForDate = exports.getSchedules = void 0;
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
+const server_cache_1 = require("../utils/server-cache");
 const ROLE_LIMITS = {
     staff: 3, // 3 days for mentors
     usthad: 3, // same window for usthad role
@@ -258,6 +259,7 @@ const createSchedule = async (req, res) => {
         }
         const result = await db_1.db.query(`INSERT INTO attendance_schedules (class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, [class_type, name || null, JSON.stringify(standards), day_of_week, start_time, end_time, duration_mins, startDate]);
+        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (err) {
@@ -274,6 +276,7 @@ const deleteSchedule = async (req, res) => {
         await db_1.db.query(`UPDATE attendance_schedules 
              SET effective_until = $1, is_deleted = true 
              WHERE id = $2`, [today, id]);
+        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         res.json({ success: true, message: 'Schedule deactivated. Past attendance data preserved.' });
     }
     catch (err) {
@@ -287,11 +290,11 @@ const getDashboardData = async (req, res) => {
         if (!start_date || !end_date)
             return res.status(400).json({ success: false, error: "Dates required" });
         const user = req.user;
+        const mentorId = MENTOR_ROLES.includes(user?.role) ? await (0, staff_utils_1.getStaffId)(req) : null;
         const cancels = await db_1.db.query('SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2', [start_date, end_date]);
         let marksQuery;
         if (MENTOR_ROLES.includes(user?.role)) {
             // Mentors only see their own marks — so "Marked" status is per-mentor
-            const mentorId = await (0, staff_utils_1.getStaffId)(req);
             marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3', [start_date, end_date, mentorId || user.id]);
         }
         else {
@@ -584,6 +587,7 @@ const markAttendance = async (req, res) => {
                  VALUES ($1, $2, $3, NOW())
                  ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`, [schedule_id, date, effectiveMarkedBy]);
             await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
             res.json({ success: true, data: result.rows[0] });
         }
         catch (txErr) {
@@ -611,6 +615,7 @@ const cancelSession = async (req, res) => {
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (schedule_id, date) DO UPDATE SET reason = EXCLUDED.reason, cancelled_by = EXCLUDED.cancelled_by RETURNING *`, [schedule_id, date, reason, userId]);
         await db_1.db.query('DELETE FROM attendance_marks WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
+        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (err) {
@@ -664,6 +669,7 @@ const updateBreak = async (req, res) => {
         const { id } = req.params;
         const { start_time, end_time } = req.body;
         const result = await db_1.db.query('UPDATE academic_breaks SET start_time = $1, end_time = $2 WHERE id = $3 RETURNING *', [start_time, end_time, id]);
+        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (err) {
@@ -676,40 +682,41 @@ const getDailyAttendanceStats = async (req, res) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date)
             return res.status(400).json({ success: false, error: "start_date and end_date are required" });
-        // Build stats for students
-        const studentRes = await db_1.db.query(`SELECT status, count(*) as count 
-             FROM student_attendance_marks 
-             WHERE date >= $1 AND date <= $2 
-             GROUP BY status`, [start_date, end_date]);
-        const students = { present: 0, absent: 0, late: 0, total: 0 };
-        studentRes.rows.forEach(r => {
-            const st = r.status.toLowerCase();
-            const cnt = parseInt(r.count, 10);
-            if (st === 'present')
-                students.present += cnt;
-            else if (st === 'absent')
-                students.absent += cnt;
-            else if (st === 'late')
-                students.late += cnt;
+        const { students, mentors } = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:daily-stats', { start_date, end_date }), 60000, async () => {
+            const studentRes = await db_1.db.query(`SELECT status, count(*) as count
+                     FROM student_attendance_marks
+                     WHERE date >= $1 AND date <= $2
+                     GROUP BY status`, [start_date, end_date]);
+            const students = { present: 0, absent: 0, late: 0, total: 0 };
+            studentRes.rows.forEach(r => {
+                const st = r.status.toLowerCase();
+                const cnt = parseInt(r.count, 10);
+                if (st === 'present')
+                    students.present += cnt;
+                else if (st === 'absent')
+                    students.absent += cnt;
+                else if (st === 'late')
+                    students.late += cnt;
+            });
+            students.total = students.present + students.absent + students.late;
+            const mentorRes = await db_1.db.query(`SELECT status, count(*) as count
+                     FROM staff_attendance
+                     WHERE date >= $1 AND date <= $2
+                     GROUP BY status`, [start_date, end_date]);
+            const mentors = { present: 0, absent: 0, late: 0, total: 0 };
+            mentorRes.rows.forEach(r => {
+                const st = r.status.toLowerCase();
+                const cnt = parseInt(r.count, 10);
+                if (st === 'present')
+                    mentors.present += cnt;
+                else if (st === 'absent')
+                    mentors.absent += cnt;
+                else if (st === 'late')
+                    mentors.late += cnt;
+            });
+            mentors.total = mentors.present + mentors.absent + mentors.late;
+            return { students, mentors };
         });
-        students.total = students.present + students.absent + students.late;
-        // Build stats for mentors (staff attendance)
-        const mentorRes = await db_1.db.query(`SELECT status, count(*) as count 
-             FROM staff_attendance 
-             WHERE date >= $1 AND date <= $2 
-             GROUP BY status`, [start_date, end_date]);
-        const mentors = { present: 0, absent: 0, late: 0, total: 0 };
-        mentorRes.rows.forEach(r => {
-            const st = r.status.toLowerCase();
-            const cnt = parseInt(r.count, 10);
-            if (st === 'present')
-                mentors.present += cnt;
-            else if (st === 'absent')
-                mentors.absent += cnt;
-            else if (st === 'late')
-                mentors.late += cnt;
-        });
-        mentors.total = mentors.present + mentors.absent + mentors.late;
         res.json({ success: true, students, mentors });
     }
     catch (err) {

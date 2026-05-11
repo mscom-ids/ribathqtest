@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { db } from '../config/db';
 import { devLog } from '../utils/logger';
 import { getStaffId } from '../utils/staff.utils';
+import { cachedResult, invalidateCacheByPrefix } from '../utils/server-cache';
 
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 
@@ -95,33 +96,32 @@ export const getAllStudents = async (req: Request, res: Response) => {
 // instead of fetching every row and counting in JS.
 export const getStudentCounts = async (_req: Request, _res: Response) => {
   try {
-    const [statusRes, outsideRes] = await Promise.all([
-      db.query(
-        `SELECT
-            COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active,
-            COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-            COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dropout,
-            COUNT(*) AS total
-          FROM students`
-      ),
-      db.query(
-        `SELECT COUNT(DISTINCT student_id) AS out_campus
-         FROM student_leaves
-         WHERE status = 'outside'`
-      ),
-    ]);
+    const counts = await cachedResult('students:counts', 60_000, async () => {
+      const [statusRes, outsideRes] = await Promise.all([
+        db.query(
+          `SELECT
+              COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active,
+              COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+              COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dropout,
+              COUNT(*) AS total
+            FROM students`
+        ),
+        db.query(
+          `SELECT COUNT(DISTINCT student_id) AS out_campus
+           FROM student_leaves
+           WHERE status = 'outside'`
+        ),
+      ]);
 
-    const r = statusRes.rows[0];
-    const active = parseInt(r.active, 10) || 0;
-    const completed = parseInt(r.completed, 10) || 0;
-    const dropout = parseInt(r.dropout, 10) || 0;
-    const total = parseInt(r.total, 10) || 0;
-    const outCampus = parseInt(outsideRes.rows[0].out_campus, 10) || 0;
-    const onCampus = Math.max(0, active - outCampus);
+      const r = statusRes.rows[0];
+      const active = parseInt(r.active, 10) || 0;
+      const completed = parseInt(r.completed, 10) || 0;
+      const dropout = parseInt(r.dropout, 10) || 0;
+      const total = parseInt(r.total, 10) || 0;
+      const outCampus = parseInt(outsideRes.rows[0].out_campus, 10) || 0;
+      const onCampus = Math.max(0, active - outCampus);
 
-    _res.json({
-      success: true,
-      counts: {
+      return {
         total,
         active,
         completed,
@@ -129,7 +129,12 @@ export const getStudentCounts = async (_req: Request, _res: Response) => {
         on_campus: onCampus,
         out_campus: outCampus,
         alumni: completed + dropout,
-      },
+      };
+    });
+
+    _res.json({
+      success: true,
+      counts,
     });
   } catch (err) {
     console.error('Error fetching student counts:', err);
@@ -248,6 +253,8 @@ export const createStudent = async (req: Request, res: Response) => {
 
     const result = await db.query(query, values);
     
+    invalidateCacheByPrefix('students:');
+    invalidateCacheByPrefix('attendance:');
     res.status(201).json({ success: true, student: result.rows[0] });
   } catch (err) {
     console.error('Error creating student:', err);
@@ -318,6 +325,8 @@ export const updateStudent = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Student not found' });
     }
 
+    invalidateCacheByPrefix('students:');
+    invalidateCacheByPrefix('attendance:');
     res.json({ success: true, student: result.rows[0] });
   } catch (err: any) {
     console.error('Error updating student:', err);

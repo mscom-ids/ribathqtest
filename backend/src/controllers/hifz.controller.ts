@@ -3,6 +3,10 @@ import { db } from '../config/db';
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
 import { countCompletedJuz } from '../utils/quran-juz';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
+
+const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
+const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
 
 export const getHifzStudents = async (req: Request, res: Response) => {
     try {
@@ -135,6 +139,7 @@ export const createHifzLog = async (req: Request, res: Response) => {
              surah_name || null, start_v || null, end_v || null, start_page || null,
              end_page || null, juz_number || null, juz_portion || null]
         );
+        invalidateCacheByPrefix('hifz:');
         res.json({ success: true, log: result.rows[0] });
     } catch (err) {
         console.error('Error creating hifz log:', err);
@@ -156,6 +161,7 @@ export const updateHifzLog = async (req: Request, res: Response) => {
              end_page || null, juz_number || null, juz_portion || null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Not found' });
+        invalidateCacheByPrefix('hifz:');
         res.json({ success: true, log: result.rows[0] });
     } catch (err) {
         console.error('Error updating hifz log:', err);
@@ -235,6 +241,7 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
             values
         );
 
+        invalidateCacheByPrefix('hifz:');
         res.json({ success: true, logs: result.rows });
     } catch (err) {
         console.error('Error bulk creating hifz logs:', err);
@@ -246,6 +253,7 @@ export const deleteHifzLog = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         await db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
+        invalidateCacheByPrefix('hifz:');
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting hifz log:', err);
@@ -258,8 +266,15 @@ export const getMonthlyReports = async (req: Request, res: Response) => {
         const { report_month } = req.query;
         if (!report_month) return res.status(400).json({ success: false, error: 'report_month is required' });
 
-        const result = await db.query('SELECT * FROM monthly_reports WHERE report_month = $1', [report_month]);
-        res.json({ success: true, reports: result.rows });
+        const reports = await cachedResult(
+            makeCacheKey('hifz:monthly-reports', { report_month }),
+            HIFZ_MONTHLY_TTL_MS,
+            async () => {
+                const result = await db.query('SELECT * FROM monthly_reports WHERE report_month = $1', [report_month]);
+                return result.rows;
+            }
+        );
+        res.json({ success: true, reports });
     } catch (err) {
         console.error('Error fetching monthly reports:', err);
         res.status(500).json({ success: false, error: 'Failed' });
@@ -287,6 +302,7 @@ export const upsertMonthlyReport = async (req: Request, res: Response) => {
         const params = [student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance];
         const result = await db.query(query, params);
         
+        invalidateCacheByPrefix('hifz:monthly');
         res.json({ success: true, report: result.rows[0] });
     } catch (err) {
         console.error('Error upserting monthly report:', err);
@@ -302,35 +318,41 @@ export const getProgressSummary = async (req: Request, res: Response) => {
         // the institution-wide scan on every open.
         const { student_id } = req.query;
 
-        const params: any[] = [];
-        let where = `WHERE mode = 'New Verses'
-                       AND surah_name IS NOT NULL
-                       AND start_v IS NOT NULL
-                       AND end_v IS NOT NULL`;
-        if (student_id) {
-            params.push(student_id);
-            where += ` AND student_id = $1`;
-        }
+        const progressMap = await cachedResult(
+            makeCacheKey('hifz:progress-summary', { student_id: student_id || 'all' }),
+            HIFZ_SUMMARY_TTL_MS,
+            async () => {
+                const params: any[] = [];
+                let where = `WHERE mode = 'New Verses'
+                               AND surah_name IS NOT NULL
+                               AND start_v IS NOT NULL
+                               AND end_v IS NOT NULL`;
+                if (student_id) {
+                    params.push(student_id);
+                    where += ` AND student_id = $1`;
+                }
 
-        const result = await db.query(
-            `SELECT student_id, surah_name, start_v, end_v
-             FROM hifz_logs
-             ${where}`,
-            params
+                const result = await db.query(
+                    `SELECT student_id, surah_name, start_v, end_v
+                     FROM hifz_logs
+                     ${where}`,
+                    params
+                );
+
+                const byStudent: Record<string, { surah_name: string | null; start_v: number | null; end_v: number | null }[]> = {};
+                for (const row of result.rows) {
+                    if (!byStudent[row.student_id]) byStudent[row.student_id] = [];
+                    byStudent[row.student_id].push(row);
+                }
+
+                const nextProgressMap: Record<string, number> = {};
+                for (const [studentId, logs] of Object.entries(byStudent)) {
+                    nextProgressMap[studentId] = countCompletedJuz(logs);
+                }
+
+                return nextProgressMap;
+            }
         );
-
-        // Group logs by student_id
-        const byStudent: Record<string, { surah_name: string | null; start_v: number | null; end_v: number | null }[]> = {};
-        for (const row of result.rows) {
-            if (!byStudent[row.student_id]) byStudent[row.student_id] = [];
-            byStudent[row.student_id].push(row);
-        }
-
-        // Compute completed juz count per student using proper boundary check
-        const progressMap: Record<string, number> = {};
-        for (const [studentId, logs] of Object.entries(byStudent)) {
-            progressMap[studentId] = countCompletedJuz(logs);
-        }
 
         res.json({ success: true, progressMap });
     } catch (err: any) {
@@ -382,45 +404,42 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
             return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
         }
 
+        const results = await cachedResult(
+            makeCacheKey('hifz:monthly-calculate', { month }),
+            HIFZ_MONTHLY_TTL_MS,
+            async () => {
         const date = new Date(month as string);
         const startDate = format(startOfMonth(date), 'yyyy-MM-dd');
         const endDate = format(endOfMonth(date), 'yyyy-MM-dd');
 
-        // 1. Get all active students that belong to Hifz (have hifz_standard or standard indicator)
-        const studentsResult = await db.query(
-            `SELECT s.adm_no, s.name, 
-             COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
-             st.name as usthad_name, st.phone as usthad_phone
-             FROM students s
-             LEFT JOIN staff st ON s.hifz_mentor_id = st.id
-             WHERE s.status = 'active'
-             ORDER BY s.adm_no`
-        );
+        const [studentsResult, logsResult, attendanceResult, manualReportsResult] = await Promise.all([
+            db.query(
+                `SELECT s.adm_no, s.name,
+                 COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
+                 st.name as usthad_name, st.phone as usthad_phone
+                 FROM students s
+                 LEFT JOIN staff st ON s.hifz_mentor_id = st.id
+                 WHERE s.status = 'active'
+                 ORDER BY s.adm_no`
+            ),
+            db.query(
+                `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
+                 start_page, end_page, juz_number, juz_portion
+                 FROM hifz_logs
+                 WHERE entry_date >= $1::date AND entry_date <= $2::date`,
+                [startDate, endDate]
+            ),
+            db.query(
+                `SELECT student_id, date, status FROM attendance
+                 WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`,
+                [startDate, endDate]
+            ),
+            db.query(
+                `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
+                [format(date, 'yyyy-MM-01')]
+            ),
+        ]);
 
-        // 2. Fetch ALL hifz logs for the month
-        const logsResult = await db.query(
-            `SELECT student_id, mode, entry_date, surah_name, start_v, end_v, 
-             start_page, end_page, juz_number, juz_portion
-             FROM hifz_logs 
-             WHERE entry_date >= $1::date AND entry_date <= $2::date`,
-            [startDate, endDate]
-        );
-
-        // 3. Fetch ALL attendance for the month (Hifz department)
-        const attendanceResult = await db.query(
-            `SELECT student_id, date, status FROM attendance 
-             WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`,
-            [startDate, endDate]
-        );
-
-        // 4. Check for manual reports
-        const reportMonthDate = format(date, 'yyyy-MM-01');
-        const manualReportsResult = await db.query(
-            `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
-            [reportMonthDate]
-        );
-
-        // Group data by student
         const logsByStudent: Record<string, any[]> = {};
         logsResult.rows.forEach((log: any) => {
             if (!logsByStudent[log.student_id]) logsByStudent[log.student_id] = [];
@@ -438,8 +457,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
             manualByStudent[r.student_id] = r;
         });
 
-        // 5. Calculate for each student
-        const results = studentsResult.rows.map((student: any) => {
+        return studentsResult.rows.map((student: any) => {
             const manualRecord = manualByStudent[student.adm_no];
             
             if (manualRecord) {
@@ -521,6 +539,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                 ...calc
             };
         });
+            }
+        );
 
         res.json({ success: true, reports: results });
     } catch (err: any) {

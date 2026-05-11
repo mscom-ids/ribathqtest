@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Badge } from "@/components/ui/badge"
 
 type StudentMonthlyStats = {
@@ -82,9 +83,7 @@ export default function MonthlyReportsPage() {
         try {
             // Our backend now handles all the fetching, merging, and grade calculations
             // Re-verified endpoint: /hifz/monthly-reports/calculate
-            const res = await api.get('/hifz/monthly-reports/calculate', { 
-                params: { month: selectedMonth } 
-            })
+            const res = await cachedGet('/hifz/monthly-reports/calculate', { month: selectedMonth }, 5 * 60_000)
             
             if (res.data.success && Array.isArray(res.data.reports)) {
                 const sorted = res.data.reports.sort((a: any, b: any) => 
@@ -163,6 +162,8 @@ _Generated from Ma'din Ribathul Quran ERP_
 
             if (!res.data.success) throw new Error(res.data.error);
 
+            invalidateCache('/hifz/monthly-reports')
+            invalidateCache('/hifz/monthly-reports/calculate')
             setIsDialogOpen(false)
             loadReportData() // Refresh
 

@@ -35,9 +35,22 @@ pool.on('error', (err, client) => {
     console.error('Unexpected error on idle pg client', err);
     process.exit(-1);
 });
+const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);
+function summarizeSql(text) {
+    return text.replace(/\s+/g, ' ').trim().slice(0, 220);
+}
 exports.db = {
-    query: (text, params) => {
-        return pool.query(text, params);
+    query: async (text, params) => {
+        const startedAt = Date.now();
+        try {
+            return await pool.query(text, params);
+        }
+        finally {
+            const duration = Date.now() - startedAt;
+            if (duration >= SLOW_QUERY_MS) {
+                console.warn(`[SLOW DB] ${duration}ms params=${params?.length || 0} sql="${summarizeSql(text)}"`);
+            }
+        }
     },
     getClient: () => {
         return pool.connect();

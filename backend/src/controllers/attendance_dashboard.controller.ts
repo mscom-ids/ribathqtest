@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 
 const ROLE_LIMITS = {
     staff: 3,    // 3 days for mentors
@@ -304,6 +305,7 @@ export const createSchedule = async (req: Request, res: Response) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
             [class_type, name || null, JSON.stringify(standards), day_of_week, start_time, end_time, duration_mins, startDate]
         );
+        invalidateCacheByPrefix('attendance:');
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -323,6 +325,7 @@ export const deleteSchedule = async (req: Request, res: Response) => {
              WHERE id = $2`,
             [today, id]
         );
+        invalidateCacheByPrefix('attendance:');
         res.json({ success: true, message: 'Schedule deactivated. Past attendance data preserved.' });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -335,6 +338,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         if (!start_date || !end_date) return res.status(400).json({ success: false, error: "Dates required" });
 
         const user = (req as any).user;
+        const mentorId = MENTOR_ROLES.includes(user?.role) ? await getStaffId(req) : null;
         const cancels = await db.query(
             'SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2',
             [start_date, end_date]
@@ -343,7 +347,6 @@ export const getDashboardData = async (req: Request, res: Response) => {
         let marksQuery: { rows: any[] };
         if (MENTOR_ROLES.includes(user?.role)) {
             // Mentors only see their own marks — so "Marked" status is per-mentor
-            const mentorId = await getStaffId(req);
             marksQuery = await db.query(
                 'SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3',
                 [start_date, end_date, mentorId || user.id]
@@ -706,6 +709,7 @@ export const markAttendance = async (req: Request, res: Response) => {
             );
 
             await client.query('COMMIT');
+            invalidateCacheByPrefix('attendance:');
             res.json({ success: true, data: result.rows[0] });
         } catch (txErr) {
             await client.query('ROLLBACK');
@@ -737,6 +741,7 @@ export const cancelSession = async (req: Request, res: Response) => {
 
         await db.query('DELETE FROM attendance_marks WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
 
+        invalidateCacheByPrefix('attendance:');
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -794,6 +799,7 @@ export const updateBreak = async (req: Request, res: Response) => {
             'UPDATE academic_breaks SET start_time = $1, end_time = $2 WHERE id = $3 RETURNING *',
             [start_time, end_time, id]
         );
+        invalidateCacheByPrefix('attendance:');
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -805,43 +811,49 @@ export const getDailyAttendanceStats = async (req: Request, res: Response) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date) return res.status(400).json({ success: false, error: "start_date and end_date are required" });
 
-        // Build stats for students
-        const studentRes = await db.query(
-            `SELECT status, count(*) as count 
-             FROM student_attendance_marks 
-             WHERE date >= $1 AND date <= $2 
-             GROUP BY status`,
-            [start_date, end_date]
+        const { students, mentors } = await cachedResult(
+            makeCacheKey('attendance:daily-stats', { start_date, end_date }),
+            60_000,
+            async () => {
+                const studentRes = await db.query(
+                    `SELECT status, count(*) as count
+                     FROM student_attendance_marks
+                     WHERE date >= $1 AND date <= $2
+                     GROUP BY status`,
+                    [start_date, end_date]
+                );
+
+                const students = { present: 0, absent: 0, late: 0, total: 0 };
+                studentRes.rows.forEach(r => {
+                    const st = r.status.toLowerCase();
+                    const cnt = parseInt(r.count, 10);
+                    if (st === 'present') students.present += cnt;
+                    else if (st === 'absent') students.absent += cnt;
+                    else if (st === 'late') students.late += cnt;
+                });
+                students.total = students.present + students.absent + students.late;
+
+                const mentorRes = await db.query(
+                    `SELECT status, count(*) as count
+                     FROM staff_attendance
+                     WHERE date >= $1 AND date <= $2
+                     GROUP BY status`,
+                    [start_date, end_date]
+                );
+
+                const mentors = { present: 0, absent: 0, late: 0, total: 0 };
+                mentorRes.rows.forEach(r => {
+                    const st = r.status.toLowerCase();
+                    const cnt = parseInt(r.count, 10);
+                    if (st === 'present') mentors.present += cnt;
+                    else if (st === 'absent') mentors.absent += cnt;
+                    else if (st === 'late') mentors.late += cnt;
+                });
+                mentors.total = mentors.present + mentors.absent + mentors.late;
+
+                return { students, mentors };
+            }
         );
-
-        const students = { present: 0, absent: 0, late: 0, total: 0 };
-        studentRes.rows.forEach(r => {
-            const st = r.status.toLowerCase();
-            const cnt = parseInt(r.count, 10);
-            if (st === 'present') students.present += cnt;
-            else if (st === 'absent') students.absent += cnt;
-            else if (st === 'late') students.late += cnt;
-        });
-        students.total = students.present + students.absent + students.late;
-
-        // Build stats for mentors (staff attendance)
-        const mentorRes = await db.query(
-            `SELECT status, count(*) as count 
-             FROM staff_attendance 
-             WHERE date >= $1 AND date <= $2 
-             GROUP BY status`,
-            [start_date, end_date]
-        );
-
-        const mentors = { present: 0, absent: 0, late: 0, total: 0 };
-        mentorRes.rows.forEach(r => {
-            const st = r.status.toLowerCase();
-            const cnt = parseInt(r.count, 10);
-            if (st === 'present') mentors.present += cnt;
-            else if (st === 'absent') mentors.absent += cnt;
-            else if (st === 'late') mentors.late += cnt;
-        });
-        mentors.total = mentors.present + mentors.absent + mentors.late;
 
         res.json({ success: true, students, mentors });
     } catch (err: any) {
