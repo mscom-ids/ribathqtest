@@ -1,13 +1,37 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = exports.getProgressSummary = exports.upsertMonthlyReport = exports.getMonthlyReports = exports.deleteHifzLog = exports.bulkCreateHifzLogs = exports.updateHifzLog = exports.createHifzLog = exports.getMaxJuzForStudent = exports.getHifzLog = exports.getHifzLogsList = exports.getHifzStudents = void 0;
+exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = exports.getProgressSummary = exports.upsertMonthlyReportSettings = exports.getMonthlyReportSettings = exports.upsertMonthlyReport = exports.getMonthlyReports = exports.deleteHifzLog = exports.bulkCreateHifzLogs = exports.updateHifzLog = exports.createHifzLog = exports.getMaxJuzForStudent = exports.getHifzLog = exports.getHifzLogsList = exports.getHifzStudents = void 0;
 const db_1 = require("../config/db");
 const hifz_calculator_1 = require("../utils/hifz-calculator");
 const quran_juz_1 = require("../utils/quran-juz");
 const date_fns_1 = require("date-fns");
 const server_cache_1 = require("../utils/server-cache");
+const quran_data_1 = require("../utils/quran-data");
 const HIFZ_SUMMARY_TTL_MS = 5 * 60000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60000;
+const getDetectedClassDays = async (startDate, endDate) => {
+    const result = await db_1.db.query(`SELECT COUNT(DISTINCT date) AS class_days
+         FROM attendance
+         WHERE date >= $1::date
+           AND date <= $2::date
+           AND department = 'Hifz'
+           AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')`, [startDate, endDate]);
+    return Number(result.rows[0]?.class_days || 0);
+};
+const getDetectedLogDays = async (startDate, endDate) => {
+    const result = await db_1.db.query(`SELECT COUNT(DISTINCT entry_date::date) AS log_days
+         FROM hifz_logs
+         WHERE entry_date >= $1::date
+           AND entry_date <= $2::date`, [startDate, endDate]);
+    return Number(result.rows[0]?.log_days || 0);
+};
+const getMonthlyClassDaysSetting = async (reportMonth) => {
+    const result = await db_1.db.query(`SELECT expected_class_days
+         FROM hifz_monthly_report_settings
+         WHERE report_month = $1::date
+         LIMIT 1`, [reportMonth]);
+    return result.rows[0]?.expected_class_days ?? null;
+};
 const getHifzStudents = async (req, res) => {
     try {
         // Replaced 2 correlated subqueries (re-running once per student row)
@@ -247,10 +271,10 @@ const getMonthlyReports = async (req, res) => {
 exports.getMonthlyReports = getMonthlyReports;
 const upsertMonthlyReport = async (req, res) => {
     try {
-        const { student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance } = req.body;
+        const { student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade } = req.body;
         const query = `
-            INSERT INTO monthly_reports (student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            INSERT INTO monthly_reports (student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
             ON CONFLICT (student_id, report_month) 
             DO UPDATE SET 
                 hifz_pages = EXCLUDED.hifz_pages,
@@ -258,10 +282,11 @@ const upsertMonthlyReport = async (req, res) => {
                 juz_revision = EXCLUDED.juz_revision,
                 total_juz = EXCLUDED.total_juz,
                 attendance = EXCLUDED.attendance,
+                grade = EXCLUDED.grade,
                 updated_at = EXCLUDED.updated_at
             RETURNING *
         `;
-        const params = [student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance];
+        const params = [student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade || null];
         const result = await db_1.db.query(query, params);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
         res.json({ success: true, report: result.rows[0] });
@@ -272,6 +297,66 @@ const upsertMonthlyReport = async (req, res) => {
     }
 };
 exports.upsertMonthlyReport = upsertMonthlyReport;
+const getMonthlyReportSettings = async (req, res) => {
+    try {
+        const { month } = req.query;
+        if (!month) {
+            return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
+        }
+        const date = new Date(month);
+        const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
+        const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
+        const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
+        const [detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+            getDetectedClassDays(startDate, endDate),
+            getDetectedLogDays(startDate, endDate),
+            getMonthlyClassDaysSetting(reportMonth),
+        ]);
+        const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
+        res.json({
+            success: true,
+            class_days: effectiveClassDays,
+            detected_class_days: detectedClassDays,
+            detected_log_days: detectedLogDays,
+            override_class_days: overrideClassDays,
+            using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            report_month: reportMonth,
+        });
+    }
+    catch (err) {
+        console.error('Error fetching monthly report settings:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+exports.getMonthlyReportSettings = getMonthlyReportSettings;
+const upsertMonthlyReportSettings = async (req, res) => {
+    try {
+        const { report_month, expected_class_days } = req.body;
+        if (!report_month) {
+            return res.status(400).json({ success: false, error: 'report_month is required' });
+        }
+        const normalizedExpectedClassDays = expected_class_days === null || expected_class_days === undefined || expected_class_days === ''
+            ? null
+            : Number(expected_class_days);
+        if (normalizedExpectedClassDays !== null && (!Number.isFinite(normalizedExpectedClassDays) || normalizedExpectedClassDays < 0)) {
+            return res.status(400).json({ success: false, error: 'expected_class_days must be 0 or more' });
+        }
+        const result = await db_1.db.query(`INSERT INTO hifz_monthly_report_settings (report_month, expected_class_days, updated_at)
+             VALUES ($1::date, $2, NOW())
+             ON CONFLICT (report_month)
+             DO UPDATE SET
+                expected_class_days = EXCLUDED.expected_class_days,
+                updated_at = EXCLUDED.updated_at
+             RETURNING *`, [report_month, normalizedExpectedClassDays]);
+        (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
+        res.json({ success: true, settings: result.rows[0] });
+    }
+    catch (err) {
+        console.error('Error upserting monthly report settings:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+exports.upsertMonthlyReportSettings = upsertMonthlyReportSettings;
 const getProgressSummary = async (req, res) => {
     try {
         // Optional ?student_id= scope. Without it we still scan all logs
@@ -321,6 +406,9 @@ const calculateMonthlyReportData = async (req, res) => {
         const date = new Date(month);
         const start = (0, date_fns_1.startOfMonth)(date).toISOString();
         const end = (0, date_fns_1.endOfMonth)(date).toISOString();
+        const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
+        const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
+        const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
         // 1. Fetch attendance for totalClassDays
         const attendanceResult = await db_1.db.query(`SELECT date, status FROM attendance 
              WHERE student_id = $1 AND date >= $2 AND date <= $3 
@@ -330,8 +418,24 @@ const calculateMonthlyReportData = async (req, res) => {
              FROM hifz_logs 
              WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`, [student_id, start, end]);
         // 3. Run calculator
-        const calculations = (0, hifz_calculator_1.calculateHifzReportPoints)(logsResult.rows, attendanceResult.rows);
-        res.json({ success: true, ...calculations });
+        const [detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+            getDetectedClassDays(startDate, endDate),
+            getDetectedLogDays(startDate, endDate),
+            getMonthlyClassDaysSetting(reportMonth),
+        ]);
+        const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
+        const calculations = (0, hifz_calculator_1.calculateHifzReportPoints)(logsResult.rows, attendanceResult.rows, {
+            expectedClassDaysOverride: effectiveClassDays,
+        });
+        res.json({
+            success: true,
+            class_days: effectiveClassDays,
+            detected_class_days: detectedClassDays,
+            detected_log_days: detectedLogDays,
+            override_class_days: overrideClassDays,
+            using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            ...calculations
+        });
     }
     catch (err) {
         console.error('Error calculating monthly report:', err);
@@ -349,22 +453,27 @@ const calculateBulkMonthlyReport = async (req, res) => {
             const date = new Date(month);
             const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
             const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
-            const [studentsResult, logsResult, attendanceResult, manualReportsResult] = await Promise.all([
+            const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
+            const [studentsResult, logsResult, attendanceResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                 db_1.db.query(`SELECT s.adm_no, s.name,
-                 COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
-                 st.name as usthad_name, st.phone as usthad_phone
-                 FROM students s
-                 LEFT JOIN staff st ON s.hifz_mentor_id = st.id
-                 WHERE s.status = 'active'
-                 ORDER BY s.adm_no`),
+                         COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
+                         st.name as usthad_name, st.phone as usthad_phone
+                         FROM students s
+                         LEFT JOIN staff st ON s.hifz_mentor_id = st.id
+                         WHERE s.status = 'active'
+                         ORDER BY s.adm_no`),
                 db_1.db.query(`SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
-                 start_page, end_page, juz_number, juz_portion
-                 FROM hifz_logs
-                 WHERE entry_date >= $1::date AND entry_date <= $2::date`, [startDate, endDate]),
+                         start_page, end_page, juz_number, juz_portion
+                         FROM hifz_logs
+                         WHERE entry_date >= $1::date AND entry_date <= $2::date`, [startDate, endDate]),
                 db_1.db.query(`SELECT student_id, date, status FROM attendance
-                 WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`, [startDate, endDate]),
-                db_1.db.query(`SELECT * FROM monthly_reports WHERE report_month = $1::date`, [(0, date_fns_1.format)(date, 'yyyy-MM-01')]),
+                         WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`, [startDate, endDate]),
+                db_1.db.query(`SELECT * FROM monthly_reports WHERE report_month = $1::date`, [reportMonth]),
+                getDetectedClassDays(startDate, endDate),
+                getDetectedLogDays(startDate, endDate),
+                getMonthlyClassDaysSetting(reportMonth),
             ]);
+            const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
             const logsByStudent = {};
             logsResult.rows.forEach((log) => {
                 if (!logsByStudent[log.student_id])
@@ -381,7 +490,7 @@ const calculateBulkMonthlyReport = async (req, res) => {
             manualReportsResult.rows.forEach((r) => {
                 manualByStudent[r.student_id] = r;
             });
-            return studentsResult.rows.map((student) => {
+            const reports = studentsResult.rows.map((student) => {
                 const manualRecord = manualByStudent[student.adm_no];
                 if (manualRecord) {
                     return {
@@ -396,27 +505,25 @@ const calculateBulkMonthlyReport = async (req, res) => {
                         total_juz: Number(manualRecord.total_juz) || '-',
                         attendance: manualRecord.attendance || '-',
                         is_manual: true,
-                        // Points from manual - not auto-calculated
                         newVersePoints: 0,
                         recentRevisionPoints: 0,
                         juzPoints: 0,
                         totalPoints: 0,
                         percentage: 0,
                         grade: manualRecord.grade || '-',
-                        totalClassDays: 0
+                        totalClassDays: effectiveClassDays,
+                        detectedClassDays
                     };
                 }
                 const studentLogs = logsByStudent[student.adm_no] || [];
                 const studentAtt = attByStudent[student.adm_no] || [];
-                // Run the calculator
-                const calc = (0, hifz_calculator_1.calculateHifzReportPoints)(studentLogs, studentAtt);
-                // Also compute raw metrics for display
-                let hifzPages = 0;
+                const calc = (0, hifz_calculator_1.calculateHifzReportPoints)(studentLogs, studentAtt, {
+                    expectedClassDaysOverride: effectiveClassDays,
+                });
+                const hifzPages = (0, quran_data_1.calculateCoveredPagesFromLogs)(studentLogs.filter((log) => log.mode === 'New Verses'));
                 let maxJuz = 0;
                 studentLogs.forEach((log) => {
                     if (log.mode === 'New Verses') {
-                        const pages = (log.end_page && log.start_page) ? (log.end_page - log.start_page + 1) : 0;
-                        hifzPages += pages > 0 ? pages : 0;
                         if (log.juz_number > maxJuz)
                             maxJuz = log.juz_number;
                     }
@@ -457,12 +564,19 @@ const calculateBulkMonthlyReport = async (req, res) => {
                     total_juz: maxJuz > 0 ? maxJuz : '-',
                     attendance: totalAttDays > 0 ? `${presentDays}/${totalAttDays}` : '-',
                     is_manual: false,
-                    // Calculated points
                     ...calc
                 };
             });
+            return {
+                reports,
+                class_days: effectiveClassDays,
+                detected_class_days: detectedClassDays,
+                detected_log_days: detectedLogDays,
+                override_class_days: overrideClassDays,
+                using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            };
         });
-        res.json({ success: true, reports: results });
+        res.json({ success: true, ...results });
     }
     catch (err) {
         console.error('Error calculating bulk monthly report:', err);

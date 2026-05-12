@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, AlertCircle } from "lucide-react"
+import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, AlertCircle, Ban, Undo2 } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import Cookies from "js-cookie"
@@ -39,13 +39,15 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     // Roster modal
     const [rosterModal, setRosterModal] = useState<{ isOpen: boolean, schedule: any, dateStr: string, students: StudentMark[], mentorId: string } | null>(null)
+    const [cancellationModal, setCancellationModal] = useState<{ mode: "cancel" | "restore", schedule: any, reason: string, selectedStandards: string[] } | null>(null)
+    const [cancellationBusy, setCancellationBusy] = useState(false)
 
     // Academic year
     const [academicYears, setAcademicYears] = useState<any[]>([])
     const [selectedYearId, setSelectedYearId] = useState("")
 
     useEffect(() => {
-        const token = Cookies.get('auth_token')
+        const token = Cookies.get('auth_token') || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null)
         if (token) {
             try {
                 const p = JSON.parse(atob(token.split('.')[1]))
@@ -53,6 +55,11 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 setUserId(p.id)
             } catch {}
         }
+        api.get('/auth/me').then(res => {
+            const user = res.data?.user
+            if (user?.role) setUserRole(user.role)
+            if (user?.id) setUserId(user.id)
+        }).catch(() => {})
         fetchFilters()
         fetchStaff()
     }, [])
@@ -141,6 +148,50 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     const isYesterday = diffFromToday === 1
     const now = new Date()
 
+    const normalizeStandardLabel = (label: string) => {
+        const l = String(label || '').trim()
+        if (l === 'Hifz Only') return 'Hifz'
+        if (l === '+1 (Plus One)') return 'Plus One'
+        if (l === '+2 (Plus Two)') return 'Plus Two'
+        if (l.endsWith(' Standard')) return l.replace(' Standard', '')
+        return l
+    }
+
+    const parseScheduleStandards = (sched: any): string[] => {
+        if (Array.isArray(sched?.standards)) return sched.standards.map(String)
+        if (typeof sched?.standards === 'string') {
+            try {
+                const parsed = JSON.parse(sched.standards || '[]')
+                return Array.isArray(parsed) ? parsed.map(String) : []
+            } catch {
+                return []
+            }
+        }
+        return []
+    }
+
+    const getCancelledStandards = (cancellation: any) => {
+        const value = cancellation?.cancelled_standards
+        if (!value) return []
+        if (Array.isArray(value)) return value.map((std: string) => normalizeStandardLabel(std))
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value || '[]')
+                return Array.isArray(parsed) ? parsed.map((std: string) => normalizeStandardLabel(std)) : []
+            } catch {
+                return []
+            }
+        }
+        return []
+    }
+
+    const isFullCancellation = (cancellation: any) => !!cancellation && getCancelledStandards(cancellation).length === 0
+
+    const getCancellationLabel = (cancellation: any) => {
+        const cancelledStandards = getCancelledStandards(cancellation)
+        return cancelledStandards.length > 0 ? cancelledStandards.join(', ') : 'All standards'
+    }
+
     // ── Mentor context ──────────────────────────────────────────────────────────
     const selectedMentor = staffList.find(s => s.id === selectedMentorId) || null
     
@@ -152,10 +203,20 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     // ── Slot status ─────────────────────────────────────────────────────────────
     const getSlotStatus = (sched: any) => {
-        const cancelled = dashboardData.cancellations?.find(
-            (c: any) => c.schedule_id === sched.id && new Date(c.date).toLocaleDateString('en-CA') === viewDateStr
-        )
-        if (cancelled) return { state: 'cancelled' as const }
+        const cancelled = dashboardData.cancellations?.find((c: any) => {
+            if (c.schedule_id !== sched.id) return false
+            const localDateStr = new Date(c.date).toLocaleDateString('en-CA')
+            return localDateStr === viewDateStr || c.date?.startsWith?.(viewDateStr)
+        })
+        const cancelledStandards = getCancelledStandards(cancelled)
+        const hasPartialCancellation = !!cancelled && cancelledStandards.length > 0
+        if (isFullCancellation(cancelled)) return { state: 'cancelled' as const, cancellation: cancelled }
+        if (selectedMentorId !== 'all' && hasPartialCancellation && mentorStandards.length > 0) {
+            const activeMentorStandards = mentorStandards.filter(std => !cancelledStandards.includes(normalizeStandardLabel(std)))
+            if (activeMentorStandards.length === 0) {
+                return { state: 'cancelled' as const, cancellation: cancelled }
+            }
+        }
 
         const marksForSched = dashboardData.marks?.filter((m: any) => {
             if (m.schedule_id !== sched.id) return false;
@@ -167,11 +228,18 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         // If viewing a specific mentor
         if (selectedMentorId !== 'all') {
             const marked = marksForSched.find((m: any) => m.marked_by === selectedMentorId);
-            if (marked) return { state: 'completed' as const, markedBy: [selectedMentorId] };
+            if (marked) return { state: 'completed' as const, markedBy: [selectedMentorId], partialCancellation: cancelled };
         } 
         // If viewing all mentors
         else {
-            const expected = sched.expected_mentors || [];
+            const expectedRaw = sched.expected_mentors || [];
+            const expected = hasPartialCancellation
+                ? expectedRaw.filter((mentor: any) => {
+                    const standards = Array.isArray(mentor.standards) ? mentor.standards : [];
+                    if (standards.length === 0) return true;
+                    return standards.some((std: string) => !cancelledStandards.includes(normalizeStandardLabel(std)));
+                })
+                : expectedRaw;
             const markedByIds = marksForSched.map((m: any) => m.marked_by);
             
             if (expected.length > 0) {
@@ -180,23 +248,23 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 const unexpectedMarks = marksForSched.filter((m: any) => !expected.find((em: any) => em.id === m.marked_by));
                 
                 if (markedExpected.length === expected.length || unexpectedMarks.length > 0) {
-                    return { state: 'completed' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected, unexpectedMarks };
+                    return { state: 'completed' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected, unexpectedMarks, partialCancellation: cancelled };
                 } else if (markedExpected.length > 0) {
-                    return { state: 'partial' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected };
+                    return { state: 'partial' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected, partialCancellation: cancelled };
                 }
             } else if (marksForSched.length > 0) {
-                return { state: 'completed' as const, markedBy: markedByIds };
+                return { state: 'completed' as const, markedBy: markedByIds, partialCancellation: cancelled };
             }
         }
 
-        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const }
+        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation: cancelled }
 
         if (diffFromToday === 0) {
             const classStart = new Date(`${viewDateStr}T${sched.start_time}`)
-            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time) }
+            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation: cancelled }
         }
 
-        return { state: 'active' as const }
+        return { state: 'active' as const, partialCancellation: cancelled }
     }
 
     // ── Roster ──────────────────────────────────────────────────────────────────
@@ -257,6 +325,57 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
+    const canManageCancellations = true
+
+    const openCancelModal = (schedule: any, mode: "cancel" | "restore", initialStandards?: string[]) => {
+        const scheduleStandards = parseScheduleStandards(schedule)
+        setCancellationModal({
+            mode,
+            schedule,
+            reason: mode === "cancel" ? "Class cancelled" : "",
+            selectedStandards: mode === "cancel" ? (initialStandards?.length ? initialStandards : scheduleStandards) : [],
+        })
+    }
+
+    const submitCancellationChange = async () => {
+        if (!cancellationModal) return
+        const scheduleStandards = parseScheduleStandards(cancellationModal.schedule)
+
+        if (
+            cancellationModal.mode === "cancel" &&
+            scheduleStandards.length > 0 &&
+            cancellationModal.selectedStandards.length === 0
+        ) {
+            alert("Select at least one standard to cancel.")
+            return
+        }
+
+        setCancellationBusy(true)
+        try {
+            const endpoint = cancellationModal.mode === "cancel" ? "/attendance/cancel" : "/attendance/restore"
+            const payload: any = {
+                schedule_id: cancellationModal.schedule.id,
+                date: viewDateStr,
+            }
+            if (cancellationModal.mode === "cancel") {
+                payload.reason = cancellationModal.reason.trim() || "Class cancelled"
+                payload.standards = cancellationModal.selectedStandards
+            }
+
+            const res = await api.post(endpoint, payload)
+            if (!res.data.success) throw new Error(res.data.error || "Unable to update class status")
+
+            invalidateCache('/attendance/dashboard')
+            invalidateCache('/hifz/monthly-reports/calculate')
+            setCancellationModal(null)
+            fetchData()
+        } catch (e: any) {
+            alert(e.response?.data?.error || e.message || "Unable to update class status")
+        } finally {
+            setCancellationBusy(false)
+        }
+    }
+
     function formatTime(t: string | undefined) {
         if (!t) return ""
         const [h, m] = t.split(':')
@@ -284,6 +403,40 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         if (status === 'present') return <CheckCircle2 className="w-3.5 h-3.5" />
         if (status === 'late') return <Clock className="w-3.5 h-3.5" />
         return <XCircle className="w-3.5 h-3.5" />
+    }
+
+    const getDisplayName = (person: { name?: string } | null | undefined, fallback = "Admin") =>
+        person?.name?.trim() || fallback
+
+    const getMarkedByNames = (marks: any[] = []) =>
+        marks.map((mark: any) => {
+            const matchedStaff = staffList.find(s => s.id === mark.marked_by)
+            return getDisplayName(matchedStaff ? { name: matchedStaff.name } : null)
+        })
+
+    const renderMentorNameList = (names: string[], tone: "success" | "danger" | "neutral" = "neutral") => {
+        if (names.length === 0) return null
+
+        const toneClass =
+            tone === "success"
+                ? "border-[#22c55e]/20 bg-[#22c55e]/5 text-[#15803d]"
+                : tone === "danger"
+                    ? "border-rose-500/20 bg-rose-500/5 text-rose-600"
+                    : "border-slate-200/70 bg-white/70 text-slate-600 dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-slate-300"
+
+        return (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+                {names.map(name => (
+                    <span
+                        key={`${tone}-${name}`}
+                        className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-4", toneClass)}
+                        title={name}
+                    >
+                        {name}
+                    </span>
+                ))}
+            </div>
+        )
     }
 
     const totalCount = daySchedules.length
@@ -323,7 +476,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
 
                     {/* ── Mentor Dropdown ── */}
-                    <div className="relative sm:w-[260px] shrink-0">
+                    <div className="relative sm:w-[320px] shrink-0">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Mentor / Staff</label>
                         <button
                             onClick={() => setIsMentorDropdownOpen(v => !v)}
@@ -526,8 +679,12 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                         {daySchedules.map(sched => {
                             const color = getClassColor(sched.class_type)
                             const status = getSlotStatus(sched)
-                            const stds = typeof sched.standards === 'string' ? JSON.parse(sched.standards || '[]') : (sched.standards || [])
+                            const stds = parseScheduleStandards(sched)
                             const isCancelled = status.state === 'cancelled'
+                            const partialCancellation = (status as any).partialCancellation
+                            const activeCancellation = (status as any).cancellation || partialCancellation
+                            const isPartiallyCancelled = !!partialCancellation && !isCancelled
+                            const cancelledStdLabels = getCancelledStandards(activeCancellation)
                             const isCompleted = status.state === 'completed'
                             const isPartial = status.state === 'partial'
                             const isActive = status.state === 'active'
@@ -554,13 +711,33 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                             </span>
                                             {sched.name && <span className="text-[15px] font-bold text-slate-800 dark:text-white leading-tight">{sched.name}</span>}
                                         </div>
-                                        <div className="flex items-center gap-1.5">
+                                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                                             {isCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Cancelled</span>}
+                                            {isPartiallyCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Some standards cancelled</span>}
                                             {isLocked && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="h-2.5 w-2.5"/>Locked</span>}
                                             {isCompleted && <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />}
                                             {isPartial && <AlertCircle className="h-5 w-5 text-amber-500" />}
                                             {isUpcoming && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Upcoming</span>}
                                             {isActive && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4f46e5] opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-[#4f46e5]"></span></span>}
+                                            {canManageCancellations && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation()
+                                                        openCancelModal(sched, activeCancellation ? "restore" : "cancel")
+                                                    }}
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black transition",
+                                                        activeCancellation
+                                                            ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
+                                                            : "border-rose-200 bg-white text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900/70"
+                                                    )}
+                                                    title={activeCancellation ? "Restore cancelled class or standards" : "Cancel this class or selected standards"}
+                                                >
+                                                    {activeCancellation ? <Undo2 className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
+                                                    {activeCancellation ? "Restore" : "Cancel"}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -575,16 +752,29 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                         <Users className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
                                         <div className="flex flex-wrap gap-1">
                                             {(() => {
+                                                const mentorStdLabels = mentorStandards.map(normalizeStandardLabel)
                                                 const displayStds = selectedMentorId !== 'all' && mentorStandards.length > 0
-                                                    ? stds.filter((s: string) => mentorStandards.includes(s))
+                                                    ? stds.filter((s: string) => mentorStdLabels.includes(normalizeStandardLabel(s)))
                                                     : stds
                                                 return (
                                                     <>
-                                                        {displayStds.slice(0, 3).map((std: string, i: number) => (
-                                                            <span key={i} className="bg-white/80 dark:bg-black/30 rounded px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
-                                                                {std}
-                                                            </span>
-                                                        ))}
+                                                        {displayStds.slice(0, 3).map((std: string, i: number) => {
+                                                            const stdCancelled = cancelledStdLabels.includes(normalizeStandardLabel(std))
+                                                            return (
+                                                                <span
+                                                                    key={i}
+                                                                    className={cn(
+                                                                        "rounded px-2 py-0.5 text-[11px] font-medium border",
+                                                                        stdCancelled
+                                                                            ? "border-rose-200 bg-rose-50/90 text-rose-600 line-through dark:border-rose-900/50 dark:bg-rose-950/20"
+                                                                            : "bg-white/80 dark:bg-black/30 text-slate-600 dark:text-slate-300 border-slate-200/50 dark:border-slate-700/50"
+                                                                    )}
+                                                                    title={stdCancelled ? "Cancelled for this class" : undefined}
+                                                                >
+                                                                    {std}
+                                                                </span>
+                                                            )
+                                                        })}
                                                         {displayStds.length > 3 && <span className="text-[11px] text-slate-500">+{displayStds.length - 3} more</span>}
                                                     </>
                                                 )
@@ -598,7 +788,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                         {isCompleted && (
                                             <div className="flex flex-col gap-0.5">
                                                 <p className="text-[11px] font-bold text-[#22c55e]">✓ Submitted — Click to Review</p>
-                                                {selectedMentorId === 'all' && (
+                                                {false && selectedMentorId === 'all' && (
                                                     <>
                                                         {(status as any).unexpectedMarks?.length > 0 && (
                                                             <p className="text-[10px] text-slate-500 truncate mt-0.5">
@@ -617,7 +807,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                         {isPartial && (
                                             <div className="flex flex-col gap-1">
                                                 <p className="text-[11px] font-bold text-amber-500">⚠ Partially Submitted</p>
-                                                {selectedMentorId === 'all' && (status as any).expected?.length > 0 && (
+                                                {false && selectedMentorId === 'all' && (status as any).expected?.length > 0 && (
                                                     <>
                                                         <p className="text-[10px] text-[#22c55e] truncate" title={(status as any).markedExpected.map((m: any) => m.name).join(', ')}>
                                                             ✓ {(status as any).markedExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
@@ -629,6 +819,34 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                                 )}
                                             </div>
                                         )}
+                                        {selectedMentorId === 'all' && (isCompleted || isPartial) && (
+                                            <div className="mt-2">
+                                                {isCompleted && (status as any).unexpectedMarks?.length > 0 && (
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-slate-500">Marked by</p>
+                                                        {renderMentorNameList(getMarkedByNames((status as any).unexpectedMarks), "neutral")}
+                                                    </div>
+                                                )}
+                                                {isCompleted && (status as any).markedExpected?.length > 0 && (status as any).unexpectedMarks?.length === 0 && (
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-slate-500">Marked</p>
+                                                        {renderMentorNameList((status as any).markedExpected.map((m: any) => getDisplayName(m)), "success")}
+                                                    </div>
+                                                )}
+                                                {isPartial && (status as any).expected?.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <p className="text-[10px] font-semibold text-[#15803d]">Marked</p>
+                                                            {renderMentorNameList((status as any).markedExpected.map((m: any) => getDisplayName(m)), "success")}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] font-semibold text-rose-500">Not marked</p>
+                                                            {renderMentorNameList((status as any).pendingExpected.map((m: any) => getDisplayName(m)), "danger")}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         {isUpcoming && (
                                             <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                                                 <Clock className="h-3 w-3" />
@@ -636,7 +854,47 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                             </p>
                                         )}
                                         {isLocked && <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1"><Lock className="h-3 w-3"/>Outside edit window</p>}
-                                        {isCancelled && <p className="text-[11px] font-medium text-rose-400">Class cancelled</p>}
+                                        {isPartiallyCancelled && (
+                                            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[11px] text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
+                                                <p className="font-bold">Cancelled standards: {getCancellationLabel(partialCancellation)}</p>
+                                                <p className="mt-0.5 text-rose-500/80">Those students are hidden from attendance and report totals.</p>
+                                            </div>
+                                        )}
+                                        {isCancelled && (
+                                            <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[11px] text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
+                                                <p className="font-bold">Class cancelled - attendance closed</p>
+                                                <p className="mt-0.5 text-rose-500/80">Cancelled standards: {getCancellationLabel(activeCancellation)}</p>
+                                                {(status as any).cancellation?.reason && (
+                                                    <p className="mt-0.5 text-rose-500/80">{(status as any).cancellation.reason}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {canManageCancellations && !isCancelled && (
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation()
+                                                    openCancelModal(sched, "cancel", isPartiallyCancelled ? getCancelledStandards(partialCancellation) : undefined)
+                                                }}
+                                                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white/80 px-3 py-2 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900/40 dark:hover:bg-rose-950/20"
+                                            >
+                                                <Ban className="h-3.5 w-3.5" />
+                                                {isPartiallyCancelled ? "Edit cancelled standards" : "Cancel standards / class"}
+                                            </button>
+                                        )}
+                                        {canManageCancellations && activeCancellation && (
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation()
+                                                    openCancelModal(sched, "restore")
+                                                }}
+                                                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
+                                            >
+                                                <Undo2 className="h-3.5 w-3.5" />
+                                                Restore cancellation
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )
@@ -646,6 +904,151 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             </div>
 
             {/* ── Roster Modal ─────────────────────────────────────────── */}
+            {cancellationModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && !cancellationBusy && setCancellationModal(null)}>
+                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-[18px] font-black text-slate-900 dark:text-white">
+                                    {cancellationModal.mode === "cancel" ? "Cancel Class" : "Restore Class"}
+                                </h2>
+                                <p className="mt-1 text-[13px] font-medium text-slate-500">
+                                    {cancellationModal.schedule.name || cancellationModal.schedule.class_type} - {viewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={cancellationBusy}
+                                onClick={() => setCancellationModal(null)}
+                                className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-slate-800"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {cancellationModal.mode === "cancel" ? (
+                            <div className="mt-5">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Reason</label>
+                                <textarea
+                                    value={cancellationModal.reason}
+                                    onChange={event => setCancellationModal({ ...cancellationModal, reason: event.target.value })}
+                                    className="mt-2 min-h-[90px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-medium text-slate-700 outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                />
+                                {(() => {
+                                    const modalStandards = parseScheduleStandards(cancellationModal.schedule)
+                                    const selectedLabels = new Set(cancellationModal.selectedStandards.map(normalizeStandardLabel))
+                                    const selectedCount = modalStandards.filter(std => selectedLabels.has(normalizeStandardLabel(std))).length
+                                    const allSelected = modalStandards.length > 0 && selectedCount === modalStandards.length
+
+                                    if (modalStandards.length === 0) {
+                                        return (
+                                            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50/80 p-3 text-[12px] font-semibold text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
+                                                This class has no standard list, so the full class will be cancelled.
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <div className="mt-5">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Standards to cancel</label>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCancellationModal({ ...cancellationModal, selectedStandards: modalStandards })}
+                                                        className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                                                    >
+                                                        All
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCancellationModal({ ...cancellationModal, selectedStandards: [] })}
+                                                        className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="mt-2 grid grid-cols-2 gap-2">
+                                                {modalStandards.map(std => {
+                                                    const checked = selectedLabels.has(normalizeStandardLabel(std))
+                                                    return (
+                                                        <label
+                                                            key={std}
+                                                            className={cn(
+                                                                "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-bold transition",
+                                                                checked
+                                                                    ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20"
+                                                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                                                            )}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={checked}
+                                                                onChange={() => {
+                                                                    const next = checked
+                                                                        ? cancellationModal.selectedStandards.filter(item => normalizeStandardLabel(item) !== normalizeStandardLabel(std))
+                                                                        : [...cancellationModal.selectedStandards, std]
+                                                                    setCancellationModal({ ...cancellationModal, selectedStandards: next })
+                                                                }}
+                                                                className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                                            />
+                                                            {std}
+                                                        </label>
+                                                    )
+                                                })}
+                                            </div>
+                                            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[12px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                                {allSelected
+                                                    ? "All standards selected: the full class will close for attendance."
+                                                    : selectedCount > 0
+                                                        ? `${selectedCount} standard${selectedCount === 1 ? "" : "s"} selected: only those students will be hidden from attendance and reports.`
+                                                        : "Choose at least one standard, or use All to cancel the full class."}
+                                            </p>
+                                        </div>
+                                    )
+                                })()}
+                                <p className="mt-2 text-[12px] text-slate-500">Attendance already saved will stay stored. Cancelled students/classes are excluded from attendance totals.</p>
+                            </div>
+                        ) : (
+                            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                Restoring reopens the class for attendance. Any old attendance marks stay available.
+                            </div>
+                        )}
+
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                disabled={cancellationBusy}
+                                onClick={() => setCancellationModal(null)}
+                                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-[13px] font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                                Keep class
+                            </button>
+                            <button
+                                type="button"
+                                disabled={
+                                    cancellationBusy ||
+                                    (
+                                        cancellationModal.mode === "cancel" &&
+                                        parseScheduleStandards(cancellationModal.schedule).length > 0 &&
+                                        cancellationModal.selectedStandards.length === 0
+                                    )
+                                }
+                                onClick={submitCancellationChange}
+                                className={cn(
+                                    "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-bold text-white transition disabled:opacity-60",
+                                    cancellationModal.mode === "cancel" ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-800 hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900"
+                                )}
+                            >
+                                {cancellationBusy && <RefreshCw className="h-4 w-4 animate-spin" />}
+                                {cancellationModal.mode === "cancel" ? "Cancel selected" : "Restore cancellation"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {rosterModal?.isOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && setRosterModal(null)}>
                     <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-2xl shadow-2xl relative animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">

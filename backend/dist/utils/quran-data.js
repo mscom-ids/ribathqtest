@@ -2,9 +2,31 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MUSHAF_PAGES = void 0;
 exports.getPageForVerse = getPageForVerse;
+exports.toGlobalVerseIndex = toGlobalVerseIndex;
 exports.calculatePages = calculatePages;
 exports.getSurahId = getSurahId;
+exports.calculateCoveredPagesFromLogs = calculateCoveredPagesFromLogs;
 const surah_list_1 = require("./surah-list");
+// Verse counts for all 114 surahs. Used to build stable global verse indexes
+// so page coverage can be counted consistently across screens.
+const SURAH_VERSE_COUNTS = [
+    7, 286, 200, 176, 120, 165, 206, 75, 129, 109,
+    123, 111, 43, 52, 99, 128, 111, 110, 98, 135,
+    112, 78, 118, 64, 77, 227, 93, 88, 69, 60,
+    34, 30, 73, 54, 45, 83, 182, 88, 75, 85,
+    54, 53, 89, 59, 37, 35, 38, 29, 18, 45,
+    60, 49, 62, 55, 78, 96, 29, 22, 24, 13, 14,
+    11, 11, 18, 12, 12, 30, 52, 52, 44, 28,
+    28, 20, 56, 40, 31, 50, 40, 46, 42, 29,
+    19, 36, 25, 22, 17, 19, 26, 30, 20, 15,
+    21, 11, 8, 8, 19, 5, 8, 8, 11, 11,
+    8, 3, 9, 5, 4, 7, 3, 6, 3, 5,
+    4, 5, 6
+];
+const GLOBAL_VERSE_OFFSETS = [0];
+for (let i = 0; i < SURAH_VERSE_COUNTS.length; i++) {
+    GLOBAL_VERSE_OFFSETS.push(GLOBAL_VERSE_OFFSETS[i] + SURAH_VERSE_COUNTS[i]);
+}
 // Auto-generated Madani Mushaf Page Map (604 Pages)
 // Maps Page Number to its Starting Surah and Ayah.
 exports.MUSHAF_PAGES = [
@@ -622,6 +644,11 @@ function getPageForVerse(surahId, ayahNumber) {
     }
     return 1;
 }
+function toGlobalVerseIndex(surah, verse) {
+    if (surah < 1 || surah > 114)
+        return -1;
+    return GLOBAL_VERSE_OFFSETS[surah - 1] + verse;
+}
 // Calculates how many pages a range of verses spans
 function calculatePages(startSurah, startAyah, endSurah, endAyah) {
     if (!startSurah || !startAyah || !endSurah || !endAyah)
@@ -657,4 +684,55 @@ function getSurahId(name) {
     if (!isNaN(num) && num >= 1 && num <= 114)
         return num;
     return 0;
+}
+function calculateCoveredPagesFromLogs(logs) {
+    let fallbackPages = 0;
+    const ranges = [];
+    logs.forEach((log) => {
+        const surahId = getSurahId(log.surah_name || '');
+        if (surahId && log.start_v && log.end_v) {
+            const startGlobal = toGlobalVerseIndex(surahId, log.start_v);
+            const endGlobal = toGlobalVerseIndex(surahId, log.end_v);
+            if (startGlobal >= 0 && endGlobal >= 0) {
+                ranges.push({
+                    start: Math.min(startGlobal, endGlobal),
+                    end: Math.max(startGlobal, endGlobal),
+                });
+            }
+            return;
+        }
+        if (log.start_page && log.end_page) {
+            fallbackPages += Math.max((log.end_page - log.start_page) + 1, 0);
+        }
+    });
+    if (ranges.length === 0)
+        return fallbackPages;
+    ranges.sort((a, b) => a.start - b.start);
+    const merged = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+        const current = merged[merged.length - 1];
+        const next = ranges[i];
+        if (next.start <= current.end + 1) {
+            if (next.end > current.end)
+                current.end = next.end;
+        }
+        else {
+            merged.push({ ...next });
+        }
+    }
+    let coveredPages = fallbackPages;
+    for (let i = 0; i < exports.MUSHAF_PAGES.length; i++) {
+        const pageStart = exports.MUSHAF_PAGES[i];
+        const startGlobal = toGlobalVerseIndex(pageStart.surah, pageStart.ayah);
+        const endGlobal = i + 1 < exports.MUSHAF_PAGES.length
+            ? toGlobalVerseIndex(exports.MUSHAF_PAGES[i + 1].surah, exports.MUSHAF_PAGES[i + 1].ayah) - 1
+            : toGlobalVerseIndex(114, 6);
+        for (const range of merged) {
+            if (range.start <= endGlobal && range.end >= endGlobal) {
+                coveredPages++;
+                break;
+            }
+        }
+    }
+    return coveredPages;
 }

@@ -3,7 +3,8 @@ import {
     getHifzStudents, getHifzLogsList, getHifzLog, createHifzLog, updateHifzLog,
     bulkCreateHifzLogs, getMaxJuzForStudent, getProgressSummary,
     deleteHifzLog, getMonthlyReports, upsertMonthlyReport,
-    calculateBulkMonthlyReport
+    calculateBulkMonthlyReport, getMonthlyReportSettings,
+    upsertMonthlyReportSettings
 } from '../controllers/hifz.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
@@ -42,6 +43,12 @@ router.delete('/logs/:id', deleteHifzLog);
 
 // GET /api/hifz/monthly-reports/calculate
 router.get('/monthly-reports/calculate', calculateBulkMonthlyReport);
+
+// GET /api/hifz/monthly-report-settings
+router.get('/monthly-report-settings', getMonthlyReportSettings);
+
+// POST /api/hifz/monthly-report-settings
+router.post('/monthly-report-settings', upsertMonthlyReportSettings);
 
 // GET /api/hifz/monthly-reports
 router.get('/monthly-reports', getMonthlyReports);

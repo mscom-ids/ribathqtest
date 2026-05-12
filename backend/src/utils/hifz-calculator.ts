@@ -1,7 +1,7 @@
-import { calculatePages, getSurahId } from './quran-data';
+import { calculateCoveredPagesFromLogs } from './quran-data';
 
 export interface HifzLog {
-    mode: 'New Verses' | 'Recent Revision' | 'Juz Revision';
+    mode: 'New Verses' | 'Recent Revision' | 'Juz Revision' | 'Juz Revision (New)' | 'Juz Revision (Old)';
     entry_date: string;
     surah_name?: string;
     start_v?: number;
@@ -16,7 +16,15 @@ export interface AttendanceRecord {
     status: string;
 }
 
-export function calculateHifzReportPoints(logs: HifzLog[], attendance: AttendanceRecord[]) {
+interface HifzReportPointOptions {
+    expectedClassDaysOverride?: number | null;
+}
+
+export function calculateHifzReportPoints(
+    logs: HifzLog[],
+    attendance: AttendanceRecord[],
+    options?: HifzReportPointOptions
+) {
     // Rounding helper
     const roundTo2 = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
 
@@ -38,10 +46,18 @@ export function calculateHifzReportPoints(logs: HifzLog[], attendance: Attendanc
             if (iso) uniqueClassDays.add(iso);
         }
     });
-    const totalClassDays = uniqueClassDays.size;
+    const attendanceClassDays = uniqueClassDays.size;
+    const uniqueLogDays = new Set<string>();
+    logs.forEach(log => {
+        const iso = safeToISO(log.entry_date);
+        if (iso) uniqueLogDays.add(iso);
+    });
+    const detectedClassDays = attendanceClassDays > 0 ? attendanceClassDays : uniqueLogDays.size;
+    const totalClassDays = options?.expectedClassDaysOverride ?? detectedClassDays;
 
     if (totalClassDays === 0) {
         return {
+            detectedClassDays,
             totalClassDays: 0,
             newVersePoints: 0,
             recentRevisionPoints: 0,
@@ -53,15 +69,7 @@ export function calculateHifzReportPoints(logs: HifzLog[], attendance: Attendanc
     }
 
     // STEP 2: NEW VERSE POINT CALCULATION
-    let totalPagesRecited = 0;
-    logs.filter(l => l.mode === 'New Verses').forEach(log => {
-        const sId = getSurahId(log.surah_name || "");
-        if (sId && log.start_v && log.end_v) {
-            totalPagesRecited += calculatePages(sId, log.start_v, sId, log.end_v);
-        } else if (log.start_page && log.end_page) {
-            totalPagesRecited += (log.end_page - log.start_page + 1);
-        }
-    });
+    const totalPagesRecited = calculateCoveredPagesFromLogs(logs.filter(l => l.mode === 'New Verses'));
 
     const expectedPages = totalClassDays * 0.9;
     let newVersePoints = expectedPages > 0 ? (totalPagesRecited / expectedPages) * 10 : 0;
@@ -108,6 +116,7 @@ export function calculateHifzReportPoints(logs: HifzLog[], attendance: Attendanc
     else if (totalPercentage >= 35) grade = 'D+';
 
     return {
+        detectedClassDays,
         totalClassDays,
         newVersePoints,
         recentRevisionPoints,

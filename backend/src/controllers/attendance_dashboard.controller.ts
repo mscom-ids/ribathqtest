@@ -37,6 +37,40 @@ function normalizeScheduleStandard(label: string): string {
     return l;
 }
 
+function parseStandardList(value: any): string[] {
+    if (Array.isArray(value)) return value.map(String);
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value || '[]');
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+function normalizeStandardList(values: any[] = []) {
+    return values
+        .map(value => normalizeScheduleStandard(String(value || '').trim()))
+        .filter(Boolean);
+}
+
+function cancellationStandards(row: any): string[] {
+    return normalizeStandardList(parseStandardList(row?.cancelled_standards));
+}
+
+function isFullCancellation(row: any) {
+    return !!row && cancellationStandards(row).length === 0;
+}
+
+function isStandardCancelled(row: any, standard: string) {
+    if (!row) return false;
+    const standards = cancellationStandards(row);
+    if (standards.length === 0) return true;
+    return standards.includes(normalizeScheduleStandard(standard));
+}
+
 // Maps schedule.class_type → the corresponding students.<col> column.
 // Centralised so all attendance queries stay in sync.
 const MENTOR_COL_MAP: Record<string, 'hifz_mentor_id' | 'school_mentor_id' | 'madrasa_mentor_id'> = {
@@ -163,20 +197,27 @@ export const getSchedules = async (req: Request, res: Response) => {
             const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
             const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
             const dbStds = rawStds.map(normalizeScheduleStandard);
-            const mentorIds = new Set<string>();
+            const mentorStandards = new Map<string, Set<string>>();
 
             if (mentorCol) {
                 for (const student of studentsRes.rows) {
                     if (dbStds.includes(student.standard)) {
                         const mid = student[mentorCol];
-                        if (mid) mentorIds.add(mid);
+                        if (mid) {
+                            if (!mentorStandards.has(mid)) mentorStandards.set(mid, new Set<string>());
+                            mentorStandards.get(mid)!.add(student.standard);
+                        }
                     }
                 }
             }
 
             return {
                 ...schedule,
-                expected_mentors: Array.from(mentorIds).map(id => ({ id, name: staffMap.get(id) || 'Unknown' }))
+                expected_mentors: Array.from(mentorStandards.entries()).map(([id, standards]) => ({
+                    id,
+                    name: staffMap.get(id) || 'Unknown',
+                    standards: Array.from(standards),
+                }))
             };
         });
 
@@ -246,20 +287,27 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
             const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
             const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
             const dbStds = rawStds.map(normalizeScheduleStandard);
-            const mentorIds = new Set<string>();
+            const mentorStandards = new Map<string, Set<string>>();
 
             if (mentorCol) {
                 for (const student of studentsRes.rows) {
                     if (dbStds.includes(student.standard)) {
                         const mid = student[mentorCol];
-                        if (mid) mentorIds.add(mid);
+                        if (mid) {
+                            if (!mentorStandards.has(mid)) mentorStandards.set(mid, new Set<string>());
+                            mentorStandards.get(mid)!.add(student.standard);
+                        }
                     }
                 }
             }
 
             return {
                 ...schedule,
-                expected_mentors: Array.from(mentorIds).map(id => ({ id, name: staffMap.get(id) || 'Unknown' }))
+                expected_mentors: Array.from(mentorStandards.entries()).map(([id, standards]) => ({
+                    id,
+                    name: staffMap.get(id) || 'Unknown',
+                    standards: Array.from(standards),
+                }))
             };
         });
 
@@ -429,12 +477,15 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         // Previously these were sequential awaits even though the schedule
         // lookup doesn't depend on the staff id at all.
         const isMentorRole = MENTOR_ROLES.includes(user?.role);
-        const [resolvedMentorId, schedRes] = await Promise.all([
+        const [resolvedMentorId, schedRes, cancellationRes] = await Promise.all([
             isMentorRole ? getStaffId(req) : Promise.resolve(null),
             db.query(
                 'SELECT standards, class_type, start_time, end_time FROM attendance_schedules WHERE id = $1',
                 [schedule_id]
             ),
+            date
+                ? db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date])
+                : Promise.resolve({ rows: [] as any[] }),
         ]);
 
         if (isMentorRole && resolvedMentorId) {
@@ -451,6 +502,22 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
+        const cancellation = cancellationRes.rows[0] || null;
+        const activeDbStds = cancellation
+            ? dbStds.filter(std => !isStandardCancelled(cancellation, std))
+            : dbStds;
+
+        if (date && cancellation && activeDbStds.length === 0) {
+            return res.json({
+                success: true,
+                students: [],
+                cancellation: {
+                    is_cancelled: true,
+                    cancelled_standards: cancellationStandards(cancellation),
+                    reason: cancellation.reason,
+                },
+            });
+        }
 
         const mentorCol = MENTOR_COL_MAP[classType];
 
@@ -469,7 +536,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                        AND standard = ANY($1)
                        AND ${mentorCol} = $2
                      ORDER BY standard, name`,
-                    [dbStds, mentor_id]
+                    [activeDbStds, mentor_id]
                 ),
                 db.query(
                     `SELECT s.adm_no, s.name, s.standard, s.photo_url
@@ -480,7 +547,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                        AND s.status = 'active'
                        AND s.standard = ANY($2)
                      ORDER BY s.name`,
-                    [mentor_id, dbStds]
+                    [mentor_id, activeDbStds]
                 ).catch((delErr: any) => {
                     console.warn('Delegation query skipped:', delErr.message);
                     return { rows: [] as any[] };
@@ -499,7 +566,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                  FROM students
                  WHERE status = 'active' AND standard = ANY($1)
                  ORDER BY standard, name`,
-                [dbStds]
+                [activeDbStds]
             );
             permanentStudents = allRes.rows.map((s: any) => ({ ...s, is_temp: false }));
         }
@@ -653,8 +720,29 @@ export const markAttendance = async (req: Request, res: Response) => {
             }
         }
 
-        const cancelCheck = await db.query('SELECT id FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
-        if (cancelCheck.rows.length > 0) return res.status(400).json({ success: false, error: "Cannot mark attendance for cancelled sessions" });
+        const cancelCheck = await db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
+        const cancellation = cancelCheck.rows[0] || null;
+        if (isFullCancellation(cancellation)) {
+            return res.status(400).json({ success: false, error: "Cannot mark attendance for a cancelled class" });
+        }
+        if (cancellation && student_marks?.length > 0) {
+            const submittedIds: string[] = student_marks.map((m: any) => m.student_id);
+            const submittedStudents = await db.query(
+                `SELECT adm_no, standard
+                 FROM students
+                 WHERE adm_no = ANY($1::text[])`,
+                [submittedIds]
+            );
+            const cancelledStudent = submittedStudents.rows.find((student: any) =>
+                isStandardCancelled(cancellation, student.standard)
+            );
+            if (cancelledStudent) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Cannot mark attendance for cancelled standard: ${cancelledStudent.standard}`,
+                });
+            }
+        }
 
         const classDateTimeStr = `${date}T${schedule.start_time}+05:30`;
         const classDateObj = new Date(classDateTimeStr);
@@ -724,25 +812,71 @@ export const markAttendance = async (req: Request, res: Response) => {
 
 export const cancelSession = async (req: Request, res: Response) => {
     try {
-        const { schedule_id, date, reason } = req.body;
+        const { schedule_id, date, reason, standards } = req.body;
         const userId = (req as any).user.id;
-        const userRole = (req as any).user.role;
+        const userRole = String((req as any).user.role || '').toLowerCase();
 
-        if (!['admin', 'principal', 'vice_principal'].includes(userRole)) {
+        if (!['admin', 'principal', 'vice_principal', 'controller'].includes(userRole)) {
             return res.status(403).json({ success: false, error: "Only Authorities can cancel a class." });
         }
 
+        const schedRes = await db.query('SELECT standards FROM attendance_schedules WHERE id = $1', [schedule_id]);
+        if (schedRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: "Schedule not found" });
+        }
+
+        const scheduleStandards = normalizeStandardList(parseStandardList(schedRes.rows[0].standards));
+        const standardsProvided = Array.isArray(standards);
+        const selectedStandards = normalizeStandardList(standardsProvided ? standards : []);
+        const validSelectedStandards = selectedStandards.filter(std => scheduleStandards.includes(std));
+
+        if (standardsProvided && scheduleStandards.length > 0 && validSelectedStandards.length === 0) {
+            return res.status(400).json({ success: false, error: "Select at least one valid standard to cancel." });
+        }
+
+        const cancelledStandards =
+            validSelectedStandards.length > 0 && validSelectedStandards.length < scheduleStandards.length
+                ? JSON.stringify(validSelectedStandards)
+                : null;
+
         const result = await db.query(
-            `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (schedule_id, date) DO UPDATE SET reason = EXCLUDED.reason, cancelled_by = EXCLUDED.cancelled_by RETURNING *`,
-            [schedule_id, date, reason, userId]
+            `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards)
+             VALUES ($1, $2, $3, $4, $5::jsonb)
+             ON CONFLICT (schedule_id, date)
+             DO UPDATE SET
+                reason = EXCLUDED.reason,
+                cancelled_by = EXCLUDED.cancelled_by,
+                cancelled_standards = EXCLUDED.cancelled_standards
+             RETURNING *`,
+            [schedule_id, date, reason, userId, cancelledStandards]
         );
 
-        await db.query('DELETE FROM attendance_marks WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
+        invalidateCacheByPrefix('attendance:');
+        invalidateCacheByPrefix('hifz:monthly');
+        res.json({ success: true, data: result.rows[0] });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+export const restoreSession = async (req: Request, res: Response) => {
+    try {
+        const { schedule_id, date } = req.body;
+        const userRole = String((req as any).user.role || '').toLowerCase();
+
+        if (!['admin', 'principal', 'vice_principal', 'controller'].includes(userRole)) {
+            return res.status(403).json({ success: false, error: "Only Authorities can restore a class." });
+        }
+
+        await db.query(
+            `DELETE FROM attendance_cancellations
+             WHERE schedule_id = $1 AND date = $2`,
+            [schedule_id, date]
+        );
 
         invalidateCacheByPrefix('attendance:');
-        res.json({ success: true, data: result.rows[0] });
+        invalidateCacheByPrefix('hifz:monthly');
+        res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }

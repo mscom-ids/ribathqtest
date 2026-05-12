@@ -4,9 +4,49 @@ import { calculateHifzReportPoints } from '../utils/hifz-calculator';
 import { countCompletedJuz } from '../utils/quran-juz';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
+import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
+import { getStudentAttendanceSummaries } from '../utils/attendance-report';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
+
+const getDetectedClassDays = async (startDate: string, endDate: string) => {
+    const result = await db.query(
+        `SELECT COUNT(DISTINCT date) AS class_days
+         FROM attendance
+         WHERE date >= $1::date
+           AND date <= $2::date
+           AND department = 'Hifz'
+           AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')`,
+        [startDate, endDate]
+    );
+
+    return Number(result.rows[0]?.class_days || 0);
+};
+
+const getDetectedLogDays = async (startDate: string, endDate: string) => {
+    const result = await db.query(
+        `SELECT COUNT(DISTINCT entry_date::date) AS log_days
+         FROM hifz_logs
+         WHERE entry_date >= $1::date
+           AND entry_date <= $2::date`,
+        [startDate, endDate]
+    );
+
+    return Number(result.rows[0]?.log_days || 0);
+};
+
+const getMonthlyClassDaysSetting = async (reportMonth: string) => {
+    const result = await db.query(
+        `SELECT expected_class_days
+         FROM hifz_monthly_report_settings
+         WHERE report_month = $1::date
+         LIMIT 1`,
+        [reportMonth]
+    );
+
+    return result.rows[0]?.expected_class_days ?? null;
+};
 
 export const getHifzStudents = async (req: Request, res: Response) => {
     try {
@@ -283,11 +323,11 @@ export const getMonthlyReports = async (req: Request, res: Response) => {
 
 export const upsertMonthlyReport = async (req: Request, res: Response) => {
     try {
-        const { student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance } = req.body;
+        const { student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade } = req.body;
         
         const query = `
-            INSERT INTO monthly_reports (student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            INSERT INTO monthly_reports (student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
             ON CONFLICT (student_id, report_month) 
             DO UPDATE SET 
                 hifz_pages = EXCLUDED.hifz_pages,
@@ -295,11 +335,12 @@ export const upsertMonthlyReport = async (req: Request, res: Response) => {
                 juz_revision = EXCLUDED.juz_revision,
                 total_juz = EXCLUDED.total_juz,
                 attendance = EXCLUDED.attendance,
+                grade = EXCLUDED.grade,
                 updated_at = EXCLUDED.updated_at
             RETURNING *
         `;
         
-        const params = [student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance];
+        const params = [student_id, report_month, hifz_pages, recent_pages, juz_revision, total_juz, attendance, grade || null];
         const result = await db.query(query, params);
         
         invalidateCacheByPrefix('hifz:monthly');
@@ -307,6 +348,76 @@ export const upsertMonthlyReport = async (req: Request, res: Response) => {
     } catch (err) {
         console.error('Error upserting monthly report:', err);
         res.status(500).json({ success: false, error: 'Failed' });
+    }
+};
+
+export const getMonthlyReportSettings = async (req: Request, res: Response) => {
+    try {
+        const { month } = req.query;
+        if (!month) {
+            return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
+        }
+
+        const date = new Date(month as string);
+        const startDate = format(startOfMonth(date), 'yyyy-MM-dd');
+        const endDate = format(endOfMonth(date), 'yyyy-MM-dd');
+        const reportMonth = format(date, 'yyyy-MM-01');
+
+        const [detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+            getDetectedClassDays(startDate, endDate),
+            getDetectedLogDays(startDate, endDate),
+            getMonthlyClassDaysSetting(reportMonth),
+        ]);
+
+        const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
+
+        res.json({
+            success: true,
+            class_days: effectiveClassDays,
+            detected_class_days: detectedClassDays,
+            detected_log_days: detectedLogDays,
+            override_class_days: overrideClassDays,
+            using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            report_month: reportMonth,
+        });
+    } catch (err: any) {
+        console.error('Error fetching monthly report settings:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+export const upsertMonthlyReportSettings = async (req: Request, res: Response) => {
+    try {
+        const { report_month, expected_class_days } = req.body;
+        if (!report_month) {
+            return res.status(400).json({ success: false, error: 'report_month is required' });
+        }
+
+        const normalizedExpectedClassDays =
+            expected_class_days === null || expected_class_days === undefined || expected_class_days === ''
+                ? null
+                : Number(expected_class_days);
+
+        if (normalizedExpectedClassDays !== null && (!Number.isFinite(normalizedExpectedClassDays) || normalizedExpectedClassDays < 0)) {
+            return res.status(400).json({ success: false, error: 'expected_class_days must be 0 or more' });
+        }
+
+        const result = await db.query(
+            `INSERT INTO hifz_monthly_report_settings (report_month, expected_class_days, updated_at)
+             VALUES ($1::date, $2, NOW())
+             ON CONFLICT (report_month)
+             DO UPDATE SET
+                expected_class_days = EXCLUDED.expected_class_days,
+                updated_at = EXCLUDED.updated_at
+             RETURNING *`,
+            [report_month, normalizedExpectedClassDays]
+        );
+
+        invalidateCacheByPrefix('hifz:monthly');
+        res.json({ success: true, settings: result.rows[0] });
+    } catch (err: any) {
+        console.error('Error upserting monthly report settings:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 
@@ -370,27 +481,63 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         const date = new Date(month as string);
         const start = startOfMonth(date).toISOString();
         const end = endOfMonth(date).toISOString();
+        const startDate = format(startOfMonth(date), 'yyyy-MM-dd');
+        const endDate = format(endOfMonth(date), 'yyyy-MM-dd');
+        const reportMonth = format(date, 'yyyy-MM-01');
 
-        // 1. Fetch attendance for totalClassDays
-        const attendanceResult = await db.query(
-            `SELECT date, status FROM attendance 
-             WHERE student_id = $1 AND date >= $2 AND date <= $3 
-             AND department = 'hifz'`,
-            [student_id, start, end]
-        );
+        const [studentResult, logsResult] = await Promise.all([
+            db.query(
+                `SELECT adm_no, standard AS attendance_standard, COALESCE(hifz_standard, standard, 'Common') AS standard
+                 FROM students
+                 WHERE adm_no = $1`,
+                [student_id]
+            ),
+            db.query(
+                `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
+                 FROM hifz_logs 
+                 WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`,
+                [student_id, start, end]
+            ),
+        ]);
 
-        // 2. Fetch hifz logs for month
-        const logsResult = await db.query(
-            `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
-             FROM hifz_logs 
-             WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`,
-            [student_id, start, end]
-        );
+        if (studentResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Student not found' });
+        }
 
-        // 3. Run calculator
-        const calculations = calculateHifzReportPoints(logsResult.rows, attendanceResult.rows);
+        const [attendanceSummaries, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+            getStudentAttendanceSummaries(db, studentResult.rows, startDate, endDate, 'hifz'),
+            getDetectedClassDays(startDate, endDate),
+            getDetectedLogDays(startDate, endDate),
+            getMonthlyClassDaysSetting(reportMonth),
+        ]);
 
-        res.json({ success: true, ...calculations });
+        const attendanceSummary = attendanceSummaries.get(student_id as string);
+        const scheduledClassDays = attendanceSummary?.plannedClasses || 0;
+        const cancelledClassDays = attendanceSummary?.cancelledClasses || 0;
+        const countedClassDays = attendanceSummary?.effectiveClasses || 0;
+        const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
+        const effectiveClassDays = overrideClassDays !== null
+            ? Math.max(0, Number(overrideClassDays) - cancelledClassDays)
+            : (countedClassDays > 0 ? countedClassDays : fallbackClassDays);
+
+        const calculations = calculateHifzReportPoints(logsResult.rows, [], {
+            expectedClassDaysOverride: effectiveClassDays,
+        });
+
+        res.json({
+            success: true,
+            class_days: effectiveClassDays,
+            scheduled_class_days: scheduledClassDays,
+            cancelled_class_days: cancelledClassDays,
+            attended_classes: attendanceSummary?.attendedClasses || 0,
+            not_attended_classes: attendanceSummary?.notAttendedClasses || 0,
+            attendance_summary: attendanceSummary?.attendanceLabel || '-',
+            detected_class_days: detectedClassDays,
+            detected_log_days: detectedLogDays,
+            override_class_days: overrideClassDays,
+            using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            ...calculations
+        });
     } catch (err: any) {
         console.error('Error calculating monthly report:', err);
         res.status(500).json({ success: false, error: err.message });
@@ -408,141 +555,177 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
             makeCacheKey('hifz:monthly-calculate', { month }),
             HIFZ_MONTHLY_TTL_MS,
             async () => {
-        const date = new Date(month as string);
-        const startDate = format(startOfMonth(date), 'yyyy-MM-dd');
-        const endDate = format(endOfMonth(date), 'yyyy-MM-dd');
+                const date = new Date(month as string);
+                const startDate = format(startOfMonth(date), 'yyyy-MM-dd');
+                const endDate = format(endOfMonth(date), 'yyyy-MM-dd');
+                const reportMonth = format(date, 'yyyy-MM-01');
 
-        const [studentsResult, logsResult, attendanceResult, manualReportsResult] = await Promise.all([
-            db.query(
-                `SELECT s.adm_no, s.name,
-                 COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
-                 st.name as usthad_name, st.phone as usthad_phone
-                 FROM students s
-                 LEFT JOIN staff st ON s.hifz_mentor_id = st.id
-                 WHERE s.status = 'active'
-                 ORDER BY s.adm_no`
-            ),
-            db.query(
-                `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
-                 start_page, end_page, juz_number, juz_portion
-                 FROM hifz_logs
-                 WHERE entry_date >= $1::date AND entry_date <= $2::date`,
-                [startDate, endDate]
-            ),
-            db.query(
-                `SELECT student_id, date, status FROM attendance
-                 WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`,
-                [startDate, endDate]
-            ),
-            db.query(
-                `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
-                [format(date, 'yyyy-MM-01')]
-            ),
-        ]);
+                const [studentsResult, logsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+                    db.query(
+                        `SELECT s.adm_no, s.name, s.standard AS attendance_standard,
+                         COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
+                         st.name as usthad_name, st.phone as usthad_phone
+                         FROM students s
+                         LEFT JOIN staff st ON s.hifz_mentor_id = st.id
+                         WHERE s.status = 'active'
+                         ORDER BY s.adm_no`
+                    ),
+                    db.query(
+                        `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
+                         start_page, end_page, juz_number, juz_portion
+                         FROM hifz_logs
+                         WHERE entry_date >= $1::date AND entry_date <= $2::date`,
+                        [startDate, endDate]
+                    ),
+                    db.query(
+                        `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
+                        [reportMonth]
+                    ),
+                    getDetectedClassDays(startDate, endDate),
+                    getDetectedLogDays(startDate, endDate),
+                    getMonthlyClassDaysSetting(reportMonth),
+                ]);
 
-        const logsByStudent: Record<string, any[]> = {};
-        logsResult.rows.forEach((log: any) => {
-            if (!logsByStudent[log.student_id]) logsByStudent[log.student_id] = [];
-            logsByStudent[log.student_id].push(log);
-        });
+                const attendanceSummaries = await getStudentAttendanceSummaries(
+                    db,
+                    studentsResult.rows,
+                    startDate,
+                    endDate,
+                    'hifz'
+                );
 
-        const attByStudent: Record<string, any[]> = {};
-        attendanceResult.rows.forEach((att: any) => {
-            if (!attByStudent[att.student_id]) attByStudent[att.student_id] = [];
-            attByStudent[att.student_id].push(att);
-        });
+                const logsByStudent: Record<string, any[]> = {};
+                logsResult.rows.forEach((log: any) => {
+                    if (!logsByStudent[log.student_id]) logsByStudent[log.student_id] = [];
+                    logsByStudent[log.student_id].push(log);
+                });
 
-        const manualByStudent: Record<string, any> = {};
-        manualReportsResult.rows.forEach((r: any) => {
-            manualByStudent[r.student_id] = r;
-        });
+                const manualByStudent: Record<string, any> = {};
+                manualReportsResult.rows.forEach((r: any) => {
+                    manualByStudent[r.student_id] = r;
+                });
 
-        return studentsResult.rows.map((student: any) => {
-            const manualRecord = manualByStudent[student.adm_no];
-            
-            if (manualRecord) {
-                return {
-                    adm_no: student.adm_no,
-                    name: student.name,
-                    standard: student.standard,
-                    usthad_name: student.usthad_name || 'Unassigned',
-                    usthad_phone: student.usthad_phone || '',
-                    hifz_pages: Number(manualRecord.hifz_pages),
-                    recent_days: Number(manualRecord.recent_pages),
-                    juz_revision: Number(manualRecord.juz_revision),
-                    total_juz: Number(manualRecord.total_juz) || '-',
-                    attendance: manualRecord.attendance || '-',
-                    is_manual: true,
-                    // Points from manual - not auto-calculated
-                    newVersePoints: 0,
-                    recentRevisionPoints: 0,
-                    juzPoints: 0,
-                    totalPoints: 0,
-                    percentage: 0,
-                    grade: manualRecord.grade || '-',
-                    totalClassDays: 0
-                };
-            }
+                const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
+                const reportClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                    const summary = attendanceSummaries.get(student.adm_no);
+                    const value = overrideClassDays !== null
+                        ? Math.max(0, Number(overrideClassDays) - (summary?.cancelledClasses || 0))
+                        : ((summary?.effectiveClasses || 0) || fallbackClassDays);
+                    return Math.max(max, value);
+                }, 0);
+                const scheduledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                    const summary = attendanceSummaries.get(student.adm_no);
+                    return Math.max(max, summary?.plannedClasses || 0);
+                }, 0);
+                const cancelledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                    const summary = attendanceSummaries.get(student.adm_no);
+                    return Math.max(max, summary?.cancelledClasses || 0);
+                }, 0);
 
-            const studentLogs = logsByStudent[student.adm_no] || [];
-            const studentAtt = attByStudent[student.adm_no] || [];
+                const reports = studentsResult.rows.map((student: any) => {
+                    const manualRecord = manualByStudent[student.adm_no];
+                    const attendanceSummary = attendanceSummaries.get(student.adm_no);
+                    const effectiveClassDays = overrideClassDays !== null
+                        ? Math.max(0, Number(overrideClassDays) - (attendanceSummary?.cancelledClasses || 0))
+                        : ((attendanceSummary?.effectiveClasses || 0) || fallbackClassDays);
 
-            // Run the calculator
-            const calc = calculateHifzReportPoints(studentLogs, studentAtt);
-
-            // Also compute raw metrics for display
-            let hifzPages = 0;
-            let maxJuz = 0;
-            studentLogs.forEach((log: any) => {
-                if (log.mode === 'New Verses') {
-                    const pages = (log.end_page && log.start_page) ? (log.end_page - log.start_page + 1) : 0;
-                    hifzPages += pages > 0 ? pages : 0;
-                    if (log.juz_number > maxJuz) maxJuz = log.juz_number;
-                }
-            });
-
-            const recentDates = new Set<string>();
-            studentLogs.filter((l: any) => l.mode === 'Recent Revision').forEach((log: any) => {
-                try {
-                    const d = new Date(log.entry_date);
-                    if (!isNaN(d.getTime())) {
-                        recentDates.add(d.toISOString().split('T')[0]);
+                    if (manualRecord) {
+                        return {
+                            adm_no: student.adm_no,
+                            name: student.name,
+                            standard: student.standard,
+                            usthad_name: student.usthad_name || 'Unassigned',
+                            usthad_phone: student.usthad_phone || '',
+                            hifz_pages: Number(manualRecord.hifz_pages),
+                            recent_days: Number(manualRecord.recent_pages),
+                            juz_revision: Number(manualRecord.juz_revision),
+                            total_juz: Number(manualRecord.total_juz) || '-',
+                            attendance: manualRecord.attendance || '-',
+                            is_manual: true,
+                            newVersePoints: 0,
+                            recentRevisionPoints: 0,
+                            juzPoints: 0,
+                            totalPoints: 0,
+                            percentage: 0,
+                            grade: manualRecord.grade || '-',
+                            totalClassDays: effectiveClassDays,
+                            detectedClassDays,
+                            scheduledClassDays: attendanceSummary?.plannedClasses || scheduledClassDays,
+                            cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                            attendedClasses: attendanceSummary?.attendedClasses || 0,
+                            notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
+                        };
                     }
-                } catch (e) {}
-            });
 
-            let juzRevTotal = 0;
-            studentLogs.filter((l: any) => l.mode?.startsWith('Juz Revision')).forEach((log: any) => {
-                const portion = log.juz_portion;
-                if (portion === 'Full') juzRevTotal += 1;
-                else if (portion?.includes('Half')) juzRevTotal += 0.5;
-                else if (portion?.startsWith('Q')) juzRevTotal += 0.25;
-                else juzRevTotal += 1;
-            });
+                    const studentLogs = logsByStudent[student.adm_no] || [];
 
-            const presentDays = studentAtt.filter((a: any) => a.status.toLowerCase() === 'present').length;
-            const totalAttDays = studentAtt.length;
+                    const calc = calculateHifzReportPoints(studentLogs, [], {
+                        expectedClassDaysOverride: effectiveClassDays,
+                    });
 
-            return {
-                adm_no: student.adm_no,
-                name: student.name,
-                standard: student.standard,
-                usthad_name: student.usthad_name || 'Unassigned',
-                usthad_phone: student.usthad_phone || '',
-                hifz_pages: parseFloat(hifzPages.toFixed(1)),
-                recent_days: recentDates.size,
-                juz_revision: parseFloat(juzRevTotal.toFixed(2)),
-                total_juz: maxJuz > 0 ? maxJuz : '-',
-                attendance: totalAttDays > 0 ? `${presentDays}/${totalAttDays}` : '-',
-                is_manual: false,
-                // Calculated points
-                ...calc
-            };
-        });
+                    const hifzPages = calculateCoveredPagesFromLogs(
+                        studentLogs.filter((log: any) => log.mode === 'New Verses')
+                    );
+                    let maxJuz = 0;
+                    studentLogs.forEach((log: any) => {
+                        if (log.mode === 'New Verses') {
+                            if (log.juz_number > maxJuz) maxJuz = log.juz_number;
+                        }
+                    });
+
+                    const recentDates = new Set<string>();
+                    studentLogs.filter((l: any) => l.mode === 'Recent Revision').forEach((log: any) => {
+                        try {
+                            const d = new Date(log.entry_date);
+                            if (!isNaN(d.getTime())) {
+                                recentDates.add(d.toISOString().split('T')[0]);
+                            }
+                        } catch (e) {}
+                    });
+
+                    let juzRevTotal = 0;
+                    studentLogs.filter((l: any) => l.mode?.startsWith('Juz Revision')).forEach((log: any) => {
+                        const portion = log.juz_portion;
+                        if (portion === 'Full') juzRevTotal += 1;
+                        else if (portion?.includes('Half')) juzRevTotal += 0.5;
+                        else if (portion?.startsWith('Q')) juzRevTotal += 0.25;
+                        else juzRevTotal += 1;
+                    });
+
+                    return {
+                        adm_no: student.adm_no,
+                        name: student.name,
+                        standard: student.standard,
+                        usthad_name: student.usthad_name || 'Unassigned',
+                        usthad_phone: student.usthad_phone || '',
+                        hifz_pages: parseFloat(hifzPages.toFixed(1)),
+                        recent_days: recentDates.size,
+                        juz_revision: parseFloat(juzRevTotal.toFixed(2)),
+                        total_juz: maxJuz > 0 ? maxJuz : '-',
+                        attendance: attendanceSummary?.attendanceLabel || '-',
+                        scheduledClassDays: attendanceSummary?.plannedClasses || 0,
+                        cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                        attendedClasses: attendanceSummary?.attendedClasses || 0,
+                        notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
+                        is_manual: false,
+                        ...calc
+                    };
+                });
+
+                return {
+                    reports,
+                    class_days: reportClassDays,
+                    scheduled_class_days: scheduledClassDays,
+                    cancelled_class_days: cancelledClassDays,
+                    detected_class_days: detectedClassDays,
+                    detected_log_days: detectedLogDays,
+                    override_class_days: overrideClassDays,
+                    using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+                };
             }
         );
 
-        res.json({ success: true, reports: results });
+        res.json({ success: true, ...results });
     } catch (err: any) {
         console.error('Error calculating bulk monthly report:', err);
         res.status(500).json({ success: false, error: err.message });

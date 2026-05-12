@@ -293,6 +293,26 @@ export default function UnifiedReportView() {
                         {/* Attendance Summary */}
                         <div>
                             <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Session Attendance</h3>
+                            {reportData.attendance_totals && (
+                                <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    <div className="rounded-lg border border-slate-200 p-3 print:border-slate-300">
+                                        <p className="text-[10px] uppercase font-bold text-slate-500">Cancelled</p>
+                                        <p className="text-xl font-black text-slate-800">{reportData.attendance_totals.cancelledClasses}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-[10px] uppercase font-bold text-emerald-700">Attended</p>
+                                        <p className="text-xl font-black text-emerald-700">{reportData.attendance_totals.attendedClasses}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-red-100 bg-red-50 p-3 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-[10px] uppercase font-bold text-red-700">Not attended</p>
+                                        <p className="text-xl font-black text-red-700">{reportData.attendance_totals.notAttendedClasses}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 p-3 print:border-slate-300">
+                                        <p className="text-[10px] uppercase font-bold text-slate-500">Counted</p>
+                                        <p className="text-xl font-black text-slate-800">{reportData.attendance_totals.effectiveClasses}</p>
+                                    </div>
+                                </div>
+                            )}
                             {reportData.attendance.length > 0 ? (() => {
                                 // Deduplicate by session name — merge present/absent/total for same-named sessions
                                 const merged = new Map<string, any>()
@@ -301,31 +321,53 @@ export default function UnifiedReportView() {
                                     const key = rawSession.toLowerCase()
                                     if (merged.has(key)) {
                                         const ex = merged.get(key)
-                                        ex.present += Number(att.present)
-                                        ex.absent  += Number(att.absent)
-                                        ex.total   += Number(att.total)
+                                        ex.present += Number(att.present || 0)
+                                        ex.late += Number(att.late || 0)
+                                        ex.absent += Number(att.absent || 0)
+                                        ex.leave += Number(att.leave || 0)
+                                        ex.attended += Number(att.attended ?? att.present ?? 0)
+                                        ex.not_attended += Number(att.not_attended ?? att.absent ?? 0)
+                                        ex.cancelled += Number(att.cancelled || 0)
+                                        ex.total += Number(att.total || att.effective_total || 0)
+                                        ex.planned += Number(att.planned || att.total || 0)
+                                        ex.effective_total += Number(att.effective_total || att.total || 0)
                                     } else {
                                         // Normalize "HIfz" typo to "Hifz" for display
                                         const cleanSession = rawSession.replace(/^hifz/i, 'Hifz')
-                                        merged.set(key, { ...att, session: cleanSession, present: Number(att.present), absent: Number(att.absent), total: Number(att.total) })
+                                        merged.set(key, {
+                                            ...att,
+                                            session: cleanSession,
+                                            present: Number(att.present || 0),
+                                            late: Number(att.late || 0),
+                                            absent: Number(att.absent || 0),
+                                            leave: Number(att.leave || 0),
+                                            attended: Number(att.attended ?? att.present ?? 0),
+                                            not_attended: Number(att.not_attended ?? att.absent ?? 0),
+                                            cancelled: Number(att.cancelled || 0),
+                                            total: Number(att.total || att.effective_total || 0),
+                                            planned: Number(att.planned || att.total || 0),
+                                            effective_total: Number(att.effective_total || att.total || 0),
+                                        })
                                     }
                                 })
                                 return (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {Array.from(merged.values()).map((att: any, i: number) => {
-                                            const total = att.total || 1
-                                            const pct = Math.round((att.present / total) * 100) || 0
+                                            const countedTotal = att.effective_total || att.total || 0
+                                            const pct = countedTotal > 0 ? Math.round((att.attended / countedTotal) * 100) : 0
                                             return (
                                                 <div key={i} className="border border-slate-200 rounded-lg p-4 print:border-slate-300 print:break-inside-avoid">
                                                     <p className="text-sm font-bold text-slate-700 mb-2">{att.session}</p>
                                                     <div className="flex justify-between items-end">
                                                         <div className="space-y-1">
-                                                            <p className="text-xs text-slate-600">Present: <span className="font-semibold text-emerald-600">{att.present}</span></p>
-                                                            <p className="text-xs text-slate-600">Absent: <span className="font-semibold text-red-600">{att.absent}</span></p>
+                                                            <p className="text-xs text-slate-600">Attended: <span className="font-semibold text-emerald-600">{att.attended}</span></p>
+                                                            <p className="text-xs text-slate-600">Not attended: <span className="font-semibold text-red-600">{att.not_attended}</span></p>
+                                                            <p className="text-xs text-slate-600">Cancelled: <span className="font-semibold text-slate-500">{att.cancelled}</span></p>
                                                         </div>
                                                         <div className="text-right">
                                                             <span className="text-2xl font-black text-slate-800">{pct}%</span>
-                                                            <p className="text-[10px] text-slate-400 font-medium">total marked: {att.total}</p>
+                                                            <p className="text-[10px] text-slate-400 font-medium">counted: {countedTotal}</p>
+                                                            <p className="text-[10px] text-slate-400 font-medium">scheduled: {att.planned}</p>
                                                         </div>
                                                     </div>
                                                 </div>

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { getStudentAttendanceSummaries } from '../utils/attendance-report';
 
 export const getStudentReports = async (req: Request, res: Response) => {
   try {
@@ -13,7 +14,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
     const monthEnd = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     // All 3 queries are independent — fire in parallel.
-    const [studentsRes, attendanceRes, hifzRes] = await Promise.all([
+    const [studentsRes, hifzRes] = await Promise.all([
       db.query(
         `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
                 (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
@@ -24,34 +25,32 @@ export const getStudentReports = async (req: Request, res: Response) => {
          ORDER BY s.name ASC`
       ),
       db.query(
-        `SELECT
-           student_id,
-           COUNT(*) as total_classes,
-           SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present,
-           SUM(CASE WHEN status = 'Absent' THEN 1 ELSE 0 END) as absent,
-           SUM(CASE WHEN status = 'Late' THEN 1 ELSE 0 END) as late,
-           SUM(CASE WHEN status = 'Leave' THEN 1 ELSE 0 END) as leave
-         FROM student_attendance_marks
-         WHERE date >= $1 AND date <= $2
-         GROUP BY student_id`,
-        [monthStart, monthEnd]
-      ),
-      db.query(
         `SELECT DISTINCT ON (student_id) student_id, juz_number as juz, current_page as page
          FROM hifz_progress
          ORDER BY student_id, updated_at DESC`
       ),
     ]);
     const students = studentsRes.rows;
+    const attendanceSummaries = await getStudentAttendanceSummaries(db, students, monthStart, monthEnd);
 
     // Build O(1) lookup maps; the previous .find()-per-row was O(N×M).
-    const attMap = new Map<string, any>();
-    attendanceRes.rows.forEach((a: any) => attMap.set(a.student_id, a));
     const hifzMap = new Map<string, any>();
     hifzRes.rows.forEach((h: any) => hifzMap.set(h.student_id, h));
 
     const mapped = students.map((s: any) => {
-       const att = attMap.get(s.adm_no) || { total_classes: 0, present: 0, absent: 0, late: 0, leave: 0 };
+       const summary = attendanceSummaries.get(s.adm_no);
+       const att = summary ? {
+         total_classes: summary.effectiveClasses,
+         planned_classes: summary.plannedClasses,
+         cancelled: summary.cancelledClasses,
+         attended: summary.attendedClasses,
+         not_attended: summary.notAttendedClasses,
+         present: summary.presentClasses,
+         absent: summary.absentClasses,
+         late: summary.lateClasses,
+         leave: summary.leaveClasses,
+         label: summary.attendanceLabel,
+       } : { total_classes: 0, planned_classes: 0, cancelled: 0, attended: 0, not_attended: 0, present: 0, absent: 0, late: 0, leave: 0, label: '-' };
        const hifz = hifzMap.get(s.adm_no);
 
        return {
@@ -144,7 +143,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         }
 
         // All 4 queries are independent — fire in parallel.
-        const [studentRes, attendanceRes, logsRes, lifetimeLogsRes] = await Promise.all([
+        const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
             db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
@@ -153,20 +152,6 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                FROM students s
                WHERE s.adm_no = $1`,
                 [student_id]
-            ),
-            db.query(
-                `SELECT
-                    sch.id as schedule_id,
-                    COALESCE(sch.name, 'Session') as session,
-                    SUM(CASE WHEN m.status = 'Present' THEN 1 ELSE 0 END) as present,
-                    SUM(CASE WHEN m.status = 'Absent' THEN 1 ELSE 0 END) as absent,
-                    SUM(CASE WHEN m.status = 'Cancelled' THEN 1 ELSE 0 END) as cancelled,
-                    COUNT(*) as total
-                 FROM student_attendance_marks m
-                 LEFT JOIN attendance_schedules sch ON m.schedule_id = sch.id
-                 WHERE m.student_id = $1 AND m.date >= $2 AND m.date <= $3
-                 GROUP BY sch.id, sch.name`,
-                 [student_id, start_date, end_date]
             ),
             db.query(
                 `SELECT *
@@ -185,6 +170,14 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         if (studentRes.rows.length === 0) {
             return res.status(404).json({ success: false, error: "Student not found" });
         }
+
+        const attendanceSummaries = await getStudentAttendanceSummaries(
+            db,
+            studentRes.rows,
+            start_date as string,
+            end_date as string
+        );
+        const attendanceSummary = attendanceSummaries.get(student_id as string);
 
         // Compute aggregations in memory for UI compatibility
         const hifz_logs_agg = logsRes.rows.reduce((acc: any[], log: any) => {
@@ -213,7 +206,8 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             success: true,
             data: {
                 student: studentRes.rows[0],
-                attendance: attendanceRes.rows,
+                attendance: attendanceSummary?.sessions || [],
+                attendance_totals: attendanceSummary || null,
                 period_logs: logsRes.rows,
                 lifetime_new_logs: lifetimeLogsRes.rows,
                 hifz_logs_agg,

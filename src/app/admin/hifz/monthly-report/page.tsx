@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { format, startOfMonth, endOfMonth, isSameMonth } from "date-fns"
-import { Search, Share2, Loader2, FileText, Download, Calendar, Edit2, Save } from "lucide-react"
+import { format } from "date-fns"
+import { Search, Share2, Loader2, Calendar, Edit2, Save } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +49,10 @@ type StudentMonthlyStats = {
     grade: string
     attendance: string
     is_manual: boolean // Flag to indicate if data is from manual entry
+    scheduledClassDays?: number
+    cancelledClasses?: number
+    attendedClasses?: number
+    notAttendedClasses?: number
 }
 
 export default function MonthlyReportsPage() {
@@ -59,6 +63,15 @@ export default function MonthlyReportsPage() {
     const [standardFilter, setStandardFilter] = useState("all")
     const [usthadFilter, setUsthadFilter] = useState("all")
     const [schemaWarning, setSchemaWarning] = useState(false)
+    const [classDays, setClassDays] = useState(0)
+    const [scheduledClassDays, setScheduledClassDays] = useState(0)
+    const [cancelledClassDays, setCancelledClassDays] = useState(0)
+    const [detectedClassDays, setDetectedClassDays] = useState(0)
+    const [detectedLogDays, setDetectedLogDays] = useState(0)
+    const [overrideClassDays, setOverrideClassDays] = useState<number | null>(null)
+    const [classDaysDraft, setClassDaysDraft] = useState("")
+    const [savingClassDays, setSavingClassDays] = useState(false)
+    const [usingFallbackLogDays, setUsingFallbackLogDays] = useState(false)
 
     // Editing State
     const [editingStudent, setEditingStudent] = useState<StudentMonthlyStats | null>(null)
@@ -89,16 +102,73 @@ export default function MonthlyReportsPage() {
                 const sorted = res.data.reports.sort((a: any, b: any) => 
                     a.adm_no.localeCompare(b.adm_no, undefined, { numeric: true })
                 )
+                const nextClassDays = Number(res.data.class_days || 0)
+                const nextScheduledClassDays = Number(res.data.scheduled_class_days || nextClassDays)
+                const nextOverrideClassDays =
+                    res.data.override_class_days === null || res.data.override_class_days === undefined
+                        ? null
+                        : Number(res.data.override_class_days)
                 setStats(sorted)
+                setClassDays(nextClassDays)
+                setDetectedClassDays(Number(res.data.detected_class_days || 0))
+                setDetectedLogDays(Number(res.data.detected_log_days || 0))
+                setOverrideClassDays(nextOverrideClassDays)
+                setUsingFallbackLogDays(Boolean(res.data.using_fallback_log_days))
+                setClassDaysDraft(String(nextOverrideClassDays ?? nextScheduledClassDays))
+                setScheduledClassDays(nextScheduledClassDays)
+                setCancelledClassDays(Number(res.data.cancelled_class_days || 0))
             } else {
                 console.error("Failed to load reports:", res.data.error || "Reports not found in response")
                 setStats([])
+                setClassDays(0)
+                setDetectedClassDays(0)
+                setDetectedLogDays(0)
+                setOverrideClassDays(null)
+                setUsingFallbackLogDays(false)
+                setClassDaysDraft("0")
+                setScheduledClassDays(0)
+                setCancelledClassDays(0)
             }
         } catch (error: any) {
             console.error("Error loading report detailed:", error)
             setStats([])
+            setClassDays(0)
+            setDetectedClassDays(0)
+            setDetectedLogDays(0)
+            setOverrideClassDays(null)
+            setUsingFallbackLogDays(false)
+            setClassDaysDraft("0")
+            setScheduledClassDays(0)
+            setCancelledClassDays(0)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const saveClassDays = async () => {
+        const parsed = Number(classDaysDraft)
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            alert("Class days must be 0 or more.")
+            return
+        }
+
+        setSavingClassDays(true)
+        try {
+            const reportMonthDate = format(new Date(selectedMonth), "yyyy-MM-01")
+            const res = await api.post("/hifz/monthly-report-settings", {
+                report_month: reportMonthDate,
+                expected_class_days: parsed,
+            })
+
+            if (!res.data.success) throw new Error(res.data.error)
+
+            invalidateCache('/hifz/monthly-reports/calculate')
+            loadReportData()
+        } catch (error: any) {
+            console.error("Error saving class days:", error)
+            alert("Failed to save class days: " + error.message)
+        } finally {
+            setSavingClassDays(false)
         }
     }
 
@@ -177,8 +247,10 @@ _Generated from Ma'din Ribathul Quran ERP_
 
     // Filter Logic
     const filteredStats = stats.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-            s.adm_no.toLowerCase().includes(search.toLowerCase())
+        const searchTerm = search.toLowerCase()
+        const matchesSearch = s.name.toLowerCase().includes(searchTerm) ||
+            s.adm_no.toLowerCase().includes(searchTerm) ||
+            s.usthad_name.toLowerCase().includes(searchTerm)
         const matchesStandard = standardFilter === 'all' || s.standard === standardFilter
         const matchesUsthad = usthadFilter === 'all' || s.usthad_name === usthadFilter
         return matchesSearch && matchesStandard && matchesUsthad
@@ -186,6 +258,20 @@ _Generated from Ma'din Ribathul Quran ERP_
 
     const standards = Array.from(new Set(stats.map(s => s.standard))).sort((a, b) => Number(a) - Number(b))
     const usthads = Array.from(new Set(stats.map(s => s.usthad_name))).sort()
+
+    function gradeBadgeClass(grade: string) {
+        const normalized = (grade || "").toUpperCase().trim()
+        if (normalized === "-" || normalized === "NO GRADE") {
+            return "text-slate-400 border-slate-200"
+        }
+        if (["A++", "A+", "A", "B+"].includes(normalized)) {
+            return "text-emerald-600 border-emerald-200 bg-emerald-50"
+        }
+        if (["B", "C+"].includes(normalized)) {
+            return "text-amber-600 border-amber-200 bg-amber-50"
+        }
+        return "text-red-600 border-red-200 bg-red-50"
+    }
 
     return (
         <div className="space-y-6">
@@ -259,6 +345,55 @@ _Generated from Ma'din Ribathul Quran ERP_
                 </div>
             </Card>
 
+            <Card className="border-none shadow-sm bg-white dark:bg-[#1a2234]">
+                <CardContent className="p-4">
+                    <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">Class Days for This Month</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Detected from Hifz attendance: <span className="font-semibold text-slate-700 dark:text-slate-300">{detectedClassDays}</span>
+                                <span className="ml-2">
+                                    Scheduled: <span className="font-semibold text-slate-700 dark:text-slate-300">{scheduledClassDays}</span>
+                                </span>
+                                <span className="ml-2">
+                                    Cancelled: <span className="font-semibold text-rose-600">{cancelledClassDays}</span>
+                                </span>
+                                {overrideClassDays !== null && (
+                                    <span className="ml-2 text-blue-600 dark:text-blue-400">
+                                        Manual override active
+                                    </span>
+                                )}
+                            </p>
+                            {usingFallbackLogDays && overrideClassDays === null && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                    Attendance days are missing for this month, so grade calculation is currently using Hifz log days: <span className="font-semibold">{detectedLogDays}</span>
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                            <div className="space-y-1">
+                                <Label htmlFor="class-days" className="text-xs text-slate-500">Editable scheduled classes</Label>
+                                <Input
+                                    id="class-days"
+                                    type="number"
+                                    min="0"
+                                    value={classDaysDraft}
+                                    onChange={(e) => setClassDaysDraft(e.target.value)}
+                                    className="w-full sm:w-32"
+                                />
+                            </div>
+                            <Button onClick={saveClassDays} disabled={savingClassDays || Number(classDaysDraft) === (overrideClassDays ?? (scheduledClassDays || classDays))} className="gap-2">
+                                {savingClassDays ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Save Class Days
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                        Current calculation counts <span className="font-semibold text-slate-700 dark:text-slate-300">{classDays}</span> classes after cancelled classes are removed.
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Data Table */}
             <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-[#1a2234]">
                 <Table>
@@ -306,11 +441,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     <TableCell>
                                         <Badge
                                             variant="outline"
-                                            className={`${s.grade === '-' ? 'text-slate-400 border-slate-200' :
-                                                Number(s.grade) >= 4 ? 'text-emerald-600 border-emerald-200 bg-emerald-50' :
-                                                    Number(s.grade) >= 3 ? 'text-amber-600 border-amber-200 bg-amber-50' :
-                                                        'text-red-600 border-red-200 bg-red-50'
-                                                }`}
+                                            className={gradeBadgeClass(s.grade)}
                                         >
                                             {s.grade}
                                         </Badge>

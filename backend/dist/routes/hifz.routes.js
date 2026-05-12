@@ -27,6 +27,10 @@ router.put('/logs/:id', hifz_controller_1.updateHifzLog);
 router.delete('/logs/:id', hifz_controller_1.deleteHifzLog);
 // GET /api/hifz/monthly-reports/calculate
 router.get('/monthly-reports/calculate', hifz_controller_1.calculateBulkMonthlyReport);
+// GET /api/hifz/monthly-report-settings
+router.get('/monthly-report-settings', hifz_controller_1.getMonthlyReportSettings);
+// POST /api/hifz/monthly-report-settings
+router.post('/monthly-report-settings', hifz_controller_1.upsertMonthlyReportSettings);
 // GET /api/hifz/monthly-reports
 router.get('/monthly-reports', hifz_controller_1.getMonthlyReports);
 // POST /api/hifz/monthly-reports

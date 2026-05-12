@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculateHifzReportPoints = calculateHifzReportPoints;
 const quran_data_1 = require("./quran-data");
-function calculateHifzReportPoints(logs, attendance) {
+function calculateHifzReportPoints(logs, attendance, options) {
     // Rounding helper
     const roundTo2 = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
     const safeToISO = (dateStr) => {
@@ -27,9 +27,18 @@ function calculateHifzReportPoints(logs, attendance) {
                 uniqueClassDays.add(iso);
         }
     });
-    const totalClassDays = uniqueClassDays.size;
+    const attendanceClassDays = uniqueClassDays.size;
+    const uniqueLogDays = new Set();
+    logs.forEach(log => {
+        const iso = safeToISO(log.entry_date);
+        if (iso)
+            uniqueLogDays.add(iso);
+    });
+    const detectedClassDays = attendanceClassDays > 0 ? attendanceClassDays : uniqueLogDays.size;
+    const totalClassDays = options?.expectedClassDaysOverride ?? detectedClassDays;
     if (totalClassDays === 0) {
         return {
+            detectedClassDays,
             totalClassDays: 0,
             newVersePoints: 0,
             recentRevisionPoints: 0,
@@ -40,16 +49,7 @@ function calculateHifzReportPoints(logs, attendance) {
         };
     }
     // STEP 2: NEW VERSE POINT CALCULATION
-    let totalPagesRecited = 0;
-    logs.filter(l => l.mode === 'New Verses').forEach(log => {
-        const sId = (0, quran_data_1.getSurahId)(log.surah_name || "");
-        if (sId && log.start_v && log.end_v) {
-            totalPagesRecited += (0, quran_data_1.calculatePages)(sId, log.start_v, sId, log.end_v);
-        }
-        else if (log.start_page && log.end_page) {
-            totalPagesRecited += (log.end_page - log.start_page + 1);
-        }
-    });
+    const totalPagesRecited = (0, quran_data_1.calculateCoveredPagesFromLogs)(logs.filter(l => l.mode === 'New Verses'));
     const expectedPages = totalClassDays * 0.9;
     let newVersePoints = expectedPages > 0 ? (totalPagesRecited / expectedPages) * 10 : 0;
     newVersePoints = roundTo2(Math.min(newVersePoints, 10));
@@ -101,6 +101,7 @@ function calculateHifzReportPoints(logs, attendance) {
     else if (totalPercentage >= 35)
         grade = 'D+';
     return {
+        detectedClassDays,
         totalClassDays,
         newVersePoints,
         recentRevisionPoints,

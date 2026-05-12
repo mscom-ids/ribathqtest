@@ -9,6 +9,7 @@ import {
     getMentorSchedules,
     markAttendance,
     cancelSession,
+    restoreSession,
     getBreaks,
     updateBreak,
     getStudentsForSchedule,
@@ -40,6 +41,7 @@ router.get('/students', getStudentsForSchedule);
 router.get('/marks', getStudentMarksForSchedule);
 router.post('/mark', markAttendance);
 router.post('/cancel', requireRole(ATTENDANCE_MANAGE_ROLES), cancelSession);
+router.post('/restore', requireRole(ATTENDANCE_MANAGE_ROLES), restoreSession);
 
 // Breaks endpoints
 router.get('/breaks', getBreaks);

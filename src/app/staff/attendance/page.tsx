@@ -66,6 +66,45 @@ type SessionRow = {
     markedCount: number
 }
 
+function parseCancelledStandards(value: any): string[] {
+    if (Array.isArray(value)) return value.map(String)
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value || "[]")
+            return Array.isArray(parsed) ? parsed.map(String) : []
+        } catch {
+            return []
+        }
+    }
+    return []
+}
+
+function normalizeStandardLabel(label: string) {
+    const value = String(label || "").trim()
+    if (value === "Hifz Only") return "Hifz"
+    if (value === "+1 (Plus One)") return "Plus One"
+    if (value === "+2 (Plus Two)") return "Plus Two"
+    if (value.endsWith(" Standard")) return value.replace(" Standard", "")
+    return value
+}
+
+function parseSessionStandards(value: any): string[] {
+    if (Array.isArray(value)) return value.map(String)
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value || "[]")
+            return Array.isArray(parsed) ? parsed.map(String) : []
+        } catch {
+            return []
+        }
+    }
+    return []
+}
+
+function isFullAttendanceCancellation(cancellation: any) {
+    return !!cancellation && parseCancelledStandards(cancellation.cancelled_standards).length === 0
+}
+
 export default function StaffAttendancePage() {
     const [staffId, setStaffId] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<string>("staff")
@@ -171,15 +210,39 @@ export default function StaffAttendancePage() {
 
             const marks = dashRes.data?.marks || []
             const markedScheduleIds = new Set(marks.map((m: any) => m.schedule_id))
+            const cancellations = dashRes.data?.cancellations || []
+            const fullyCancelledScheduleIds = new Set(
+                cancellations
+                    .filter(isFullAttendanceCancellation)
+                    .map((c: any) => c.schedule_id)
+            )
+            const cancellationsBySchedule = new Map(cancellations.map((c: any) => [c.schedule_id, c]))
 
             const rows: SessionRow[] = activeSessions.map(session => {
-                const isCancelled = !!cancelledMap[session.id]
+                const scheduleStandards = parseSessionStandards(session.standards).map(normalizeStandardLabel)
+                const cancellation = cancellationsBySchedule.get(session.id)
+                const cancelledStandards = parseCancelledStandards((cancellation as any)?.cancelled_standards).map(normalizeStandardLabel)
+                const studentsForSession = students.filter(student => {
+                    const studentStandard = normalizeStandardLabel(student.standard)
+                    const belongsToSession = scheduleStandards.length === 0 || scheduleStandards.includes(studentStandard)
+                    return belongsToSession
+                })
+                const activeStudentsForSession = studentsForSession.filter(
+                    student => !cancelledStandards.includes(normalizeStandardLabel(student.standard))
+                )
+                const isCancelled =
+                    !!cancelledMap[session.id] ||
+                    fullyCancelledScheduleIds.has(session.id) ||
+                    (!!cancellation && studentsForSession.length > 0 && activeStudentsForSession.length === 0)
                 const isMarked = markedScheduleIds.has(session.id)
+                const visibleStudentCount = cancellation
+                    ? activeStudentsForSession.length
+                    : (session.student_count || studentsForSession.length || 0)
                 return {
                     session,
                     status: isCancelled ? "cancelled" : isMarked ? "marked" : "pending",
-                    studentCount: session.student_count || 0,
-                    markedCount: isMarked ? (session.student_count || 0) : 0,
+                    studentCount: visibleStudentCount,
+                    markedCount: isMarked ? visibleStudentCount : 0,
                 }
             })
 
