@@ -9,7 +9,7 @@ import {
     CheckCircle2, Clock, AlertCircle,
     UserCheck, CalendarCheck, TrendingUp,
     MoreHorizontal, GraduationCap, X, Plus,
-    Edit2, Trash2, Loader2, UserCog
+    Edit2, Trash2, Loader2, UserCog, ShieldCheck
 } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
@@ -548,6 +548,7 @@ export default function AdminDashboardPage() {
                             
                             <QuickLink href="/admin/finance/dashboard"  label="Fees"        icon={DollarSign}   bg="bg-[#E0F7FA]" iconBg="bg-[#06B6D4]" />
                             <QuickLink label="Reports"                 onClick={() => setReportsPopupOpen(true)} icon={FileText}     bg="bg-[#E0F2FE]" iconBg="bg-[#0EA5E9]" />
+                            <QuickLink href="/admin/mentor-access"      label="Mentor Locks" icon={ShieldCheck}  bg="bg-[#EEF2FF]" iconBg="bg-[#6366F1]" />
                             
                             <Link href="/admin/delegations" className="flex flex-col items-center justify-center py-5 rounded-xl bg-purple-50 hover:shadow flex-1 min-w-[30%] transition-all relative">
                                 {pendingDelegationsCount > 0 && (

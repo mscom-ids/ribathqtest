@@ -2,16 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
-
-const ROLE_LIMITS = {
-    staff: 3,    // 3 days for mentors
-    usthad: 3,   // same window for usthad role
-    mentor: 3,   // same window for mentor role
-    admin: 30,
-    principal: 30,
-    vice_principal: 30,
-    controller: 30
-};
+import { getMentorAccessDecision } from '../utils/mentor-access-policy';
 
 // All roles treated as a mentor (filtered access)
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -87,23 +78,60 @@ type MentorCountMap = Record<'hifz' | 'school' | 'madrasa', Record<string, numbe
 // fire one query per schedule.
 async function getMentorStudentCounts(mentorId: string): Promise<MentorCountMap> {
     const result = await db.query(
-        `SELECT standard,
-                (hifz_mentor_id    = $1) AS is_hifz,
-                (school_mentor_id  = $1) AS is_school,
-                (madrasa_mentor_id = $1) AS is_madrasa
-         FROM students
-         WHERE status = 'active'
-           AND standard IS NOT NULL
-           AND (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)`,
+        `SELECT adm_no, standard, is_hifz, is_school, is_madrasa
+         FROM (
+             SELECT s.adm_no, s.standard,
+                    (s.hifz_mentor_id    = $1) AS is_hifz,
+                    (s.school_mentor_id  = $1) AS is_school,
+                    (s.madrasa_mentor_id = $1) AS is_madrasa
+             FROM students s
+             WHERE s.status = 'active'
+               AND s.standard IS NOT NULL
+               AND (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
+               AND NOT EXISTS (
+                   SELECT 1 FROM mentor_delegations d
+                   WHERE d.from_staff_id = $1
+                     AND d.status = 'approved'
+                     AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+               )
+
+             UNION ALL
+
+             SELECT s.adm_no, s.standard,
+                    (s.hifz_mentor_id    = d.from_staff_id) AS is_hifz,
+                    (s.school_mentor_id  = d.from_staff_id) AS is_school,
+                    (s.madrasa_mentor_id = d.from_staff_id) AS is_madrasa
+             FROM mentor_delegations d
+             JOIN students s ON (
+                s.hifz_mentor_id = d.from_staff_id
+                OR s.school_mentor_id = d.from_staff_id
+                OR s.madrasa_mentor_id = d.from_staff_id
+             )
+             WHERE d.to_staff_id = $1
+               AND d.status = 'approved'
+               AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+               AND s.status = 'active'
+               AND s.standard IS NOT NULL
+         ) assigned`,
         [mentorId]
     );
 
     const counts: MentorCountMap = { hifz: {}, school: {}, madrasa: {} };
+    const seen = { hifz: new Set<string>(), school: new Set<string>(), madrasa: new Set<string>() };
     for (const row of result.rows) {
         const std = row.standard;
-        if (row.is_hifz)    counts.hifz[std]    = (counts.hifz[std]    || 0) + 1;
-        if (row.is_school)  counts.school[std]  = (counts.school[std]  || 0) + 1;
-        if (row.is_madrasa) counts.madrasa[std] = (counts.madrasa[std] || 0) + 1;
+        if (row.is_hifz && !seen.hifz.has(`${std}|${row.adm_no}`)) {
+            seen.hifz.add(`${std}|${row.adm_no}`);
+            counts.hifz[std] = (counts.hifz[std] || 0) + 1;
+        }
+        if (row.is_school && !seen.school.has(`${std}|${row.adm_no}`)) {
+            seen.school.add(`${std}|${row.adm_no}`);
+            counts.school[std] = (counts.school[std] || 0) + 1;
+        }
+        if (row.is_madrasa && !seen.madrasa.has(`${std}|${row.adm_no}`)) {
+            seen.madrasa.add(`${std}|${row.adm_no}`);
+            counts.madrasa[std] = (counts.madrasa[std] || 0) + 1;
+        }
     }
     return counts;
 }
@@ -535,16 +563,26 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                      WHERE status = 'active'
                        AND standard = ANY($1)
                        AND ${mentorCol} = $2
+                       AND NOT EXISTS (
+                           SELECT 1 FROM mentor_delegations d
+                           WHERE d.from_staff_id = $2
+                             AND d.status = 'approved'
+                             AND (d.student_id IS NULL OR d.student_id = students.adm_no)
+                       )
                      ORDER BY standard, name`,
                     [activeDbStds, mentor_id]
                 ),
                 db.query(
-                    `SELECT s.adm_no, s.name, s.standard, s.photo_url
-                     FROM mentor_delegations d
+                    `WITH incoming_delegations AS (
+                        SELECT from_staff_id, student_id
+                        FROM mentor_delegations
+                        WHERE to_staff_id = $1
+                          AND status = 'approved'
+                     )
+                     SELECT s.adm_no, s.name, s.standard, s.photo_url
+                     FROM incoming_delegations d
                      JOIN students s ON s.${mentorCol} = d.from_staff_id
-                     WHERE d.to_staff_id = $1
-                       AND d.status = 'approved'
-                       AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+                     WHERE (d.student_id IS NULL OR d.student_id = s.adm_no)
                        AND s.status = 'active'
                        AND s.standard = ANY($2)
                      ORDER BY s.name`,
@@ -686,7 +724,16 @@ export const markAttendance = async (req: Request, res: Response) => {
                 if (mentorCol) {
                     // Fetch permanently assigned students
                     const permRes = await db.query(
-                        `SELECT adm_no FROM students WHERE adm_no = ANY($1) AND ${mentorCol} = $2`,
+                        `SELECT adm_no
+                         FROM students
+                         WHERE adm_no = ANY($1)
+                           AND ${mentorCol} = $2
+                           AND NOT EXISTS (
+                               SELECT 1 FROM mentor_delegations d
+                               WHERE d.from_staff_id = $2
+                                 AND d.status = 'approved'
+                                 AND (d.student_id IS NULL OR d.student_id = students.adm_no)
+                           )`,
                         [submittedIds, staffId]
                     );
                     const permIds = new Set(permRes.rows.map((r: any) => r.adm_no));
@@ -695,11 +742,16 @@ export const markAttendance = async (req: Request, res: Response) => {
                     let delegatedIds = new Set<string>();
                     try {
                         const delRes = await db.query(
-                            `SELECT s.adm_no FROM mentor_delegations d
+                            `WITH incoming_delegations AS (
+                                SELECT from_staff_id, student_id
+                                FROM mentor_delegations
+                                WHERE to_staff_id = $1
+                                  AND status = 'approved'
+                             )
+                             SELECT s.adm_no
+                             FROM incoming_delegations d
                              JOIN students s ON s.${mentorCol} = d.from_staff_id
-                             WHERE d.to_staff_id = $1
-                               AND d.status = 'approved'
-                               AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+                             WHERE (d.student_id IS NULL OR d.student_id = s.adm_no)
                                AND s.adm_no = ANY($2)`,
                             [staffId, submittedIds]
                         );
@@ -752,11 +804,16 @@ export const markAttendance = async (req: Request, res: Response) => {
         
         if (now < classDateObj) return res.status(400).json({ success: false, error: "Cannot mark attendance before the class starts" });
 
-        const diffTime = Math.abs(now.getTime() - classDateObj.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const maxDays = (ROLE_LIMITS as any)[userRole] || 3;
-
-        if (diffDays > maxDays) return res.status(403).json({ success: false, error: `Time lock expired. You only have a ${maxDays}-day window.` });
+        if (MENTOR_ROLES.includes(userRole)) {
+            const access = await getMentorAccessDecision('attendance', date);
+            if (!access.allowed) {
+                return res.status(403).json({
+                    success: false,
+                    error: access.reason || 'Attendance is locked for this date.',
+                    access_policy: access,
+                });
+            }
+        }
 
         // ── Transaction: must use a single client; db.query() goes through the
         // pool and would route BEGIN/COMMIT to different connections than the

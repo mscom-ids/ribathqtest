@@ -405,26 +405,30 @@ const getMyStudentsWithStats = async (req, res) => {
         const { date } = req.query;
         const todayDate = date || new Date().toISOString().split('T')[0];
         const studentIds = students.map((s) => s.adm_no);
+        const safeRows = (label, query) => query.catch((err) => {
+            console.warn(`getMyStudentsWithStats: ${label} skipped:`, err.message);
+            return { rows: [] };
+        });
         // Fire all 5 dependent queries in parallel — none depend on each other,
         // they only depend on studentIds + staffId + todayDate. Previously each
         // awaited the next, costing ~5 sequential round-trips per request.
         const [activeLeaveResult, logsResult, attResult, outgoingDelegationsRes, lastHifzResult] = await Promise.all([
-            db_1.db.query(`SELECT student_id, leave_type, reason_category, remarks, end_datetime
+            safeRows('outside leave lookup', db_1.db.query(`SELECT student_id, leave_type, reason_category, remarks, end_datetime
                  FROM student_leaves
                  WHERE student_id = ANY($1) AND status = 'outside'
                    AND leave_type <> 'outdoor'
-                 ORDER BY created_at DESC`, [studentIds]),
-            db_1.db.query(`SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
-                 FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`, [studentIds, todayDate]),
-            db_1.db.query(`SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`, [studentIds, todayDate]),
-            db_1.db.query(`SELECT d.student_id, s.name as receiver_name
+                 ORDER BY created_at DESC`, [studentIds])),
+            safeRows('today hifz logs lookup', db_1.db.query(`SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
+                 FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`, [studentIds, todayDate])),
+            safeRows('attendance marks lookup', db_1.db.query(`SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`, [studentIds, todayDate])),
+            safeRows('outgoing delegations lookup', db_1.db.query(`SELECT d.student_id, s.name as receiver_name
                  FROM mentor_delegations d
                  JOIN staff s ON d.to_staff_id = s.id
-                 WHERE d.from_staff_id = $1 AND d.status = 'approved'`, [staffId]),
-            db_1.db.query(`SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date
+                 WHERE d.from_staff_id = $1 AND d.status = 'approved'`, [staffId])),
+            safeRows('last hifz lookup', db_1.db.query(`SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date
                  FROM hifz_logs
                  WHERE student_id = ANY($1) AND mode = 'New Verses'
-                 ORDER BY student_id, entry_date DESC, created_at DESC`, [studentIds]),
+                 ORDER BY student_id, entry_date DESC, created_at DESC`, [studentIds])),
         ]);
         // Build a map: student_id -> leave info
         const activeLeaveMap = {};
@@ -433,8 +437,18 @@ const getMyStudentsWithStats = async (req, res) => {
                 activeLeaveMap[l.student_id] = l;
             }
         });
-        const logs = logsResult.rows;
-        const attendance = attResult.rows;
+        const logsByStudent = {};
+        logsResult.rows.forEach((log) => {
+            if (!logsByStudent[log.student_id])
+                logsByStudent[log.student_id] = [];
+            logsByStudent[log.student_id].push(log);
+        });
+        const attendanceByStudent = {};
+        attResult.rows.forEach((mark) => {
+            if (!attendanceByStudent[mark.student_id])
+                attendanceByStudent[mark.student_id] = [];
+            attendanceByStudent[mark.student_id].push(mark);
+        });
         const outgoingDelegations = outgoingDelegationsRes.rows;
         const lastHifzMap = {};
         lastHifzResult.rows.forEach(r => {
@@ -443,8 +457,8 @@ const getMyStudentsWithStats = async (req, res) => {
         // Enrich students with today's stats
         const enriched = students.map((student) => {
             const delegation = outgoingDelegations.find(d => d.student_id === student.adm_no || d.student_id === null);
-            const sLogs = logs.filter((l) => l.student_id === student.adm_no);
-            const sAtts = attendance.filter((a) => a.student_id === student.adm_no);
+            const sLogs = logsByStudent[student.adm_no] || [];
+            const sAtts = attendanceByStudent[student.adm_no] || [];
             let globalAttStatus = 'Pending';
             if (sAtts.length > 0) {
                 // If present in ANY session today, mark them as Present globally on dashboard

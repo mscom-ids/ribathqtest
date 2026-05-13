@@ -36,6 +36,7 @@ import eventsRoutes from './routes/events.routes';
 import reportsRoutes from './routes/reports.routes';
 import chatRoutes from './routes/chat.routes';
 import delegationsRoutes from './routes/delegations.routes';
+import accessControlRoutes from './routes/access_control.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -104,6 +105,7 @@ app.use('/api/events', eventsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/delegations', delegationsRoutes);
+app.use('/api/access-control', accessControlRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Backend is running' });

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { format, subDays, isBefore } from "date-fns"
+import { format, subDays } from "date-fns"
 import { Check, ChevronsUpDown, Loader2, Save, ArrowLeft, PlusCircle, Trash2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -180,6 +180,14 @@ type HifzLogRow = {
     juz_portion?: FormValues["juz_entries"][number]["juz_portion"] | null
 }
 
+type MentorAccessPolicy = {
+    default_window_days: number
+    default_start_date: string
+    today: string
+    unlock_start_date: string | null
+    unlock_end_date: string | null
+}
+
 export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -191,6 +199,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [isHafiz, setIsHafiz] = useState(false)
+    const [accessPolicy, setAccessPolicy] = useState<MentorAccessPolicy | null>(null)
     // Gate the form render until student + progress + log are all loaded.
     // Without this gate, the form renders with the default "New Verses" mode
     // first, then re-renders to "Juz Revision (New)" once the progress check
@@ -207,7 +216,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [rangeSuccess, setRangeSuccess] = useState(false)
 
     const today = new Date()
-    const minDate = subDays(today, 7)
+    const fallbackMinDate = subDays(today, 6)
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema) as any,
@@ -243,7 +252,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             // Fire all three calls in parallel. Previously these were
             // sequential awaits, costing 3 RTTs every time the form opened.
-            const [sRes, progRes, logRes] = await Promise.all([
+            const [sRes, progRes, logRes, policyRes] = await Promise.all([
                 api.get(`/students/${studentId}`, { params: { light: 'true' } }).catch(() => null),
                 api.get('/hifz/progress-summary', { params: { student_id: studentId } }).catch(() => null),
                 (logIdParam
@@ -252,6 +261,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         params: { student_id: studentId, date: initialDate, mode: initialMode },
                     })
                 ).catch(() => null),
+                api.get('/access-control/mentor-policies').catch(() => null),
             ])
 
             if (cancelled) return
@@ -261,6 +271,8 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
                 setIsOutside(!!sRes.data.student.is_outside)
             }
+            const policies = policyRes?.data?.policies || []
+            setAccessPolicy(policies.find((p: any) => p.feature === "hifz_recording") || null)
 
             const totalJuzCompleted = progRes?.data?.progressMap?.[studentId] || 0
             const isStudentHafiz = totalJuzCompleted >= 30
@@ -410,6 +422,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     }, [watchedDate, watchedMode])
 
     const onSubmit = async (values: FormValues) => {
+        if (!isDateAllowedForRecording(values.date)) {
+            alert(`Locked for dates older than ${lockWindowDays} days.${unlockLabel}`)
+            return
+        }
         setLoading(true)
 
         // Get my staff profile to know usthad_id
@@ -534,6 +550,10 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     async function handleRangeSave() {
         setRangeError(null)
         setRangeSuccess(false)
+        if (isRangeDateLocked) {
+            setRangeError(`Locked for dates older than ${lockWindowDays} days.${unlockLabel}`)
+            return
+        }
         // Validate
         for (let i = 0; i < ranges.length; i++) {
             const r = ranges[i]
@@ -594,7 +614,24 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         setRangeSaving(false)
     }
 
-    const isOldDate = isBefore(new Date(form.watch("date")), minDate)
+    const isDateAllowedForRecording = (dateStr: string) => {
+        const todayKey = accessPolicy?.today || format(today, "yyyy-MM-dd")
+        const defaultStart = accessPolicy?.default_start_date || format(fallbackMinDate, "yyyy-MM-dd")
+        const inDefaultWindow = dateStr >= defaultStart && dateStr <= todayKey
+        const inUnlockWindow =
+            !!accessPolicy?.unlock_start_date &&
+            !!accessPolicy?.unlock_end_date &&
+            dateStr >= accessPolicy.unlock_start_date &&
+            dateStr <= accessPolicy.unlock_end_date
+
+        return dateStr <= todayKey && (inDefaultWindow || inUnlockWindow)
+    }
+    const isOldDate = !isDateAllowedForRecording(form.watch("date"))
+    const isRangeDateLocked = !isDateAllowedForRecording(rangeDate)
+    const lockWindowDays = accessPolicy?.default_window_days || 7
+    const unlockLabel = accessPolicy?.unlock_start_date && accessPolicy?.unlock_end_date
+        ? ` Admin unlock: ${accessPolicy.unlock_start_date} to ${accessPolicy.unlock_end_date}.`
+        : ""
 
     if (!mounted || initialLoading) return <div className="p-4 max-w-lg mx-auto flex justify-center items-center h-40"><Loader2 className="animate-spin text-emerald-500" /></div>
 
@@ -666,6 +703,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                             onChange={e => setRangeDate(e.target.value)}
                             className="w-full h-9 rounded-md border border-input bg-white dark:bg-slate-900 px-2 text-sm"
                         />
+                        {isRangeDateLocked && (
+                            <p className="mt-2 text-[10px] font-bold text-red-500">
+                                Locked for dates older than {lockWindowDays} days.{unlockLabel}
+                            </p>
+                        )}
                     </div>
 
                     {/* Range cards */}
@@ -752,7 +794,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     <Button
                         type="button"
                         onClick={handleRangeSave}
-                        disabled={rangeSaving}
+                        disabled={rangeSaving || isRangeDateLocked}
                         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-sm font-bold shadow-md"
                     >
                         {rangeSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2 h-4 w-4" />Save Range</>}
@@ -1023,7 +1065,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                      <div className="flex flex-col gap-3">
                         {isOldDate && (
                             <p className="text-red-400 text-[11px] text-center font-bold bg-red-400/5 py-1.5 rounded-md border border-red-400/20">
-                                Locked for dates older than 7 days.
+                                Locked for dates older than {lockWindowDays} days.{unlockLabel}
                             </p>
                         )}
                         <div className="flex gap-3">

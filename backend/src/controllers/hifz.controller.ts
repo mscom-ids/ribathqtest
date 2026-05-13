@@ -5,6 +5,7 @@ import { countCompletedJuz } from '../utils/quran-juz';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
 import { getStudentAttendanceSummaries } from '../utils/attendance-report';
+import { getMentorAccessDecision, isMentorAccessRole } from '../utils/mentor-access-policy';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
@@ -36,6 +37,19 @@ const resolvePointClassDays = (
     if (manualFallback > 0) return manualFallback;
 
     return normalizeClassDayCount(fallbackClassDays);
+};
+
+const enforceHifzRecordingAccess = async (req: Request, entryDate: string) => {
+    const role = String((req as any).user?.role || '').toLowerCase();
+    if (!isMentorAccessRole(role)) return;
+
+    const access = await getMentorAccessDecision('hifz_recording', entryDate);
+    if (!access.allowed) {
+        const err: any = new Error(access.reason || 'Hifz recording is locked for this date.');
+        err.statusCode = 403;
+        err.accessPolicy = access;
+        throw err;
+    }
 };
 
 const getDetectedClassDays = async (startDate: string, endDate: string) => {
@@ -244,6 +258,7 @@ export const createHifzLog = async (req: Request, res: Response) => {
     try {
         const { student_id, usthad_id, entry_date, session_type, mode,
                 surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
+        await enforceHifzRecordingAccess(req, entry_date);
         const result = await db.query(
             `INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
@@ -256,7 +271,11 @@ export const createHifzLog = async (req: Request, res: Response) => {
         res.json({ success: true, log: result.rows[0] });
     } catch (err) {
         console.error('Error creating hifz log:', err);
-        res.status(500).json({ success: false, error: 'Failed to create hifz log' });
+        res.status((err as any).statusCode || 500).json({
+            success: false,
+            error: (err as any).statusCode ? (err as any).message : 'Failed to create hifz log',
+            access_policy: (err as any).accessPolicy,
+        });
     }
 };
 
@@ -265,6 +284,9 @@ export const updateHifzLog = async (req: Request, res: Response) => {
         const { id } = req.params;
         const { student_id, usthad_id, entry_date, session_type, mode,
                 surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
+        if (entry_date) {
+            await enforceHifzRecordingAccess(req, entry_date);
+        }
         const result = await db.query(
             `UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, session_type=$4, mode=$5,
              surah_name=$6, start_v=$7, end_v=$8, start_page=$9, end_page=$10,
@@ -278,7 +300,11 @@ export const updateHifzLog = async (req: Request, res: Response) => {
         res.json({ success: true, log: result.rows[0] });
     } catch (err) {
         console.error('Error updating hifz log:', err);
-        res.status(500).json({ success: false, error: 'Failed to update hifz log' });
+        res.status((err as any).statusCode || 500).json({
+            success: false,
+            error: (err as any).statusCode ? (err as any).message : 'Failed to update hifz log',
+            access_policy: (err as any).accessPolicy,
+        });
     }
 };
 
@@ -287,6 +313,13 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
         const { logs } = req.body;
         if (!Array.isArray(logs) || logs.length === 0) {
             return res.status(400).json({ success: false, error: 'logs array is required' });
+        }
+
+        const uniqueEntryDates = [
+            ...new Set(logs.map((log: any) => String(log.entry_date || '').slice(0, 10)).filter(Boolean)),
+        ];
+        for (const entryDate of uniqueEntryDates) {
+            await enforceHifzRecordingAccess(req, entryDate);
         }
 
         // ── Step 1: bulk-fetch existing verse-range rows that could collide
@@ -358,19 +391,31 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
         res.json({ success: true, logs: result.rows });
     } catch (err) {
         console.error('Error bulk creating hifz logs:', err);
-        res.status(500).json({ success: false, error: 'Failed to bulk create hifz logs' });
+        res.status((err as any).statusCode || 500).json({
+            success: false,
+            error: (err as any).statusCode ? (err as any).message : 'Failed to bulk create hifz logs',
+            access_policy: (err as any).accessPolicy,
+        });
     }
 };
 
 export const deleteHifzLog = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const existing = await db.query('SELECT entry_date FROM hifz_logs WHERE id = $1', [id]);
+        if (existing.rows[0]?.entry_date) {
+            await enforceHifzRecordingAccess(req, existing.rows[0].entry_date);
+        }
         await db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
         invalidateCacheByPrefix('hifz:');
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting hifz log:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
+        res.status((err as any).statusCode || 500).json({
+            success: false,
+            error: (err as any).statusCode ? (err as any).message : 'Failed',
+            access_policy: (err as any).accessPolicy,
+        });
     }
 };
 

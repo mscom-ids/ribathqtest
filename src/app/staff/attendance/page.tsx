@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { format, differenceInDays, subDays } from "date-fns"
+import { format, subDays } from "date-fns"
 import {
     Calendar as CalendarIcon, Loader2, Clock, Users, CheckCircle2,
     XCircle, Ban, Lock, ChevronLeft, ChevronRight
@@ -66,6 +66,14 @@ type SessionRow = {
     markedCount: number
 }
 
+type MentorAccessPolicy = {
+    default_window_days: number
+    default_start_date: string
+    today: string
+    unlock_start_date: string | null
+    unlock_end_date: string | null
+}
+
 function parseCancelledStandards(value: any): string[] {
     if (Array.isArray(value)) return value.map(String)
     if (typeof value === "string") {
@@ -110,7 +118,6 @@ export default function StaffAttendancePage() {
     const [userRole, setUserRole] = useState<string>("staff")
     const [selectedDate, setSelectedDate] = useState<Date>(new Date())
     const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
-    const [students, setStudents] = useState<Student[]>([])
     const [sessionStudents, setSessionStudents] = useState<Student[]>([])
     const [policy, setPolicy] = useState<CalendarPolicy | null>(null)
     const [loading, setLoading] = useState(true)
@@ -131,6 +138,7 @@ export default function StaffAttendancePage() {
     const [lockedLeaves, setLockedLeaves] = useState<Record<string, string>>({})
     const [futureLeaves, setFutureLeaves] = useState<Record<string, string>>({})
     const [modalLoading, setModalLoading] = useState(false)
+    const [accessPolicy, setAccessPolicy] = useState<MentorAccessPolicy | null>(null)
 
     const router = useRouter()
     const todayStr = format(currentTime, "yyyy-MM-dd")
@@ -140,8 +148,14 @@ export default function StaffAttendancePage() {
     const diffTime = new Date(todayStr).getTime() - new Date(dateStr).getTime();
     const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
-    const maxEditDays = userRole === "staff" ? 3 : 30
-    const isEditable = daysDiff >= 0 && daysDiff <= maxEditDays
+    const isMentorRole = ["staff", "usthad", "mentor"].includes(userRole)
+    const maxEditDays = isMentorRole ? (accessPolicy?.default_window_days || 7) : 30
+    const isUnlockedRange =
+        !!accessPolicy?.unlock_start_date &&
+        !!accessPolicy?.unlock_end_date &&
+        dateStr >= accessPolicy.unlock_start_date &&
+        dateStr <= accessPolicy.unlock_end_date
+    const isEditable = daysDiff >= 0 && (isMentorRole ? (dateStr >= (accessPolicy?.default_start_date || format(subDays(currentTime, maxEditDays - 1), "yyyy-MM-dd")) || isUnlockedRange) : daysDiff <= maxEditDays)
     const isFutureDate = daysDiff < 0
 
     // Initial auth + staff lookup — all 3 calls fire in parallel
@@ -149,15 +163,17 @@ export default function StaffAttendancePage() {
         async function init() {
             setLoading(true)
             try {
-                const [meRes, staffRes, studentsRes] = await Promise.all([
+                const [meRes, staffRes, policyRes] = await Promise.all([
                     api.get('/auth/me'),
                     api.get('/staff/me'),
-                    api.get('/staff/me/students'),
+                    api.get('/access-control/mentor-policies').catch(() => null),
                 ])
 
                 const user = meRes.data?.user
                 if (!user) { router.push("/login"); return }
                 setUserRole(user.role)
+                const policies = policyRes?.data?.policies || []
+                setAccessPolicy(policies.find((p: any) => p.feature === "attendance") || null)
 
                 const staff = staffRes.data?.staff
                 if (!staff) {
@@ -167,8 +183,6 @@ export default function StaffAttendancePage() {
                 }
                 setStaffId(staff.id)
 
-                const studentsData = studentsRes.data?.students
-                if (studentsData) setStudents(studentsData)
             } catch (error) {
                 console.warn("Auth init error:", error)
                 router.push("/login")
@@ -203,11 +217,6 @@ export default function StaffAttendancePage() {
                 name: s.name || `${s.class_type} Class`,
             }))
 
-            if (students.length === 0) {
-                setSessionRows([])
-                return
-            }
-
             const marks = dashRes.data?.marks || []
             const markedScheduleIds = new Set(marks.map((m: any) => m.schedule_id))
             const cancellations = dashRes.data?.cancellations || []
@@ -222,22 +231,15 @@ export default function StaffAttendancePage() {
                 const scheduleStandards = parseSessionStandards(session.standards).map(normalizeStandardLabel)
                 const cancellation = cancellationsBySchedule.get(session.id)
                 const cancelledStandards = parseCancelledStandards((cancellation as any)?.cancelled_standards).map(normalizeStandardLabel)
-                const studentsForSession = students.filter(student => {
-                    const studentStandard = normalizeStandardLabel(student.standard)
-                    const belongsToSession = scheduleStandards.length === 0 || scheduleStandards.includes(studentStandard)
-                    return belongsToSession
-                })
-                const activeStudentsForSession = studentsForSession.filter(
-                    student => !cancelledStandards.includes(normalizeStandardLabel(student.standard))
-                )
+                const isAllScheduledStandardsCancelled =
+                    scheduleStandards.length > 0 &&
+                    scheduleStandards.every(std => cancelledStandards.includes(std))
                 const isCancelled =
                     !!cancelledMap[session.id] ||
                     fullyCancelledScheduleIds.has(session.id) ||
-                    (!!cancellation && studentsForSession.length > 0 && activeStudentsForSession.length === 0)
+                    (!!cancellation && isAllScheduledStandardsCancelled)
                 const isMarked = markedScheduleIds.has(session.id)
-                const visibleStudentCount = cancellation
-                    ? activeStudentsForSession.length
-                    : (session.student_count || studentsForSession.length || 0)
+                const visibleStudentCount = isCancelled ? 0 : (session.student_count || 0)
                 return {
                     session,
                     status: isCancelled ? "cancelled" : isMarked ? "marked" : "pending",
@@ -252,7 +254,7 @@ export default function StaffAttendancePage() {
         } finally {
             setLoadingSessions(false)
         }
-    }, [staffId, students, dateStr])
+    }, [staffId, dateStr])
 
     useEffect(() => { loadDateSessions() }, [loadDateSessions])
 
@@ -466,6 +468,7 @@ export default function StaffAttendancePage() {
     }
 
     const isHoliday = policy?.is_holiday
+    const assignedStudentCount = Math.max(0, ...sessionRows.map(row => row.studentCount))
 
     // Count stats
     const presentCount = Object.values(attendanceMap).filter(s => s === "Present").length
@@ -484,7 +487,7 @@ export default function StaffAttendancePage() {
                         Attendance Marking
                     </h1>
                     <p className="text-sm text-blue-100 mt-1">
-                        {students.length} students assigned to you
+                        {assignedStudentCount} students available for attendance today
                     </p>
                 </div>
 
@@ -540,6 +543,9 @@ export default function StaffAttendancePage() {
                         <Lock className="h-5 w-5 text-amber-400" />
                         <p className="text-sm text-amber-300">
                             This date is older than {maxEditDays} days. Attendance is locked.
+                            {isMentorRole && accessPolicy?.unlock_start_date && accessPolicy?.unlock_end_date
+                                ? ` Admin unlock is active only from ${accessPolicy.unlock_start_date} to ${accessPolicy.unlock_end_date}.`
+                                : ""}
                         </p>
                     </CardContent>
                 </Card>
