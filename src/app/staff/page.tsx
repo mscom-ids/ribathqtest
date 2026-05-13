@@ -185,7 +185,7 @@ export default function StaffDashboard() {
                     name: s.name || `${s.class_type} Class`,
                 })))
             } catch (err: any) {
-                console.error("[STAFF PAGE] Load error:", err)
+                console.warn("[STAFF PAGE] Load error:", err)
                 router.push("/login")
             }
             setLoading(false)

@@ -23,6 +23,7 @@ router.get('/students', attendance_dashboard_controller_1.getStudentsForSchedule
 router.get('/marks', attendance_dashboard_controller_1.getStudentMarksForSchedule);
 router.post('/mark', attendance_dashboard_controller_1.markAttendance);
 router.post('/cancel', (0, auth_middleware_1.requireRole)(ATTENDANCE_MANAGE_ROLES), attendance_dashboard_controller_1.cancelSession);
+router.post('/restore', (0, auth_middleware_1.requireRole)(ATTENDANCE_MANAGE_ROLES), attendance_dashboard_controller_1.restoreSession);
 // Breaks endpoints
 router.get('/breaks', attendance_dashboard_controller_1.getBreaks);
 router.post('/breaks/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), attendance_dashboard_controller_1.updateBreak);

@@ -31,9 +31,11 @@ const pool = new pg_1.Pool({
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
 });
-pool.on('error', (err, client) => {
+pool.on('error', (err) => {
     console.error('Unexpected error on idle pg client', err);
-    process.exit(-1);
+    // The failed idle client has already been removed by pg-pool. Exiting here
+    // makes transient Supabase pooler/network hiccups look like frontend
+    // "Network Error" crashes, so keep the API process alive for new requests.
 });
 const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);
 function summarizeSql(text) {

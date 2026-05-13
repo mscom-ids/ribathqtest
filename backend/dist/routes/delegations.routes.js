@@ -6,6 +6,7 @@ const delegations_controller_1 = require("../controllers/delegations.controller"
 const router = (0, express_1.Router)();
 // Staff (Mentor) routes
 const staffRoles = ['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller'];
+router.get('/assignable-mentors', auth_middleware_1.verifyToken, (0, auth_middleware_1.requireRole)(staffRoles), delegations_controller_1.getAssignableMentors);
 router.post('/request', auth_middleware_1.verifyToken, (0, auth_middleware_1.requireRole)(staffRoles), delegations_controller_1.createDelegationRequest);
 router.get('/my-requests', auth_middleware_1.verifyToken, (0, auth_middleware_1.requireRole)(staffRoles), delegations_controller_1.getOutgoingRequests);
 router.get('/assigned-to-me', auth_middleware_1.verifyToken, (0, auth_middleware_1.requireRole)(staffRoles), delegations_controller_1.getAssignedToMe);

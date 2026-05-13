@@ -50,9 +50,36 @@ type StudentMonthlyStats = {
     attendance: string
     is_manual: boolean // Flag to indicate if data is from manual entry
     scheduledClassDays?: number
+    pointClassDays?: number
     cancelledClasses?: number
     attendedClasses?: number
     notAttendedClasses?: number
+}
+
+function formatAttendanceText(student: StudentMonthlyStats) {
+    if (
+        student.attendedClasses === undefined &&
+        student.notAttendedClasses === undefined &&
+        student.cancelledClasses === undefined
+    ) {
+        return student.attendance
+    }
+
+    const parts = [
+        `${student.attendedClasses || 0} attended`,
+        `${student.notAttendedClasses || 0} not attended`,
+    ]
+
+    if ((student.cancelledClasses || 0) > 0) {
+        parts.push(`${student.cancelledClasses} cancelled`)
+    }
+
+    return parts.join(', ')
+}
+
+function formatPointDays(value?: number) {
+    if (value === undefined || value === null) return "-"
+    return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "")
 }
 
 export default function MonthlyReportsPage() {
@@ -66,12 +93,15 @@ export default function MonthlyReportsPage() {
     const [classDays, setClassDays] = useState(0)
     const [scheduledClassDays, setScheduledClassDays] = useState(0)
     const [cancelledClassDays, setCancelledClassDays] = useState(0)
+    const [automaticPointClassDays, setAutomaticPointClassDays] = useState(0)
     const [detectedClassDays, setDetectedClassDays] = useState(0)
     const [detectedLogDays, setDetectedLogDays] = useState(0)
     const [overrideClassDays, setOverrideClassDays] = useState<number | null>(null)
     const [classDaysDraft, setClassDaysDraft] = useState("")
     const [savingClassDays, setSavingClassDays] = useState(false)
     const [usingFallbackLogDays, setUsingFallbackLogDays] = useState(false)
+    const [reportEndDate, setReportEndDate] = useState("")
+    const [isCurrentMonthReport, setIsCurrentMonthReport] = useState(false)
 
     // Editing State
     const [editingStudent, setEditingStudent] = useState<StudentMonthlyStats | null>(null)
@@ -108,15 +138,19 @@ export default function MonthlyReportsPage() {
                     res.data.override_class_days === null || res.data.override_class_days === undefined
                         ? null
                         : Number(res.data.override_class_days)
+                const nextAutomaticPointClassDays = Number(res.data.automatic_point_class_days || res.data.point_class_days || 0)
                 setStats(sorted)
                 setClassDays(nextClassDays)
                 setDetectedClassDays(Number(res.data.detected_class_days || 0))
                 setDetectedLogDays(Number(res.data.detected_log_days || 0))
                 setOverrideClassDays(nextOverrideClassDays)
                 setUsingFallbackLogDays(Boolean(res.data.using_fallback_log_days))
-                setClassDaysDraft(String(nextOverrideClassDays ?? nextScheduledClassDays))
+                setClassDaysDraft(String(nextOverrideClassDays ?? (nextAutomaticPointClassDays || nextClassDays || nextScheduledClassDays)))
                 setScheduledClassDays(nextScheduledClassDays)
                 setCancelledClassDays(Number(res.data.cancelled_class_days || 0))
+                setAutomaticPointClassDays(nextAutomaticPointClassDays)
+                setReportEndDate(res.data.report_end_date || "")
+                setIsCurrentMonthReport(Boolean(res.data.is_current_month))
             } else {
                 console.error("Failed to load reports:", res.data.error || "Reports not found in response")
                 setStats([])
@@ -128,6 +162,9 @@ export default function MonthlyReportsPage() {
                 setClassDaysDraft("0")
                 setScheduledClassDays(0)
                 setCancelledClassDays(0)
+                setAutomaticPointClassDays(0)
+                setReportEndDate("")
+                setIsCurrentMonthReport(false)
             }
         } catch (error: any) {
             console.error("Error loading report detailed:", error)
@@ -140,6 +177,9 @@ export default function MonthlyReportsPage() {
             setClassDaysDraft("0")
             setScheduledClassDays(0)
             setCancelledClassDays(0)
+            setAutomaticPointClassDays(0)
+            setReportEndDate("")
+            setIsCurrentMonthReport(false)
         } finally {
             setLoading(false)
         }
@@ -358,9 +398,12 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 <span className="ml-2">
                                     Cancelled: <span className="font-semibold text-rose-600">{cancelledClassDays}</span>
                                 </span>
+                                <span className="ml-2">
+                                    Max point days: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(automaticPointClassDays)}</span>
+                                </span>
                                 {overrideClassDays !== null && (
                                     <span className="ml-2 text-blue-600 dark:text-blue-400">
-                                        Manual override active
+                                        Manual fallback saved
                                     </span>
                                 )}
                             </p>
@@ -372,7 +415,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                         </div>
                         <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                             <div className="space-y-1">
-                                <Label htmlFor="class-days" className="text-xs text-slate-500">Editable scheduled classes</Label>
+                                <Label htmlFor="class-days" className="text-xs text-slate-500">Editable point class days</Label>
                                 <Input
                                     id="class-days"
                                     type="number"
@@ -382,14 +425,18 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     className="w-full sm:w-32"
                                 />
                             </div>
-                            <Button onClick={saveClassDays} disabled={savingClassDays || Number(classDaysDraft) === (overrideClassDays ?? (scheduledClassDays || classDays))} className="gap-2">
+                            <Button onClick={saveClassDays} disabled={savingClassDays || Number(classDaysDraft) === (overrideClassDays ?? (automaticPointClassDays || classDays))} className="gap-2">
                                 {savingClassDays ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Save Class Days
+                                Save Point Days
                             </Button>
                         </div>
                     </div>
                     <div className="mt-3 text-xs text-slate-500">
-                        Current calculation counts <span className="font-semibold text-slate-700 dark:text-slate-300">{classDays}</span> classes after cancelled classes are removed.
+                        Current point calculation uses each student's own Hifz point days. The highest row currently has <span className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(classDays)}</span> point days
+                        {isCurrentMonthReport && reportEndDate ? (
+                            <> up to <span className="font-semibold text-slate-700 dark:text-slate-300">{reportEndDate}</span></>
+                        ) : null}
+                        {' '}after standard-wise cancelled classes are removed.
                     </div>
                 </CardContent>
             </Card>
@@ -403,6 +450,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             <TableHead>Hifz Pages</TableHead>
                             <TableHead>Recent Rev (D)</TableHead>
                             <TableHead>Juz Rev (J)</TableHead>
+                            <TableHead>Point Days</TableHead>
                             <TableHead>Grade</TableHead>
                             <TableHead>Attendance</TableHead>
                             <TableHead>Usthad</TableHead>
@@ -412,7 +460,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center h-48">
+                                <TableCell colSpan={9} className="text-center h-48">
                                     <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
                                         <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
                                         <p>Generating monthly report...</p>
@@ -421,7 +469,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             </TableRow>
                         ) : filteredStats.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center h-32 text-slate-500">
+                                <TableCell colSpan={9} className="text-center h-32 text-slate-500">
                                     No data found for this month.
                                 </TableCell>
                             </TableRow>
@@ -438,6 +486,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.hifz_pages}</TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.recent_days}</TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-emerald-600'}`}>{s.juz_revision}</TableCell>
+                                    <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
                                     <TableCell>
                                         <Badge
                                             variant="outline"
@@ -446,7 +495,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                             {s.grade}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell>{s.attendance}</TableCell>
+                                    <TableCell>{formatAttendanceText(s)}</TableCell>
                                     <TableCell className="text-slate-500 text-sm">{s.usthad_name}</TableCell>
                                     <TableCell className="text-right pr-6">
                                         <div className="flex justify-end gap-2">

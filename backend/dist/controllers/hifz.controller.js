@@ -4,11 +4,32 @@ exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = export
 const db_1 = require("../config/db");
 const hifz_calculator_1 = require("../utils/hifz-calculator");
 const quran_juz_1 = require("../utils/quran-juz");
-const date_fns_1 = require("date-fns");
 const server_cache_1 = require("../utils/server-cache");
 const quran_data_1 = require("../utils/quran-data");
+const attendance_report_1 = require("../utils/attendance-report");
 const HIFZ_SUMMARY_TTL_MS = 5 * 60000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60000;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 2;
+const normalizeClassDayCount = (value) => {
+    const parsed = Number(value || 0);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+const resolvePointClassDays = (automaticPointClassDays, effectiveAttendanceClasses, plannedAttendanceClasses, fallbackClassDays, overrideClassDays) => {
+    const automatic = normalizeClassDayCount(automaticPointClassDays);
+    if (automatic > 0)
+        return automatic;
+    const attendanceClasses = normalizeClassDayCount(effectiveAttendanceClasses);
+    if (attendanceClasses > 0)
+        return attendanceClasses;
+    // If the timetable applied to this student but every slot was cancelled,
+    // the correct denominator is zero, not a global/manual fallback.
+    if (normalizeClassDayCount(plannedAttendanceClasses) > 0)
+        return 0;
+    const manualFallback = overrideClassDays === null ? 0 : normalizeClassDayCount(overrideClassDays);
+    if (manualFallback > 0)
+        return manualFallback;
+    return normalizeClassDayCount(fallbackClassDays);
+};
 const getDetectedClassDays = async (startDate, endDate) => {
     const result = await db_1.db.query(`SELECT COUNT(DISTINCT date) AS class_days
          FROM attendance
@@ -32,6 +53,46 @@ const getMonthlyClassDaysSetting = async (reportMonth) => {
          LIMIT 1`, [reportMonth]);
     return result.rows[0]?.expected_class_days ?? null;
 };
+function formatIndiaDate(date) {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(date);
+}
+function getMonthlyReportPeriod(month) {
+    const match = String(month).match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+        throw new Error('month must be in YYYY-MM format');
+    }
+    const year = Number(match[1]);
+    const monthNumber = Number(match[2]);
+    if (!Number.isInteger(year) || monthNumber < 1 || monthNumber > 12) {
+        throw new Error('month must be in YYYY-MM format');
+    }
+    const monthKey = `${year}-${String(monthNumber).padStart(2, '0')}`;
+    const startDate = `${monthKey}-01`;
+    const fullMonthEndDate = `${monthKey}-${String(new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()).padStart(2, '0')}`;
+    const reportMonth = `${monthKey}-01`;
+    const todayDate = formatIndiaDate(new Date());
+    const todayMonthKey = todayDate.slice(0, 7);
+    let endDate = fullMonthEndDate;
+    if (monthKey === todayMonthKey) {
+        endDate = todayDate < fullMonthEndDate ? todayDate : fullMonthEndDate;
+    }
+    else if (monthKey > todayMonthKey) {
+        endDate = formatIndiaDate(new Date(Date.UTC(year, monthNumber - 1, 0)));
+    }
+    return {
+        startDate,
+        endDate,
+        fullMonthEndDate,
+        reportMonth,
+        isCurrentMonth: monthKey === todayMonthKey,
+        isFutureMonth: monthKey > todayMonthKey,
+    };
+}
 const getHifzStudents = async (req, res) => {
     try {
         // Replaced 2 correlated subqueries (re-running once per student row)
@@ -303,10 +364,7 @@ const getMonthlyReportSettings = async (req, res) => {
         if (!month) {
             return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
         }
-        const date = new Date(month);
-        const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
-        const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
-        const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
+        const { startDate, endDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month);
         const [detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
             getDetectedClassDays(startDate, endDate),
             getDetectedLogDays(startDate, endDate),
@@ -321,6 +379,9 @@ const getMonthlyReportSettings = async (req, res) => {
             override_class_days: overrideClassDays,
             using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
             report_month: reportMonth,
+            report_start_date: startDate,
+            report_end_date: endDate,
+            is_current_month: isCurrentMonth,
         });
     }
     catch (err) {
@@ -403,37 +464,50 @@ const calculateMonthlyReportData = async (req, res) => {
         if (!student_id || !month) {
             return res.status(400).json({ success: false, error: 'student_id and month are required' });
         }
-        const date = new Date(month);
-        const start = (0, date_fns_1.startOfMonth)(date).toISOString();
-        const end = (0, date_fns_1.endOfMonth)(date).toISOString();
-        const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
-        const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
-        const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
-        // 1. Fetch attendance for totalClassDays
-        const attendanceResult = await db_1.db.query(`SELECT date, status FROM attendance 
-             WHERE student_id = $1 AND date >= $2 AND date <= $3 
-             AND department = 'hifz'`, [student_id, start, end]);
-        // 2. Fetch hifz logs for month
-        const logsResult = await db_1.db.query(`SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
-             FROM hifz_logs 
-             WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`, [student_id, start, end]);
-        // 3. Run calculator
-        const [detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+        const { startDate, endDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month);
+        const [studentResult, logsResult] = await Promise.all([
+            db_1.db.query(`SELECT adm_no, standard AS attendance_standard, COALESCE(hifz_standard, standard, 'Common') AS standard
+                 FROM students
+                 WHERE adm_no = $1`, [student_id]),
+            db_1.db.query(`SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
+                 FROM hifz_logs 
+                 WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`, [student_id, startDate, endDate]),
+        ]);
+        if (studentResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Student not found' });
+        }
+        const [attendanceSummaries, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+            (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, studentResult.rows, startDate, endDate, 'hifz'),
             getDetectedClassDays(startDate, endDate),
             getDetectedLogDays(startDate, endDate),
             getMonthlyClassDaysSetting(reportMonth),
         ]);
-        const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
-        const calculations = (0, hifz_calculator_1.calculateHifzReportPoints)(logsResult.rows, attendanceResult.rows, {
+        const attendanceSummary = attendanceSummaries.get(student_id);
+        const scheduledClassDays = attendanceSummary?.plannedClasses || 0;
+        const cancelledClassDays = attendanceSummary?.cancelledClasses || 0;
+        const countedClassDays = attendanceSummary?.effectiveClasses || 0;
+        const automaticPointClassDays = attendanceSummary?.pointClassDays || 0;
+        const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
+        const effectiveClassDays = resolvePointClassDays(automaticPointClassDays, countedClassDays, scheduledClassDays, fallbackClassDays, overrideClassDays);
+        const calculations = (0, hifz_calculator_1.calculateHifzReportPoints)(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
         });
         res.json({
             success: true,
             class_days: effectiveClassDays,
+            scheduled_class_days: scheduledClassDays,
+            cancelled_class_days: cancelledClassDays,
+            point_class_days: automaticPointClassDays,
+            attended_classes: attendanceSummary?.attendedClasses || 0,
+            not_attended_classes: attendanceSummary?.notAttendedClasses || 0,
+            attendance_summary: attendanceSummary?.attendanceLabel || '-',
             detected_class_days: detectedClassDays,
             detected_log_days: detectedLogDays,
             override_class_days: overrideClassDays,
-            using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+            using_fallback_log_days: automaticPointClassDays === 0 && countedClassDays === 0 && detectedClassDays === 0 && detectedLogDays > 0,
+            report_start_date: startDate,
+            report_end_date: endDate,
+            is_current_month: isCurrentMonth,
             ...calculations
         });
     }
@@ -449,13 +523,11 @@ const calculateBulkMonthlyReport = async (req, res) => {
         if (!month) {
             return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
         }
-        const results = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('hifz:monthly-calculate', { month }), HIFZ_MONTHLY_TTL_MS, async () => {
-            const date = new Date(month);
-            const startDate = (0, date_fns_1.format)((0, date_fns_1.startOfMonth)(date), 'yyyy-MM-dd');
-            const endDate = (0, date_fns_1.format)((0, date_fns_1.endOfMonth)(date), 'yyyy-MM-dd');
-            const reportMonth = (0, date_fns_1.format)(date, 'yyyy-MM-01');
-            const [studentsResult, logsResult, attendanceResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
-                db_1.db.query(`SELECT s.adm_no, s.name,
+        const period = getMonthlyReportPeriod(month);
+        const results = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('hifz:monthly-calculate', { month, report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }), HIFZ_MONTHLY_TTL_MS, async () => {
+            const { startDate, endDate, reportMonth, isCurrentMonth } = period;
+            const [studentsResult, logsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+                db_1.db.query(`SELECT s.adm_no, s.name, s.standard AS attendance_standard,
                          COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
                          st.name as usthad_name, st.phone as usthad_phone
                          FROM students s
@@ -466,32 +538,49 @@ const calculateBulkMonthlyReport = async (req, res) => {
                          start_page, end_page, juz_number, juz_portion
                          FROM hifz_logs
                          WHERE entry_date >= $1::date AND entry_date <= $2::date`, [startDate, endDate]),
-                db_1.db.query(`SELECT student_id, date, status FROM attendance
-                         WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz'`, [startDate, endDate]),
                 db_1.db.query(`SELECT * FROM monthly_reports WHERE report_month = $1::date`, [reportMonth]),
                 getDetectedClassDays(startDate, endDate),
                 getDetectedLogDays(startDate, endDate),
                 getMonthlyClassDaysSetting(reportMonth),
             ]);
-            const effectiveClassDays = overrideClassDays ?? (detectedClassDays > 0 ? detectedClassDays : detectedLogDays);
+            const attendanceSummaries = await (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, studentsResult.rows, startDate, endDate, 'hifz');
             const logsByStudent = {};
             logsResult.rows.forEach((log) => {
                 if (!logsByStudent[log.student_id])
                     logsByStudent[log.student_id] = [];
                 logsByStudent[log.student_id].push(log);
             });
-            const attByStudent = {};
-            attendanceResult.rows.forEach((att) => {
-                if (!attByStudent[att.student_id])
-                    attByStudent[att.student_id] = [];
-                attByStudent[att.student_id].push(att);
-            });
             const manualByStudent = {};
             manualReportsResult.rows.forEach((r) => {
                 manualByStudent[r.student_id] = r;
             });
+            const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
+            const scheduledClassDays = studentsResult.rows.reduce((max, student) => {
+                const summary = attendanceSummaries.get(student.adm_no);
+                return Math.max(max, summary?.plannedClasses || 0);
+            }, 0);
+            const fallbackAllowedForStudent = (plannedClasses) => (plannedClasses === 0 && scheduledClassDays === 0);
+            const reportClassDays = studentsResult.rows.reduce((max, student) => {
+                const summary = attendanceSummaries.get(student.adm_no);
+                const plannedClasses = summary?.plannedClasses || 0;
+                const value = resolvePointClassDays(summary?.pointClassDays || 0, summary?.effectiveClasses || 0, plannedClasses, fallbackAllowedForStudent(plannedClasses) ? fallbackClassDays : 0, fallbackAllowedForStudent(plannedClasses) ? overrideClassDays : null);
+                return Math.max(max, value);
+            }, 0);
+            const cancelledClassDays = studentsResult.rows.reduce((max, student) => {
+                const summary = attendanceSummaries.get(student.adm_no);
+                return Math.max(max, summary?.cancelledClasses || 0);
+            }, 0);
+            const automaticPointClassDays = studentsResult.rows.reduce((max, student) => {
+                const summary = attendanceSummaries.get(student.adm_no);
+                return Math.max(max, summary?.pointClassDays || 0);
+            }, 0);
             const reports = studentsResult.rows.map((student) => {
                 const manualRecord = manualByStudent[student.adm_no];
+                const attendanceSummary = attendanceSummaries.get(student.adm_no);
+                const automaticPointClassDays = attendanceSummary?.pointClassDays || 0;
+                const plannedClasses = attendanceSummary?.plannedClasses || 0;
+                const allowFallback = fallbackAllowedForStudent(plannedClasses);
+                const effectiveClassDays = resolvePointClassDays(automaticPointClassDays, attendanceSummary?.effectiveClasses || 0, plannedClasses, allowFallback ? fallbackClassDays : 0, allowFallback ? overrideClassDays : null);
                 if (manualRecord) {
                     return {
                         adm_no: student.adm_no,
@@ -512,12 +601,16 @@ const calculateBulkMonthlyReport = async (req, res) => {
                         percentage: 0,
                         grade: manualRecord.grade || '-',
                         totalClassDays: effectiveClassDays,
-                        detectedClassDays
+                        detectedClassDays,
+                        scheduledClassDays: attendanceSummary?.plannedClasses || scheduledClassDays,
+                        pointClassDays: automaticPointClassDays,
+                        cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                        attendedClasses: attendanceSummary?.attendedClasses || 0,
+                        notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                     };
                 }
                 const studentLogs = logsByStudent[student.adm_no] || [];
-                const studentAtt = attByStudent[student.adm_no] || [];
-                const calc = (0, hifz_calculator_1.calculateHifzReportPoints)(studentLogs, studentAtt, {
+                const calc = (0, hifz_calculator_1.calculateHifzReportPoints)(studentLogs, [], {
                     expectedClassDaysOverride: effectiveClassDays,
                 });
                 const hifzPages = (0, quran_data_1.calculateCoveredPagesFromLogs)(studentLogs.filter((log) => log.mode === 'New Verses'));
@@ -550,8 +643,6 @@ const calculateBulkMonthlyReport = async (req, res) => {
                     else
                         juzRevTotal += 1;
                 });
-                const presentDays = studentAtt.filter((a) => a.status.toLowerCase() === 'present').length;
-                const totalAttDays = studentAtt.length;
                 return {
                     adm_no: student.adm_no,
                     name: student.name,
@@ -562,18 +653,29 @@ const calculateBulkMonthlyReport = async (req, res) => {
                     recent_days: recentDates.size,
                     juz_revision: parseFloat(juzRevTotal.toFixed(2)),
                     total_juz: maxJuz > 0 ? maxJuz : '-',
-                    attendance: totalAttDays > 0 ? `${presentDays}/${totalAttDays}` : '-',
+                    attendance: attendanceSummary?.attendanceLabel || '-',
+                    scheduledClassDays: attendanceSummary?.plannedClasses || 0,
+                    pointClassDays: automaticPointClassDays,
+                    cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                    attendedClasses: attendanceSummary?.attendedClasses || 0,
+                    notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                     is_manual: false,
                     ...calc
                 };
             });
             return {
                 reports,
-                class_days: effectiveClassDays,
+                class_days: reportClassDays,
+                scheduled_class_days: scheduledClassDays,
+                cancelled_class_days: cancelledClassDays,
+                automatic_point_class_days: automaticPointClassDays,
                 detected_class_days: detectedClassDays,
                 detected_log_days: detectedLogDays,
                 override_class_days: overrideClassDays,
-                using_fallback_log_days: overrideClassDays === null && detectedClassDays === 0 && detectedLogDays > 0,
+                using_fallback_log_days: automaticPointClassDays === 0 && scheduledClassDays === 0 && detectedClassDays === 0 && detectedLogDays > 0,
+                report_start_date: startDate,
+                report_end_date: endDate,
+                is_current_month: isCurrentMonth,
             };
         });
         res.json({ success: true, ...results });

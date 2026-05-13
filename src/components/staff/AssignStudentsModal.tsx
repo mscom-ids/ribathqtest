@@ -50,13 +50,15 @@ export function AssignStudentsModal({
 
     const loadStaff = async () => {
         try {
-            const res = await api.get('/staff')
+            const res = await api.get('/delegations/assignable-mentors')
             if (res.data.success) {
                 // Filter out self
-                setStaffList(res.data.staff.filter((s: any) => s.id !== currentStaffId))
+                setStaffList((res.data.mentors || []).filter((s: any) => s.id !== currentStaffId))
             }
         } catch (e) {
             console.error("Failed to load staff list", e)
+            setStaffList([])
+            toast.error("Failed to load available mentors")
         }
     }
 

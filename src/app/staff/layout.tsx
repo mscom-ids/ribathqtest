@@ -44,7 +44,7 @@ export default function StaffLayout({
             try {
                 const res = await api.get('/staff/me')
                 if (!res.data.success || !res.data.staff) {
-                    console.error("Staff profile not found in database")
+                    console.warn("Staff profile not found in database")
                     // Clear cookie and hard-redirect to break any loop
                     document.cookie = 'auth_token=; path=/; max-age=0'
                     window.location.href = '/login'
@@ -53,7 +53,7 @@ export default function StaffLayout({
                 setStaffName(res.data.staff.name || "Mentor")
                 setStaffPhoto(res.data.staff.photo_url || "")
             } catch (e: any) {
-                console.error("Error loading staff layout profile:", e)
+                console.warn("Error loading staff layout profile:", e)
                 // Only redirect to login if it's an auth error (401)
                 // For network errors or 500s, don't redirect — it would cause a loop
                 if (e?.response?.status === 401) {

@@ -9,6 +9,30 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
 }
 
+const ASSIGNABLE_MENTOR_ROLES = ['staff', 'usthad', 'mentor', 'controller'];
+
+// Staff-safe mentor picker for temporary assignments. The generic /staff route is
+// admin-only because it exposes management actions, so mentors need this narrow list.
+export const getAssignableMentors = async (req: Request, res: Response) => {
+    try {
+        const staffId = await getStaffId(req);
+        if (!staffId) return res.status(404).json({ success: false, error: "Staff profile not found." });
+
+        const result = await db.query(`
+            SELECT id, name, photo_url, role
+            FROM staff
+            WHERE id <> $1
+              AND COALESCE(is_active, true) = true
+              AND role = ANY($2::text[])
+            ORDER BY name ASC
+        `, [staffId, ASSIGNABLE_MENTOR_ROLES]);
+
+        res.json({ success: true, mentors: result.rows });
+    } catch (e: any) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+};
+
 // 1. Mentor requests student assignment
 export const createDelegationRequest = async (req: Request, res: Response) => {
     try {
@@ -17,12 +41,45 @@ export const createDelegationRequest = async (req: Request, res: Response) => {
         if (!fromStaffId) return res.status(404).json({ success: false, error: "Staff profile not found." });
         
         if (fromStaffId === to_staff_id) return res.status(400).json({ success: false, error: "Cannot assign to yourself." });
+
+        const targetRes = await db.query(`
+            SELECT id
+            FROM staff
+            WHERE id = $1
+              AND COALESCE(is_active, true) = true
+              AND role = ANY($2::text[])
+            LIMIT 1
+        `, [to_staff_id, ASSIGNABLE_MENTOR_ROLES]);
+
+        if (targetRes.rows.length === 0) {
+            return res.status(400).json({ success: false, error: "Selected mentor is not available for assignment." });
+        }
+
+        if (student_id) {
+            const studentRes = await db.query(`
+                SELECT adm_no
+                FROM students
+                WHERE adm_no = $1
+                  AND status = 'active'
+                  AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
+                LIMIT 1
+            `, [student_id, fromStaffId]);
+
+            if (studentRes.rows.length === 0) {
+                return res.status(403).json({ success: false, error: "You can only assign your own active students." });
+            }
+        }
         
         const checkRes = await db.query(`
             SELECT id FROM mentor_delegations 
             WHERE from_staff_id = $1 AND to_staff_id = $2 
               AND status IN ('pending', 'approved')
-              AND (student_id = $3 OR (student_id IS NULL AND $3 IS NULL))
+              AND (
+                student_id = $3
+                OR (student_id IS NULL AND $3 IS NULL)
+                OR student_id IS NULL
+                OR $3 IS NULL
+              )
         `, [fromStaffId, to_staff_id, student_id || null]);
         
         if (checkRes.rows.length > 0) {

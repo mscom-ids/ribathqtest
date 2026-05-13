@@ -46,7 +46,7 @@ export default function AdminDelegationsPage() {
                 setRequests(res.data.requests)
             }
         } catch (e) {
-            console.error("Error loading pending requests:", e)
+            console.warn("Error loading pending requests:", e)
             toast.error("Failed to load requests")
         } finally {
             setLoading(false)

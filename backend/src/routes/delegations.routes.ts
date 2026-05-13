@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken, requireRole } from '../middleware/auth.middleware';
 import {
     createDelegationRequest,
+    getAssignableMentors,
     getOutgoingRequests,
     getAssignedToMe,
     getAdminAllRequests,
@@ -14,6 +15,7 @@ const router = Router();
 
 // Staff (Mentor) routes
 const staffRoles = ['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller'];
+router.get('/assignable-mentors', verifyToken, requireRole(staffRoles), getAssignableMentors);
 router.post('/request', verifyToken, requireRole(staffRoles), createDelegationRequest);
 router.get('/my-requests', verifyToken, requireRole(staffRoles), getOutgoingRequests);
 router.get('/assigned-to-me', verifyToken, requireRole(staffRoles), getAssignedToMe);

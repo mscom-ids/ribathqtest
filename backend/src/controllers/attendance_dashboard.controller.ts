@@ -544,6 +544,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                      JOIN students s ON s.${mentorCol} = d.from_staff_id
                      WHERE d.to_staff_id = $1
                        AND d.status = 'approved'
+                       AND (d.student_id IS NULL OR d.student_id = s.adm_no)
                        AND s.status = 'active'
                        AND s.standard = ANY($2)
                      ORDER BY s.name`,
@@ -698,6 +699,7 @@ export const markAttendance = async (req: Request, res: Response) => {
                              JOIN students s ON s.${mentorCol} = d.from_staff_id
                              WHERE d.to_staff_id = $1
                                AND d.status = 'approved'
+                               AND (d.student_id IS NULL OR d.student_id = s.adm_no)
                                AND s.adm_no = ANY($2)`,
                             [staffId, submittedIds]
                         );
