@@ -69,6 +69,13 @@ type Session = {
     is_deleted: boolean
 }
 
+type MonthlyTopPerformer = {
+    adm_no: string
+    name: string
+    standard: string
+    totalPoints: number
+}
+
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
 function getGreeting(h: number) {
     if (h < 12) return "Good Morning"
@@ -110,6 +117,7 @@ export default function StaffDashboard() {
     const [sessions, setSessions] = useState<Session[]>([])
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
+    const [topPerformersLoading, setTopPerformersLoading] = useState(false)
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [currentTime, setCurrentTime] = useState<Date | null>(null)
     // "my" = assigned only, "all" = every active student
@@ -124,6 +132,7 @@ export default function StaffDashboard() {
     // Only compute date on client to avoid hydration mismatch
     const [todayStr, setTodayStr] = useState("")
     const [todayLabel, setTodayLabel] = useState("")
+    const [monthlyTopPerformers, setMonthlyTopPerformers] = useState<MonthlyTopPerformer[]>([])
 
     useEffect(() => {
         setMounted(true)
@@ -207,6 +216,42 @@ export default function StaffDashboard() {
         loadAll()
     }, [studentMode, allStudentsLoaded])
 
+    useEffect(() => {
+        if (!staffId || !todayStr) return
+        async function loadMonthlyTopPerformers() {
+            setTopPerformersLoading(true)
+            try {
+                const reportMonth = todayStr.slice(0, 7)
+                const res = await api.get("/hifz/monthly-reports/calculate", {
+                    params: { month: reportMonth, mentor_id: staffId }
+                })
+
+                if (res.data.success && Array.isArray(res.data.reports)) {
+                    const topThree = res.data.reports
+                        .filter((student: any) => Number(student.totalPoints || 0) > 0)
+                        .sort((a: any, b: any) => Number(b.totalPoints || 0) - Number(a.totalPoints || 0))
+                        .slice(0, 3)
+                        .map((student: any) => ({
+                            adm_no: student.adm_no,
+                            name: student.name,
+                            standard: student.standard,
+                            totalPoints: Number(student.totalPoints || 0),
+                        }))
+                    setMonthlyTopPerformers(topThree)
+                } else {
+                    setMonthlyTopPerformers([])
+                }
+            } catch (error) {
+                console.warn("[STAFF PAGE] Monthly top performers load failed:", error)
+                setMonthlyTopPerformers([])
+            } finally {
+                setTopPerformersLoading(false)
+            }
+        }
+
+        loadMonthlyTopPerformers()
+    }, [staffId, todayStr])
+
     // ── Derived ──────────────────────────────────────────────────
     const todaySessions = useMemo(() => {
         if (myStudents.length === 0) return []
@@ -259,13 +304,6 @@ export default function StaffDashboard() {
             }
         })
     }
-
-    const topPerformers = useMemo(() => [...myStudents]
-        .filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0))
-        .sort((a, b) => ((b.today_stats?.hifz || 0) + (b.today_stats?.revision || 0)) - ((a.today_stats?.hifz || 0) + (a.today_stats?.revision || 0)))
-        .slice(0, 3),
-        [myStudents]
-    )
 
     const nowStr = currentTime ? format(currentTime, "HH:mm") : "00:00"
     const greetingHour = currentTime ? currentTime.getHours() : 12
@@ -830,13 +868,18 @@ export default function StaffDashboard() {
                                 <h3 className="font-semibold text-sm dark:text-white">Top Performers</h3>
                                 <Award className="h-4 w-4 text-amber-500" />
                             </div>
-                            {topPerformers.length === 0 ? (
+                            {topPerformersLoading ? (
+                                <div className="flex items-center justify-center py-6 text-sm text-slate-400 gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading monthly points...
+                                </div>
+                            ) : monthlyTopPerformers.length === 0 ? (
                                 <div className="text-center py-6 text-sm text-slate-400">
-                                    No entries recorded yet today
+                                    No point records available for this month
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {topPerformers.map((stu, i) => (
+                                    {monthlyTopPerformers.map((stu, i) => (
                                         <div key={stu.adm_no} className="flex items-center justify-between">
                                             <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
                                                 <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center font-bold text-xs
@@ -853,9 +896,9 @@ export default function StaffDashboard() {
                                             </div>
                                             <div className="text-right shrink-0">
                                                 <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                                    {(stu.today_stats?.hifz || 0) + (stu.today_stats?.revision || 0)}
+                                                    {stu.totalPoints.toFixed(2)}
                                                 </p>
-                                                <p className="text-[10px] text-slate-400">verses</p>
+                                                <p className="text-[10px] text-slate-400">points</p>
                                             </div>
                                         </div>
                                     ))}

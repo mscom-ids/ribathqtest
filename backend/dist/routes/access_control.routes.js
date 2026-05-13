@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const access_control_controller_1 = require("../controllers/access_control.controller");
+const router = (0, express_1.Router)();
+router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
+router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor']));
+router.get('/mentor-policies', access_control_controller_1.getMentorAccessPolicies);
+router.get('/mentor-decision', access_control_controller_1.getMentorAccessDecisionForDate);
+router.post('/mentor-policies', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'controller']), access_control_controller_1.updateMentorAccessPolicy);
+exports.default = router;

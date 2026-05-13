@@ -668,7 +668,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
 
 export const calculateBulkMonthlyReport = async (req: Request, res: Response) => {
     try {
-        const { month } = req.query;
+        const { month, mentor_id } = req.query;
         if (!month) {
             return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
         }
@@ -676,10 +676,12 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
         const period = getMonthlyReportPeriod(month as string);
 
         const results = await cachedResult(
-            makeCacheKey('hifz:monthly-calculate', { month, report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
+            makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
             HIFZ_MONTHLY_TTL_MS,
             async () => {
                 const { startDate, endDate, reportMonth, isCurrentMonth } = period;
+                const mentorFilterClause = mentor_id ? ` AND s.hifz_mentor_id = $1` : '';
+                const studentQueryParams = mentor_id ? [mentor_id] : [];
 
                 const [studentsResult, logsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                     db.query(
@@ -689,7 +691,9 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                          FROM students s
                          LEFT JOIN staff st ON s.hifz_mentor_id = st.id
                          WHERE s.status = 'active'
-                         ORDER BY s.adm_no`
+                         ${mentorFilterClause}
+                         ORDER BY s.adm_no`,
+                        studentQueryParams
                     ),
                     db.query(
                         `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,

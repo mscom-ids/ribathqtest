@@ -4,15 +4,7 @@ exports.getDailyAttendanceStats = exports.updateBreak = exports.getBreaks = expo
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const server_cache_1 = require("../utils/server-cache");
-const ROLE_LIMITS = {
-    staff: 3, // 3 days for mentors
-    usthad: 3, // same window for usthad role
-    mentor: 3, // same window for mentor role
-    admin: 30,
-    principal: 30,
-    vice_principal: 30,
-    controller: 30
-};
+const mentor_access_policy_1 = require("../utils/mentor-access-policy");
 // All roles treated as a mentor (filtered access)
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 // Helper: calculate next occurrence of a day_of_week from a given date
@@ -695,11 +687,16 @@ const markAttendance = async (req, res) => {
         const now = new Date();
         if (now < classDateObj)
             return res.status(400).json({ success: false, error: "Cannot mark attendance before the class starts" });
-        const diffTime = Math.abs(now.getTime() - classDateObj.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const maxDays = ROLE_LIMITS[userRole] || 3;
-        if (diffDays > maxDays)
-            return res.status(403).json({ success: false, error: `Time lock expired. You only have a ${maxDays}-day window.` });
+        if (MENTOR_ROLES.includes(userRole)) {
+            const access = await (0, mentor_access_policy_1.getMentorAccessDecision)('attendance', date);
+            if (!access.allowed) {
+                return res.status(403).json({
+                    success: false,
+                    error: access.reason || 'Attendance is locked for this date.',
+                    access_policy: access,
+                });
+            }
+        }
         // ── Transaction: must use a single client; db.query() goes through the
         // pool and would route BEGIN/COMMIT to different connections than the
         // INSERTs, silently breaking atomicity.
