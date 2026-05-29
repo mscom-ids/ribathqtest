@@ -1,51 +1,15 @@
+
+> institution-os@0.1.0 dev:frontend
+> next dev
+
 ▲ Next.js 16.1.6 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://192.168.0.102:3000
+- Network:       http://192.168.251.233:3000
 - Environments: .env.local
 
 ✓ Starting...
-✓ Ready in 1513ms
-○ Compiling /staff ...
+✓ Ready in 12.6s
+○ Compiling /login ...
 >>> [api.ts] API_URL configured as: http://127.0.0.1:5000/api
- GET /staff 200 in 9.5s (compile: 8.8s, proxy.ts: 267ms, render: 491ms)
- GET /manifest.webmanifest 200 in 821ms (compile: 784ms, proxy.ts: 22ms, render: 15ms)
- GET /staff 200 in 134ms (compile: 16ms, proxy.ts: 14ms, render: 104ms)
- GET /manifest.webmanifest 200 in 25ms (compile: 7ms, proxy.ts: 11ms, render: 8ms)
- GET /admin/staff 200 in 1479ms (compile: 1299ms, proxy.ts: 17ms, render: 163ms)
- GET /manifest.webmanifest 200 in 22ms (compile: 8ms, proxy.ts: 9ms, render: 5ms)
- GET /login 200 in 980ms (compile: 938ms, proxy.ts: 8ms, render: 35ms)
- GET /manifest.webmanifest 200 in 27ms (compile: 6ms, proxy.ts: 14ms, render: 7ms)
- GET /staff 200 in 109ms (compile: 8ms, proxy.ts: 7ms, render: 93ms)
- GET /manifest.webmanifest 200 in 30ms (compile: 15ms, proxy.ts: 9ms, render: 6ms)
- GET /admin/staff 200 in 111ms (compile: 4ms, proxy.ts: 8ms, render: 99ms)
- GET /manifest.webmanifest 200 in 24ms (compile: 12ms, proxy.ts: 8ms, render: 4ms)
- GET /login 200 in 730ms (compile: 78ms, proxy.ts: 100ms, render: 552ms)
-✓ Compiled in 972ms
->>> [api.ts] API_URL configured as: http://127.0.0.1:5000/api
- GET /staff 200 in 1418ms (compile: 244ms, proxy.ts: 41ms, render: 1133ms)
- GET /staff 200 in 1421ms (compile: 300ms, proxy.ts: 46ms, render: 1076ms)
- GET /manifest.webmanifest 200 in 54ms (compile: 23ms, proxy.ts: 18ms, render: 13ms)
- GET /manifest.webmanifest 200 in 58ms (compile: 32ms, proxy.ts: 18ms, render: 7ms)
- GET /admin/students 200 in 1656ms (compile: 1603ms, proxy.ts: 12ms, render: 41ms)
- GET /manifest.webmanifest 200 in 20ms (compile: 5ms, proxy.ts: 6ms, render: 9ms)
- POST /admin/students 200 in 1856ms (compile: 13ms, proxy.ts: 14ms, render: 1829ms)
- POST /admin/students 200 in 1430ms (compile: 11ms, proxy.ts: 16ms, render: 1404ms)
- GET /login 200 in 51ms (compile: 10ms, proxy.ts: 8ms, render: 33ms)
- GET /manifest.webmanifest 200 in 40ms (compile: 10ms, proxy.ts: 19ms, render: 11ms)
- GET /manifest.webmanifest 200 in 96ms (compile: 55ms, proxy.ts: 35ms, render: 6ms)
- GET /login 200 in 278ms (compile: 28ms, proxy.ts: 24ms, render: 225ms)
- GET /login 200 in 166ms (compile: 85ms, proxy.ts: 32ms, render: 49ms)
- GET /login 200 in 190ms (compile: 25ms, proxy.ts: 34ms, render: 131ms)
- GET /manifest.webmanifest 200 in 28ms (compile: 12ms, proxy.ts: 9ms, render: 8ms)
- GET /login 200 in 78ms (compile: 6ms, proxy.ts: 7ms, render: 65ms)
- GET /manifest.webmanifest 200 in 31ms (compile: 13ms, proxy.ts: 9ms, render: 9ms)
- POST /admin/students 200 in 1435ms (compile: 6ms, proxy.ts: 6ms, render: 1424ms)
- POST /admin/students 200 in 1423ms (compile: 7ms, proxy.ts: 6ms, render: 1410ms)
- POST /admin/students 200 in 1460ms (compile: 6ms, proxy.ts: 5ms, render: 1449ms)
- POST /admin/students 200 in 1557ms (compile: 4ms, proxy.ts: 5ms, render: 1547ms)
- POST /admin/students 200 in 1616ms (compile: 6ms, proxy.ts: 7ms, render: 1602ms)
- POST /admin/students 200 in 1690ms (compile: 5ms, proxy.ts: 5ms, render: 1680ms)
- POST /admin/students 200 in 1692ms (compile: 4ms, proxy.ts: 7ms, render: 1680ms)
- POST /admin/students 200 in 1560ms (compile: 11ms, proxy.ts: 8ms, render: 1541ms)
- POST /admin/students 200 in 1723ms (compile: 11ms, proxy.ts: 11ms, render: 1701ms)
- POST /admin/students 200 in 1514ms (compile: 11ms, proxy.ts: 10ms, render: 1494ms)
+ GET /login 200 in 7.6s (compile: 7.3s, proxy.ts: 70ms, render: 226ms)
+✓ Compiled in 248ms

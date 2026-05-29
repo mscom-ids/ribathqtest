@@ -14,13 +14,6 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import {
     Table,
     TableBody,
     TableCell,
@@ -45,7 +38,6 @@ interface HifzLog {
     id: string
     student_id: string
     entry_date: string
-    session_type: string
     mode: string
     surah_name?: string
     start_v?: number
@@ -59,17 +51,13 @@ interface HifzLog {
 
 export default function HifzTrackingPage() {
     const [date, setDate] = useState<Date>(new Date())
-    const [selectedSession, setSelectedSession] = useState<string>("all")
     const [students, setStudents] = useState<Student[]>([])
     const [hifzLogs, setHifzLogs] = useState<Record<string, HifzLog[]>>({})
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [refreshKey, setRefreshKey] = useState(0)
 
-    // Hifz sessions (hardcoded as per hifz_logs session_type constraint)
-    const hifzSessionTypes = ["Subh", "Breakfast", "Lunch"]
-
-    // Load students and hifz logs when date/session changes
+    // Load students and hifz logs when date changes
     useEffect(() => {
         async function loadData() {
             setLoading(true)
@@ -83,9 +71,9 @@ export default function HifzTrackingPage() {
                     setStudents(studentsData)
                 }
 
-                // Load existing hifz logs for this date (filter by session if selected)
+                // Load existing hifz logs for this date.
                 const { data: { logs: logsData } } = await api.get('/hifz/logs', {
-                    params: { date: dateStr, session_type: selectedSession }
+                    params: { date: dateStr }
                 });
 
                 if (logsData) {
@@ -109,7 +97,7 @@ export default function HifzTrackingPage() {
             setLoading(false)
         }
         loadData()
-    }, [date, selectedSession, refreshKey])
+    }, [date, refreshKey])
 
     const filteredStudents = students.filter(s =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -188,21 +176,6 @@ export default function HifzTrackingPage() {
                                 />
                             </PopoverContent>
                         </Popover>
-
-                        {/* Session Select */}
-                        <Select value={selectedSession} onValueChange={setSelectedSession}>
-                            <SelectTrigger className="w-full sm:w-[200px]">
-                                <SelectValue placeholder="All Sessions" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Sessions</SelectItem>
-                                {hifzSessionTypes.map(session => (
-                                    <SelectItem key={session} value={session}>
-                                        {session}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
 
                         {/* Search */}
                         <div className="relative flex-1">

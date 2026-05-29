@@ -228,9 +228,9 @@ export default function AlumniPage() {
 
             {/* Data Table */}
             <div className="bg-white dark:bg-[#1e2538] border border-slate-200 dark:border-[#2a3348] rounded-xl shadow-sm overflow-hidden auto-cols-auto">
-                <div className="overflow-x-auto min-w-full">
-                    <table className="w-full text-sm text-left whitespace-nowrap">
-                        <thead className="bg-[#f8fafc] dark:bg-[#232838] text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-[#2a3348]">
+                <div className="max-h-[calc(100vh-360px)] min-h-[360px] overflow-auto relative p-1">
+                    <table className="w-full min-w-[1200px] text-sm text-left whitespace-nowrap">
+                        <thead className="sticky top-0 z-10 bg-[#f8fafc] dark:bg-[#232838] text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-[#2a3348] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                             <tr>
                                 <th className="px-6 py-4">#</th>
                                 <th className="px-6 py-4">Name</th>

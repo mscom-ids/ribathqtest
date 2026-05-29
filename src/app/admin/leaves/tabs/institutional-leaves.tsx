@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { InstitutionalModal } from "../institutional-modal"
 import { InstitutionalExitModal } from "../institutional-exit-modal"
 import { RecordReturnModal } from "../record-return-modal"
@@ -53,15 +54,17 @@ export function InstitutionalLeavesTab() {
     const [leaveToDelete, setLeaveToDelete] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
 
-    const fetchLeaves = async () => {
+    const fetchLeaves = async (force = false) => {
         setLoading(true)
         try {
-            const res = await api.get('/leaves/institutional')
+            const res = force
+                ? await api.get('/leaves/institutional')
+                : await cachedGet('/leaves/institutional', undefined, 15_000)
             if (res.data.success) {
                 setLeaves(res.data.leaves)
             }
-        } catch (error) {
-            console.error(error)
+        } catch {
+            console.warn("Failed to load institutional leaves")
             toast.error("Failed to load institutional leaves")
         } finally {
             setLoading(false)
@@ -83,7 +86,7 @@ export function InstitutionalLeavesTab() {
             const res = await api.delete(`/leaves/institutional/${leaveToDelete}`)
             if (res.data.success) {
                 toast.success("Leave deleted successfully")
-                fetchLeaves()
+                fetchLeaves(true)
             }
         } catch (error: unknown) {
             toast.error(getErrorMessage(error, "Failed to delete leave"))
@@ -219,14 +222,14 @@ export function InstitutionalLeavesTab() {
             <InstitutionalModal
                 open={isCreateModalOpen}
                 onOpenChange={setIsCreateModalOpen}
-                onSuccess={fetchLeaves}
+                onSuccess={() => fetchLeaves(true)}
             />
 
             <InstitutionalExitModal
                 leave={leaveForExit}
                 open={!!leaveForExit}
                 onOpenChange={(op: boolean) => !op && setLeaveForExit(null)}
-                onSuccess={fetchLeaves}
+                onSuccess={() => fetchLeaves(true)}
             />
 
             {leaveForRecord && (
@@ -235,7 +238,7 @@ export function InstitutionalLeavesTab() {
                     type="institutional"
                     open={!!leaveForRecord}
                     onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
-                    onSuccess={fetchLeaves}
+                    onSuccess={() => fetchLeaves(true)}
                 />
             )}
 

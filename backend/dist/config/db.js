@@ -24,12 +24,16 @@ const pool = new pg_1.Pool({
     ssl: {
         rejectUnauthorized: false
     },
-    // Tuned for several concurrent mentors hitting the dashboard at once.
-    // pg defaults are max=10 / no idle timeout, which causes "waiting for
-    // connection" stalls under multi-user load.
-    max: 20,
+    // Render instances talking to Supabase pooler should avoid opening too many
+    // database connections at once. A smaller pool plus short app-level caching
+    // is usually faster than stampeding the pooler under page-load bursts.
+    max: Number(process.env.DB_POOL_MAX || 8),
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 10000),
+    // Prevent any single query from running longer than 15s.
+    // Without this, a slow query can hold a connection indefinitely,
+    // eventually exhausting the pool and blocking ALL requests.
+    statement_timeout: 15000,
 });
 pool.on('error', (err) => {
     console.error('Unexpected error on idle pg client', err);
@@ -38,14 +42,47 @@ pool.on('error', (err) => {
     // "Network Error" crashes, so keep the API process alive for new requests.
 });
 const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);
+const READ_RETRY_ATTEMPTS = Number(process.env.DB_READ_RETRY_ATTEMPTS || 2);
 function summarizeSql(text) {
     return text.replace(/\s+/g, ' ').trim().slice(0, 220);
+}
+function isReadOnlySql(text) {
+    const sql = text.trim().toLowerCase();
+    return sql.startsWith('select') || sql.startsWith('with');
+}
+function isTransientConnectionError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return (message.includes('connection terminated') ||
+        message.includes('connection timeout') ||
+        message.includes('timeout exceeded') ||
+        message.includes('connection ended unexpectedly') ||
+        error?.code === 'ECONNRESET' ||
+        error?.code === 'ETIMEDOUT' ||
+        error?.code === '57P01');
+}
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 exports.db = {
     query: async (text, params) => {
         const startedAt = Date.now();
         try {
-            return await pool.query(text, params);
+            const maxAttempts = isReadOnlySql(text) ? Math.max(1, READ_RETRY_ATTEMPTS) : 1;
+            let lastError;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    return await pool.query(text, params);
+                }
+                catch (error) {
+                    lastError = error;
+                    if (attempt >= maxAttempts || !isTransientConnectionError(error))
+                        throw error;
+                    const delayMs = 120 * attempt;
+                    console.warn(`[DB RETRY] read query attempt ${attempt + 1}/${maxAttempts} after transient error: ${error.message}`);
+                    await wait(delayMs);
+                }
+            }
+            throw lastError;
         }
         finally {
             const duration = Date.now() - startedAt;

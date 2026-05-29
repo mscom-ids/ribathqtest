@@ -44,7 +44,6 @@ CREATE TABLE hifz_logs (
   student_id TEXT REFERENCES students(adm_no),
   usthad_id UUID REFERENCES staff(id),
   entry_date DATE DEFAULT CURRENT_DATE NOT NULL,
-  session_type TEXT CHECK (session_type IN ('Subh', 'Breakfast', 'Lunch')) NOT NULL,
   mode TEXT CHECK (mode IN ('New Verses', 'Recent Revision', 'Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)')) NOT NULL,
   -- New Verses Mode
   surah_name TEXT,
@@ -60,6 +59,14 @@ CREATE TABLE hifz_logs (
   rating INTEGER CHECK (rating >= 1 AND rating <= 5),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+CREATE TABLE hifz_log_session_legacy (
+  hifz_log_id UUID PRIMARY KEY REFERENCES hifz_logs(id) ON DELETE CASCADE,
+  session_type TEXT NOT NULL,
+  archived_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE hifz_log_session_legacy ENABLE ROW LEVEL SECURITY;
 
 -- 5. ACADEMIC SESSIONS (Classes/Timings)
 CREATE TABLE academic_sessions (

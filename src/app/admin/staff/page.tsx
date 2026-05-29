@@ -107,9 +107,18 @@ export default function StaffPage() {
     })
     const [photoFile, setPhotoFile] = useState<File | null>(null)
     const [mounted, setMounted] = useState(false)
+    const [userRole, setUserRole] = useState("")
+    const isPrincipalPortal = userRole === "principal" || userRole === "vice_principal"
 
     useEffect(() => {
         setMounted(true)
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]))
+                setUserRole(payload.role || "")
+            } catch {}
+        }
         loadStaff()
     }, [])
 
@@ -369,13 +378,17 @@ export default function StaffPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
                         <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">Mentors</h1>
-                        <p className="text-slate-500 dark:text-slate-400 mt-1">Manage mentors and administrators.</p>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">
+                            {isPrincipalPortal ? "View mentor details and assigned student coverage." : "Manage mentors and administrators."}
+                        </p>
                     </div>
-                    <Link href="/admin/staff/create">
-                        <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-lg shadow-purple-500/30">
-                            <Plus className="mr-2 h-4 w-4" /> Add Mentor
-                        </Button>
-                    </Link>
+                    {!isPrincipalPortal && (
+                        <Link href="/admin/staff/create">
+                            <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-lg shadow-purple-500/30">
+                                <Plus className="mr-2 h-4 w-4" /> Add Mentor
+                            </Button>
+                        </Link>
+                    )}
                 </div>
 
             {/* Stats Cards */}
@@ -447,16 +460,18 @@ export default function StaffPage() {
                         Active
                         <Badge variant="secondary" className="bg-white/50 dark:bg-slate-900/50">{activeStaffList.length}</Badge>
                     </button>
-                    <button
-                        onClick={() => setActiveTab("archived")}
-                        className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${activeTab === "archived"
-                            ? "border-slate-500 text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800"
-                            : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-                            }`}
-                    >
-                        Archived
-                        <Badge variant="secondary" className="bg-white/50 dark:bg-slate-900/50">{archivedStaffList.length}</Badge>
-                    </button>
+                    {!isPrincipalPortal && (
+                        <button
+                            onClick={() => setActiveTab("archived")}
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${activeTab === "archived"
+                                ? "border-slate-500 text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800"
+                                : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                                }`}
+                        >
+                            Archived
+                            <Badge variant="secondary" className="bg-white/50 dark:bg-slate-900/50">{archivedStaffList.length}</Badge>
+                        </button>
+                    )}
                 </div>
 
                 <div className="relative w-full md:w-72 flex-shrink-0">
@@ -581,7 +596,7 @@ export default function StaffPage() {
                                                         View Details
                                                     </Button>
                                                 </Link>
-                                                {activeTab === "active" ? (
+                                                {!isPrincipalPortal && activeTab === "active" ? (
                                                     <>
                                                         {!s.password_hash && (
                                                             <Button
@@ -611,7 +626,7 @@ export default function StaffPage() {
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
                                                     </>
-                                                ) : (
+                                                ) : !isPrincipalPortal ? (
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -621,7 +636,7 @@ export default function StaffPage() {
                                                         <RotateCcw className="h-3.5 w-3.5 mr-2" />
                                                         Restore
                                                     </Button>
-                                                )}
+                                                ) : null}
                                             </div>
                                         </TableCell>
                                     </TableRow>

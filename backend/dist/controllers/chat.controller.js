@@ -8,6 +8,7 @@ const db_1 = require("../config/db");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const server_cache_1 = require("../utils/server-cache");
 // ── Multer for chat image uploads ────────────────────────────────────────────
 const chatStorage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
@@ -36,8 +37,10 @@ async function isParticipant(conversationId, staffId) {
 }
 // ── Helper: get staff id from auth user ──────────────────────────────────────
 async function getStaffId(user) {
-    const r = await db_1.db.query('SELECT id FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
-    return r.rows.length > 0 ? r.rows[0].id : null;
+    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('chat:staff-id', { userId: user.id, email: user.email || '' }), 60000, async () => {
+        const r = await db_1.db.query('SELECT id FROM staff WHERE profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        return r.rows.length > 0 ? r.rows[0].id : null;
+    });
 }
 // ═══════════════════════════════════════════════════════════════════════════════
 // GET /chat/conversations — List all my conversations
@@ -48,7 +51,8 @@ const getConversations = async (req, res) => {
         const staffId = await getStaffId(user);
         if (!staffId)
             return res.status(404).json({ success: false, error: 'Staff not found' });
-        const result = await db_1.db.query(`
+        const conversations = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('chat:conversations', { staffId }), 10000, async () => {
+            const result = await db_1.db.query(`
             SELECT 
                 c.id, c.type, c.name, c.created_at,
                 cp.last_read_at,
@@ -92,7 +96,9 @@ const getConversations = async (req, res) => {
             WHERE cp.staff_id = $1
             ORDER BY COALESCE(lm.created_at, c.created_at) DESC
         `, [staffId]);
-        res.json({ success: true, conversations: result.rows });
+            return result.rows;
+        });
+        res.json({ success: true, conversations });
     }
     catch (err) {
         console.error('Error fetching conversations:', err);
@@ -132,6 +138,7 @@ const startPrivateChat = async (req, res) => {
             const convId = convRes.rows[0].id;
             await client.query('INSERT INTO chat_participants (conversation_id, staff_id) VALUES ($1, $2), ($1, $3)', [convId, staffId, otherStaffId]);
             await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
             res.json({ success: true, conversationId: convId, isNew: true });
         }
         catch (e) {
@@ -173,6 +180,7 @@ const createGroupChat = async (req, res) => {
                  SELECT $1, sid FROM unnest($2::uuid[]) AS t(sid)
                  ON CONFLICT DO NOTHING`, [convId, allMembers]);
             await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
             res.json({ success: true, conversationId: convId });
         }
         catch (e) {
@@ -206,8 +214,11 @@ const updateGroupMembers = async (req, res) => {
         try {
             await client.query('BEGIN');
             if (addIds && Array.isArray(addIds)) {
-                for (const memberId of addIds) {
-                    await client.query('INSERT INTO chat_participants (conversation_id, staff_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, memberId]);
+                const uniqueAddIds = [...new Set(addIds)].filter(Boolean);
+                if (uniqueAddIds.length > 0) {
+                    await client.query(`INSERT INTO chat_participants (conversation_id, staff_id)
+                         SELECT $1, sid FROM unnest($2::uuid[]) AS t(sid)
+                         ON CONFLICT DO NOTHING`, [id, uniqueAddIds]);
                 }
             }
             if (removeIds && Array.isArray(removeIds)) {
@@ -219,6 +230,7 @@ const updateGroupMembers = async (req, res) => {
                 }
             }
             await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
             res.json({ success: true });
         }
         catch (e) {
@@ -321,6 +333,7 @@ const sendMessage = async (req, res) => {
         }
         const result = await db_1.db.query(`INSERT INTO chat_messages (conversation_id, sender_id, content) 
              VALUES ($1, $2, $3) RETURNING id, created_at`, [id, staffId, content.trim()]);
+        (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
         // Update sender's last_read_at
         await db_1.db.query('UPDATE chat_participants SET last_read_at = NOW() WHERE conversation_id = $1 AND staff_id = $2', [id, staffId]);
         res.json({ success: true, message: { id: result.rows[0].id, created_at: result.rows[0].created_at } });
@@ -353,6 +366,7 @@ const sendImageMessage = async (req, res) => {
             const caption = req.body.caption || null;
             const result = await db_1.db.query(`INSERT INTO chat_messages (conversation_id, sender_id, content, image_url)
                  VALUES ($1, $2, $3, $4) RETURNING id, created_at`, [id, staffId, caption, imageUrl]);
+            (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
             await db_1.db.query('UPDATE chat_participants SET last_read_at = NOW() WHERE conversation_id = $1 AND staff_id = $2', [id, staffId]);
             res.json({ success: true, message: { id: result.rows[0].id, created_at: result.rows[0].created_at, image_url: imageUrl } });
         }
@@ -374,6 +388,7 @@ const markAsRead = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Staff not found' });
         const id = req.params.id;
         await db_1.db.query('UPDATE chat_participants SET last_read_at = NOW() WHERE conversation_id = $1 AND staff_id = $2', [id, staffId]);
+        (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
         res.json({ success: true });
     }
     catch (err) {
@@ -412,8 +427,15 @@ const getStaffList = async (req, res) => {
     try {
         const user = req.user;
         const staffId = await getStaffId(user);
-        const result = await db_1.db.query(`SELECT id, name, photo_url, role FROM staff WHERE id != $1 ORDER BY name`, [staffId]);
-        res.json({ success: true, staff: result.rows });
+        const staff = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('chat:staff-list', { staffId: staffId || '' }), 60000, async () => {
+            const result = await db_1.db.query(`SELECT id, name, photo_url, role
+                     FROM staff
+                     WHERE id != $1
+                       AND COALESCE(is_active, true) = true
+                     ORDER BY name`, [staffId]);
+            return result.rows;
+        });
+        res.json({ success: true, staff });
     }
     catch (err) {
         console.error('Error fetching staff list:', err);
@@ -483,6 +505,7 @@ const deleteConversation = async (req, res) => {
             // Delete the conversation itself
             await client.query('DELETE FROM chat_conversations WHERE id = $1', [id]);
             await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('chat:conversations');
             res.json({ success: true, message: 'Conversation deleted successfully' });
         }
         catch (e) {

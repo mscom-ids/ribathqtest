@@ -1,8 +1,6 @@
 
 "use client"
 
-import { LogIn } from "lucide-react"
-
 export function ProgressRing({
     percentage,
     size = 120,

@@ -62,16 +62,29 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
 
     // All eligible students
     const [fetchedStudents, setFetchedStudents] = useState<any[]>([])
+    const [studentsLoading, setStudentsLoading] = useState(false)
+    const [studentsError, setStudentsError] = useState("")
 
     useEffect(() => {
         if (open) {
             const getStuds = async () => {
+                setStudentsLoading(true)
+                setStudentsError("")
                 try {
                     const res = await api.get('/leaves/eligible-students')
                     if (res.data.success) {
                         setFetchedStudents(res.data.students.filter((s: any) => !s.is_outside))
+                    } else {
+                        setFetchedStudents([])
+                        setStudentsError(res.data.error || "Failed to load students")
                     }
-                } catch (e) { }
+                } catch (e: unknown) {
+                    const error = e as { response?: { data?: { error?: string } } }
+                    setFetchedStudents([])
+                    setStudentsError(error.response?.data?.error || "Failed to load students")
+                } finally {
+                    setStudentsLoading(false)
+                }
             }
             getStuds()
         } else {
@@ -89,6 +102,9 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
             setExceptions([])
             setExceptionsSearch("")
             setMode("individual")
+            setFetchedStudents([])
+            setStudentsError("")
+            setStudentsLoading(false)
         }
     }, [open])
 
@@ -212,9 +228,15 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                         }}>
                                             <CommandInput placeholder="Search student name or ID..." className="h-9" />
                                             <CommandList>
-                                                <CommandEmpty>No student found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {fetchedStudents.map((s) => (
+                                                {studentsLoading ? (
+                                                    <div className="py-6 text-center text-sm text-slate-500">Loading students...</div>
+                                                ) : studentsError ? (
+                                                    <div className="py-6 px-4 text-center text-sm text-red-600">{studentsError}</div>
+                                                ) : (
+                                                    <>
+                                                        <CommandEmpty>No student found.</CommandEmpty>
+                                                        <CommandGroup>
+                                                            {fetchedStudents.map((s) => (
                                                         <CommandItem
                                                             key={s.adm_no}
                                                             value={`${s.name} ${s.adm_no}`}
@@ -226,8 +248,10 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                                             <span className="flex-1">{s.name} <span className="text-xs text-slate-500">({s.adm_no} – {s.standard})</span></span>
                                                             <Check className={cn("ml-auto h-4 w-4", studentId === s.adm_no ? "opacity-100" : "opacity-0")} />
                                                         </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </>
+                                                )}
                                             </CommandList>
                                         </Command>
                                     </PopoverContent>

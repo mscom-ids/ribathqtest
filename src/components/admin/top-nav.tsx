@@ -22,6 +22,8 @@ type Notification = {
     color?: string
 }
 
+const ADMIN_NOTIFICATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_ADMIN_NOTIFICATIONS === "true"
+
 function decodeUser(token: string) {
     try {
         const p = JSON.parse(atob(token.split('.')[1]))
@@ -38,6 +40,7 @@ function NotificationBell() {
     const [open, setOpen]             = useState(false)
     const [notifications, setNotifications] = useState<Notification[]>([])
     const [loading, setLoading]       = useState(false)
+    const [hasLoaded, setHasLoaded]   = useState(false)
     const panelRef                    = useRef<HTMLDivElement>(null)
 
     // Close on outside click
@@ -50,23 +53,29 @@ function NotificationBell() {
     }, [])
 
     const fetchNotifications = useCallback(async () => {
+        if (!ADMIN_NOTIFICATIONS_ENABLED) {
+            setHasLoaded(true)
+            setNotifications([])
+            return
+        }
+
         setLoading(true)
         try {
-            // All 3 calls fire in parallel (was sequential).
+            // All 3 calls fire in parallel using small cached payloads.
             // /delegations + /events + /chat use cachedGet so navigating between
             // admin pages doesn't repeatedly re-hit the backend within the TTL.
-            // /delegations now uses count_only mode + a separate small fetch
-            // for the actual pending preview list — no more 3-table JOIN every
-            // 60 seconds.
-            const [delRes, chatRes, evtRes] = await Promise.all([
-                cachedGet("/delegations/admin/all", undefined, 60_000),
+            const [delResult, chatResult, evtResult] = await Promise.allSettled([
+                cachedGet("/delegations/admin/all", { pending_only: "true", limit: 5 }, 60_000),
                 cachedGet("/chat/conversations", undefined, 60_000),
                 cachedGet("/events", undefined, 60_000),
             ])
 
             const notifs: Notification[] = []
+            const delRes = delResult.status === "fulfilled" ? delResult.value : null
+            const chatRes = chatResult.status === "fulfilled" ? chatResult.value : null
+            const evtRes = evtResult.status === "fulfilled" ? evtResult.value : null
 
-            if (delRes.data?.success) {
+            if (delRes?.data?.success) {
                 const pending = (delRes.data.requests || []).filter((r: any) => r.status === "pending")
                 pending.forEach((r: any) => {
                     notifs.push({
@@ -83,7 +92,7 @@ function NotificationBell() {
                 })
             }
 
-            if (chatRes.data) {
+            if (chatRes?.data) {
                 const convs: any[] = chatRes.data?.conversations || (Array.isArray(chatRes.data) ? chatRes.data : [])
                 const unread = convs.filter(c => c.unread_count > 0)
                 unread.slice(0, 3).forEach(c => {
@@ -101,7 +110,7 @@ function NotificationBell() {
                 })
             }
 
-            if (evtRes.data?.success) {
+            if (evtRes?.data?.success) {
                 const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
                 const recent = (evtRes.data.events || []).filter(
                     (e: any) => new Date(e.created_at || e.start_date) >= cutoff
@@ -123,17 +132,18 @@ function NotificationBell() {
 
             notifs.sort((a, b) => b.time.getTime() - a.time.getTime())
             setNotifications(notifs)
+            setHasLoaded(true)
         } catch { /* non-blocking */ }
         setLoading(false)
     }, [])
 
-    // Fetch on mount and every 2 minutes (was 60s — notifications don't change
-    // that fast; the 60s polling was doubling network noise unnecessarily).
+    // Load notifications only when the bell is opened, then refresh while open.
     useEffect(() => {
-        fetchNotifications()
+        if (!open) return
+        if (!hasLoaded) fetchNotifications()
         const t = setInterval(fetchNotifications, 120_000)
         return () => clearInterval(t)
-    }, [fetchNotifications])
+    }, [fetchNotifications, hasLoaded, open])
 
     const unreadCount = notifications.filter(n => !n.read).length
 

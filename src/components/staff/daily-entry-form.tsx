@@ -16,11 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import { SURAH_LIST } from "@/lib/data/surah-list"
 type Surah = { id: number; name: string; totalVerses: number };
 const typedSurahList = SURAH_LIST as Surah[];
-const DEFAULT_HIFZ_SESSION = "Subh"
 
 function SurahPicker({
     value,
@@ -113,7 +113,6 @@ const juzPortionSchema = z.preprocess(
 // Schema
 const formSchema = z.object({
     date: z.string(), // YYYY-MM-DD
-    session: z.enum(["Subh", "Breakfast", "Lunch"]),
 
     mode: z.enum(["New Verses", "Recent Revision", "Juz Revision", "Juz Revision (New)", "Juz Revision (Old)"]),
 
@@ -170,7 +169,6 @@ type HifzLogRow = {
     id?: string
     mode?: string
     entry_date?: string
-    session_type?: "Subh" | "Breakfast" | "Lunch"
     surah_name?: string | null
     start_v?: number | null
     end_v?: number | null
@@ -222,7 +220,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         resolver: zodResolver(formSchema) as any,
         defaultValues: {
             date: searchParams.get("date") || format(today, "yyyy-MM-dd"),
-            session: DEFAULT_HIFZ_SESSION,
             mode: "New Verses",
             new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
             juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
@@ -253,15 +250,15 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             // Fire all three calls in parallel. Previously these were
             // sequential awaits, costing 3 RTTs every time the form opened.
             const [sRes, progRes, logRes, policyRes] = await Promise.all([
-                api.get(`/students/${studentId}`, { params: { light: 'true' } }).catch(() => null),
-                api.get('/hifz/progress-summary', { params: { student_id: studentId } }).catch(() => null),
+                cachedGet(`/students/${studentId}`, { light: 'true' }, 30_000).catch(() => null),
+                cachedGet('/hifz/progress-summary', { student_id: studentId }, 5 * 60_000).catch(() => null),
                 (logIdParam
                     ? api.get(`/hifz/logs/${logIdParam}`)
                     : api.get('/hifz/logs', {
                         params: { student_id: studentId, date: initialDate, mode: initialMode },
                     })
                 ).catch(() => null),
-                api.get('/access-control/mentor-policies').catch(() => null),
+                cachedGet('/access-control/mentor-policies', undefined, 60_000).catch(() => null),
             ])
 
             if (cancelled) return
@@ -278,8 +275,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             const isStudentHafiz = totalJuzCompleted >= 30
             setIsHafiz(isStudentHafiz)
 
-            // Resolve existing logs across all historical sessions. Old Subh/Breakfast/Lunch
-            // records remain discoverable even though the form no longer exposes sessions.
+            // Resolve existing logs without splitting the same date/mode into hidden session buckets.
             const existingLogs = logIdParam && logRes?.data?.success
                 ? [logRes.data.log]
                 : (logRes?.data?.success ? (logRes.data.logs || []) : [])
@@ -320,7 +316,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                 form.reset({
                     date: existingLog.entry_date ? format(new Date(existingLog.entry_date), 'yyyy-MM-dd') : format(today, 'yyyy-MM-dd'),
-                    session: existingLog.session_type || DEFAULT_HIFZ_SESSION,
                     mode: existingLog.mode as any,
                     new_verses: verseEntries,
                     start_page: existingLog.start_page,
@@ -333,7 +328,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 setLogId(null)
                 form.reset({
                     date: initialDate,
-                    session: DEFAULT_HIFZ_SESSION,
                     mode: resolvedMode,
                     new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
                     juz_number: undefined,
@@ -348,8 +342,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         return () => { cancelled = true }
     }, [studentId, form, searchParams])
 
-    // Re-fetch when date/mode change. Sessions are hidden now, so old records
-    // are loaded across all historical session_type values.
+    // Re-fetch when date/mode change.
     const watchedDate = form.watch("date")
     const watchedMode = form.watch("mode")
 
@@ -395,7 +388,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         }]
                     form.reset({
                         date: data.entry_date ? format(new Date(data.entry_date), 'yyyy-MM-dd') : watchedDate,
-                        session: data.session_type || DEFAULT_HIFZ_SESSION,
                         mode: data.mode as any,
                         new_verses: verseEntries,
                         start_page: data.start_page,
@@ -408,7 +400,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     setLogId(null)
                     form.reset({
                         date: watchedDate,
-                        session: DEFAULT_HIFZ_SESSION,
                         mode: watchedMode,
                         new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
                         juz_number: undefined,
@@ -446,7 +437,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
             student_id: studentId,
             usthad_id: targetUsthadId,
             entry_date: values.date,
-            session_type: values.session || DEFAULT_HIFZ_SESSION,
             mode: values.mode
         }
 
@@ -493,7 +483,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 alert("Saved successfully!")
                 form.reset({
                     date: form.getValues("date"),
-                    session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                     mode: form.getValues("mode"),
                     new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
                     juz_number: undefined,
@@ -595,7 +584,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         student_id: studentId,
                         usthad_id: targetUsthadId,
                         entry_date: rangeDate,
-                        session_type: DEFAULT_HIFZ_SESSION,
                         mode: 'New Verses',
                         surah_name: rec.surah_name,
                         start_v: rec.start_v,
@@ -851,7 +839,6 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                 // 1. Force RHF absolute wipe instantly
                                                 form.reset({
                                                     date: form.getValues("date"),
-                                                    session: form.getValues("session") || DEFAULT_HIFZ_SESSION,
                                                     mode: val as any,
                                                     new_verses: [{ surah_id: undefined, start_v: undefined, end_v: undefined }],
                                                     juz_number: undefined,

@@ -17,7 +17,6 @@ export type HifzLog = {
     start_v?: number;
     end_v?: number;
     entry_date: string;
-    session_type?: string;
     rating?: number;
     juz_number?: number;
     juz_part?: string;

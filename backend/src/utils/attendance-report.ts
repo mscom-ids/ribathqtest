@@ -223,6 +223,7 @@ export async function getStudentAttendanceSummaries(
 
     const studentById = new Map(students.map(student => [student.adm_no, student]));
     const effectiveSessionsByStudentDate = new Map<string, Map<string, number>>();
+    const sessionByStudentSchedule = new Map<string, AttendanceSessionSummary>();
 
     for (const dateStr of dateRange(startDate, endDate)) {
         const day = new Date(`${dateStr}T00:00:00`).getDay();
@@ -236,7 +237,8 @@ export async function getStudentAttendanceSummaries(
 
                 const summary = summaries.get(studentId) || emptySummary();
                 const sessionKey = String(schedule.id);
-                let session = summary.sessions.find(s => s.schedule_id === sessionKey);
+                const studentSessionKey = `${studentId}|${sessionKey}`;
+                let session = sessionByStudentSchedule.get(studentSessionKey);
                 if (!session) {
                     session = {
                         schedule_id: sessionKey,
@@ -253,6 +255,7 @@ export async function getStudentAttendanceSummaries(
                         total: 0,
                     };
                     summary.sessions.push(session);
+                    sessionByStudentSchedule.set(studentSessionKey, session);
                 }
 
                 summary.plannedClasses += 1;

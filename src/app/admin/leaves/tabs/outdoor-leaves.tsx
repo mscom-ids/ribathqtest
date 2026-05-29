@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { OutdoorModal } from "../outdoor-modal"
 import { RecordReturnModal } from "../record-return-modal"
 
@@ -23,13 +24,15 @@ export function OutdoorLeavesTab() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [leaveForRecord, setLeaveForRecord] = useState<string | null>(null)
 
-    const fetchLeaves = async () => {
+    const fetchLeaves = async (force = false) => {
         setLoading(true)
         try {
-            const res = await api.get('/leaves/personal?type=outdoor')
+            const res = force
+                ? await api.get('/leaves/personal?type=outdoor')
+                : await cachedGet('/leaves/personal', { type: 'outdoor' }, 15_000)
             if (res.data.success) setLeaves(res.data.leaves)
-        } catch (error) {
-            console.error(error)
+        } catch {
+            console.warn("Failed to load outdoor leaves")
         } finally {
             setLoading(false)
         }
@@ -180,7 +183,7 @@ export function OutdoorLeavesTab() {
                 )}
             </Card>
 
-            <OutdoorModal open={isModalOpen} onOpenChange={setIsModalOpen} onSuccess={fetchLeaves} />
+            <OutdoorModal open={isModalOpen} onOpenChange={setIsModalOpen} onSuccess={() => fetchLeaves(true)} />
 
             {leaveForRecord && (
                 <RecordReturnModal
@@ -188,7 +191,7 @@ export function OutdoorLeavesTab() {
                     type="personal"
                     open={!!leaveForRecord}
                     onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
-                    onSuccess={fetchLeaves}
+                    onSuccess={() => fetchLeaves(true)}
                 />
             )}
         </div>

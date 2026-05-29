@@ -2,14 +2,18 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteEvent = exports.updateEvent = exports.createEvent = exports.getEvents = void 0;
 const db_1 = require("../config/db");
+const server_cache_1 = require("../utils/server-cache");
 const getEvents = async (req, res) => {
     try {
         const query = `
             SELECT * FROM events 
             ORDER BY start_date ASC, start_time ASC
         `;
-        const result = await db_1.db.query(query);
-        res.status(200).json({ success: true, events: result.rows });
+        const events = await (0, server_cache_1.cachedResult)('events:list', 60000, async () => {
+            const result = await db_1.db.query(query);
+            return result.rows;
+        });
+        res.status(200).json({ success: true, events });
     }
     catch (e) {
         console.error("Error fetching events:", e);
@@ -31,6 +35,7 @@ const createEvent = async (req, res) => {
         `;
         const params = [title, category, event_for, rolesJson, start_date, end_date, start_time, end_time, message];
         const result = await db_1.db.query(query, params);
+        (0, server_cache_1.invalidateCacheByPrefix)('events:');
         res.status(201).json({ success: true, event: result.rows[0] });
     }
     catch (e) {
@@ -57,6 +62,7 @@ const updateEvent = async (req, res) => {
         const result = await db_1.db.query(query, params);
         if (result.rows.length === 0)
             return res.status(404).json({ success: false, error: "Event not found" });
+        (0, server_cache_1.invalidateCacheByPrefix)('events:');
         res.status(200).json({ success: true, event: result.rows[0] });
     }
     catch (e) {
@@ -72,6 +78,7 @@ const deleteEvent = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: "Event not found" });
         }
+        (0, server_cache_1.invalidateCacheByPrefix)('events:');
         res.status(200).json({ success: true, message: "Event deleted successfully" });
     }
     catch (e) {

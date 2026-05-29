@@ -83,8 +83,8 @@ export function QuickViewDashboard({ staffMode = false }: QuickViewDashboardProp
 
                     buildChart(allLeaves)
                 }
-            } catch (error) {
-                console.error("Failed to load dashboard data", error)
+            } catch {
+                console.warn("Failed to load dashboard data")
             } finally {
                 setLoading(false)
             }

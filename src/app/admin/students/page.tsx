@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, Suspense } from "react"
+import { useEffect, useState, useMemo, useRef, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import {
@@ -22,7 +22,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import api from "@/lib/api"
-import { getActiveStudents } from "../financeActions"
+import { cachedGet } from "@/lib/api-cache"
 
 export type Student = {
     adm_no: string
@@ -40,13 +40,64 @@ export type Student = {
     assigned_usthad?: { name: string } | null
     progress?: number
     status?: string
-    comprehensive_details?: any
+    comprehensive_details?: {
+        basic?: { gender?: string }
+        admission?: { admission_date?: string }
+        [key: string]: unknown
+    }
     gender?: string
     date_of_join?: string
     admission_date?: string
     father_name?: string
     parent_name?: string
     phone_number?: string
+}
+
+type StudentApiRow = Partial<Student> & {
+    date_of_birth?: string
+}
+
+type StudentStatusFilter = "all" | "active" | "completed" | "dropout"
+type StudentSort = "name" | "adm_no" | "standard"
+
+type StudentsPageResponse = {
+    success: boolean
+    students?: StudentApiRow[]
+    pagination?: { limit: number; offset: number; total: number }
+    error?: string
+}
+
+type StudentCounts = {
+    total: number
+    active: number
+    completed: number
+    dropout: number
+    out_campus: number
+    on_campus?: number
+}
+
+const DEFAULT_ROWS_PER_PAGE = 15
+const VALID_STATUSES: StudentStatusFilter[] = ["all", "active", "completed", "dropout"]
+const VALID_SORTS: StudentSort[] = ["name", "adm_no", "standard"]
+
+function rememberStudentsReturnPath(path: string) {
+    if (typeof window === "undefined") return
+    try {
+        window.sessionStorage.setItem("admin:students:return-path", path)
+    } catch {}
+}
+
+function getPositiveNumber(value: string | null, fallback: number) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function getStatusFilter(value: string | null): StudentStatusFilter {
+    return VALID_STATUSES.includes(value as StudentStatusFilter) ? (value as StudentStatusFilter) : "active"
+}
+
+function getSort(value: string | null): StudentSort {
+    return VALID_SORTS.includes(value as StudentSort) ? (value as StudentSort) : "name"
 }
 
 function calculateAge(dob: string) {
@@ -63,15 +114,42 @@ function calculateAge(dob: string) {
 function formatDate(dateStr: string | null | undefined) {
     if (!dateStr) return "—"
     try {
-        const d = new Date(dateStr)
+        const normalized = String(dateStr).trim()
+        const slashMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+        const isoDateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/)
+        const d = slashMatch
+            ? new Date(Number(slashMatch[3]), Number(slashMatch[2]) - 1, Number(slashMatch[1]))
+            : isoDateMatch
+                ? new Date(Number(isoDateMatch[1]), Number(isoDateMatch[2]) - 1, Number(isoDateMatch[3]))
+                : new Date(normalized)
         if (isNaN(d.getTime())) return "—"
         return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     } catch { return "—" }
 }
 
 // ─── STUDENT ROW for Table View ──────────────────────────────
-function StudentTableRow({ student }: { student: Student }) {
+function getJoinDate(student: Student) {
+    return student.date_of_join || student.admission_date || student.comprehensive_details?.admission?.admission_date
+}
+
+function normalizeStudentRow(s: StudentApiRow): Student {
+    return {
+        ...s,
+        adm_no: s.adm_no || "",
+        name: s.name || "",
+        batch_year: s.batch_year || "",
+        standard: s.standard || "",
+        photo_url: s.photo_url ?? null,
+        dob: s.dob || s.date_of_birth || "",
+        gender: s.gender || s.comprehensive_details?.basic?.gender,
+        date_of_join: s.date_of_join || s.admission_date || s.comprehensive_details?.admission?.admission_date,
+        progress: s.progress || 0,
+    }
+}
+
+function StudentTableRow({ student, returnPath }: { student: Student; returnPath: string }) {
     const router = useRouter()
+    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}`
     const statusColor = {
         active: "bg-emerald-50 text-emerald-700 border-emerald-200",
         completed: "bg-blue-50 text-blue-700 border-blue-200",
@@ -81,7 +159,12 @@ function StudentTableRow({ student }: { student: Student }) {
     return (
         <TableRow
             className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group"
-            onClick={() => router.push(`/admin/students/${student.adm_no}`)}
+            onMouseEnter={() => router.prefetch(href)}
+            onFocus={() => router.prefetch(href)}
+            onClick={() => {
+                rememberStudentsReturnPath(returnPath)
+                router.push(href)
+            }}
         >
             <TableCell className="font-mono text-xs text-blue-600 font-semibold">
                 {student.adm_no}
@@ -123,7 +206,7 @@ function StudentTableRow({ student }: { student: Student }) {
                     {(student.status || 'active').charAt(0).toUpperCase() + (student.status || 'active').slice(1)}
                 </span>
             </TableCell>
-            <TableCell className="text-sm text-slate-500">{formatDate(student.admission_date || student.date_of_join)}</TableCell>
+            <TableCell className="text-sm text-slate-500">{formatDate(getJoinDate(student))}</TableCell>
             <TableCell className="text-sm text-slate-500">{formatDate(student.dob)}</TableCell>
             <TableCell>
                 <Button
@@ -132,7 +215,8 @@ function StudentTableRow({ student }: { student: Student }) {
                     className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950 font-medium gap-1.5 text-xs"
                     onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/admin/students/${student.adm_no}`)
+                        rememberStudentsReturnPath(returnPath)
+                        router.push(href)
                     }}
                 >
                     <Eye className="h-3.5 w-3.5" />
@@ -144,8 +228,9 @@ function StudentTableRow({ student }: { student: Student }) {
 }
 
 // ─── STUDENT CARD for Grid View ──────────────────────────────
-function StudentGridCard({ student }: { student: Student }) {
+function StudentGridCard({ student, returnPath }: { student: Student; returnPath: string }) {
     const router = useRouter()
+    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}`
     
     // Exact PreSkool colors
     const primaryBlue = "#3d5ee1"
@@ -159,7 +244,12 @@ function StudentGridCard({ student }: { student: Student }) {
     return (
         <div
             className="bg-white dark:bg-[#1e2538] rounded-md border border-[#f1f1f1] dark:border-[#2a3348] hover:shadow-md transition-all duration-300 cursor-pointer group overflow-hidden"
-            onClick={() => router.push(`/admin/students/${student.adm_no}`)}
+            onMouseEnter={() => router.prefetch(href)}
+            onFocus={() => router.prefetch(href)}
+            onClick={() => {
+                rememberStudentsReturnPath(returnPath)
+                router.push(href)
+            }}
         >
             {/* Top Bar: Adm No + Status */}
             <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -210,7 +300,7 @@ function StudentGridCard({ student }: { student: Student }) {
                 <div>
                     <p className="text-[13px] text-slate-500 mb-0.5">Joined On</p>
                     <p className="text-[13px] font-medium text-slate-800 dark:text-slate-200">
-                        {formatDate(student.admission_date || student.date_of_join)}
+                        {formatDate(getJoinDate(student))}
                     </p>
                 </div>
             </div>
@@ -227,7 +317,8 @@ function StudentGridCard({ student }: { student: Student }) {
                     style={{ backgroundColor: '#e8ebfd', color: primaryBlue }}
                     onClick={(e) => {
                         e.stopPropagation()
-                        router.push(`/admin/students/${student.adm_no}`)
+                        rememberStudentsReturnPath(returnPath)
+                        router.push(href)
                     }}
                 >
                     <Eye className="h-3.5 w-3.5" />
@@ -241,22 +332,53 @@ function StudentGridCard({ student }: { student: Student }) {
 // ─── MAIN STUDENTS PAGE ──────────────────────────────────────
 function StudentsPageContent() {
     const searchParams = useSearchParams()
-    const filterFromUrl = searchParams.get('filter') as "all" | "active" | "completed" | "dropout" | null
+    const router = useRouter()
+    const filterFromUrl = searchParams.get('status') || searchParams.get('filter')
     const [students, setStudents] = useState<Student[]>([])
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState<string | null>(null)
-    const [search, setSearch] = useState("")
-    const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed" | "dropout">(filterFromUrl || "active")
+    const [search, setSearch] = useState(() => searchParams.get('q') || searchParams.get('search') || "")
+    const [debouncedSearch, setDebouncedSearch] = useState(search)
+    const [statusFilter, setStatusFilter] = useState<StudentStatusFilter>(() => getStatusFilter(filterFromUrl))
     const [viewMode, setViewMode] = useState<"list" | "grid">("list")
-    const [sortBy, setSortBy] = useState<"name" | "adm_no" | "standard">("name")
-    const [rowsPerPage, setRowsPerPage] = useState(15)
-    const [currentPage, setCurrentPage] = useState(1)
+    const [sortBy, setSortBy] = useState<StudentSort>(() => getSort(searchParams.get('sort')))
+    const [rowsPerPage, setRowsPerPage] = useState(() => getPositiveNumber(searchParams.get('limit'), DEFAULT_ROWS_PER_PAGE))
+    const [currentPage, setCurrentPage] = useState(() => getPositiveNumber(searchParams.get('page'), 1))
+    const [totalRows, setTotalRows] = useState(0)
+    const [refreshKey, setRefreshKey] = useState(0)
     const [exportLoading, setExportLoading] = useState(false)
-    const [outCampusCount, setOutCampusCount] = useState(0)
+    const [userRole, setUserRole] = useState("")
+    const [progressMap, setProgressMap] = useState<Record<string, number>>({})
+    const didMountPageReset = useRef(false)
+    const [studentCounts, setStudentCounts] = useState<StudentCounts>({
+        total: 0,
+        active: 0,
+        completed: 0,
+        dropout: 0,
+        out_campus: 0,
+    })
 
     useEffect(() => {
-        if (filterFromUrl) setStatusFilter(filterFromUrl)
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]))
+                setUserRole(payload.role || "")
+            } catch {}
+        }
+        setStatusFilter(getStatusFilter(filterFromUrl))
     }, [filterFromUrl])
+
+    const isPrincipalPortal = userRole === "principal" || userRole === "vice_principal"
+
+    useEffect(() => {
+        if (isPrincipalPortal && statusFilter !== "active") setStatusFilter("active")
+    }, [isPrincipalPortal, statusFilter])
+
+    useEffect(() => {
+        const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
+        return () => window.clearTimeout(timeout)
+    }, [search])
 
     // ── Export to Excel ───────────────────────────────────────
     async function handleExportExcel() {
@@ -280,121 +402,105 @@ function StudentsPageContent() {
 
     // ── Load Students ─────────────────────────────────────────
     useEffect(() => {
-        async function initialLoad() {
+        let cancelled = false
+        async function loadPage() {
             setLoading(true)
+            setLoadError(null)
             try {
-                const res = await getActiveStudents()
-                if (!res.success || !res.data) throw new Error(res.error || 'Failed to load')
-                const merged = (res.data as any).map((s: any) => ({
-                    ...s,
-                    dob: s.dob || s.date_of_birth,
-                    date_of_join: s.date_of_join || s.admission_date,
-                    progress: 0
-                }))
-
-                try {
-                    const progRes = await api.get('/hifz/progress-summary')
-                    if (progRes.data.success && progRes.data.progressMap) {
-                        const pMap = progRes.data.progressMap
-                        merged.forEach((s: any) => { s.progress = pMap[s.adm_no] || 0 })
-                    }
-                } catch (_) { /* hifz progress is optional */ }
-
+                const res = await api.get<StudentsPageResponse>('/students', {
+                    params: {
+                        light: 'true',
+                        limit: rowsPerPage,
+                        offset: (currentPage - 1) * rowsPerPage,
+                        search: debouncedSearch || undefined,
+                        status: isPrincipalPortal ? "active" : statusFilter,
+                        sort: sortBy,
+                    },
+                })
+                if (!res.data.success) throw new Error(res.data.error || 'Failed to load')
+                const merged = (res.data.students || []).map(normalizeStudentRow)
+                    .map(s => ({ ...s, progress: progressMap[s.adm_no] || s.progress || 0 }))
+                if (cancelled) return
                 setStudents(merged)
-
-                // Fetch Out Campus count from leave system (Option A — no DB column needed)
-                try {
-                    const leaveRes = await api.get('/leaves/outside-students')
-                    if (leaveRes.data.success) {
-                        setOutCampusCount(leaveRes.data.students?.length || 0)
-                    }
-                } catch (_) { /* non-critical */ }
-
-            } catch (error: any) {
-                console.error('Error loading students:', error.message || error)
+                setTotalRows(res.data.pagination?.total || merged.length)
+            } catch (error: unknown) {
+                if (cancelled) return
+                console.error('Error loading students:', error instanceof Error ? error.message : error)
                 setLoadError('Could not connect to the server. Please ensure the backend is running.')
             } finally {
-                setLoading(false)
+                if (!cancelled) setLoading(false)
             }
         }
-        initialLoad()
-    }, [])
+        loadPage()
+        return () => { cancelled = true }
+    }, [currentPage, debouncedSearch, isPrincipalPortal, progressMap, refreshKey, rowsPerPage, sortBy, statusFilter])
 
     // ── Auto-poll every 3 min ───────────────────────────────────
     // Was 30s, which constantly re-pulled the full /students list (heavy
     // query) plus /leaves/outside-students every 30 seconds while the page
     // was just sitting idle. Student list rarely changes; 3 min is plenty.
     useEffect(() => {
-        const interval = setInterval(async () => {
-            try {
-                const [stuRes, leaveRes] = await Promise.all([
-                    getActiveStudents(),
-                    api.get('/leaves/outside-students').catch(() => ({ data: { success: false, students: [] } })),
-                ])
-                if (stuRes.success && stuRes.data) {
-                    const merged = (stuRes.data as any).map((s: any) => ({
-                        ...s,
-                        dob: s.dob || s.date_of_birth,
-                        gender: s.gender || s.comprehensive_details?.basic?.gender,
-                        date_of_join: s.date_of_join || s.admission_date || s.comprehensive_details?.admission?.admission_date,
-                        progress: 0
-                    }))
-                    setStudents(prev => {
-                        merged.forEach((s: any) => {
-                            const existing = prev.find(st => st.adm_no === s.adm_no)
-                            if (existing) s.progress = existing.progress || 0
-                        })
-                        return merged
-                    })
-                }
-                if (leaveRes.data?.success) {
-                    setOutCampusCount(leaveRes.data.students?.length || 0)
-                }
-            } catch (_) {}
-        }, 180_000)
-        return () => clearInterval(interval)
+        const interval = window.setInterval(() => setRefreshKey(k => k + 1), 300_000)
+        return () => window.clearInterval(interval)
     }, [])
 
     // ── Filter + Sort ─────────────────────────────────────────
-    const filtered = useMemo(() => {
-        let result = students.filter(s => {
-            const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-                s.adm_no.toLowerCase().includes(search.toLowerCase())
-            const effectiveStatus = s.status || 'active'
-            const matchStatus = statusFilter === 'all' || effectiveStatus === statusFilter
-            return matchSearch && matchStatus
-        })
+    useEffect(() => {
+        cachedGet('/hifz/progress-summary', undefined, 5 * 60_000)
+            .then(progRes => {
+                if (!progRes.data.success || !progRes.data.progressMap) return
+                setProgressMap(progRes.data.progressMap)
+            })
+            .catch(() => { /* hifz progress is optional */ })
+    }, [])
 
-        result.sort((a, b) => {
-            if (sortBy === 'name') return a.name.localeCompare(b.name)
-            if (sortBy === 'adm_no') return a.adm_no.localeCompare(b.adm_no, undefined, { numeric: true })
-            if (sortBy === 'standard') return (a.standard || '').localeCompare(b.standard || '')
-            return 0
-        })
+    useEffect(() => {
+        let cancelled = false
+        cachedGet<{ success: boolean; counts?: StudentCounts }>('/students/counts', undefined, 60_000)
+            .then(res => {
+                if (!cancelled && res.data.success && res.data.counts) setStudentCounts(res.data.counts)
+            })
+            .catch(() => {})
+        return () => { cancelled = true }
+    }, [refreshKey])
 
-        return result
-    }, [students, search, statusFilter, sortBy])
-
-    // Reset page when filter changes
-    useEffect(() => { setCurrentPage(1) }, [search, statusFilter, sortBy])
-
-    const totalPages = Math.ceil(filtered.length / rowsPerPage)
-    const paginatedStudents = filtered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
-
-    // Memoized — was running 3 .filter() passes over the full student list on
-    // every render, including every keystroke in the search box.
-    const statusCounts = useMemo(() => {
-        const activeCount = students.reduce(
-            (n, s) => n + ((s.status || 'active') === 'active' ? 1 : 0),
-            0
-        )
-        return {
-            all: students.length,
-            active: activeCount,
-            on_campus: Math.max(0, activeCount - outCampusCount),
-            out_campus: outCampusCount,
+    useEffect(() => {
+        if (!didMountPageReset.current) {
+            didMountPageReset.current = true
+            return
         }
-    }, [students, outCampusCount])
+        setCurrentPage(1)
+    }, [debouncedSearch, rowsPerPage, sortBy, statusFilter])
+
+    const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage))
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages)
+    }, [currentPage, totalPages])
+
+    const listReturnPath = useMemo(() => {
+        const params = new URLSearchParams()
+        if (debouncedSearch) params.set('q', debouncedSearch)
+        if (statusFilter !== 'active') params.set('status', statusFilter)
+        if (currentPage !== 1) params.set('page', String(currentPage))
+        if (rowsPerPage !== DEFAULT_ROWS_PER_PAGE) params.set('limit', String(rowsPerPage))
+        if (sortBy !== 'name') params.set('sort', sortBy)
+        const query = params.toString()
+        return `/admin/students${query ? `?${query}` : ''}`
+    }, [currentPage, debouncedSearch, rowsPerPage, sortBy, statusFilter])
+
+    useEffect(() => {
+        if (typeof window === "undefined") return
+        const current = `${window.location.pathname}${window.location.search}`
+        if (current !== listReturnPath) router.replace(listReturnPath, { scroll: false })
+    }, [listReturnPath, router])
+
+    const statusCounts = useMemo(() => ({
+        all: studentCounts.total,
+        active: studentCounts.active,
+        on_campus: studentCounts.on_campus ?? Math.max(0, studentCounts.active - studentCounts.out_campus),
+        out_campus: studentCounts.out_campus,
+    }), [studentCounts])
 
     return (
         <div className="space-y-6">
@@ -406,21 +512,23 @@ function StudentsPageContent() {
                         Dashboard / Peoples / Students Grid
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={handleExportExcel}
-                        disabled={exportLoading}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors shadow-sm"
-                    >
-                        <Download className="h-4 w-4" />
-                        {exportLoading ? 'Exporting...' : 'Export Students'}
-                    </button>
-                    <Link href="/admin/students/create">
-                        <Button className="bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 shadow-sm font-semibold gap-2">
-                            <Plus className="h-4 w-4" /> Add Student
-                        </Button>
-                    </Link>
-                </div>
+                {!isPrincipalPortal && (
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={exportLoading}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold transition-colors shadow-sm"
+                        >
+                            <Download className="h-4 w-4" />
+                            {exportLoading ? 'Exporting...' : 'Export Students'}
+                        </button>
+                        <Link href="/admin/students/create">
+                            <Button className="bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 shadow-sm font-semibold gap-2">
+                                <Plus className="h-4 w-4" /> Add Student
+                            </Button>
+                        </Link>
+                    </div>
+                )}
             </div>
 
             {/* ── Backend Error Banner ─────────────────────────── */}
@@ -471,7 +579,7 @@ function StudentsPageContent() {
                 {/* Total */}
                 <div
                     className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'all' ? 'border-indigo-300 shadow-sm ring-1 ring-indigo-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
-                    onClick={() => setStatusFilter('all')}
+                    onClick={() => !isPrincipalPortal && setStatusFilter('all')}
                 >
                     <div className="h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center shrink-0">
                         <LayoutGrid className="h-5 w-5 text-indigo-600" />
@@ -510,21 +618,23 @@ function StudentsPageContent() {
                         </div>
 
                         {/* Filter */}
-                        <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                            <SelectTrigger className="w-[130px] h-9 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                <Filter className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
-                                <SelectValue placeholder="Filter" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Students</SelectItem>
-                                <SelectItem value="active">Active</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="dropout">Dropout</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        {!isPrincipalPortal && (
+                            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "completed" | "dropout")}>
+                                <SelectTrigger className="w-[130px] h-9 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                                    <Filter className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
+                                    <SelectValue placeholder="Filter" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Students</SelectItem>
+                                    <SelectItem value="active">Active</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="dropout">Dropout</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
 
                         {/* Sort */}
-                        <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                        <Select value={sortBy} onValueChange={(v) => setSortBy(v as "name" | "adm_no" | "standard")}>
                             <SelectTrigger className="w-[140px] h-9 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
                                 <SelectValue placeholder="Sort By" />
@@ -555,7 +665,7 @@ function StudentsPageContent() {
                         </Select>
                         <span>Entries</span>
                         <span className="ml-2 text-slate-400">•</span>
-                        <span className="ml-2">Showing {paginatedStudents.length} of {filtered.length}</span>
+                        <span className="ml-2">Showing {students.length} of {totalRows}</span>
                     </div>
                     <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -574,7 +684,7 @@ function StudentsPageContent() {
                         <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
                         <p className="text-sm text-slate-500">Loading students...</p>
                     </div>
-                ) : filtered.length === 0 ? (
+                ) : students.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                         <Users className="h-10 w-10 text-slate-300 mb-3" />
                         <p className="font-medium text-slate-500">No students found</p>
@@ -597,8 +707,8 @@ function StudentsPageContent() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {paginatedStudents.map((student) => (
-                                    <StudentTableRow key={student.adm_no} student={student} />
+                                {students.map((student) => (
+                                    <StudentTableRow key={student.adm_no} student={student} returnPath={listReturnPath} />
                                 ))}
                             </TableBody>
                         </Table>
@@ -607,8 +717,8 @@ function StudentsPageContent() {
                     /* ── GRID VIEW ─────────────────────────────── */
                     <div className="p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {paginatedStudents.map((student) => (
-                                <StudentGridCard key={student.adm_no} student={student} />
+                            {students.map((student) => (
+                                <StudentGridCard key={student.adm_no} student={student} returnPath={listReturnPath} />
                             ))}
                         </div>
                     </div>

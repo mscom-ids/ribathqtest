@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Download, Search, Loader2, ArrowLeft, GraduationCap, Calendar, CheckCircle, XCircle, Clock } from "lucide-react"
-import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 
@@ -22,7 +22,7 @@ export default function StudentReportsPage() {
     const fetchReports = async () => {
         setLoading(true)
         try {
-            const res = await api.get(`/reports/students?month=${targetMonth}&year=${targetYear}`)
+            const res = await cachedGet('/reports/students', { month: targetMonth, year: targetYear }, 60_000)
             if (res.data?.success) setData(res.data.data)
         } catch (error) {
             toast({ title: "Error", description: "Failed to load student reports", variant: "destructive" })
@@ -43,7 +43,7 @@ export default function StudentReportsPage() {
             return
         }
 
-        const headers = ["ID", "Name", "Standard", "Batch", "Status", "Att-Classes", "Att-Present", "Att-Absent", "Att-Late", "Att-Leave", "Hifz Progress", "Latest Exam Score"]
+        const headers = ["ID", "Name", "Standard", "Batch", "Status", "Att-Classes Uncancelled", "Att-Classes Scheduled", "Att-Present", "Att-Absent", "Att-Late", "Att-Leave", "Hifz Progress", "Latest Exam Score"]
         const csvRows = [headers.join(",")]
 
         filtered.forEach(s => {
@@ -54,6 +54,7 @@ export default function StudentReportsPage() {
                 s.batch_year || 'N/A',
                 s.status || 'Active',
                 s.attendance?.total_classes || 0,
+                s.attendance?.planned_classes || 0,
                 s.attendance?.present || 0,
                 s.attendance?.absent || 0,
                 s.attendance?.late || 0,
@@ -174,6 +175,8 @@ export default function StudentReportsPage() {
                                             </td>
                                             <td className="px-4 py-4 text-center">
                                                 <span className="text-[15px] font-black text-slate-700">{s.attendance?.total_classes || 0}</span>
+                                                <span className="text-slate-300 mx-1">/</span>
+                                                <span className="text-[14px] font-bold text-slate-500">{s.attendance?.planned_classes || 0}</span>
                                             </td>
                                             <td className="px-4 py-4 text-center">
                                                 <span className="text-[15px] font-black text-emerald-600">{s.attendance?.present || 0}</span>

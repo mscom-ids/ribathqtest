@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { useRouter, useParams } from "next/navigation"
+import { useRouter, useParams, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Pencil, X, AlertCircle, CheckCircle2, User, BookOpen, FileText, Users, BookMarked, GraduationCap, Globe, Trophy, Heart, Lightbulb, Gift, Briefcase, LogOut } from "lucide-react"
 
 import { PhoneInput, validatePhone } from "@/components/ui/phone-input"
@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 
 // ── Constants ────────────────────────────────────────────────
 const INDIAN_STATES = [
@@ -126,6 +127,7 @@ const statusConfig: Record<string, { label: string; dot: string; badge: string }
 export default function StudentDetailPage() {
     const router = useRouter()
     const params = useParams()
+    const searchParams = useSearchParams()
     const id = params.id as string
 
     const [activeTab, setActiveTab] = useState("basic")
@@ -137,6 +139,8 @@ export default function StudentDetailPage() {
     const [error, setError] = useState<string | null>(null)
     const [saveSuccess, setSaveSuccess] = useState(false)
     const [hifzLogs, setHifzLogs] = useState<any[]>([])
+    const [hifzLogsLoaded, setHifzLogsLoaded] = useState(false)
+    const [hifzLogsLoading, setHifzLogsLoading] = useState(false)
     const [photoUploading, setPhotoUploading] = useState(false)
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
     const [pincodeLoading, setPincodeLoading] = useState(false)
@@ -169,6 +173,26 @@ export default function StudentDetailPage() {
     const watchedNationality = form.watch("nationality")
     const watchedState = form.watch("state")
     const isIndian = watchedNationality?.toLowerCase() === "indian" || watchedNationality?.toLowerCase() === "india"
+
+    const studentsReturnPath = useMemo(() => {
+        const returnTo = searchParams.get("returnTo")
+        if (returnTo?.startsWith("/admin/students") && !returnTo.startsWith("//")) return returnTo
+        if (typeof window === "undefined") return "/admin/students"
+        try {
+            const path = window.sessionStorage.getItem("admin:students:return-path")
+            return path?.startsWith("/admin/students") && !path.startsWith("//") ? path : "/admin/students"
+        } catch {
+            return "/admin/students"
+        }
+    }, [searchParams])
+
+    function backToStudentsList() {
+        router.push(studentsReturnPath)
+    }
+
+    useEffect(() => {
+        router.prefetch(studentsReturnPath)
+    }, [router, studentsReturnPath])
 
     // ── Pincode auto-fill (India Post API) ────────────────────
     async function handlePincodeChange(pincode: string) {
@@ -234,13 +258,13 @@ export default function StudentDetailPage() {
     useEffect(() => {
         async function loadData() {
             setFetching(true)
+            setError(null)
             try {
-                const staffRes = await api.get('/staff')
-                if (staffRes.data.success) setStaff(staffRes.data.staff)
-            } catch { console.error("Failed to load staff") }
-
-            try {
-                const res = await api.get(`/students/${id}`)
+                const [staffRes, res] = await Promise.all([
+                    cachedGet('/staff', undefined, 5 * 60_000).catch(() => null),
+                    api.get(`/students/${id}`),
+                ])
+                if (staffRes?.data?.success) setStaff(staffRes.data.staff)
                 if (res.data.success) {
                     const s = res.data.student
                     setStudentData(s)
@@ -281,15 +305,33 @@ export default function StudentDetailPage() {
                 return
             }
 
-            try {
-                const logsRes = await api.get('/hifz/logs', { params: { student_id: id } })
-                if (logsRes.data.success) setHifzLogs(logsRes.data.logs)
-            } catch { /* non-blocking */ }
-
             setFetching(false)
         }
         loadData()
     }, [id, form])
+
+    useEffect(() => {
+        if (activeTab !== "hifz" || hifzLogsLoaded || hifzLogsLoading) return
+
+        let cancelled = false
+        async function loadHifzLogs() {
+            setHifzLogsLoading(true)
+            try {
+                const logsRes = await api.get('/hifz/logs', { params: { student_id: id } })
+                if (!cancelled && logsRes.data.success) {
+                    setHifzLogs(logsRes.data.logs || [])
+                    setHifzLogsLoaded(true)
+                }
+            } catch {
+                if (!cancelled) setHifzLogsLoaded(true)
+            } finally {
+                if (!cancelled) setHifzLogsLoading(false)
+            }
+        }
+
+        loadHifzLogs()
+        return () => { cancelled = true }
+    }, [activeTab, hifzLogsLoaded, hifzLogsLoading, id])
 
     // ── Save ──────────────────────────────────────────────────
     async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -438,7 +480,7 @@ export default function StudentDetailPage() {
                 <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
                 <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-2">Unable to Load Student</h2>
                 <p className="text-sm text-slate-500 mb-6">{error}</p>
-                <Button onClick={() => router.push("/admin/students")} variant="outline">
+                <Button onClick={backToStudentsList} variant="outline">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Back to Students
                 </Button>
             </div>
@@ -462,7 +504,7 @@ export default function StudentDetailPage() {
                     <h1 className="text-xl font-bold text-slate-800 dark:text-white">Student Details</h1>
                     <p className="text-xs text-slate-400 mt-0.5">Dashboard / Students / Student Details</p>
                 </div>
-                <Button variant="outline" onClick={() => router.push("/admin/students")}
+                <Button variant="outline" onClick={backToStudentsList}
                     className="gap-2 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600">
                     <ArrowLeft className="h-4 w-4" /> Back to List
                 </Button>
@@ -1059,14 +1101,19 @@ export default function StudentDetailPage() {
                                         <CardTitle className="text-sm">Hifz Entry Log</CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-0">
-                                        {hifzLogs.length === 0 ? (
+                                        {hifzLogsLoading ? (
+                                            <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-400">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Loading records...
+                                            </div>
+                                        ) : hifzLogs.length === 0 ? (
                                             <div className="p-8 text-center text-sm text-slate-400">No records found.</div>
                                         ) : (
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-sm">
                                                     <thead className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
                                                         <tr>
-                                                            {['Date', 'Session', 'Mode', 'Task', 'Rating', 'Mentor'].map(h => (
+                                                            {['Date', 'Mode', 'Task', 'Rating', 'Mentor'].map(h => (
                                                                 <th key={h} className="p-3 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">{h}</th>
                                                             ))}
                                                         </tr>
@@ -1075,7 +1122,6 @@ export default function StudentDetailPage() {
                                                         {hifzLogs.map((log) => (
                                                             <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/20 transition-colors">
                                                                 <td className="p-3 text-slate-600 dark:text-slate-300 text-xs">{log.entry_date}</td>
-                                                                <td className="p-3 text-slate-600 dark:text-slate-300 text-xs">{log.session_type}</td>
                                                                 <td className="p-3">
                                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                                                                         log.mode === 'New Verses' ? 'bg-blue-100 text-blue-700' :

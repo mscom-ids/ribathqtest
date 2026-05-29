@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { format, isPast } from "date-fns"
 import {
     UserCheck, RefreshCw, Loader2, Search, Filter,
@@ -292,22 +293,26 @@ function RecordReturnDialog({
 export function OutsideStudentsPanel() {
     const [students, setStudents] = useState<OutsideStudent[]>([])
     const [loading, setLoading] = useState(true)
+    const hasLoadedRef = useRef(false)
     const [searchQuery, setSearchQuery] = useState('')
     const [filterType, setFilterType] = useState<string>('all')
     const [returnModal, setReturnModal] = useState<ReturnModalState>({
         open: false, leaveId: '', studentName: '', leaveType: ''
     })
 
-    const fetchOutside = useCallback(async () => {
-        setLoading(true)
+    const fetchOutside = useCallback(async (force = false) => {
+        if (!hasLoadedRef.current) setLoading(true)
         try {
-            const res = await api.get('/leaves/outside-students')
+            const res = force
+                ? await api.get('/leaves/outside-students')
+                : await cachedGet('/leaves/outside-students', undefined, 15_000)
             if (res.data.success) {
                 setStudents(res.data.students)
             }
-        } catch (err) {
-            console.error('Failed to fetch outside students:', err)
+        } catch {
+            console.warn('Failed to fetch outside students')
         } finally {
+            hasLoadedRef.current = true
             setLoading(false)
         }
     }, [])
@@ -390,7 +395,7 @@ export function OutsideStudentsPanel() {
                             <SelectItem value="on-campus">On-Campus</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="icon" onClick={fetchOutside} className="shrink-0 rounded-xl border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0f172a]">
+                    <Button variant="outline" size="icon" onClick={() => fetchOutside(true)} className="shrink-0 rounded-xl border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0f172a]">
                         <RefreshCw className="h-4 w-4" />
                     </Button>
                 </div>

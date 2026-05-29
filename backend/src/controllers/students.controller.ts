@@ -34,13 +34,19 @@ const formatJoinedAdmittedBatchYear = (student: any) => {
 
 export const getAllStudents = async (req: Request, res: Response) => {
   try {
-    const { search, class: className, status, light } = req.query;
+    const { search, class: className, status, light, sort } = req.query;
+    const rawLimit = Number(req.query.limit);
+    const rawOffset = Number(req.query.offset);
+    const shouldPaginate = Number.isFinite(rawLimit);
+    const limit = Math.min(Math.max(shouldPaginate ? rawLimit : 0, 1), 500);
+    const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
 
     // ?light=true skips the heavy comprehensive_details JSON column —
     // the listing pages don't need it and dropping it cuts payload size
     // and serialization time significantly when there are many students.
     const cols = light === 'true' ? LIGHT_STUDENT_COLS : FULL_STUDENT_COLS;
-    let query = `SELECT ${cols} FROM students WHERE 1=1`;
+    const whereParts: string[] = ['1=1'];
+    let query = `SELECT ${cols} FROM students WHERE `;
     const params: any[] = [];
     let paramCount = 1;
     const user = (req as any).user;
@@ -52,36 +58,60 @@ export const getAllStudents = async (req: Request, res: Response) => {
       if (!staffId) {
         return res.status(403).json({ success: false, error: 'Staff profile not found' });
       }
-      query += ` AND (hifz_mentor_id = $${paramCount} OR school_mentor_id = $${paramCount} OR madrasa_mentor_id = $${paramCount})`;
+      whereParts.push(`(hifz_mentor_id = $${paramCount} OR school_mentor_id = $${paramCount} OR madrasa_mentor_id = $${paramCount})`);
       params.push(staffId);
       paramCount++;
     }
 
     if (search) {
-      query += ` AND (name ILIKE $${paramCount} OR adm_no ILIKE $${paramCount})`;
+      whereParts.push(`(name ILIKE $${paramCount} OR adm_no ILIKE $${paramCount})`);
       params.push(`%${search}%`);
       paramCount++;
     }
 
     if (className && className !== 'all') {
-      query += ` AND standard = $${paramCount}`;
+      whereParts.push(`standard = $${paramCount}`);
       params.push(className);
       paramCount++;
     }
 
     if (status) {
       if (status === 'alumni') {
-         query += ` AND status IN ('completed', 'dropout', 'stopped', 'higher_education')`;
+         whereParts.push(`status IN ('completed', 'dropout', 'stopped', 'higher_education')`);
       } else if (status !== 'all') {
-         query += ` AND status = $${paramCount}`;
+         whereParts.push(`status = $${paramCount}`);
          params.push(status);
          paramCount++;
       }
     } else {
-      query += ` AND status = 'active'`;
+      whereParts.push(`status = 'active'`);
     }
 
-    query += ' ORDER BY name ASC';
+    query += whereParts.join(' AND ');
+    const sortColumns: Record<string, string> = {
+      name: 'name ASC, adm_no ASC',
+      adm_no: 'adm_no ASC',
+      standard: 'standard ASC NULLS LAST, name ASC',
+    };
+    const orderBy = sortColumns[String(sort || 'name')] || sortColumns.name;
+    query += ` ORDER BY ${orderBy}`;
+
+    if (shouldPaginate) {
+      const limitIdx = paramCount++;
+      const offsetIdx = paramCount++;
+      query += ` LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+      const pagedParams = [...params, limit, offset];
+      const countQuery = `SELECT COUNT(*)::integer as total FROM students WHERE ${whereParts.join(' AND ')}`;
+      const [result, countRes] = await Promise.all([
+        db.query(query, pagedParams),
+        db.query(countQuery, params),
+      ]);
+      return res.json({
+        success: true,
+        students: result.rows,
+        pagination: { limit, offset, total: countRes.rows[0]?.total || 0 },
+      });
+    }
 
     const result = await db.query(query, params);
     res.json({ success: true, students: result.rows });
@@ -97,7 +127,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
 export const getStudentCounts = async (_req: Request, _res: Response) => {
   try {
     const counts = await cachedResult('students:counts', 60_000, async () => {
-      const [statusRes, outsideRes] = await Promise.all([
+      const [statusRes, presenceRes] = await Promise.all([
         db.query(
           `SELECT
               COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active,
@@ -107,10 +137,20 @@ export const getStudentCounts = async (_req: Request, _res: Response) => {
             FROM students`
         ),
         db.query(
-          `SELECT COUNT(DISTINCT student_id) AS out_campus
-           FROM student_leaves
-           WHERE status = 'outside'`
-        ),
+          `SELECT
+              COUNT(*) FILTER (WHERE status = 'outside') AS out_campus,
+              COUNT(*) FILTER (WHERE status = 'on-campus') AS on_campus_leave
+           FROM student_current_presence`
+        ).catch((err: any) => {
+          if (err?.code !== '42P01') throw err;
+          return db.query(
+            `SELECT
+                COUNT(DISTINCT student_id) AS out_campus,
+                0::integer AS on_campus_leave
+             FROM student_leaves
+             WHERE status = 'outside'`
+          );
+        }),
       ]);
 
       const r = statusRes.rows[0];
@@ -118,7 +158,7 @@ export const getStudentCounts = async (_req: Request, _res: Response) => {
       const completed = parseInt(r.completed, 10) || 0;
       const dropout = parseInt(r.dropout, 10) || 0;
       const total = parseInt(r.total, 10) || 0;
-      const outCampus = parseInt(outsideRes.rows[0].out_campus, 10) || 0;
+      const outCampus = parseInt(presenceRes.rows[0].out_campus, 10) || 0;
       const onCampus = Math.max(0, active - outCampus);
 
       return {
@@ -254,6 +294,8 @@ export const createStudent = async (req: Request, res: Response) => {
     const result = await db.query(query, values);
     
     invalidateCacheByPrefix('students:');
+    invalidateCacheByPrefix('hifz:');
+    invalidateCacheByPrefix('finance:active-students');
     invalidateCacheByPrefix('attendance:');
     res.status(201).json({ success: true, student: result.rows[0] });
   } catch (err) {
@@ -326,6 +368,8 @@ export const updateStudent = async (req: Request, res: Response) => {
     }
 
     invalidateCacheByPrefix('students:');
+    invalidateCacheByPrefix('hifz:');
+    invalidateCacheByPrefix('finance:active-students');
     invalidateCacheByPrefix('attendance:');
     res.json({ success: true, student: result.rows[0] });
   } catch (err: any) {

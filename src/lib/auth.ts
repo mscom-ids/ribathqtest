@@ -15,9 +15,10 @@ export async function getUserRole() {
 export const getRedirectPathForRole = (role: string) => {
     switch (role) {
         case 'admin':
+            return '/admin'
         case 'principal':
         case 'vice_principal':
-            return '/admin'
+            return '/principal'
         case 'controller':
             return '/admin'
         case 'staff':

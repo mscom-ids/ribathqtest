@@ -111,32 +111,35 @@ const getHifzStudents = async (req, res) => {
         // Replaced 2 correlated subqueries (re-running once per student row)
         // with LATERAL JOINs. PG can use the new (student_id, mode, entry_date)
         // index to fetch the latest matching log per student in one pass.
-        const result = await db_1.db.query(`SELECT
-                s.adm_no,
-                s.name,
-                s.standard,
-                s.hifz_standard,
-                nv.surah_name AS current_surah,
-                jr.juz_number AS current_juz,
-                st.name      AS usthad_name,
-                st.phone     AS usthad_phone
-             FROM students s
-             LEFT JOIN staff st ON s.hifz_mentor_id = st.id
-             LEFT JOIN LATERAL (
-                 SELECT surah_name FROM hifz_logs
-                 WHERE student_id = s.adm_no AND mode = 'New Verses'
-                 ORDER BY entry_date DESC
-                 LIMIT 1
-             ) nv ON TRUE
-             LEFT JOIN LATERAL (
-                 SELECT juz_number FROM hifz_logs
-                 WHERE student_id = s.adm_no AND mode = 'Juz Revision'
-                 ORDER BY entry_date DESC
-                 LIMIT 1
-             ) jr ON TRUE
-             WHERE s.status = $1
-             ORDER BY s.name`, ['active']);
-        res.json({ success: true, students: result.rows });
+        const students = await (0, server_cache_1.cachedResult)('hifz:students', 5 * 60000, async () => {
+            const result = await db_1.db.query(`SELECT
+                        s.adm_no,
+                        s.name,
+                        s.standard,
+                        s.hifz_standard,
+                        nv.surah_name AS current_surah,
+                        jr.juz_number AS current_juz,
+                        st.name      AS usthad_name,
+                        st.phone     AS usthad_phone
+                     FROM students s
+                     LEFT JOIN staff st ON s.hifz_mentor_id = st.id
+                     LEFT JOIN LATERAL (
+                         SELECT surah_name FROM hifz_logs
+                         WHERE student_id = s.adm_no AND mode = 'New Verses'
+                         ORDER BY entry_date DESC
+                         LIMIT 1
+                     ) nv ON TRUE
+                     LEFT JOIN LATERAL (
+                         SELECT juz_number FROM hifz_logs
+                         WHERE student_id = s.adm_no AND mode = 'Juz Revision'
+                         ORDER BY entry_date DESC
+                         LIMIT 1
+                     ) jr ON TRUE
+                     WHERE s.status = $1
+                     ORDER BY s.name`, ['active']);
+            return result.rows;
+        });
+        res.json({ success: true, students });
     }
     catch (err) {
         console.error('Error fetching hifz students:', err);
@@ -146,7 +149,7 @@ const getHifzStudents = async (req, res) => {
 exports.getHifzStudents = getHifzStudents;
 const getHifzLogsList = async (req, res) => {
     try {
-        const { date, session_type, start_date, end_date, student_id, mode, limit } = req.query;
+        const { date, start_date, end_date, student_id, mode, limit } = req.query;
         let query = `
             SELECT hl.*, st.name as recorded_by_name 
             FROM hifz_logs hl
@@ -164,11 +167,6 @@ const getHifzLogsList = async (req, res) => {
             query += ` AND entry_date >= $${paramCount} AND entry_date <= $${paramCount + 1}`;
             params.push(start_date, end_date);
             paramCount += 2;
-        }
-        if (session_type && session_type !== 'all') {
-            query += ` AND session_type = $${paramCount}`;
-            params.push(session_type);
-            paramCount++;
         }
         if (student_id) {
             query += ` AND student_id = $${paramCount}`;
@@ -222,14 +220,15 @@ const getMaxJuzForStudent = async (req, res) => {
 exports.getMaxJuzForStudent = getMaxJuzForStudent;
 const createHifzLog = async (req, res) => {
     try {
-        const { student_id, usthad_id, entry_date, session_type, mode, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
+        const { student_id, usthad_id, entry_date, mode, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
         await enforceHifzRecordingAccess(req, entry_date);
-        const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
+        const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [student_id, usthad_id || null, entry_date, session_type, mode,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [student_id, usthad_id || null, entry_date, mode,
             surah_name || null, start_v || null, end_v || null, start_page || null,
             end_page || null, juz_number || null, juz_portion || null]);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true, log: result.rows[0] });
     }
     catch (err) {
@@ -245,18 +244,19 @@ exports.createHifzLog = createHifzLog;
 const updateHifzLog = async (req, res) => {
     try {
         const { id } = req.params;
-        const { student_id, usthad_id, entry_date, session_type, mode, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
+        const { student_id, usthad_id, entry_date, mode, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
         if (entry_date) {
             await enforceHifzRecordingAccess(req, entry_date);
         }
-        const result = await db_1.db.query(`UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, session_type=$4, mode=$5,
-             surah_name=$6, start_v=$7, end_v=$8, start_page=$9, end_page=$10,
-             juz_number=$11, juz_portion=$12 WHERE id=$13 RETURNING *`, [student_id, usthad_id || null, entry_date, session_type, mode,
+        const result = await db_1.db.query(`UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, mode=$4,
+             surah_name=$5, start_v=$6, end_v=$7, start_page=$8, end_page=$9,
+             juz_number=$10, juz_portion=$11 WHERE id=$12 RETURNING *`, [student_id, usthad_id || null, entry_date, mode,
             surah_name || null, start_v || null, end_v || null, start_page || null,
             end_page || null, juz_number || null, juz_portion || null, id]);
         if (result.rows.length === 0)
             return res.status(404).json({ success: false, error: 'Not found' });
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true, log: result.rows[0] });
     }
     catch (err) {
@@ -285,14 +285,14 @@ const bulkCreateHifzLogs = async (req, res) => {
         // with any candidate, in a SINGLE query. Replaces the per-row SELECT
         // dedup that ran inside the original loop.
         const dedupCandidates = logs.filter((l) => ['New Verses', 'Recent Revision'].includes(l.mode) && l.surah_name && l.start_v && l.end_v);
-        const dupKey = (l) => `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.session_type}|${l.mode}|${l.surah_name}|${l.start_v}|${l.end_v}`;
+        const dupKey = (l) => `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.mode}|${l.surah_name}|${l.start_v}|${l.end_v}`;
         const existingKeys = new Set();
         if (dedupCandidates.length > 0) {
             const studentIds = [...new Set(dedupCandidates.map((l) => l.student_id))];
             const dates = [...new Set(dedupCandidates.map((l) => String(l.entry_date).slice(0, 10)))];
             const existing = await db_1.db.query(`SELECT student_id,
                         to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
-                        session_type, mode, surah_name, start_v, end_v
+                        mode, surah_name, start_v, end_v
                  FROM hifz_logs
                  WHERE mode = ANY($3::text[])
                    AND student_id = ANY($1::text[])
@@ -314,15 +314,16 @@ const bulkCreateHifzLogs = async (req, res) => {
         const values = [];
         let i = 1;
         for (const log of toInsert) {
-            placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
-            values.push(log.student_id, log.usthad_id || null, log.entry_date, log.session_type, log.mode, log.surah_name || null, log.start_v || null, log.end_v || null, log.start_page || null, log.end_page || null, log.juz_number || null, log.juz_portion || null);
+            placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+            values.push(log.student_id, log.usthad_id || null, log.entry_date, log.mode, log.surah_name || null, log.start_v || null, log.end_v || null, log.start_page || null, log.end_page || null, log.juz_number || null, log.juz_portion || null);
         }
-        const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, session_type, mode,
+        const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
                                     surah_name, start_v, end_v, start_page, end_page,
                                     juz_number, juz_portion)
              VALUES ${placeholders.join(',')}
              RETURNING *`, values);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true, logs: result.rows });
     }
     catch (err) {
@@ -344,6 +345,7 @@ const deleteHifzLog = async (req, res) => {
         }
         await db_1.db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true });
     }
     catch (err) {

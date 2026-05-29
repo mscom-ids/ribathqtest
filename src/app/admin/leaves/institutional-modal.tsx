@@ -56,8 +56,8 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                         // filter out those currently outside
                         setAllStudents(res.data.students.filter((s: EligibleStudent) => !s.is_outside))
                     }
-                } catch (e) {
-                    console.error(e)
+                } catch {
+                    console.warn("Failed to load eligible students")
                 }
             }
             fetchStudents()

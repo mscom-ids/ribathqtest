@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { OutCampusModal } from "../out-campus-modal"
 import { RecordReturnModal } from "../record-return-modal"
 
@@ -26,15 +27,17 @@ export function OutCampusLeavesTab() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [leaveForRecord, setLeaveForRecord] = useState<{ id: string, type: 'personal' | 'group' } | null>(null)
 
-    const fetchLeaves = async () => {
+    const fetchLeaves = async (force = false) => {
         setLoading(true)
         try {
-            const res = await api.get('/leaves/personal?type=out-campus')
+            const res = force
+                ? await api.get('/leaves/personal?type=out-campus')
+                : await cachedGet('/leaves/personal', { type: 'out-campus' }, 15_000)
             if (res.data.success) {
                 setLeaves(res.data.leaves)
             }
-        } catch (error) {
-            console.error(error)
+        } catch {
+            console.warn("Failed to load out-campus leaves")
         } finally {
             setLoading(false)
         }
@@ -231,13 +234,13 @@ export function OutCampusLeavesTab() {
                 )}
             </Card>
 
-            <OutCampusModal open={isModalOpen} onOpenChange={setIsModalOpen} onSuccess={fetchLeaves} />
+            <OutCampusModal open={isModalOpen} onOpenChange={setIsModalOpen} onSuccess={() => fetchLeaves(true)} />
 
             {leaveForRecord && (
                 <RecordReturnModal
                     leaveId={leaveForRecord.id} type={leaveForRecord.type}
                     open={!!leaveForRecord} onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
-                    onSuccess={fetchLeaves}
+                    onSuccess={() => fetchLeaves(true)}
                 />
             )}
         </div>

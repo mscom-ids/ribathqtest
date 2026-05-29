@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 // We decode the JWT payload (base64) to read the role, but actual
 // cryptographic verification happens in the Express backend.
 
-const ADMIN_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const ADMIN_ROLES = ['admin', 'controller'];
+const PRINCIPAL_ROLES = ['principal', 'vice_principal'];
 const STAFF_ROLES = ['staff', 'usthad', 'mentor'];
 
 function decodeTokenRole(tokenValue: string): string | null {
@@ -20,6 +21,7 @@ function decodeTokenRole(tokenValue: string): string | null {
 
 function getPortalForRole(role: string): string {
   if (ADMIN_ROLES.includes(role)) return '/admin';
+  if (PRINCIPAL_ROLES.includes(role)) return '/principal';
   if (STAFF_ROLES.includes(role)) return '/staff';
   if (role === 'parent') return '/parent';
   return '/staff'; // safe default
@@ -41,6 +43,7 @@ export function middleware(request: NextRequest) {
   // ── Protected routes: /admin, /staff, /parent ──
   const isProtected =
     currentPath.startsWith('/admin') ||
+    currentPath.startsWith('/principal') ||
     currentPath.startsWith('/staff') ||
     currentPath.startsWith('/parent');
 
@@ -58,7 +61,10 @@ export function middleware(request: NextRequest) {
     // Wrong portal — redirect to their correct portal, NOT to login
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
-  if (currentPath.startsWith('/staff') && !STAFF_ROLES.includes(role) && !ADMIN_ROLES.includes(role)) {
+  if (currentPath.startsWith('/principal') && !PRINCIPAL_ROLES.includes(role)) {
+    return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
+  }
+  if (currentPath.startsWith('/staff') && !STAFF_ROLES.includes(role) && !ADMIN_ROLES.includes(role) && !PRINCIPAL_ROLES.includes(role)) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
   if (currentPath.startsWith('/parent') && role !== 'parent') {

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
-import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
+import { cachedResult, getCached, invalidateCacheByPrefix, makeCacheKey, setCached } from '../utils/server-cache';
 import { getMentorAccessDecision } from '../utils/mentor-access-policy';
 
 // All roles treated as a mentor (filtered access)
@@ -166,6 +166,24 @@ function countStudentsForSchedule(
 export const getSchedules = async (req: Request, res: Response) => {
     try {
         const { academic_year_id, show_inactive } = req.query;
+        const user = (req as any).user;
+        const isMentor = MENTOR_ROLES.includes(user?.role);
+        const mentorId = isMentor ? await getStaffId(req) : null;
+        if (isMentor && !mentorId) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const cacheKey = makeCacheKey('attendance:schedules', {
+            academic_year_id: academic_year_id || '',
+            show_inactive: show_inactive === 'true' ? 'true' : 'false',
+            role: user?.role || '',
+            staff: mentorId || 'all',
+        });
+        const cached = getCached<any[]>(cacheKey);
+        if (cached) {
+            return res.json({ success: true, data: cached });
+        }
+
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
                      FROM attendance_schedules a
                      LEFT JOIN staff s ON a.mentor_id = s.id`;
@@ -191,17 +209,11 @@ export const getSchedules = async (req: Request, res: Response) => {
 
         const result = await db.query(query, params);
         const schedules = result.rows;
-        const user = (req as any).user;
 
-        if (MENTOR_ROLES.includes(user?.role)) {
-            const mentorId = await getStaffId(req);
-            if (!mentorId) {
-                return res.json({ success: true, data: [] });
-            }
-
+        if (isMentor) {
             // ONE query for all mentor↔standard counts, then in-memory lookup
             // per schedule. Replaces the previous N+1 COUNT(*) loop.
-            const counts = await getMentorStudentCounts(mentorId);
+            const counts = await getMentorStudentCounts(mentorId!);
 
             const filteredSchedules = schedules
                 .map(schedule => ({
@@ -210,6 +222,7 @@ export const getSchedules = async (req: Request, res: Response) => {
                 }))
                 .filter(s => s.student_count > 0);
 
+            setCached(cacheKey, filteredSchedules, 5 * 60_000);
             return res.json({ success: true, data: filteredSchedules });
         }
 
@@ -249,6 +262,7 @@ export const getSchedules = async (req: Request, res: Response) => {
             };
         });
 
+        setCached(cacheKey, schedulesWithMentors, 5 * 60_000);
         res.json({ success: true, data: schedulesWithMentors });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -415,6 +429,17 @@ export const getDashboardData = async (req: Request, res: Response) => {
 
         const user = (req as any).user;
         const mentorId = MENTOR_ROLES.includes(user?.role) ? await getStaffId(req) : null;
+        const dashboardCacheKey = makeCacheKey('attendance:dashboard', {
+            start_date,
+            end_date,
+            role: user?.role || '',
+            staff: MENTOR_ROLES.includes(user?.role) ? (mentorId || user.id || '') : 'all',
+        });
+        const cachedDashboard = getCached<{ cancellations: any[]; marks: any[] }>(dashboardCacheKey);
+        if (cachedDashboard) {
+            return res.json({ success: true, ...cachedDashboard });
+        }
+
         const cancels = await db.query(
             'SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2',
             [start_date, end_date]
@@ -435,10 +460,15 @@ export const getDashboardData = async (req: Request, res: Response) => {
             );
         }
 
-        res.json({
-            success: true,
+        const dashboardPayload = {
             cancellations: cancels.rows,
             marks: marksQuery.rows
+        };
+        setCached(dashboardCacheKey, dashboardPayload, 30_000);
+
+        res.json({
+            success: true,
+            ...dashboardPayload
         });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -857,6 +887,8 @@ export const markAttendance = async (req: Request, res: Response) => {
 
             await client.query('COMMIT');
             invalidateCacheByPrefix('attendance:');
+            invalidateCacheByPrefix('reports:mentors');
+            invalidateCacheByPrefix('reports:students');
             res.json({ success: true, data: result.rows[0] });
         } catch (txErr) {
             await client.query('ROLLBACK');
@@ -912,6 +944,8 @@ export const cancelSession = async (req: Request, res: Response) => {
 
         invalidateCacheByPrefix('attendance:');
         invalidateCacheByPrefix('hifz:monthly');
+        invalidateCacheByPrefix('reports:mentors');
+        invalidateCacheByPrefix('reports:students');
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -935,6 +969,8 @@ export const restoreSession = async (req: Request, res: Response) => {
 
         invalidateCacheByPrefix('attendance:');
         invalidateCacheByPrefix('hifz:monthly');
+        invalidateCacheByPrefix('reports:mentors');
+        invalidateCacheByPrefix('reports:students');
         res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });

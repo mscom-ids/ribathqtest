@@ -8,7 +8,7 @@ import {
     LayoutDashboard, Users, Calendar, UserCog,
     Settings, HelpCircle, LogOut, DoorOpen, BookOpen,
     Landmark, BookMarked, School, GraduationCap,
-    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck
+    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText
 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -81,11 +81,74 @@ const academicLinks: NavEntry[] = [
 const managementLinks: NavEntry[] = [
     { href: "/admin/finance/dashboard", label: "Finance", icon: Landmark, group: ["/admin/finance"] },
     { href: "/admin/leaves",            label: "Leaves",  icon: DoorOpen },
+    {
+        label: "Report", icon: FileText, group: ["/admin/reports"],
+        children: [
+            { href: "/admin/reports/students", label: "Students" },
+            { href: "/admin/reports/mentors",  label: "Mentors" },
+        ],
+    },
 ]
 
 const generalLinks: SimpleItem[] = [
     { href: "/admin/setup/academic-years", label: "Settings", icon: Settings },
     { href: "#help",                       label: "Help",     icon: HelpCircle },
+]
+
+const principalMenuLinks: NavEntry[] = [
+    { href: "/admin",          label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/students", label: "Students",  icon: Users, group: ["/admin/students"] },
+    { href: "/admin/calendar", label: "Calendar",  icon: Calendar },
+    {
+        label: "Time Table", icon: BookMarked, group: ["/admin/timetable"],
+        children: [
+            { href: "/admin/timetable/view", label: "Time Table View" },
+        ],
+    },
+    { href: "/admin/student-attendance", label: "Attendance Dashboard", icon: ClipboardCheck, group: ["/admin/student-attendance"] },
+    { href: "/admin/staff", label: "Mentors", icon: UserCog },
+    { href: "/admin/chat", label: "Chat", icon: MessageCircle },
+]
+
+const principalAcademicLinks: NavEntry[] = [
+    {
+        label: "Madrasa", icon: BookMarked, group: ["/admin/madrassa"],
+        children: [
+            { href: "/admin/madrassa/attendance", label: "Attendance" },
+            { href: "/admin/madrassa/exams", label: "Exam Results" },
+        ],
+    },
+    {
+        label: "School", icon: School, group: ["/admin/school"],
+        children: [
+            { href: "/admin/school/attendance", label: "Attendance" },
+            { href: "/admin/school/exams", label: "Exam Results" },
+        ],
+    },
+    {
+        label: "Hifz", icon: BookOpen, group: ["/admin/hifz"],
+        children: [
+            { href: "/admin/hifz/attendance", label: "Attendance" },
+            { href: "/admin/hifz/tracking", label: "Hifz Recording" },
+            { href: "/admin/hifz/monthly-report", label: "Monthly Report" },
+            { href: "/admin/hifz/exams", label: "Exam Results" },
+        ],
+    },
+]
+
+const principalManagementLinks: NavEntry[] = [
+    { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    {
+        label: "Reports", icon: FileText, group: ["/admin/reports"],
+        children: [
+            { href: "/admin/reports/students", label: "Student Reports" },
+            { href: "/admin/reports/mentors", label: "Mentor Reports" },
+        ],
+    },
+]
+
+const principalGeneralLinks: SimpleItem[] = [
+    { href: "#help", label: "Help", icon: HelpCircle },
 ]
 
 function isItemActive(item: NavEntry, pathname: string): boolean {
@@ -114,6 +177,11 @@ export function AdminSidebar({
     const router   = useRouter()
     const [user, setUser]       = useState({ name: 'Admin User', role: 'Administrator' })
     const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+    const isPrincipalPortal = user.role === 'Principal' || user.role === 'Vice Principal'
+    const visibleMenuLinks = isPrincipalPortal ? principalMenuLinks : menuLinks
+    const visibleAcademicLinks = isPrincipalPortal ? principalAcademicLinks : academicLinks
+    const visibleManagementLinks = isPrincipalPortal ? principalManagementLinks : managementLinks
+    const visibleGeneralLinks = isPrincipalPortal ? principalGeneralLinks : generalLinks
 
     useEffect(() => {
         const token = localStorage.getItem('auth_token')
@@ -123,11 +191,11 @@ export function AdminSidebar({
     // Auto-expand active sections
     useEffect(() => {
         const open: Record<string, boolean> = {}
-        ;[...menuLinks, ...academicLinks, ...managementLinks].forEach(item => {
+        ;[...visibleMenuLinks, ...visibleAcademicLinks, ...visibleManagementLinks].forEach(item => {
             if (item.children && isItemActive(item, pathname)) open[item.label] = true
         })
         setExpanded(prev => ({ ...prev, ...open }))
-    }, [pathname])
+    }, [pathname, visibleMenuLinks, visibleAcademicLinks, visibleManagementLinks])
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch {}
@@ -308,7 +376,9 @@ export function AdminSidebar({
                         {!isCollapsed && (
                             <div className="flex-1 min-w-0 animate-in fade-in duration-300">
                                 <p className="text-[15px] font-bold text-slate-800 dark:text-slate-100 truncate tracking-tight">Ribathul Quran</p>
-                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">Admin Portal</p>
+                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                                    {isPrincipalPortal ? "Principal Portal" : "Admin Portal"}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -320,28 +390,28 @@ export function AdminSidebar({
 
                     <SectionLabel label="Main" />
                     <div className="space-y-0.5 mt-1">
-                        {menuLinks.map(item => (
+                        {visibleMenuLinks.map(item => (
                             <NavItem key={'href' in item ? item.href : item.label} item={item} />
                         ))}
                     </div>
 
                     <SectionLabel label="Academics" />
                     <div className="space-y-0.5 mt-1">
-                        {academicLinks.map(item => (
+                        {visibleAcademicLinks.map(item => (
                             <NavItem key={item.label} item={item} />
                         ))}
                     </div>
 
                     <SectionLabel label="Management" />
                     <div className="space-y-0.5 mt-1">
-                        {managementLinks.map(item => (
+                        {visibleManagementLinks.map(item => (
                             <NavItem key={'href' in item ? item.href : item.label} item={item} />
                         ))}
                     </div>
 
                     <SectionLabel label="Settings" />
                     <div className="space-y-0.5 mt-1">
-                        {generalLinks.map(item => <NavItem key={item.href} item={item} />)}
+                        {visibleGeneralLinks.map(item => <NavItem key={item.href} item={item} />)}
 
                         {/* Logout */}
                         <button

@@ -153,6 +153,22 @@ function countStudentsForSchedule(schedule, counts) {
 const getSchedules = async (req, res) => {
     try {
         const { academic_year_id, show_inactive } = req.query;
+        const user = req.user;
+        const isMentor = MENTOR_ROLES.includes(user?.role);
+        const mentorId = isMentor ? await (0, staff_utils_1.getStaffId)(req) : null;
+        if (isMentor && !mentorId) {
+            return res.json({ success: true, data: [] });
+        }
+        const cacheKey = (0, server_cache_1.makeCacheKey)('attendance:schedules', {
+            academic_year_id: academic_year_id || '',
+            show_inactive: show_inactive === 'true' ? 'true' : 'false',
+            role: user?.role || '',
+            staff: mentorId || 'all',
+        });
+        const cached = (0, server_cache_1.getCached)(cacheKey);
+        if (cached) {
+            return res.json({ success: true, data: cached });
+        }
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
                      FROM attendance_schedules a
                      LEFT JOIN staff s ON a.mentor_id = s.id`;
@@ -174,12 +190,7 @@ const getSchedules = async (req, res) => {
         query += ` ORDER BY day_of_week, start_time`;
         const result = await db_1.db.query(query, params);
         const schedules = result.rows;
-        const user = req.user;
-        if (MENTOR_ROLES.includes(user?.role)) {
-            const mentorId = await (0, staff_utils_1.getStaffId)(req);
-            if (!mentorId) {
-                return res.json({ success: true, data: [] });
-            }
+        if (isMentor) {
             // ONE query for all mentor↔standard counts, then in-memory lookup
             // per schedule. Replaces the previous N+1 COUNT(*) loop.
             const counts = await getMentorStudentCounts(mentorId);
@@ -189,6 +200,7 @@ const getSchedules = async (req, res) => {
                 student_count: countStudentsForSchedule(schedule, counts),
             }))
                 .filter(s => s.student_count > 0);
+            (0, server_cache_1.setCached)(cacheKey, filteredSchedules, 5 * 60000);
             return res.json({ success: true, data: filteredSchedules });
         }
         // For Admins/Principals, attach expected mentors to each schedule
@@ -222,6 +234,7 @@ const getSchedules = async (req, res) => {
                 }))
             };
         });
+        (0, server_cache_1.setCached)(cacheKey, schedulesWithMentors, 5 * 60000);
         res.json({ success: true, data: schedulesWithMentors });
     }
     catch (err) {
@@ -364,6 +377,16 @@ const getDashboardData = async (req, res) => {
             return res.status(400).json({ success: false, error: "Dates required" });
         const user = req.user;
         const mentorId = MENTOR_ROLES.includes(user?.role) ? await (0, staff_utils_1.getStaffId)(req) : null;
+        const dashboardCacheKey = (0, server_cache_1.makeCacheKey)('attendance:dashboard', {
+            start_date,
+            end_date,
+            role: user?.role || '',
+            staff: MENTOR_ROLES.includes(user?.role) ? (mentorId || user.id || '') : 'all',
+        });
+        const cachedDashboard = (0, server_cache_1.getCached)(dashboardCacheKey);
+        if (cachedDashboard) {
+            return res.json({ success: true, ...cachedDashboard });
+        }
         const cancels = await db_1.db.query('SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2', [start_date, end_date]);
         let marksQuery;
         if (MENTOR_ROLES.includes(user?.role)) {
@@ -374,10 +397,14 @@ const getDashboardData = async (req, res) => {
             // Admin/Principal: see all marks (session shown as completed if anyone marked it)
             marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2', [start_date, end_date]);
         }
-        res.json({
-            success: true,
+        const dashboardPayload = {
             cancellations: cancels.rows,
             marks: marksQuery.rows
+        };
+        (0, server_cache_1.setCached)(dashboardCacheKey, dashboardPayload, 30000);
+        res.json({
+            success: true,
+            ...dashboardPayload
         });
     }
     catch (err) {
@@ -725,6 +752,8 @@ const markAttendance = async (req, res) => {
                  ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`, [schedule_id, date, effectiveMarkedBy]);
             await client.query('COMMIT');
             (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+            (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
+            (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
             res.json({ success: true, data: result.rows[0] });
         }
         catch (txErr) {
@@ -772,6 +801,8 @@ const cancelSession = async (req, res) => {
              RETURNING *`, [schedule_id, date, reason, userId, cancelledStandards]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (err) {
@@ -790,6 +821,8 @@ const restoreSession = async (req, res) => {
              WHERE schedule_id = $1 AND date = $2`, [schedule_id, date]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true });
     }
     catch (err) {

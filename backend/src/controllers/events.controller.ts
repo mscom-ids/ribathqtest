@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { cachedResult, invalidateCacheByPrefix } from '../utils/server-cache';
 
 export const getEvents = async (req: Request, res: Response) => {
     try {
@@ -7,8 +8,11 @@ export const getEvents = async (req: Request, res: Response) => {
             SELECT * FROM events 
             ORDER BY start_date ASC, start_time ASC
         `;
-        const result = await db.query(query);
-        res.status(200).json({ success: true, events: result.rows });
+        const events = await cachedResult('events:list', 60_000, async () => {
+            const result = await db.query(query);
+            return result.rows;
+        });
+        res.status(200).json({ success: true, events });
     } catch (e: any) {
         console.error("Error fetching events:", e);
         res.status(500).json({ success: false, error: e.message || "Failed to fetch events" });
@@ -33,6 +37,7 @@ export const createEvent = async (req: Request, res: Response) => {
         const params = [title, category, event_for, rolesJson, start_date, end_date, start_time, end_time, message];
 
         const result = await db.query(query, params);
+        invalidateCacheByPrefix('events:');
         res.status(201).json({ success: true, event: result.rows[0] });
     } catch (e: any) {
         console.error("Error creating event:", e);
@@ -61,6 +66,7 @@ export const updateEvent = async (req: Request, res: Response) => {
 
         const result = await db.query(query, params);
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Event not found" });
+        invalidateCacheByPrefix('events:');
 
         res.status(200).json({ success: true, event: result.rows[0] });
     } catch (e: any) {
@@ -78,6 +84,7 @@ export const deleteEvent = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: "Event not found" });
         }
 
+        invalidateCacheByPrefix('events:');
         res.status(200).json({ success: true, message: "Event deleted successfully" });
     } catch (e: any) {
         console.error("Error deleting event:", e);

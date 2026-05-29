@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { resolveBackendUrl } from "@/lib/utils"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -36,8 +37,8 @@ type StaffMember = { id: string; name: string; photo_url: string | null; role: s
 // Conversation-LIST polling (sidebar) backs off to 15s — new conversations
 // rarely appear that often, and the list was causing constant /chat/conversations
 // noise even when the user wasn't looking at chat at all.
-const POLL_INTERVAL = 3000
-const LIST_POLL_INTERVAL = 15000
+const POLL_INTERVAL = 5000
+const LIST_POLL_INTERVAL = 30000
 
 const EMOJI_LIST = ['😀','😂','❤️','👍','🔥','🙏','😊','🎉','💯','✅','👏','😍','🤔','😢','🤣','😎','💪','⭐','🌟','💡','📌','✨','🥇','📚','🎓']
 
@@ -96,6 +97,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
 
     // ── Fetch conversations ──────────────────────────────────────────────────
     const fetchConversations = useCallback(async () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
         try {
             const res = await api.get('/chat/conversations')
             if (res.data.success) setConversations(res.data.conversations)
@@ -129,6 +131,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
     useEffect(() => {
         if (!activeConv) return
         const interval = setInterval(async () => {
+            if (document.visibilityState === 'hidden') return
             try {
                 const since = lastMessageTimeRef.current || ''
                 const res = await api.get(`/chat/poll/${activeConv.id}`, { params: { since } })
@@ -211,10 +214,10 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
             const res = await api.post('/chat/conversations/private', { otherStaffId })
             if (res.data.success) {
                 setShowNewChat(false)
-                await fetchConversations()
-                // Find and activate the conversation
                 const convRes = await api.get('/chat/conversations')
-                const conv = convRes.data.conversations.find((c: Conversation) => c.id === res.data.conversationId)
+                const nextConversations = convRes.data.conversations || []
+                setConversations(nextConversations)
+                const conv = nextConversations.find((c: Conversation) => c.id === res.data.conversationId)
                 if (conv) { setActiveConv(conv); setShowMobileChat(true) }
             }
         } catch (e) { console.error(e) }
@@ -231,9 +234,10 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
                 setShowNewGroup(false)
                 setGroupName("")
                 setSelectedMembers([])
-                await fetchConversations()
                 const convRes = await api.get('/chat/conversations')
-                const conv = convRes.data.conversations.find((c: Conversation) => c.id === res.data.conversationId)
+                const nextConversations = convRes.data.conversations || []
+                setConversations(nextConversations)
+                const conv = nextConversations.find((c: Conversation) => c.id === res.data.conversationId)
                 if (conv) { setActiveConv(conv); setShowMobileChat(true) }
             }
         } catch (e) { console.error(e) }
@@ -263,7 +267,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
     const openNewChat = async () => {
         setShowNewChat(true)
         try {
-            const res = await api.get('/chat/staff-list')
+            const res = await cachedGet('/chat/staff-list', undefined, 60_000)
             if (res.data.success) setStaffList(res.data.staff)
         } catch (e) { console.error(e) }
     }
@@ -272,7 +276,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
         setSelectedMembers([])
         setGroupName("")
         try {
-            const res = await api.get('/chat/staff-list')
+            const res = await cachedGet('/chat/staff-list', undefined, 60_000)
             if (res.data.success) setStaffList(res.data.staff)
         } catch (e) { console.error(e) }
     }
@@ -282,7 +286,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
         if (!activeConv || activeConv.type !== 'group') return
         setShowGroupInfo(true)
         try {
-            const res = await api.get(`/chat/conversations/${activeConv.id}/members`)
+            const res = await cachedGet(`/chat/conversations/${activeConv.id}/members`, undefined, 30_000)
             if (res.data.success) setGroupMembers(res.data.members)
         } catch (e) { console.error(e) }
     }

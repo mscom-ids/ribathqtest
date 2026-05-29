@@ -2,6 +2,7 @@
 
 import { AdminSidebar } from "@/components/admin/sidebar"
 import { TopNav } from "@/components/admin/top-nav"
+import { AdminBackgroundWarmup } from "@/components/admin/admin-background-warmup"
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -20,6 +21,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     return (
         <div className="min-h-screen bg-[#f5f8f5] dark:bg-[#111520] transition-colors relative">
+            <AdminBackgroundWarmup />
             <AdminSidebar 
                 mobileOpen={sidebarOpen} 
                 onClose={() => setSidebarOpen(false)} 

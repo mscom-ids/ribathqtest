@@ -1,195 +1,403 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Download, Search, Loader2, ArrowLeft, UserCog, Calendar, CheckCircle, XCircle } from "lucide-react"
-import api from "@/lib/api"
-import { useToast } from "@/hooks/use-toast"
+import { useEffect, useState, type ElementType } from "react"
 import { useRouter } from "next/navigation"
+import {
+    AlertTriangle,
+    ArrowLeft,
+    Calendar,
+    CheckCircle,
+    ClipboardCheck,
+    Download,
+    Loader2,
+    RefreshCw,
+    Search,
+    UserCog,
+    XCircle,
+} from "lucide-react"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
+import { useToast } from "@/hooks/use-toast"
+
+type MentorReport = {
+    id: string
+    name: string
+    role?: string
+    phone?: string
+    active?: boolean
+    planned_classes: number
+    cancelled_classes: number
+    required_classes: number
+    marked_classes: number
+    not_marked_classes: number
+    marking_percentage: number
+    missing_percentage: number
+}
+
+type Totals = {
+    planned_classes: number
+    cancelled_classes: number
+    required_classes: number
+    marked_classes: number
+    not_marked_classes: number
+}
+
+const emptyTotals: Totals = {
+    planned_classes: 0,
+    cancelled_classes: 0,
+    required_classes: 0,
+    marked_classes: 0,
+    not_marked_classes: 0,
+}
+
+function toDateInputValue(date: Date) {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+}
+
+function getWeekRange(offsetWeeks = 0) {
+    const today = new Date()
+    const start = new Date(today)
+    start.setDate(today.getDate() - today.getDay() + offsetWeeks * 7)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    if (offsetWeeks === 0 && end > today) end.setTime(today.getTime())
+    return { start: toDateInputValue(start), end: toDateInputValue(end) }
+}
+
+function getMonthRange() {
+    const today = new Date()
+    const start = new Date(today.getFullYear(), today.getMonth(), 1)
+    return { start: toDateInputValue(start), end: toDateInputValue(today) }
+}
+
+function pct(value: number) {
+    return `${Number(value || 0).toFixed(1).replace(".0", "")}%`
+}
 
 export default function MentorReportsPage() {
-    const [data, setData] = useState<any[]>([])
+    const weekRange = getWeekRange()
+    const [data, setData] = useState<MentorReport[]>([])
+    const [totals, setTotals] = useState<Totals>(emptyTotals)
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
-    const [targetMonth, setTargetMonth] = useState((new Date().getMonth() + 1).toString())
-    const [targetYear, setTargetYear] = useState((new Date().getFullYear()).toString())
+    const [startDate, setStartDate] = useState(weekRange.start)
+    const [endDate, setEndDate] = useState(weekRange.end)
+    const [activePreset, setActivePreset] = useState("This Week")
     const { toast } = useToast()
     const router = useRouter()
 
     useEffect(() => {
         fetchReports()
-    }, [targetMonth, targetYear])
+    }, [startDate, endDate])
 
     const fetchReports = async () => {
         setLoading(true)
         try {
-            const res = await api.get(`/reports/mentors?month=${targetMonth}&year=${targetYear}`)
-            if (res.data?.success) setData(res.data.data)
+            const res = await cachedGet('/reports/mentors', { start_date: startDate, end_date: endDate }, 30_000)
+            if (res.data?.success) {
+                setData(res.data.data || [])
+                setTotals(res.data.totals || emptyTotals)
+            }
         } catch (error) {
-            toast({ title: "Error", description: "Failed to load mentor reports", variant: "destructive" })
+            toast({ title: "Error", description: "Failed to load mentor marking report", variant: "destructive" })
         } finally {
             setLoading(false)
         }
     }
 
-    const filtered = data.filter(m => 
-        m.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        m.role?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const applyPreset = (preset: "This Week" | "Last Week" | "This Month") => {
+        const range = preset === "This Month" ? getMonthRange() : getWeekRange(preset === "Last Week" ? -1 : 0)
+        setActivePreset(preset)
+        setStartDate(range.start)
+        setEndDate(range.end)
+    }
 
-    const handleDownloadExcel = () => {
-        if (!data || data.length === 0) {
-            toast({ title: "No Data", description: "There is no data to export." })
+    const filtered = data.filter(mentor => {
+        const query = searchTerm.toLowerCase()
+        return (
+            mentor.name?.toLowerCase().includes(query) ||
+            mentor.role?.toLowerCase().includes(query) ||
+            mentor.phone?.toLowerCase().includes(query)
+        )
+    })
+
+    const overallMarkedPercentage = totals.required_classes > 0
+        ? Math.round((totals.marked_classes / totals.required_classes) * 1000) / 10
+        : 0
+
+    const handleDownloadCsv = () => {
+        if (filtered.length === 0) {
+            toast({ title: "No Data", description: "There is no mentor report data to export." })
             return
         }
 
-        const headers = ["ID", "Name", "Role", "Phone", "Status", "Total Marked Days", "Present", "Absent", "Leave Used"]
-        const csvRows = [headers.join(",")]
+        const headers = [
+            "Mentor",
+            "Role",
+            "Phone",
+            "Planned Classes",
+            "Cancelled Classes",
+            "Required Classes",
+            "Marked Classes",
+            "Not Marked Classes",
+            "Marked %",
+            "Not Marked %",
+        ]
+        const rows = filtered.map(mentor => [
+            `"${mentor.name || "Unnamed Mentor"}"`,
+            `"${mentor.role || "N/A"}"`,
+            mentor.phone || "N/A",
+            mentor.planned_classes || 0,
+            mentor.cancelled_classes || 0,
+            mentor.required_classes || 0,
+            mentor.marked_classes || 0,
+            mentor.not_marked_classes || 0,
+            mentor.marking_percentage || 0,
+            mentor.missing_percentage || 0,
+        ])
 
-        filtered.forEach(m => {
-            const row = [
-                m.id,
-                `"${m.name || 'Un-named Mentor'}"`,
-                `"${m.role || 'Role N/A'}"`,
-                m.phone || 'N/A',
-                m.active ? 'Active' : 'Archived',
-                m.attendance?.total_marked || 0,
-                m.attendance?.present || 0,
-                m.attendance?.absent || 0,
-                m.attendance?.leave || 0
-            ]
-            csvRows.push(row.join(","))
-        })
-
-        const csvContent = csvRows.join("\n")
-        // Create Blob and trigger download
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+        const csvContent = [headers.join(","), ...rows.map(row => row.join(","))].join("\n")
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
         const url = URL.createObjectURL(blob)
         const link = document.createElement("a")
-        link.setAttribute("href", url)
-        link.setAttribute("download", `Mentor_Report_${targetYear}_${targetMonth}.csv`)
+        link.href = url
+        link.download = `Mentor_Marking_Report_${startDate}_to_${endDate}.csv`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
+        URL.revokeObjectURL(url)
     }
 
-    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] w-full">
-            {/* Header Area */}
-            <div className="flex items-center justify-between mb-8">
+        <div className="flex min-h-[calc(100vh-120px)] w-full flex-col gap-6">
+            <div className="flex flex-col gap-5 rounded-[28px] bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-xl lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <button onClick={() => router.push('/admin')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-[13px] font-bold mb-4 transition-colors">
+                    <button
+                        onClick={() => router.push("/admin")}
+                        className="mb-5 flex items-center gap-2 text-[13px] font-bold text-white/65 transition-colors hover:text-white"
+                    >
                         <ArrowLeft className="h-4 w-4" /> Back to Dashboard
                     </button>
-                    <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-                        <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                            <UserCog className="h-6 w-6 text-emerald-600" />
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                            <UserCog className="h-6 w-6 text-emerald-300" />
                         </div>
-                        Mentor Reports
-                    </h1>
-                    <p className="text-slate-500 font-medium mt-1">Monthly evaluation logs and attendance status for active mentors</p>
+                        <div>
+                            <h1 className="text-3xl font-black tracking-tight">Mentor Marking Report</h1>
+                            <p className="mt-1 text-sm font-medium text-white/65">
+                                Percentage of required class attendance submitted by each mentor. Cancelled classes are excluded.
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex gap-4">
-                    <select value={targetMonth} onChange={e => setTargetMonth(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-36 cursor-pointer hover:border-emerald-400 focus:border-emerald-500 transition-colors">
-                        {months.map((m, i) => (
-                            <option key={i} value={i + 1}>{m}</option>
-                        ))}
-                    </select>
-
-                    <button onClick={handleDownloadExcel} className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-[14px] px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-                        <Download className="h-4 w-4" />
-                        Download CSV
-                    </button>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <SummaryPill icon={Calendar} label="Required" value={totals.required_classes} />
+                    <SummaryPill icon={CheckCircle} label="Marked" value={totals.marked_classes} />
+                    <SummaryPill icon={XCircle} label="Not Marked" value={totals.not_marked_classes} />
+                    <SummaryPill icon={ClipboardCheck} label="Overall" value={pct(overallMarkedPercentage)} />
                 </div>
             </div>
 
-            {/* Content Area */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                        {(["This Week", "Last Week", "This Month"] as const).map(preset => (
+                            <button
+                                key={preset}
+                                onClick={() => applyPreset(preset)}
+                                className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                                    activePreset === preset
+                                        ? "bg-emerald-600 text-white shadow-sm"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
+                            >
+                                {preset}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                From
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={event => {
+                                        setActivePreset("Custom")
+                                        setStartDate(event.target.value)
+                                    }}
+                                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-1 text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                To
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={event => {
+                                        setActivePreset("Custom")
+                                        setEndDate(event.target.value)
+                                    }}
+                                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
+                                />
+                            </label>
+                        </div>
+                        <button
+                            onClick={() => {
+                                invalidateCache('/reports/mentors')
+                                fetchReports()
+                            }}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
+                        >
+                            <RefreshCw className="h-4 w-4" /> Refresh
+                        </button>
+                        <button
+                            onClick={handleDownloadCsv}
+                            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                        >
+                            <Download className="h-4 w-4" /> Download CSV
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-4">
+                    <MetricCard label="Planned Slots" value={totals.planned_classes} tone="slate" />
+                    <MetricCard label="Cancelled Slots" value={totals.cancelled_classes} tone="rose" />
+                    <MetricCard label="Required After Cancel" value={totals.required_classes} tone="blue" />
+                    <MetricCard label="Marked Percentage" value={pct(overallMarkedPercentage)} tone="emerald" />
+                </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 p-5 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h2 className="text-lg font-black text-slate-900">Mentors</h2>
+                        <p className="text-sm font-medium text-slate-500">
+                            A class is counted as marked only when that mentor submitted attendance for that schedule and date.
+                        </p>
+                    </div>
+                    <div className="relative w-full md:max-w-sm">
+                        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <input
-                            type="text"
-                            placeholder="Search by mentor name or core role..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[13px] font-medium placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 shadow-sm transition-all"
+                            onChange={event => setSearchTerm(event.target.value)}
+                            placeholder="Search mentor, role, phone..."
+                            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                         />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-auto relative p-1">
+                <div className="relative min-h-[360px] overflow-auto">
                     {loading ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
-                            <Loader2 className="h-8 w-8 text-emerald-600 animate-spin mb-4" />
-                            <span className="text-sm font-bold text-slate-500">Generating Report...</span>
+                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+                            <Loader2 className="mb-4 h-8 w-8 animate-spin text-emerald-600" />
+                            <span className="text-sm font-bold text-slate-500">Calculating mentor marking report...</span>
                         </div>
-                    ) : (
-                        <table className="w-full">
-                            <thead className="sticky top-0 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] z-10">
+                    ) : null}
+
+                    <table className="w-full min-w-[980px]">
+                        <thead className="sticky top-0 z-[1] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                            <tr>
+                                <th className="px-6 py-4 text-left text-[11px] font-black uppercase tracking-wider text-slate-500">Mentor</th>
+                                <th className="px-4 py-4 text-center text-[11px] font-black uppercase tracking-wider text-slate-500">Required</th>
+                                <th className="px-4 py-4 text-center text-[11px] font-black uppercase tracking-wider text-emerald-600">Marked</th>
+                                <th className="px-4 py-4 text-center text-[11px] font-black uppercase tracking-wider text-rose-600">Not Marked</th>
+                                <th className="px-4 py-4 text-center text-[11px] font-black uppercase tracking-wider text-slate-500">Cancelled</th>
+                                <th className="px-6 py-4 text-left text-[11px] font-black uppercase tracking-wider text-slate-500">Completion</th>
+                                <th className="px-4 py-4 text-center text-[11px] font-black uppercase tracking-wider text-slate-500">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {!loading && filtered.length === 0 ? (
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-wider">Mentor Profile</th>
-                                    <th className="px-6 py-4 text-left text-[11px] font-black text-slate-500 uppercase tracking-wider">Role & Status</th>
-                                    <th className="px-4 py-4 text-center text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                                        <div className="flex items-center justify-center gap-1.5"><Calendar className="h-3 w-3" />Days Expected</div>
-                                    </th>
-                                    <th className="px-4 py-4 text-center text-[11px] font-black text-emerald-600 uppercase tracking-wider">
-                                        <div className="flex items-center justify-center gap-1.5"><CheckCircle className="h-3 w-3" />Present</div>
-                                    </th>
-                                    <th className="px-4 py-4 text-center text-[11px] font-black text-rose-600 uppercase tracking-wider">
-                                        <div className="flex items-center justify-center gap-1.5"><XCircle className="h-3 w-3" />Absent</div>
-                                    </th>
-                                    <th className="px-4 py-4 text-center text-[11px] font-black text-blue-500 uppercase tracking-wider">Leaves Taken</th>
+                                    <td colSpan={7} className="py-16 text-center text-sm font-bold text-slate-500">
+                                        No mentor class marking data found for this period.
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filtered.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="py-16 text-center text-slate-500 font-medium text-[14px]">
-                                            No explicit mentor records tracked for this period.
+                            ) : (
+                                filtered.map(mentor => (
+                                    <tr key={mentor.id} className="transition hover:bg-slate-50/80">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-sm font-black text-emerald-700 ring-1 ring-emerald-100">
+                                                    {(mentor.name || "M").split(" ").map(word => word[0]).join("").slice(0, 2)}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-black text-slate-900">{mentor.name || "Unnamed Mentor"}</div>
+                                                    <div className="text-xs font-semibold text-slate-500">
+                                                        {mentor.role || "Mentor"} {mentor.phone ? `• ${mentor.phone}` : ""}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-center text-base font-black text-slate-800">{mentor.required_classes || 0}</td>
+                                        <td className="px-4 py-4 text-center text-base font-black text-emerald-600">{mentor.marked_classes || 0}</td>
+                                        <td className="px-4 py-4 text-center text-base font-black text-rose-600">{mentor.not_marked_classes || 0}</td>
+                                        <td className="px-4 py-4 text-center text-base font-black text-slate-500">{mentor.cancelled_classes || 0}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="mb-2 flex items-center justify-between text-xs font-black">
+                                                <span className="text-emerald-700">{pct(mentor.marking_percentage)} marked</span>
+                                                <span className="text-rose-600">{pct(mentor.missing_percentage)} missed</span>
+                                            </div>
+                                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                                                <div
+                                                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
+                                                    style={{ width: `${Math.min(100, Math.max(0, mentor.marking_percentage || 0))}%` }}
+                                                />
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            {(mentor.required_classes || 0) === 0 ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
+                                                    No Classes
+                                                </span>
+                                            ) : (mentor.not_marked_classes || 0) === 0 ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                                                    <CheckCircle className="h-3.5 w-3.5" /> Complete
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+                                                    <AlertTriangle className="h-3.5 w-3.5" /> Pending
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
-                                ) : (
-                                    filtered.map((m, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[14px] font-extrabold text-slate-800">{m.name}</span>
-                                                    <span className="text-[12px] font-semibold text-slate-500">{m.phone || 'No phone record'}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col items-start gap-1">
-                                                    <span className="text-[14px] font-bold text-slate-700">{m.role}</span>
-                                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${m.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                                                        {m.active ? 'ACTIVE' : 'ARCHIVED'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <span className="text-[15px] font-black text-slate-700">{m.attendance?.total_marked || 0}</span>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <span className="text-[15px] font-black text-emerald-600">{m.attendance?.present || 0}</span>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <span className="text-[15px] font-black text-rose-600">{m.attendance?.absent || 0}</span>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <div className="text-[15px] font-bold mt-1 text-blue-600">
-                                                    {m.attendance?.leave || 0} <span className="text-[10px] text-slate-400 font-medium">days</span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    )}
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
+        </div>
+    )
+}
+
+function SummaryPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: string | number }) {
+    return (
+        <div className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+            <Icon className="mb-3 h-5 w-5 text-emerald-200" />
+            <div className="text-2xl font-black">{value}</div>
+            <div className="text-xs font-bold text-white/60">{label}</div>
+        </div>
+    )
+}
+
+function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: "slate" | "rose" | "blue" | "emerald" }) {
+    const colors = {
+        slate: "bg-slate-50 text-slate-700 ring-slate-100",
+        rose: "bg-rose-50 text-rose-700 ring-rose-100",
+        blue: "bg-blue-50 text-blue-700 ring-blue-100",
+        emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    }
+
+    return (
+        <div className={`rounded-2xl p-4 ring-1 ${colors[tone]}`}>
+            <div className="text-xs font-black uppercase tracking-wider opacity-70">{label}</div>
+            <div className="mt-2 text-3xl font-black">{value}</div>
         </div>
     )
 }

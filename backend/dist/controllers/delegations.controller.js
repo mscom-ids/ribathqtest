@@ -8,6 +8,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const logger_1 = require("../utils/logger");
+const server_cache_1 = require("../utils/server-cache");
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
@@ -87,6 +88,7 @@ const createDelegationRequest = async (req, res) => {
             VALUES ($1, $2, $3, $4, 'pending')
             RETURNING *
         `, [fromStaffId, to_staff_id, student_id || null, reason]);
+        (0, server_cache_1.invalidateCacheByPrefix)('delegations:admin');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (e) {
@@ -150,21 +152,48 @@ const getAdminAllRequests = async (req, res) => {
         // ?count_only=true returns just the pending count for the admin
         // dashboard badge — avoids the 3-table JOIN when no row data is needed.
         if (req.query.count_only === 'true') {
-            const c = await db_1.db.query(`SELECT COUNT(*)::int AS pending FROM mentor_delegations WHERE status = 'pending'`);
-            return res.json({ success: true, pending_count: c.rows[0].pending });
+            const pending_count = await (0, server_cache_1.cachedResult)('delegations:admin:pending-count', 15000, async () => {
+                const c = await db_1.db.query(`SELECT COUNT(*)::int AS pending FROM mentor_delegations WHERE status = 'pending'`);
+                return c.rows[0].pending;
+            });
+            return res.json({ success: true, pending_count });
         }
-        const result = await db_1.db.query(`
-            SELECT d.*,
-                   f.name as from_mentor_name, f.photo_url as from_mentor_photo,
-                   t.name as to_mentor_name, t.photo_url as to_mentor_photo,
-                   stu.name as student_name
-            FROM mentor_delegations d
-            JOIN staff f ON d.from_staff_id = f.id
-            JOIN staff t ON d.to_staff_id = t.id
-            LEFT JOIN students stu ON d.student_id = stu.adm_no
-            ORDER BY d.status = 'pending' DESC, d.status = 'approved' DESC, d.created_at DESC
-        `);
-        res.json({ success: true, requests: result.rows });
+        if (req.query.pending_only === 'true') {
+            const rawLimit = Number(req.query.limit || 5);
+            const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 5, 1), 20);
+            const requests = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('delegations:admin:pending-preview', { limit }), 30000, async () => {
+                const result = await db_1.db.query(`
+                        SELECT d.id, d.status, d.created_at,
+                               f.name as from_mentor_name, f.name as requester_name, f.photo_url as from_mentor_photo,
+                               t.name as to_mentor_name, t.photo_url as to_mentor_photo,
+                               stu.name as student_name
+                        FROM mentor_delegations d
+                        JOIN staff f ON d.from_staff_id = f.id
+                        JOIN staff t ON d.to_staff_id = t.id
+                        LEFT JOIN students stu ON d.student_id = stu.adm_no
+                        WHERE d.status = 'pending'
+                        ORDER BY d.created_at DESC
+                        LIMIT $1
+                    `, [limit]);
+                return result.rows;
+            });
+            return res.json({ success: true, requests });
+        }
+        const requests = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('delegations:admin:all', { user: req.user?.id || 'system' }), 15000, async () => {
+            const result = await db_1.db.query(`
+                    SELECT d.*,
+                           f.name as from_mentor_name, f.photo_url as from_mentor_photo,
+                           t.name as to_mentor_name, t.photo_url as to_mentor_photo,
+                           stu.name as student_name
+                    FROM mentor_delegations d
+                    JOIN staff f ON d.from_staff_id = f.id
+                    JOIN staff t ON d.to_staff_id = t.id
+                    LEFT JOIN students stu ON d.student_id = stu.adm_no
+                    ORDER BY d.status = 'pending' DESC, d.status = 'approved' DESC, d.created_at DESC
+                `);
+            return result.rows;
+        });
+        res.json({ success: true, requests });
     }
     catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -188,6 +217,7 @@ const updateDelegationStatus = async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: "Not found" });
         }
+        (0, server_cache_1.invalidateCacheByPrefix)('delegations:admin');
         // If approved, we can also reject any other pending requests from that mentor? Optional.
         // Or if approved, we let it be. A mentor can have students assigned to multiple? No, the system checks
         // usually if you are A, you assign to B.
@@ -221,6 +251,7 @@ const revokeDelegation = async (req, res) => {
             SET status = 'terminated', terminated_at = NOW(), updated_at = NOW()
             WHERE id = $1
         `, [id]);
+        (0, server_cache_1.invalidateCacheByPrefix)('delegations:admin');
         res.json({ success: true, message: "Assignment terminated successfully" });
     }
     catch (e) {

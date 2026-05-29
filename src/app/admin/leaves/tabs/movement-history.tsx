@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 
 export function MovementHistoryTab() {
     const [leaves, setLeaves] = useState<any[]>([])
@@ -25,12 +25,12 @@ export function MovementHistoryTab() {
         const fetchLeaves = async () => {
             setLoading(true)
             try {
-                const res = await api.get('/leaves')
+                const res = await cachedGet('/leaves', undefined, 30_000)
                 if (res.data.success) {
                     setLeaves(res.data.leaves || [])
                 }
-            } catch (error) {
-                console.error(error)
+            } catch {
+                console.warn("Failed to load movement history")
             } finally {
                 setLoading(false)
             }

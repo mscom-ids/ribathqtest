@@ -27,6 +27,8 @@ const MONTHS = [
     "July","August","September","October","November","December",
 ]
 const WEEK = ["Su","Mo","Tu","We","Th","Fr","Sa"]
+const DASHBOARD_EVENTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DASHBOARD_EVENTS === "true"
+const DASHBOARD_DELEGATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DASHBOARD_DELEGATIONS === "true"
 
 // ── Mini calendar ─────────────────────────────────────────────────────────────
 function MiniCalendar({ events = [] }: { events?: any[] }) {
@@ -200,28 +202,33 @@ export default function AdminDashboardPage() {
             // Was fetching the entire /students payload (with comprehensive_details
             // JSON blob) just to count rows. Now uses a tiny aggregation endpoint.
             // /leaves/outside-students is no longer needed — counts include it.
-            const [countsRes, staffRes, evtRes, delRes] = await Promise.all([
+            const requests = [
                 cachedGet("/students/counts", undefined, 60_000),
                 cachedGet("/staff", undefined, 60_000),
-                cachedGet("/events", undefined, 60_000),
-                // count_only=true skips the 3-table JOIN — we only need the
-                // badge number on the dashboard, not the full request list.
-                api.get("/delegations/admin/all", { params: { count_only: 'true' } }),
-            ])
-            if (evtRes?.data?.success) {
-                setEvents(evtRes.data.events || [])
-            }
-            if (delRes?.data?.success) {
-                setPendingDelegationsCount(delRes.data.pending_count || 0)
-            }
+                DASHBOARD_EVENTS_ENABLED
+                    ? cachedGet("/events", undefined, 60_000)
+                    : Promise.resolve({ data: { success: true, events: [] } }),
+                DASHBOARD_DELEGATIONS_ENABLED
+                    ? api.get("/delegations/admin/all", { params: { count_only: 'true' } })
+                    : Promise.resolve({ data: { success: true, pending_count: 0 } }),
+            ] as const
 
-            if (countsRes.data.success) {
+            const [countsResult, staffResult, evtResult, delResult] = await Promise.allSettled(requests)
+            const countsRes = countsResult.status === "fulfilled" ? countsResult.value : null
+            const staffRes = staffResult.status === "fulfilled" ? staffResult.value : null
+            const evtRes = evtResult.status === "fulfilled" ? evtResult.value : null
+            const delRes = delResult.status === "fulfilled" ? delResult.value : null
+
+            if (evtRes?.data?.success) setEvents(evtRes.data.events || [])
+            if (delRes?.data?.success) setPendingDelegationsCount(delRes.data.pending_count || 0)
+
+            if (countsRes?.data.success) {
                 const c = countsRes.data.counts
                 setStudents({ total: c.active, onCampus: c.on_campus, outCampus: c.out_campus })
                 setAlumni({ total: c.alumni, completed: c.completed, dropout: c.dropout })
             }
 
-            if (staffRes.data.success) {
+            if (staffRes?.data.success) {
                 const d: any[] = staffRes.data.staff || []
                 const active = d.filter((s: any) => s.is_active !== false).length
                 setStaff({ total: d.length, active, inactive: d.length - active })
@@ -316,7 +323,7 @@ export default function AdminDashboardPage() {
                     }
                     return { s, e };
                 })();
-                const res = await api.get("/attendance/daily-stats", { params: { start_date: dates.s, end_date: dates.e } });
+                const res = await cachedGet("/attendance/daily-stats", { start_date: dates.s, end_date: dates.e }, 30_000);
                 if (res.data.success) {
                     setAttStats({
                         students: res.data.students || { present: 0, absent: 0, late: 0, total: 0 },

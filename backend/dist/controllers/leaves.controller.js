@@ -7,8 +7,20 @@ exports.getAllLeaves = exports.getOutsideStudents = exports.getActiveLeaves = ex
 const db_1 = require("../config/db");
 const crypto_1 = __importDefault(require("crypto"));
 const staff_utils_1 = require("../utils/staff.utils");
+const server_cache_1 = require("../utils/server-cache");
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+function invalidateLeaveCaches() {
+    (0, server_cache_1.invalidateCacheByPrefix)('leaves:');
+    (0, server_cache_1.invalidateCacheByPrefix)('attendance:daily-stats');
+}
+function parseLimitOffset(query, defaultLimit = 100, maxLimit = 500) {
+    const rawLimit = Number(query.limit ?? defaultLimit);
+    const rawOffset = Number(query.offset ?? 0);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : defaultLimit, 1), maxLimit);
+    const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+    return { limit, offset };
+}
 /** =============================
  *  SHARED / HELPERS
  *  ============================= */
@@ -90,6 +102,7 @@ const createInstitutionalLeave = async (req, res) => {
                 // Note: accurate date calculation omitted here for brevity, assuming external chron block or manual via attendance dashboard for granular
             }
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.status(201).json({ success: true, count: 0, institutional_leave_id: inst_id });
         }
         catch (e) {
@@ -246,6 +259,7 @@ const markInstitutionalExit = async (req, res) => {
                  SELECT sid, lid, 'out', $1, $2
                  FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`, [exit_datetime, user.id, movementStudentIds, movementLeaveIds]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.status(201).json({ success: true, count: allowedIds.length });
         }
         catch (e) {
@@ -264,15 +278,29 @@ const markInstitutionalExit = async (req, res) => {
 exports.markInstitutionalExit = markInstitutionalExit;
 const getInstitutionalLeaves = async (req, res) => {
     try {
-        const query = `
-            SELECT il.*, 
-            (SELECT COUNT(*) FROM student_leaves sl WHERE sl.institutional_leave_id = il.id) as total_students,
-            (SELECT COUNT(*) FROM student_leaves sl WHERE sl.institutional_leave_id = il.id AND sl.status = 'returned') as returned_students
-            FROM institutional_leaves il
-            ORDER BY il.created_at DESC
-        `;
-        const result = await db_1.db.query(query);
-        res.json({ success: true, leaves: result.rows });
+        const leaves = await (0, server_cache_1.cachedResult)('leaves:institutional', 10000, async () => {
+            const query = `
+                WITH leave_counts AS (
+                    SELECT
+                        institutional_leave_id,
+                        COUNT(*) as total_students,
+                        COUNT(*) FILTER (WHERE status = 'returned') as returned_students
+                    FROM student_leaves
+                    WHERE institutional_leave_id IS NOT NULL
+                    GROUP BY institutional_leave_id
+                )
+                SELECT
+                    il.*,
+                    COALESCE(lc.total_students, 0)::text as total_students,
+                    COALESCE(lc.returned_students, 0)::text as returned_students
+                FROM institutional_leaves il
+                LEFT JOIN leave_counts lc ON lc.institutional_leave_id = il.id
+                ORDER BY il.created_at DESC
+            `;
+            const result = await db_1.db.query(query);
+            return result.rows;
+        });
+        res.json({ success: true, leaves });
     }
     catch (err) {
         console.error('Error fetching institutional leaves:', err);
@@ -319,6 +347,7 @@ const deleteInstitutionalLeave = async (req, res) => {
             // Delete main record
             await client.query('DELETE FROM institutional_leaves WHERE id = $1', [id]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.json({ success: true, message: 'Institutional leave deleted successfully' });
         }
         catch (e) {
@@ -390,6 +419,7 @@ const bulkRecordReturn = async (req, res) => {
                  SELECT sid, lid, 'in', $1, $1::timestamptz > end_dt, $2
                  FROM unnest($3::text[], $4::uuid[], $5::timestamptz[]) AS t(sid, lid, end_dt)`, [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r) => r.end_datetime)]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.json({ success: true, count: pending.rows.length });
         }
         catch (e) {
@@ -491,6 +521,7 @@ const bulkRecordGroupReturn = async (req, res) => {
                  SELECT sid, lid, 'in', $1, end_dt IS NOT NULL AND $1::timestamptz > end_dt, $2
                  FROM unnest($3::text[], $4::uuid[], $5::timestamptz[]) AS t(sid, lid, end_dt)`, [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r) => r.end_datetime)]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.json({ success: true, count: pending.rows.length });
         }
         catch (e) {
@@ -586,6 +617,7 @@ const createPersonalLeave = async (req, res) => {
                 `, [student_id, leave_id, start_datetime, user.id]);
             }
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.status(201).json({ success: true, leave_id });
         }
         catch (e) {
@@ -648,6 +680,7 @@ const createGroupLeave = async (req, res) => {
                  SELECT sid, lid, 'out', $1, $2
                  FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`, [start_datetime, user.id, movStudentIds, movLeaveIds]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.status(201).json({ success: true, count: targetStudents.length });
         }
         catch (e) {
@@ -671,55 +704,71 @@ const getLeavesFilter = async (req, res) => {
         if (type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role)) {
             return res.status(403).json({ success: false, error: 'Outdoor movements are admin-only' });
         }
-        const params = [type];
-        let query = `
-            SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
-            FROM student_leaves sl
-            JOIN students s ON sl.student_id = s.adm_no
-            WHERE sl.leave_type = $1
-        `;
+        let staffId = null;
         if (MENTOR_ROLES.includes(user.role)) {
-            const staffId = await (0, staff_utils_1.getStaffId)(req);
+            staffId = await (0, staff_utils_1.getStaffId)(req);
             if (!staffId) {
                 return res.status(403).json({ success: false, error: 'Staff profile not found' });
             }
-            query += ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
-            params.push(staffId);
         }
-        query += ` ORDER BY sl.created_at DESC`;
-        const result = await db_1.db.query(query, params);
-        const leavesMap = new Map();
-        const groupedLeaves = [];
-        for (const row of result.rows) {
-            const { student_name, school_standard, student_adm_no, ...rest } = row;
-            if (rest.group_id) {
-                if (!leavesMap.has(rest.group_id)) {
-                    // Create a master group leave entry
-                    const groupEntry = {
-                        ...rest,
-                        is_group: true,
-                        count: 1,
-                        student: {
-                            name: rest.group_type === 'class' ? `Class: ${rest.group_value}` : `Batch: ${rest.group_value}`,
-                            standard: rest.group_value || '',
-                            adm_no: `GROUP-${rest.group_type?.toUpperCase()}`
-                        }
-                    };
-                    leavesMap.set(rest.group_id, groupEntry);
-                    groupedLeaves.push(groupEntry);
+        const cacheKey = (0, server_cache_1.makeCacheKey)('leaves:filter', {
+            type: String(type || ''),
+            role: user.role,
+            staffId: staffId || 'all',
+            limit: String(req.query.limit || ''),
+            offset: String(req.query.offset || ''),
+        });
+        const groupedLeaves = await (0, server_cache_1.cachedResult)(cacheKey, 10000, async () => {
+            const { limit, offset } = parseLimitOffset(req.query, 250, 500);
+            const params = [type];
+            let query = `
+                SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
+                FROM student_leaves sl
+                JOIN students s ON sl.student_id = s.adm_no
+                WHERE sl.leave_type = $1
+            `;
+            if (staffId) {
+                query += ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
+                params.push(staffId);
+            }
+            const limitIdx = params.length + 1;
+            const offsetIdx = params.length + 2;
+            query += ` ORDER BY sl.created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+            params.push(limit, offset);
+            const result = await db_1.db.query(query, params);
+            const leavesMap = new Map();
+            const grouped = [];
+            for (const row of result.rows) {
+                const { student_name, school_standard, student_adm_no, ...rest } = row;
+                if (rest.group_id) {
+                    if (!leavesMap.has(rest.group_id)) {
+                        const groupEntry = {
+                            ...rest,
+                            is_group: true,
+                            count: 1,
+                            student: {
+                                name: rest.group_type === 'class' ? `Class: ${rest.group_value}` : `Batch: ${rest.group_value}`,
+                                standard: rest.group_value || '',
+                                adm_no: `GROUP-${rest.group_type?.toUpperCase()}`
+                            }
+                        };
+                        leavesMap.set(rest.group_id, groupEntry);
+                        grouped.push(groupEntry);
+                    }
+                    else {
+                        leavesMap.get(rest.group_id).count++;
+                    }
                 }
                 else {
-                    leavesMap.get(rest.group_id).count++;
+                    grouped.push({
+                        ...rest,
+                        is_group: false,
+                        student: { name: student_name, standard: school_standard || '', adm_no: student_adm_no }
+                    });
                 }
             }
-            else {
-                groupedLeaves.push({
-                    ...rest,
-                    is_group: false,
-                    student: { name: student_name, standard: school_standard || '', adm_no: student_adm_no }
-                });
-            }
-        }
+            return grouped;
+        });
         res.json({ success: true, leaves: groupedLeaves });
     }
     catch (err) {
@@ -781,6 +830,7 @@ const recordReturn = async (req, res) => {
                 WHERE id = $3
             `, [return_datetime, returnStatus, leave_id, closedStatus]);
             await client.query('COMMIT');
+            invalidateLeaveCaches();
             res.json({ success: true });
         }
         catch (e) {
@@ -799,6 +849,7 @@ const recordReturn = async (req, res) => {
 exports.recordReturn = recordReturn;
 const getMovementHistory = async (req, res) => {
     try {
+        const { limit, offset } = parseLimitOffset(req.query, 100, 500);
         const query = `
             SELECT sm.id, sm.student_id, sm.leave_id, sm.direction, sm.timestamp, sm.is_late,
                    sl.leave_type, sl.reason_category, sl.remarks,
@@ -809,10 +860,17 @@ const getMovementHistory = async (req, res) => {
             JOIN students s ON sm.student_id = s.adm_no
             LEFT JOIN staff st ON sm.recorded_by = st.profile_id
             ORDER BY sm.timestamp DESC
-            LIMIT 500
+            LIMIT $1 OFFSET $2
         `;
-        const result = await db_1.db.query(query);
-        res.json({ success: true, movements: result.rows });
+        const [result, countRes] = await Promise.all([
+            db_1.db.query(query, [limit, offset]),
+            db_1.db.query(`SELECT COUNT(*)::integer as total FROM student_movements`),
+        ]);
+        res.json({
+            success: true,
+            movements: result.rows,
+            pagination: { limit, offset, total: countRes.rows[0]?.total || 0 },
+        });
     }
     catch (err) {
         console.error('Error fetching movements:', err);
@@ -825,13 +883,19 @@ const getActiveLeaves = async (req, res) => {
     try {
         const { student_ids } = req.query;
         const user = req.user;
-        let query = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside'`;
         const params = [];
+        let query = `
+            SELECT sl.*
+            FROM student_current_presence scp
+            JOIN student_leaves sl ON scp.active_leave_id = sl.id
+            JOIN students s ON scp.student_id = s.adm_no
+            WHERE scp.status IN ('outside', 'on-campus')
+        `;
         if (student_ids && typeof student_ids === 'string') {
             const ids = student_ids.split(',');
             if (ids.length > 0) {
                 const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
-                query += ` AND sl.student_id IN (${placeholders})`;
+                query += ` AND scp.student_id IN (${placeholders})`;
                 params.push(...ids);
             }
         }
@@ -844,7 +908,31 @@ const getActiveLeaves = async (req, res) => {
             query += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
             params.push(staffId);
         }
-        const result = await db_1.db.query(query, params);
+        let result;
+        try {
+            result = await db_1.db.query(query, params);
+        }
+        catch (presenceErr) {
+            if (presenceErr?.code !== '42P01')
+                throw presenceErr;
+            let fallbackQuery = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside'`;
+            const fallbackParams = [];
+            if (student_ids && typeof student_ids === 'string') {
+                const ids = student_ids.split(',');
+                if (ids.length > 0) {
+                    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+                    fallbackQuery += ` AND sl.student_id IN (${placeholders})`;
+                    fallbackParams.push(...ids);
+                }
+            }
+            if (MENTOR_ROLES.includes(user.role)) {
+                const staffId = await (0, staff_utils_1.getStaffId)(req);
+                const idx = fallbackParams.length + 1;
+                fallbackQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
+                fallbackParams.push(staffId);
+            }
+            result = await db_1.db.query(fallbackQuery, fallbackParams);
+        }
         res.json({ success: true, leaves: result.rows });
     }
     catch (err) {
@@ -871,11 +959,18 @@ const getOutsideStudents = async (req, res) => {
             assignmentFilter = ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
             params.push(staffId);
         }
-        // Step 1: get all outside leaves with student + institutional leave info + mentor names
-        const leavesRes = await db_1.db.query(`
+        const cacheKey = (0, server_cache_1.makeCacheKey)('leaves:outside-students', {
+            role: user.role,
+            staff: MENTOR_ROLES.includes(user.role) ? String(params[1] || '') : 'all',
+            outdoor: String(canViewOutdoor),
+        });
+        const students = await (0, server_cache_1.cachedResult)(cacheKey, 10000, async () => {
+            // Prefer the current-state helper table. It keeps this endpoint small
+            // even when student_leaves/student_movements history becomes large.
+            const presenceQuery = `
             SELECT 
                 sl.id as leave_id,
-                sl.student_id,
+                scp.student_id,
                 sl.leave_type,
                 sl.reason_category,
                 sl.remarks,
@@ -894,46 +989,83 @@ const getOutsideStudents = async (req, res) => {
                 s.batch_year,
                 hm.name as hifz_mentor_name,
                 sm2.name as school_mentor_name,
-                mm.name as madrasa_mentor_name
-            FROM student_leaves sl
-            JOIN students s ON sl.student_id = s.adm_no
+                mm.name as madrasa_mentor_name,
+                COALESCE(exit_mv.exit_timestamp, sl.start_datetime) as actual_exit_datetime,
+                COALESCE(exit_mv.recorder_name, 'System') as exited_recorded_by_name
+            FROM student_current_presence scp
+            JOIN student_leaves sl ON scp.active_leave_id = sl.id
+            JOIN students s ON scp.student_id = s.adm_no
             LEFT JOIN institutional_leaves il ON sl.institutional_leave_id = il.id
             LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
             LEFT JOIN staff sm2 ON s.school_mentor_id = sm2.id
             LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
-            WHERE sl.status = 'outside'
+            LEFT JOIN LATERAL (
+                SELECT mv.timestamp as exit_timestamp, st.name as recorder_name
+                FROM student_movements mv
+                LEFT JOIN staff st ON mv.recorded_by = st.profile_id
+                WHERE mv.leave_id = sl.id AND mv.direction = 'out'
+                ORDER BY mv.timestamp DESC
+                LIMIT 1
+            ) exit_mv ON TRUE
+            WHERE scp.status = 'outside'
               AND ($1::boolean OR sl.leave_type <> 'outdoor')
               ${assignmentFilter}
             ORDER BY sl.start_datetime DESC
-        `, params);
-        if (leavesRes.rows.length === 0) {
-            return res.json({ success: true, students: [] });
-        }
-        // Step 2: get the exit movements for those leave IDs to find who recorded exit
-        const leaveIds = leavesRes.rows.map((r) => r.leave_id);
-        const movementsRes = await db_1.db.query(`
-            SELECT mv.leave_id, mv.timestamp as exit_timestamp, st.name as recorder_name
-            FROM student_movements mv
-            LEFT JOIN staff st ON mv.recorded_by = st.profile_id
-            WHERE mv.leave_id = ANY($1) AND mv.direction = 'out'
-            ORDER BY mv.timestamp DESC
-        `, [leaveIds]);
-        // Build a map: leave_id -> first 'out' movement info
-        const exitMap = {};
-        for (const row of movementsRes.rows) {
-            if (!exitMap[row.leave_id]) {
-                exitMap[row.leave_id] = {
-                    exit_timestamp: row.exit_timestamp,
-                    recorder_name: row.recorder_name || 'System'
-                };
+        `;
+            try {
+                const presenceResult = await db_1.db.query(presenceQuery, params);
+                return presenceResult.rows;
             }
-        }
-        // Step 3: merge
-        const students = leavesRes.rows.map((row) => ({
-            ...row,
-            actual_exit_datetime: exitMap[row.leave_id]?.exit_timestamp || row.start_datetime,
-            exited_recorded_by_name: exitMap[row.leave_id]?.recorder_name || 'System',
-        }));
+            catch (presenceErr) {
+                if (presenceErr?.code !== '42P01')
+                    throw presenceErr;
+                const fallbackResult = await db_1.db.query(`
+                    SELECT 
+                        sl.id as leave_id,
+                        sl.student_id,
+                        sl.leave_type,
+                        sl.reason_category,
+                        sl.remarks,
+                        sl.companion_name,
+                        sl.companion_relationship,
+                        sl.start_datetime,
+                        sl.end_datetime,
+                        sl.group_type,
+                        sl.group_value,
+                        sl.institutional_leave_id,
+                        il.name as institutional_leave_name,
+                        s.name as student_name,
+                        s.adm_no,
+                        COALESCE(s.standard, s.school_standard, s.hifz_standard, 'Common') as standard,
+                        s.photo_url,
+                        s.batch_year,
+                        hm.name as hifz_mentor_name,
+                        sm2.name as school_mentor_name,
+                        mm.name as madrasa_mentor_name,
+                        COALESCE(exit_mv.exit_timestamp, sl.start_datetime) as actual_exit_datetime,
+                        COALESCE(exit_mv.recorder_name, 'System') as exited_recorded_by_name
+                    FROM student_leaves sl
+                    JOIN students s ON sl.student_id = s.adm_no
+                    LEFT JOIN institutional_leaves il ON sl.institutional_leave_id = il.id
+                    LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
+                    LEFT JOIN staff sm2 ON s.school_mentor_id = sm2.id
+                    LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
+                    LEFT JOIN LATERAL (
+                        SELECT mv.timestamp as exit_timestamp, st.name as recorder_name
+                        FROM student_movements mv
+                        LEFT JOIN staff st ON mv.recorded_by = st.profile_id
+                        WHERE mv.leave_id = sl.id AND mv.direction = 'out'
+                        ORDER BY mv.timestamp DESC
+                        LIMIT 1
+                    ) exit_mv ON TRUE
+                    WHERE sl.status = 'outside'
+                      AND ($1::boolean OR sl.leave_type <> 'outdoor')
+                      ${assignmentFilter}
+                    ORDER BY sl.start_datetime DESC
+                `, params);
+                return fallbackResult.rows;
+            }
+        });
         res.json({ success: true, students });
     }
     catch (err) {
@@ -948,14 +1080,29 @@ exports.getOutsideStudents = getOutsideStudents;
  */
 const getAllLeaves = async (req, res) => {
     try {
-        const result = await db_1.db.query(`
-            SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
-            FROM student_leaves sl
-            JOIN students s ON sl.student_id = s.adm_no
-            ORDER BY sl.created_at DESC
-            LIMIT 1000
-        `);
-        res.json({ success: true, leaves: result.rows });
+        const { limit, offset } = parseLimitOffset(req.query, 100, 500);
+        const cacheKey = (0, server_cache_1.makeCacheKey)('leaves:all', { limit, offset });
+        const payload = await (0, server_cache_1.cachedResult)(cacheKey, 15000, async () => {
+            const [leavesRes, countRes] = await Promise.all([
+                db_1.db.query(`
+                    SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
+                    FROM student_leaves sl
+                    JOIN students s ON sl.student_id = s.adm_no
+                    ORDER BY sl.created_at DESC
+                    LIMIT $1 OFFSET $2
+                `, [limit, offset]),
+                db_1.db.query(`SELECT COUNT(*)::integer as total FROM student_leaves`),
+            ]);
+            return {
+                leaves: leavesRes.rows,
+                pagination: {
+                    limit,
+                    offset,
+                    total: countRes.rows[0]?.total || 0,
+                },
+            };
+        });
+        res.json({ success: true, ...payload });
     }
     catch (err) {
         console.error('Error fetching all leaves:', err);
