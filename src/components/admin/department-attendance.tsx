@@ -203,6 +203,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
 
     // ── Slot status ─────────────────────────────────────────────────────────────
     const getSlotStatus = (sched: any) => {
+        let allMentorTracking: any = null
         const cancelled = dashboardData.cancellations?.find((c: any) => {
             if (c.schedule_id !== sched.id) return false
             const localDateStr = new Date(c.date).toLocaleDateString('en-CA')
@@ -246,6 +247,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                 const markedExpected = expected.filter((em: any) => markedByIds.includes(em.id));
                 const pendingExpected = expected.filter((em: any) => !markedByIds.includes(em.id));
                 const unexpectedMarks = marksForSched.filter((m: any) => !expected.find((em: any) => em.id === m.marked_by));
+                allMentorTracking = { markedBy: markedByIds, expected, markedExpected, pendingExpected, unexpectedMarks }
                 
                 if (markedExpected.length === expected.length || unexpectedMarks.length > 0) {
                     return { state: 'completed' as const, markedBy: markedByIds, expected, markedExpected, pendingExpected, unexpectedMarks, partialCancellation: cancelled };
@@ -257,21 +259,22 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             }
         }
 
-        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation: cancelled }
+        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation: cancelled, ...allMentorTracking }
 
         if (diffFromToday === 0) {
             const classStart = new Date(`${viewDateStr}T${sched.start_time}`)
-            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation: cancelled }
+            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation: cancelled, ...allMentorTracking }
         }
 
-        return { state: 'active' as const, partialCancellation: cancelled }
+        return { state: 'active' as const, partialCancellation: cancelled, ...allMentorTracking }
     }
 
     // ── Roster ──────────────────────────────────────────────────────────────────
     const openRoster = async (sched: any) => {
         try {
             const mentorParam = selectedMentorId !== 'all' ? `&mentor_id=${selectedMentorId}` : ''
-            const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}`)
+            const yearParam = selectedYearId ? `&academic_year_id=${selectedYearId}` : ''
+            const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}${yearParam}`)
             if (res.data.success) {
                 const students: StudentMark[] = res.data.students.map((st: any) => ({
                     ...st,
@@ -845,6 +848,12 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                                         </div>
                                                     </div>
                                                 )}
+                                            </div>
+                                        )}
+                                        {selectedMentorId === 'all' && !isCompleted && !isPartial && (status as any).expected?.length > 0 && (
+                                            <div className="mt-2">
+                                                <p className="text-[10px] font-semibold text-rose-500">Not marked</p>
+                                                {renderMentorNameList((status as any).pendingExpected.map((m: any) => getDisplayName(m)), "danger")}
                                             </div>
                                         )}
                                         {isUpcoming && (

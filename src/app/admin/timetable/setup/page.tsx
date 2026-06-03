@@ -10,6 +10,9 @@ export default function TimeTableSetupPage() {
     const [loading, setLoading] = useState(true)
     const [schedules, setSchedules] = useState<any[]>([])
     const [breaks, setBreaks] = useState<any[]>([])
+    const [academicYears, setAcademicYears] = useState<any[]>([])
+    const [academicYearId, setAcademicYearId] = useState("")
+    const [classes, setClasses] = useState<any[]>([])
 
     // Auth context
     const [userRole, setUserRole] = useState("")
@@ -21,6 +24,7 @@ export default function TimeTableSetupPage() {
 
     // Form states
     const [newSchedule, setNewSchedule] = useState({
+        class_id: '',
         class_type: 'school',
         name: '',
         standards: [] as string[],
@@ -29,17 +33,22 @@ export default function TimeTableSetupPage() {
         end_time: '09:45'
     })
 
-    const availableStandards = [
-        "Hifz Only", "1st Standard", "2nd Standard", "3rd Standard", "4th Standard",
-        "5th Standard", "6th Standard", "7th Standard", "8th Standard",
-        "9th Standard", "10th Standard", "+1 (Plus One)", "+2 (Plus Two)"
-    ]
+    const tabToClassType = (value: string) => {
+        const tab = value.toLowerCase()
+        if (tab === 'madrassa' || tab === 'madrasa') return 'Madrassa'
+        if (tab === 'hifz') return 'Hifz'
+        return 'School'
+    }
+
+    const availableClasses = classes.filter(item => item.type === tabToClassType(activeTab))
 
     async function fetchData(force = false) {
         setLoading(true)
         try {
             const [schedRes, breaksRes] = await Promise.all([
-                force ? api.get('/attendance/schedules') : cachedGet('/attendance/schedules', undefined, 5 * 60_000),
+                force
+                    ? api.get('/attendance/schedules', { params: { academic_year_id: academicYearId || undefined } })
+                    : cachedGet('/attendance/schedules', { academic_year_id: academicYearId || undefined }, 5 * 60_000),
                 force ? api.get('/attendance/breaks') : cachedGet('/attendance/breaks', undefined, 5 * 60_000)
             ])
             if (schedRes.data.success) setSchedules(schedRes.data.data)
@@ -50,6 +59,19 @@ export default function TimeTableSetupPage() {
         setLoading(false)
     }
 
+    async function fetchAcademicSetup() {
+        const yearsRes = await api.get('/classes/academic-years')
+        const years = yearsRes.data?.data || []
+        setAcademicYears(years)
+        const selectedYear = academicYearId || years.find((year: any) => year.is_current)?.id || years[0]?.id || ""
+        setAcademicYearId(selectedYear)
+        if (selectedYear) {
+            const classesRes = await api.get('/classes', { params: { academic_year_id: selectedYear } })
+            setClasses(classesRes.data?.data || [])
+        }
+        return selectedYear
+    }
+
     useEffect(() => {
         api.get('/auth/me')
             .then(res => {
@@ -58,25 +80,37 @@ export default function TimeTableSetupPage() {
                 }
             })
             .catch(() => {})
-        queueMicrotask(() => {
+        queueMicrotask(async () => {
+            const selectedYear = await fetchAcademicSetup()
+            if (selectedYear) setAcademicYearId(selectedYear)
             void fetchData()
         })
     }, [])
 
+    useEffect(() => {
+        if (!academicYearId) return
+        api.get('/classes', { params: { academic_year_id: academicYearId } })
+            .then(res => setClasses(res.data?.data || []))
+            .catch(() => setClasses([]))
+        void fetchData(true)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [academicYearId])
+
     const handleCreateSchedule = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (newSchedule.standards.length === 0) {
-            alert("Please select at least one standard.")
+        if (!newSchedule.class_id) {
+            alert("Please select a class from Class Setup.")
             return
         }
         try {
             const res = await api.post('/attendance/schedules', {
                 ...newSchedule,
+                academic_year_id: academicYearId,
                 duration_mins: 45
             })
             if (res.data.success) {
                 setIsAddModalOpen(false)
-                setNewSchedule({ class_type: activeTab, name: '', standards: [], day_of_week: 1, start_time: '09:00', end_time: '09:45' })
+                setNewSchedule({ class_id: '', class_type: activeTab, name: '', standards: [], day_of_week: 1, start_time: '09:00', end_time: '09:45' })
                 invalidateCache('/attendance/schedules')
                 fetchData(true)
             }
@@ -163,6 +197,9 @@ export default function TimeTableSetupPage() {
                 <div className="flex items-center flex-wrap gap-2">
 
                     <div className="flex bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded overflow-hidden shadow-sm h-[38px]">
+                        <select value={academicYearId} onChange={(e) => setAcademicYearId(e.target.value)} className="bg-white dark:bg-slate-800 border-0 border-r border-slate-200 dark:border-slate-700 px-3 text-[13px] font-semibold text-slate-600 outline-none">
+                            {academicYears.map(year => <option key={year.id} value={year.id}>{year.name}</option>)}
+                        </select>
                         <button onClick={() => fetchData(true)} className="px-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition border-r border-slate-200 dark:border-slate-700 text-slate-500">
                             <RefreshCw className="h-[15px] w-[15px]" />
                         </button>
@@ -175,7 +212,7 @@ export default function TimeTableSetupPage() {
                     </div>
 
                     {isAuthority && (
-                        <button onClick={() => { setNewSchedule({...newSchedule, name: '', class_type: activeTab}); setIsAddModalOpen(true); }} className="flex items-center gap-1.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white px-4 py-2 rounded shadow text-[13px] font-semibold h-[38px] transition">
+                        <button onClick={() => { setNewSchedule({...newSchedule, class_id: '', name: '', class_type: activeTab}); setIsAddModalOpen(true); }} className="flex items-center gap-1.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white px-4 py-2 rounded shadow text-[13px] font-semibold h-[38px] transition">
                             <span className="text-lg leading-none">+</span> Add Time Table
                         </button>
                     )}
@@ -248,7 +285,7 @@ export default function TimeTableSetupPage() {
                                                                 <span>{formatTime(sched.start_time)} - {formatTime(sched.end_time)}</span>
                                                             </div>
                                                             <p className="text-[14px] font-semibold text-slate-800 dark:text-white mb-1">
-                                                                {sched.name ? sched.name : <span className="capitalize">Class Type : {sched.class_type}</span>}
+                                                                {sched.class_setup_name || sched.name ? (sched.class_setup_name || sched.name) : <span className="capitalize">Class Type : {sched.class_type}</span>}
                                                             </p>
                                                             {sched.effective_from && (
                                                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-2">
@@ -330,7 +367,7 @@ export default function TimeTableSetupPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Class Type <span className="text-rose-500">*</span></label>
-                                    <select value={newSchedule.class_type} onChange={e => setNewSchedule({...newSchedule, class_type: e.target.value})}
+                                    <select value={newSchedule.class_type} onChange={e => setNewSchedule({...newSchedule, class_type: e.target.value, class_id: ''})}
                                         className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-[13px] focus:ring-1 focus:ring-[#4f46e5] outline-none">
                                         <option value="school">School</option>
                                         <option value="hifz">Hifz</option>
@@ -347,39 +384,24 @@ export default function TimeTableSetupPage() {
                             </div>
 
                             <div>
-                                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Class Name (Optional)</label>
-                                <input type="text" value={newSchedule.name} onChange={e => setNewSchedule({...newSchedule, name: e.target.value})}
-                                    placeholder="e.g. Morning Hifz"
-                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-[13px] focus:ring-1 focus:ring-[#4f46e5] outline-none" />
+                                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Class / Group <span className="text-rose-500">*</span></label>
+                                <select value={newSchedule.class_id} onChange={e => setNewSchedule({...newSchedule, class_id: e.target.value})}
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-[13px] focus:ring-1 focus:ring-[#4f46e5] outline-none">
+                                    <option value="">Select from Class Setup</option>
+                                    {availableClasses.map(item => (
+                                        <option key={item.id} value={item.id}>
+                                            {item.name}{item.section ? ` - Section ${item.section}` : ''}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div>
-                                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-2">Standards <span className="text-rose-500">*</span></label>
-                                <div className="flex flex-wrap gap-2 max-h-[140px] overflow-y-auto p-1">
-                                    {availableStandards.map(std => {
-                                        const isSelected = newSchedule.standards.includes(std)
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={std}
-                                                onClick={() => {
-                                                    if (isSelected) {
-                                                        setNewSchedule({...newSchedule, standards: newSchedule.standards.filter(s => s !== std)})
-                                                    } else {
-                                                        setNewSchedule({...newSchedule, standards: [...newSchedule.standards, std]})
-                                                    }
-                                                }}
-                                                className={cn(
-                                                    "px-3 py-1.5 rounded-full text-[12px] font-bold transition-all border shadow-sm",
-                                                    isSelected
-                                                        ? "bg-[#4f46e5] text-white border-[#4f46e5]"
-                                                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#4f46e5]/50"
-                                                )}>
-                                                {std}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
+                                <label className="block text-[12px] font-bold text-slate-600 dark:text-slate-400 mb-1">Schedule Name (Optional)</label>
+                                <input type="text" value={newSchedule.name} onChange={e => setNewSchedule({...newSchedule, name: e.target.value})}
+                                    placeholder="Leave blank to use the class name"
+                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-[13px] focus:ring-1 focus:ring-[#4f46e5] outline-none" />
+                                <p className="mt-1 text-[11px] font-medium text-slate-400">Classes are created in Academic / Class Setup. Timetable only assigns periods to those classes.</p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">

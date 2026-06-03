@@ -12,7 +12,11 @@ const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller']
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 function invalidateLeaveCaches() {
     (0, server_cache_1.invalidateCacheByPrefix)('leaves:');
+    (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
     (0, server_cache_1.invalidateCacheByPrefix)('attendance:daily-stats');
+    (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
+    (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
+    (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
 }
 function parseLimitOffset(query, defaultLimit = 100, maxLimit = 500) {
     const rawLimit = Number(query.limit ?? defaultLimit);
@@ -20,6 +24,151 @@ function parseLimitOffset(query, defaultLimit = 100, maxLimit = 500) {
     const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : defaultLimit, 1), maxLimit);
     const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
     return { limit, offset };
+}
+const APP_TIME_ZONE = 'Asia/Kolkata';
+const institutionalCancellationPrefix = 'Institutional Leave:';
+function institutionalCancellationReason(id) {
+    return `${institutionalCancellationPrefix}${id}`;
+}
+function toDateKey(value) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: APP_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(new Date(value));
+    const part = (type) => parts.find(p => p.type === type)?.value;
+    return `${part('year')}-${part('month')}-${part('day')}`;
+}
+function dateKeysBetween(start, end) {
+    const startKey = toDateKey(start);
+    const endKey = toDateKey(end);
+    const dates = [];
+    const cursor = new Date(`${startKey}T00:00:00.000Z`);
+    const last = new Date(`${endKey}T00:00:00.000Z`);
+    while (cursor <= last) {
+        dates.push(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return dates;
+}
+function normalizeScheduleStandard(label) {
+    const l = label.trim();
+    if (l === 'Hifz Only')
+        return 'Hifz';
+    if (l === '+1 (Plus One)')
+        return 'Plus One';
+    if (l === '+2 (Plus Two)')
+        return 'Plus Two';
+    if (l.endsWith(' Standard'))
+        return l.replace(' Standard', '');
+    return l;
+}
+function parseStandardList(value) {
+    if (Array.isArray(value))
+        return value.map(String);
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value || '[]');
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+        }
+        catch {
+            return value.split(',').map(item => item.trim()).filter(Boolean);
+        }
+    }
+    return [];
+}
+function normalizeStandardList(values = []) {
+    return Array.from(new Set(values
+        .map(value => normalizeScheduleStandard(String(value || '').trim()))
+        .filter(Boolean)));
+}
+function getDayOfWeek(dateKey) {
+    return new Date(`${dateKey}T12:00:00.000Z`).getUTCDay();
+}
+function scheduleDateTime(dateKey, timeValue) {
+    const cleanTime = String(timeValue || '00:00:00').slice(0, 8);
+    return new Date(`${dateKey}T${cleanTime}+05:30`);
+}
+function doRangesOverlap(startA, endA, startB, endB) {
+    return startA < endB && endA > startB;
+}
+async function applyInstitutionalAttendanceCancellations(client, leave) {
+    const dateKeys = dateKeysBetween(leave.start_datetime, leave.end_datetime);
+    if (dateKeys.length === 0)
+        return 0;
+    const targetClasses = normalizeStandardList(parseStandardList(leave.target_classes));
+    if (!leave.is_entire_institution && targetClasses.length === 0)
+        return 0;
+    const schedulesRes = await client.query(`SELECT id, standards, day_of_week, start_time, end_time, effective_from, effective_until
+         FROM attendance_schedules
+         WHERE (is_deleted = false OR is_deleted IS NULL)
+           AND (effective_from IS NULL OR effective_from <= $2::date)
+           AND (effective_until IS NULL OR effective_until >= $1::date)`, [dateKeys[0], dateKeys[dateKeys.length - 1]]);
+    const leaveStart = new Date(leave.start_datetime);
+    const leaveEnd = new Date(leave.end_datetime);
+    const rows = [];
+    for (const dateKey of dateKeys) {
+        const dayOfWeek = getDayOfWeek(dateKey);
+        for (const schedule of schedulesRes.rows) {
+            if (Number(schedule.day_of_week) !== dayOfWeek)
+                continue;
+            const scheduleStart = scheduleDateTime(dateKey, schedule.start_time);
+            const scheduleEnd = scheduleDateTime(dateKey, schedule.end_time);
+            if (!doRangesOverlap(scheduleStart, scheduleEnd, leaveStart, leaveEnd))
+                continue;
+            let cancelledStandards = null;
+            if (!leave.is_entire_institution) {
+                const scheduleStandards = normalizeStandardList(parseStandardList(schedule.standards));
+                const affectedStandards = scheduleStandards.length > 0
+                    ? targetClasses.filter(standard => scheduleStandards.includes(standard))
+                    : targetClasses;
+                if (affectedStandards.length === 0)
+                    continue;
+                cancelledStandards = scheduleStandards.length > 0 && affectedStandards.length === scheduleStandards.length
+                    ? null
+                    : affectedStandards;
+            }
+            rows.push({
+                schedule_id: schedule.id,
+                date: dateKey,
+                reason: institutionalCancellationReason(leave.id),
+                cancelled_by: leave.created_by,
+                cancelled_standards: cancelledStandards,
+            });
+        }
+    }
+    if (rows.length === 0)
+        return 0;
+    await client.query(`INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards)
+         SELECT schedule_id, date, reason, cancelled_by, cancelled_standards
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+             schedule_id uuid,
+             date date,
+             reason text,
+             cancelled_by uuid,
+             cancelled_standards jsonb
+         )
+         ON CONFLICT (schedule_id, date) DO UPDATE SET
+             reason = CASE
+                 WHEN attendance_cancellations.reason LIKE '${institutionalCancellationPrefix}%'
+                     THEN EXCLUDED.reason
+                 ELSE attendance_cancellations.reason
+             END,
+             cancelled_by = EXCLUDED.cancelled_by,
+             cancelled_standards = CASE
+                 WHEN attendance_cancellations.cancelled_standards IS NULL OR EXCLUDED.cancelled_standards IS NULL
+                     THEN NULL
+                 ELSE (
+                     SELECT jsonb_agg(DISTINCT value)
+                     FROM (
+                         SELECT jsonb_array_elements_text(attendance_cancellations.cancelled_standards) AS value
+                         UNION
+                         SELECT jsonb_array_elements_text(EXCLUDED.cancelled_standards) AS value
+                     ) merged
+                 )
+             END`, [JSON.stringify(rows)]);
+    return rows.length;
 }
 /** =============================
  *  SHARED / HELPERS
@@ -93,17 +242,22 @@ const createInstitutionalLeave = async (req, res) => {
                 await client.query(`INSERT INTO leave_exceptions (institutional_leave_id, student_id)
                      SELECT $1, sid FROM unnest($2::text[]) AS t(sid)`, [inst_id, exceptions]);
             }
-            // 3. Cancel relevant class schedules for these dates
-            // (For simplicity, if it's entire institution, we cancel all sessions on those dates)
-            if (is_entire_institution) {
-                // Find all schedules
-                const schedulesRes = await client.query(`SELECT id, day_of_week FROM attendance_schedules`);
-                // Insert into attendance_cancellations for each day between start and end
-                // Note: accurate date calculation omitted here for brevity, assuming external chron block or manual via attendance dashboard for granular
-            }
+            const cancellationCount = await applyInstitutionalAttendanceCancellations(client, {
+                id: inst_id,
+                start_datetime,
+                end_datetime,
+                target_classes,
+                is_entire_institution,
+                created_by: user.id,
+            });
             await client.query('COMMIT');
             invalidateLeaveCaches();
-            res.status(201).json({ success: true, count: 0, institutional_leave_id: inst_id });
+            res.status(201).json({
+                success: true,
+                count: 0,
+                cancellation_count: cancellationCount,
+                institutional_leave_id: inst_id,
+            });
         }
         catch (e) {
             await client.query('ROLLBACK');
@@ -330,7 +484,7 @@ const getInstitutionalLeaveStudents = async (req, res) => {
 exports.getInstitutionalLeaveStudents = getInstitutionalLeaveStudents;
 const deleteInstitutionalLeave = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = String(req.params.id);
         // Start transaction
         const client = await db_1.db.getClient();
         try {
@@ -344,6 +498,8 @@ const deleteInstitutionalLeave = async (req, res) => {
             await client.query('DELETE FROM student_leaves WHERE institutional_leave_id = $1', [id]);
             // Delete exceptions
             await client.query('DELETE FROM leave_exceptions WHERE institutional_leave_id = $1', [id]);
+            // Delete attendance cancellations generated directly by this leave.
+            await client.query('DELETE FROM attendance_cancellations WHERE reason = $1', [institutionalCancellationReason(id)]);
             // Delete main record
             await client.query('DELETE FROM institutional_leaves WHERE id = $1', [id]);
             await client.query('COMMIT');
@@ -890,6 +1046,7 @@ const getActiveLeaves = async (req, res) => {
             JOIN student_leaves sl ON scp.active_leave_id = sl.id
             JOIN students s ON scp.student_id = s.adm_no
             WHERE scp.status IN ('outside', 'on-campus')
+              AND s.status = 'active'
         `;
         if (student_ids && typeof student_ids === 'string') {
             const ids = student_ids.split(',');
@@ -915,7 +1072,7 @@ const getActiveLeaves = async (req, res) => {
         catch (presenceErr) {
             if (presenceErr?.code !== '42P01')
                 throw presenceErr;
-            let fallbackQuery = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside'`;
+            let fallbackQuery = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'`;
             const fallbackParams = [];
             if (student_ids && typeof student_ids === 'string') {
                 const ids = student_ids.split(',');
@@ -1008,6 +1165,7 @@ const getOutsideStudents = async (req, res) => {
                 LIMIT 1
             ) exit_mv ON TRUE
             WHERE scp.status = 'outside'
+              AND s.status = 'active'
               AND ($1::boolean OR sl.leave_type <> 'outdoor')
               ${assignmentFilter}
             ORDER BY sl.start_datetime DESC
@@ -1059,6 +1217,7 @@ const getOutsideStudents = async (req, res) => {
                         LIMIT 1
                     ) exit_mv ON TRUE
                     WHERE sl.status = 'outside'
+                      AND s.status = 'active'
                       AND ($1::boolean OR sl.leave_type <> 'outdoor')
                       ${assignmentFilter}
                     ORDER BY sl.start_datetime DESC
@@ -1081,17 +1240,50 @@ exports.getOutsideStudents = getOutsideStudents;
 const getAllLeaves = async (req, res) => {
     try {
         const { limit, offset } = parseLimitOffset(req.query, 100, 500);
-        const cacheKey = (0, server_cache_1.makeCacheKey)('leaves:all', { limit, offset });
+        const search = String(req.query.search || '').trim();
+        const cacheKey = (0, server_cache_1.makeCacheKey)('leaves:all', { limit, offset, search });
         const payload = await (0, server_cache_1.cachedResult)(cacheKey, 15000, async () => {
+            const params = [];
+            let whereClause = '';
+            if (search) {
+                params.push(`%${search}%`);
+                whereClause = `
+                    WHERE s.name ILIKE $1
+                       OR s.adm_no ILIKE $1
+                       OR COALESCE(s.standard, s.school_standard, s.hifz_standard, '') ILIKE $1
+                       OR COALESCE(sl.reason_category, '') ILIKE $1
+                       OR COALESCE(sl.remarks, '') ILIKE $1
+                       OR COALESCE(sl.leave_type, '') ILIKE $1
+                       OR COALESCE(sl.status, '') ILIKE $1
+                `;
+            }
+            const limitIdx = params.length + 1;
+            const offsetIdx = params.length + 2;
             const [leavesRes, countRes] = await Promise.all([
                 db_1.db.query(`
-                    SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
+                    SELECT sl.*,
+                           CASE
+                             WHEN sl.status IN ('returned', 'completed')
+                              AND sl.actual_return_datetime IS NOT NULL
+                              AND sl.end_datetime IS NOT NULL
+                               THEN CASE WHEN sl.actual_return_datetime > sl.end_datetime THEN 'late' ELSE 'normal' END
+                             ELSE sl.return_status
+                           END AS computed_return_status,
+                           s.name as student_name,
+                           COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard,
+                           s.adm_no as student_adm_no
                     FROM student_leaves sl
                     JOIN students s ON sl.student_id = s.adm_no
+                    ${whereClause}
                     ORDER BY sl.created_at DESC
-                    LIMIT $1 OFFSET $2
-                `, [limit, offset]),
-                db_1.db.query(`SELECT COUNT(*)::integer as total FROM student_leaves`),
+                    LIMIT $${limitIdx} OFFSET $${offsetIdx}
+                `, [...params, limit, offset]),
+                db_1.db.query(`
+                    SELECT COUNT(*)::integer as total
+                    FROM student_leaves sl
+                    JOIN students s ON sl.student_id = s.adm_no
+                    ${whereClause}
+                `, params),
             ]);
             return {
                 leaves: leavesRes.rows,

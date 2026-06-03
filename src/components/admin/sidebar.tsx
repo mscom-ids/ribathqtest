@@ -8,7 +8,7 @@ import {
     LayoutDashboard, Users, Calendar, UserCog,
     Settings, HelpCircle, LogOut, DoorOpen, BookOpen,
     Landmark, BookMarked, School, GraduationCap,
-    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText
+    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText, ShieldCheck
 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -54,6 +54,17 @@ const menuLinks: NavEntry[] = [
 
 const academicLinks: NavEntry[] = [
     {
+        label: "Academic", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable"],
+        children: [
+            { href: "/admin/setup/academic-years", label: "Academic Years" },
+            { href: "/admin/academic/class-setup", label: "Class Setup" },
+            { href: "/admin/academic/enrollments", label: "Student Enrollments" },
+            { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
+            { href: "/admin/promotions", label: "Promotion" },
+            { href: "/admin/timetable/setup", label: "Time Table" },
+        ],
+    },
+    {
         label: "Madrasa", icon: BookMarked, group: ["/admin/madrassa"],
         children: [
             { href: "/admin/madrassa/attendance", label: "Attendance" },
@@ -92,6 +103,7 @@ const managementLinks: NavEntry[] = [
 
 const generalLinks: SimpleItem[] = [
     { href: "/admin/setup/academic-years", label: "Settings", icon: Settings },
+    { href: "/admin/academic-history", label: "History Layer", icon: ShieldCheck },
     { href: "#help",                       label: "Help",     icon: HelpCircle },
 ]
 
@@ -111,6 +123,17 @@ const principalMenuLinks: NavEntry[] = [
 ]
 
 const principalAcademicLinks: NavEntry[] = [
+    {
+        label: "Academic", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable"],
+        children: [
+            { href: "/admin/setup/academic-years", label: "Academic Years" },
+            { href: "/admin/academic/class-setup", label: "Class Setup" },
+            { href: "/admin/academic/enrollments", label: "Student Enrollments" },
+            { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
+            { href: "/admin/promotions", label: "Promotion" },
+            { href: "/admin/timetable/setup", label: "Time Table" },
+        ],
+    },
     {
         label: "Madrasa", icon: BookMarked, group: ["/admin/madrassa"],
         children: [
@@ -148,6 +171,7 @@ const principalManagementLinks: NavEntry[] = [
 ]
 
 const principalGeneralLinks: SimpleItem[] = [
+    { href: "/admin/academic-history", label: "History Layer", icon: ShieldCheck },
     { href: "#help", label: "Help", icon: HelpCircle },
 ]
 

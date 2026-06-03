@@ -557,18 +557,21 @@ export const getProgressSummary = async (req: Request, res: Response) => {
             HIFZ_SUMMARY_TTL_MS,
             async () => {
                 const params: any[] = [];
-                let where = `WHERE mode = 'New Verses'
-                               AND surah_name IS NOT NULL
-                               AND start_v IS NOT NULL
-                               AND end_v IS NOT NULL`;
+                let where = `WHERE hl.mode = 'New Verses'
+                               AND hl.surah_name IS NOT NULL
+                               AND hl.start_v IS NOT NULL
+                               AND hl.end_v IS NOT NULL`;
                 if (student_id) {
                     params.push(student_id);
-                    where += ` AND student_id = $1`;
+                    where += ` AND hl.student_id = $1`;
+                } else {
+                    where += ` AND s.status = 'active'`;
                 }
 
                 const result = await db.query(
-                    `SELECT student_id, surah_name, start_v, end_v
-                     FROM hifz_logs
+                    `SELECT hl.student_id, hl.surah_name, hl.start_v, hl.end_v
+                     FROM hifz_logs hl
+                     JOIN students s ON hl.student_id = s.adm_no
                      ${where}`,
                     params
                 );

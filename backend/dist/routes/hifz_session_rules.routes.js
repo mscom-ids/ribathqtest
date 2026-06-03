@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const hifz_session_rules_controller_1 = require("../controllers/hifz_session_rules.controller");
+const router = (0, express_1.Router)();
+const MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+router.use(auth_middleware_1.verifyToken);
+router.use(auth_middleware_1.verifyDelegation);
+router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
+router.get('/', hifz_session_rules_controller_1.getHifzSessionSetup);
+router.post('/sessions', (0, auth_middleware_1.requireRole)(MANAGE_ROLES), hifz_session_rules_controller_1.upsertHifzSession);
+router.post('/rules/bulk', (0, auth_middleware_1.requireRole)(MANAGE_ROLES), hifz_session_rules_controller_1.bulkSaveHifzSessionRules);
+router.post('/assignments', (0, auth_middleware_1.requireRole)(MANAGE_ROLES), hifz_session_rules_controller_1.upsertStudentHifzSessionAssignment);
+exports.default = router;

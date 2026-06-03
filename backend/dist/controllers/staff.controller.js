@@ -8,7 +8,7 @@ const SAFE_STAFF_COLUMNS = `
     id, profile_id, name, role, phone, email, photo_url, address, place,
     phone_contacts, staff_id, is_active, created_at
 `;
-const STAFF_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
+const STAFF_ROLES = [...staff_utils_1.TEACHING_STAFF_ROLES, ...staff_utils_1.LEADERSHIP_STAFF_ROLES, ...staff_utils_1.ADMINISTRATIVE_STAFF_ROLES];
 const getMyStaffProfile = async (req, res) => {
     try {
         const user = req.user;
@@ -218,8 +218,75 @@ const restoreStaff = async (req, res) => {
 exports.restoreStaff = restoreStaff;
 const getAllStaff = async (req, res) => {
     try {
-        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff ORDER BY name ASC`);
-        res.json({ success: true, staff: result.rows });
+        const result = await db_1.db.query(`WITH responsibility_counts AS (
+                SELECT mentor_id,
+                       COUNT(DISTINCT adm_no) AS assigned_students,
+                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students,
+                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'school') AS school_students,
+                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'madrasa') AS madrasa_students
+                FROM (
+                    SELECT hifz_mentor_id AS mentor_id, adm_no, 'hifz' AS responsibility
+                    FROM students
+                    WHERE status = 'active' AND hifz_mentor_id IS NOT NULL
+                    UNION ALL
+                    SELECT school_mentor_id AS mentor_id, adm_no, 'school' AS responsibility
+                    FROM students
+                    WHERE status = 'active' AND school_mentor_id IS NOT NULL
+                    UNION ALL
+                    SELECT madrasa_mentor_id AS mentor_id, adm_no, 'madrasa' AS responsibility
+                    FROM students
+                    WHERE status = 'active' AND madrasa_mentor_id IS NOT NULL
+                ) assigned
+                GROUP BY mentor_id
+            )
+            SELECT ${SAFE_STAFF_COLUMNS},
+                   COALESCE(rc.assigned_students, 0)::int AS assigned_students,
+                   COALESCE(rc.hifz_students, 0)::int AS hifz_students,
+                   COALESCE(rc.school_students, 0)::int AS school_students,
+                   COALESCE(rc.madrasa_students, 0)::int AS madrasa_students,
+                   NULL::timestamptz AS last_login
+            FROM staff
+            LEFT JOIN responsibility_counts rc ON rc.mentor_id = staff.id
+            ORDER BY name ASC`);
+        const staff = result.rows.map((member) => {
+            const responsibilities = [];
+            if (Number(member.hifz_students || 0) > 0)
+                responsibilities.push('Hifz Mentor');
+            if (Number(member.school_students || 0) > 0)
+                responsibilities.push('School Mentor');
+            if (Number(member.madrasa_students || 0) > 0)
+                responsibilities.push('Madrasa Mentor');
+            const staff_category = (0, staff_utils_1.staffDomainForRole)(member.role);
+            if (responsibilities.length === 0) {
+                if ((0, staff_utils_1.isLeadershipStaffRole)(member.role))
+                    responsibilities.push('Leadership Role');
+                else if ((0, staff_utils_1.isAdministrativeStaffRole)(member.role))
+                    responsibilities.push('System Administration');
+                else
+                    responsibilities.push('General Mentor');
+            }
+            return {
+                ...member,
+                staff_category,
+                role_label: (0, staff_utils_1.staffRoleLabel)(member.role),
+                assigned_responsibilities: responsibilities,
+            };
+        });
+        const stats = staff.reduce((acc, member) => {
+            if (member.is_active === false) {
+                acc.archived_staff += 1;
+                return acc;
+            }
+            acc.total_staff += 1;
+            if (member.staff_category === 'teaching')
+                acc.teaching_staff += 1;
+            else
+                acc.leadership_staff += 1;
+            if (member.staff_category === 'administrative')
+                acc.admin_staff += 1;
+            return acc;
+        }, { total_staff: 0, teaching_staff: 0, leadership_staff: 0, admin_staff: 0, archived_staff: 0 });
+        res.json({ success: true, staff, stats });
     }
     catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch staff' });

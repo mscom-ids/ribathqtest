@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getStudentAttendanceSummaries } from '../utils/attendance-report';
 import { cachedResult, makeCacheKey } from '../utils/server-cache';
+import { TEACHING_STAFF_ROLES, staffRoleLabel } from '../utils/staff.utils';
+import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
+import { resolveHifzStandardsForSchedule } from '../utils/hifz-session-eligibility';
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 
@@ -13,6 +16,27 @@ const MENTOR_COL_MAP: Record<string, MentorColumn> = {
   madrasa: 'madrasa_mentor_id',
   madrassa: 'madrasa_mentor_id',
 };
+
+type MentorReportFilter = 'active' | 'hifz' | 'school' | 'madrasa';
+type MentorReportSort =
+  | 'highest_percentage'
+  | 'lowest_percentage'
+  | 'most_marked'
+  | 'least_marked'
+  | 'missing_desc'
+  | 'name';
+
+function clampPaginationValue(value: any, fallback: number, max: number) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+function mentorClassTotal(mentor: any, type: 'hifz' | 'school' | 'madrasa') {
+  const breakdown = mentor.class_breakdown?.[type];
+  if (!breakdown) return 0;
+  return Number(breakdown.required || 0) + Number(breakdown.marked || 0) + Number(breakdown.cancelled || 0);
+}
 
 function toDateKey(value: any): string {
   if (!value) return '';
@@ -94,6 +118,46 @@ function scheduleAppliesToDate(schedule: any, dateStr: string) {
   return true;
 }
 
+function scheduleDateTime(dateKey: string, timeValue: string) {
+  return new Date(`${dateKey}T${String(timeValue || '00:00:00').slice(0, 8)}+05:30`);
+}
+
+function institutionalLeaveCancellationForMentor(schedule: any, mentorStandards: Set<string>, dateKey: string, leaves: any[]) {
+  const scheduleStart = scheduleDateTime(dateKey, schedule.start_time);
+  const scheduleEnd = scheduleDateTime(dateKey, schedule.end_time);
+  const scheduleStandards = normalizeStandardList(parseStandardList(schedule.standards));
+
+  for (const leave of leaves) {
+    const leaveStart = new Date(leave.start_datetime);
+    const leaveEnd = new Date(leave.end_datetime);
+    if (!(scheduleStart < leaveEnd && scheduleEnd > leaveStart)) continue;
+
+    if (leave.is_entire_institution) {
+      return {
+        schedule_id: schedule.id,
+        date: dateKey,
+        cancelled_standards: null,
+      };
+    }
+
+    const targetStandards = normalizeStandardList(parseStandardList(leave.target_classes));
+    const affectedStandards = Array.from(mentorStandards).filter(std => targetStandards.includes(std));
+    if (affectedStandards.length === 0) continue;
+
+    const cancelledStandards = scheduleStandards.length > 0 && affectedStandards.length < scheduleStandards.length
+      ? affectedStandards
+      : null;
+
+    return {
+      schedule_id: schedule.id,
+      date: dateKey,
+      cancelled_standards: cancelledStandards,
+    };
+  }
+
+  return null;
+}
+
 function monthBounds(month: number, year: number) {
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const lastDay = new Date(year, month, 0).getDate();
@@ -119,6 +183,7 @@ function resolveReportRange(req: Request) {
 export const getStudentReports = async (req: Request, res: Response) => {
   try {
     const { month, year } = req.query;
+    const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
     
     const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
     const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
@@ -129,22 +194,40 @@ export const getStudentReports = async (req: Request, res: Response) => {
 
     // All 3 queries are independent — fire in parallel.
     const mapped = await cachedResult(
-      makeCacheKey('reports:students', { month: targetMonth, year: targetYear }),
+      makeCacheKey('reports:students', { month: targetMonth, year: targetYear, academic_year_id: academicContext.academicYearId || 'legacy' }),
       60_000,
       async () => {
+    const studentsQuery = academicContext.mode === 'historical' && academicContext.academicYearId
+      ? {
+          text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                        hm.name as hifz_mentor,
+                        sm.name as school_mentor,
+                        mm.name as madrasa_mentor
+                 FROM student_year_snapshots sys
+                 JOIN students s ON s.adm_no = sys.student_id
+                 LEFT JOIN staff hm ON COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = hm.id
+                 LEFT JOIN staff sm ON s.school_mentor_id = sm.id
+                 LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
+                 WHERE sys.academic_year_id = $1
+                   AND COALESCE(sys.status, 'active') = 'active'
+                 ORDER BY s.name ASC`,
+          params: [academicContext.academicYearId],
+        }
+      : {
+          text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                        hm.name as hifz_mentor,
+                        sm.name as school_mentor,
+                        mm.name as madrasa_mentor
+                 FROM students s
+                 LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
+                 LEFT JOIN staff sm ON s.school_mentor_id = sm.id
+                 LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
+                 WHERE s.status = 'active'
+                 ORDER BY s.name ASC`,
+          params: [],
+        };
     const [studentsRes, hifzRes] = await Promise.all([
-      db.query(
-        `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                hm.name as hifz_mentor,
-                sm.name as school_mentor,
-                mm.name as madrasa_mentor
-         FROM students s
-         LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
-         LEFT JOIN staff sm ON s.school_mentor_id = sm.id
-         LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
-         WHERE s.status = 'active'
-         ORDER BY s.name ASC`
-      ),
+      db.query(studentsQuery.text, studentsQuery.params),
       db.query(
         `SELECT DISTINCT ON (student_id) student_id, juz_number as juz, COALESCE(end_page, start_page) as page
          FROM hifz_logs
@@ -152,7 +235,12 @@ export const getStudentReports = async (req: Request, res: Response) => {
          ORDER BY student_id, entry_date DESC, created_at DESC`
       ),
     ]);
-    const students = studentsRes.rows;
+    const snapshotMap = await getStudentYearSnapshotMap(
+      db,
+      studentsRes.rows.map((s: any) => s.adm_no),
+      academicContext.academicYearId
+    );
+    const students = studentsRes.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no)));
     const attendanceSummaries = await getStudentAttendanceSummaries(db, students, monthStart, monthEnd);
 
     // Build O(1) lookup maps; the previous .find()-per-row was O(N×M).
@@ -182,6 +270,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
 
        return {
          ...s,
+         academic_year_mode: academicContext.mode,
          attendance: att,
          hifz_progress: hifz 
            ? (hifz.juz && hifz.page ? `Juz ${hifz.juz}, Pg ${hifz.page}` : hifz.juz ? `Juz ${hifz.juz}` : `Pg ${hifz.page}`) 
@@ -206,19 +295,55 @@ export const getMentorReports = async (req: Request, res: Response) => {
        return res.status(400).json({ success: false, error: 'start_date and end_date must be YYYY-MM-DD' });
      }
 
-     const payload = await cachedResult(
-       makeCacheKey('reports:mentors', { startDate, endDate }),
-       30_000,
+     const filter = String(req.query.filter || 'active').toLowerCase() as MentorReportFilter;
+     const sort = String(req.query.sort || 'lowest_percentage').toLowerCase() as MentorReportSort;
+     const search = String(req.query.search || '').trim().toLowerCase();
+     const limit = clampPaginationValue(req.query.limit, 50, 100);
+     const offset = clampPaginationValue(req.query.offset, 0, 100000);
+     const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+
+     const basePayload = await cachedResult(
+       makeCacheKey('reports:mentors', { startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }),
+       60_000,
        async () => {
-     const [mentorsRes, schedulesRes, studentsRes, cancellationsRes, marksRes] = await Promise.all([
+     const [mentorsRes, schedulesRes, studentsRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
        db.query(
-         `SELECT id, name, role, phone, is_active as active
-          FROM staff
-          WHERE is_active = true
+         `WITH responsibility_counts AS (
+            SELECT mentor_id,
+                   COUNT(DISTINCT adm_no) AS assigned_students,
+                   COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students,
+                   COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'school') AS school_students,
+                   COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'madrasa') AS madrasa_students
+            FROM (
+              SELECT hifz_mentor_id AS mentor_id, adm_no, 'hifz' AS responsibility
+              FROM students
+              WHERE status = 'active' AND hifz_mentor_id IS NOT NULL
+              UNION ALL
+              SELECT school_mentor_id AS mentor_id, adm_no, 'school' AS responsibility
+              FROM students
+              WHERE status = 'active' AND school_mentor_id IS NOT NULL
+              UNION ALL
+              SELECT madrasa_mentor_id AS mentor_id, adm_no, 'madrasa' AS responsibility
+              FROM students
+              WHERE status = 'active' AND madrasa_mentor_id IS NOT NULL
+            ) assigned
+            GROUP BY mentor_id
+          )
+          SELECT s.id, s.name, s.role, s.phone, s.is_active as active,
+                 COALESCE(rc.assigned_students, 0)::int AS assigned_students,
+                 COALESCE(rc.hifz_students, 0)::int AS hifz_students,
+                 COALESCE(rc.school_students, 0)::int AS school_students,
+                 COALESCE(rc.madrasa_students, 0)::int AS madrasa_students
+          FROM staff s
+          JOIN responsibility_counts rc ON rc.mentor_id = s.id
+          WHERE s.is_active = true
+            AND lower(s.role) = ANY($1::text[])
           ORDER BY name ASC`
+          ,
+         [TEACHING_STAFF_ROLES]
        ),
        db.query(
-         `SELECT id, class_type, name, standards, day_of_week, effective_from, effective_until
+         `SELECT id, class_type, name, standards, day_of_week, start_time, end_time, effective_from, effective_until
           FROM attendance_schedules
           WHERE effective_from <= $2::date
             AND (effective_until IS NULL OR effective_until >= $1::date)
@@ -243,12 +368,21 @@ export const getMentorReports = async (req: Request, res: Response) => {
           WHERE date >= $1 AND date <= $2`,
          [startDate, endDate]
        ),
+       db.query(
+         `SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution
+          FROM institutional_leaves
+          WHERE start_datetime < ($2::date + 1)
+            AND end_datetime >= $1::date`,
+         [startDate, endDate]
+       ),
      ]);
 
      const mentorStats = new Map<string, any>();
      for (const mentor of mentorsRes.rows) {
        mentorStats.set(String(mentor.id), {
          ...mentor,
+         role_label: staffRoleLabel(mentor.role),
+         staff_category: 'teaching',
          planned_classes: 0,
          cancelled_classes: 0,
          required_classes: 0,
@@ -281,7 +415,10 @@ export const getMentorReports = async (req: Request, res: Response) => {
        const mentorCol = MENTOR_COL_MAP[normalizedClassType];
        if (!mentorCol) continue;
 
-       const scheduleStandards = normalizeStandardList(parseStandardList(schedule.standards));
+       const resolvedHifz = await resolveHifzStandardsForSchedule(schedule, academicContext.academicYearId, startDate);
+       const scheduleStandards = String(schedule.class_type || '').toLowerCase() === 'hifz' && resolvedHifz.usedRules
+         ? resolvedHifz.standards
+         : normalizeStandardList(parseStandardList(schedule.standards));
        const mentorStandards = new Map<string, Set<string>>();
 
        for (const student of studentsRes.rows) {
@@ -311,14 +448,20 @@ export const getMentorReports = async (req: Request, res: Response) => {
          const classType = String(schedule.class_type || '').toLowerCase() === 'madrassa'
            ? 'madrasa'
            : String(schedule.class_type || '').toLowerCase();
-         const cancellation = cancellationMap.get(`${scheduleId}|${date}`);
-         const cancelledStandards = cancellationStandards(cancellation);
+         const persistedCancellation = cancellationMap.get(`${scheduleId}|${date}`);
 
          for (const [mentorId, standards] of mentorStandards.entries()) {
            const stat = mentorStats.get(mentorId);
            if (!stat) continue;
 
            stat.planned_classes += 1;
+           const cancellation = persistedCancellation || institutionalLeaveCancellationForMentor(
+             schedule,
+             standards,
+             date,
+             institutionalLeavesRes.rows
+           );
+           const cancelledStandards = cancellationStandards(cancellation);
 
            const fullyCancelledForMentor = isFullCancellation(cancellation)
              || (!!cancellation && Array.from(standards).every(std => cancelledStandards.includes(normalizeScheduleStandard(std))));
@@ -376,7 +519,6 @@ export const getMentorReports = async (req: Request, res: Response) => {
      }, { planned_classes: 0, cancelled_classes: 0, required_classes: 0, marked_classes: 0, not_marked_classes: 0 });
 
      return {
-       success: true,
        period: { start_date: startDate, end_date: endDate },
        totals,
        data: mapped,
@@ -384,7 +526,55 @@ export const getMentorReports = async (req: Request, res: Response) => {
        }
      );
 
-     res.json(payload);
+     let filtered = [...basePayload.data];
+     if (filter === 'hifz' || filter === 'school' || filter === 'madrasa') {
+       filtered = filtered.filter((mentor: any) => mentorClassTotal(mentor, filter) > 0);
+     }
+     if (search) {
+       filtered = filtered.filter((mentor: any) => {
+         return (
+           String(mentor.name || '').toLowerCase().includes(search) ||
+           String(mentor.role || '').toLowerCase().includes(search) ||
+           String(mentor.role_label || '').toLowerCase().includes(search) ||
+           String(mentor.phone || '').toLowerCase().includes(search)
+         );
+       });
+     }
+
+     const sorters: Record<MentorReportSort, (a: any, b: any) => number> = {
+       highest_percentage: (a, b) => (b.marking_percentage || 0) - (a.marking_percentage || 0),
+       lowest_percentage: (a, b) => (a.marking_percentage || 0) - (b.marking_percentage || 0),
+       most_marked: (a, b) => (b.marked_classes || 0) - (a.marked_classes || 0),
+       least_marked: (a, b) => (a.marked_classes || 0) - (b.marked_classes || 0),
+       missing_desc: (a, b) => (b.not_marked_classes || 0) - (a.not_marked_classes || 0),
+       name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
+     };
+     filtered.sort(sorters[sort] || sorters.lowest_percentage);
+
+     const averageReportingRate = filtered.length
+       ? Math.round((filtered.reduce((sum: number, mentor: any) => sum + Number(mentor.marking_percentage || 0), 0) / filtered.length) * 10) / 10
+       : 0;
+     const withRequired = filtered.filter((mentor: any) => Number(mentor.required_classes || 0) > 0);
+     const summary = {
+       teaching_staff_count: filtered.length,
+       best_reporting_mentor: withRequired.length ? [...withRequired].sort(sorters.highest_percentage)[0] : null,
+       lowest_reporting_mentor: withRequired.length ? [...withRequired].sort(sorters.lowest_percentage)[0] : null,
+       average_reporting_rate: averageReportingRate,
+       missing_reports_count: filtered.reduce((sum: number, mentor: any) => sum + Number(mentor.not_marked_classes || 0), 0),
+     };
+
+     const total = filtered.length;
+     const paged = filtered.slice(offset, offset + limit);
+
+     res.json({
+       success: true,
+       period: basePayload.period,
+       totals: basePayload.totals,
+       summary,
+       pagination: { total, limit, offset, has_more: offset + limit < total },
+       filters: { filter, sort, search },
+       data: paged,
+     });
   } catch (error) {
      console.error("Error generating mentor report:", error);
      res.status(500).json({ success: false, error: "Failed to generate mentor report" });
@@ -414,6 +604,8 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         }
 
         // All 4 queries are independent — fire in parallel.
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+
         const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
             db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
@@ -446,9 +638,16 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             return res.status(404).json({ success: false, error: "Student not found" });
         }
 
+        const snapshotMap = await getStudentYearSnapshotMap(
+            db,
+            [student_id as string],
+            academicContext.academicYearId
+        );
+        const studentRows = studentRes.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no)));
+
         const attendanceSummaries = await getStudentAttendanceSummaries(
             db,
-            studentRes.rows,
+            studentRows,
             start_date as string,
             end_date as string
         );
@@ -478,7 +677,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         res.json({
             success: true,
             data: {
-                student: studentRes.rows[0],
+                student: { ...studentRows[0], academic_year_mode: academicContext.mode },
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,
                 period_logs: logsRes.rows,

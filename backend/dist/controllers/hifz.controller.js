@@ -472,16 +472,20 @@ const getProgressSummary = async (req, res) => {
         const { student_id } = req.query;
         const progressMap = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('hifz:progress-summary', { student_id: student_id || 'all' }), HIFZ_SUMMARY_TTL_MS, async () => {
             const params = [];
-            let where = `WHERE mode = 'New Verses'
-                               AND surah_name IS NOT NULL
-                               AND start_v IS NOT NULL
-                               AND end_v IS NOT NULL`;
+            let where = `WHERE hl.mode = 'New Verses'
+                               AND hl.surah_name IS NOT NULL
+                               AND hl.start_v IS NOT NULL
+                               AND hl.end_v IS NOT NULL`;
             if (student_id) {
                 params.push(student_id);
-                where += ` AND student_id = $1`;
+                where += ` AND hl.student_id = $1`;
             }
-            const result = await db_1.db.query(`SELECT student_id, surah_name, start_v, end_v
-                     FROM hifz_logs
+            else {
+                where += ` AND s.status = 'active'`;
+            }
+            const result = await db_1.db.query(`SELECT hl.student_id, hl.surah_name, hl.start_v, hl.end_v
+                     FROM hifz_logs hl
+                     JOIN students s ON hl.student_id = s.adm_no
                      ${where}`, params);
             const byStudent = {};
             for (const row of result.rows) {

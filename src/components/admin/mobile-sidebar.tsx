@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut } from "lucide-react"
+import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, ArrowUpRight } from "lucide-react"
 import { useEffect } from "react"
 import Cookies from "js-cookie"
 import api from "@/lib/api"
@@ -18,8 +18,13 @@ const navLinks = [
     { href: "/admin/hifz/tracking", label: "Hifz", icon: BookOpen },
     { href: "/admin/staff", label: "Staff", icon: UserCog },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/academic/class-setup", label: "Class Setup", icon: School },
+    { href: "/admin/academic/enrollments", label: "Enrollments", icon: Users },
+    { href: "/admin/academic/hifz-session-rules", label: "Hifz Rules", icon: BookOpen },
+    { href: "/admin/promotions", label: "Promotions", icon: ArrowUpRight },
+    { href: "/admin/timetable/setup", label: "Time Table", icon: Calendar },
     { href: "/admin/calendar", label: "Events", icon: Calendar },
-    { href: "/admin/setup/academic-years", label: "Setup", icon: Settings },
+    { href: "/admin/setup/academic-years", label: "Academic Years", icon: Settings },
 ]
 
 interface MobileSidebarProps {

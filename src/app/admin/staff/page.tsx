@@ -67,9 +67,45 @@ type Staff = {
     profile_id: string | null
     password_hash?: string | null
     is_active?: boolean
+    staff_category?: "teaching" | "leadership" | "administrative"
+    role_label?: string
+    assigned_responsibilities?: string[]
+    assigned_students?: number
+    hifz_students?: number
+    school_students?: number
+    madrasa_students?: number
+    last_login?: string | null
 }
 
 const RELATION_OPTIONS = ["Personal", "Home", "Father", "Mother", "Guardian", "Other"]
+const TEACHING_ROLES = ["usthad", "mentor", "staff", "teacher"]
+const LEADERSHIP_ROLES = ["principal", "vice_principal", "admin", "controller"]
+
+function staffCategory(staff: Staff) {
+    if (staff.staff_category) return staff.staff_category
+    return TEACHING_ROLES.includes(staff.role) ? "teaching" : "leadership"
+}
+
+function roleLabel(role?: string) {
+    const labels: Record<string, string> = {
+        usthad: "General Mentor",
+        mentor: "General Mentor",
+        staff: "General Mentor",
+        teacher: "General Mentor",
+        principal: "Principal",
+        vice_principal: "Vice Principal",
+        admin: "Administrator",
+        controller: "Administrator",
+    }
+    return labels[role || ""] || role || "Staff"
+}
+
+function formatLastLogin(value?: string | null) {
+    if (!value) return "Not tracked"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "Not tracked"
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+}
 
 export default function StaffPage() {
     const router = useRouter()
@@ -329,21 +365,30 @@ export default function StaffPage() {
 
     // Single-pass partition + role counts. Was 4 separate .filter() passes
     // re-running on every render (every keystroke in the search box).
-    const { activeStaffList, archivedStaffList, mentorCount, adminCount } = useMemo(() => {
+    const { activeStaffList, archivedStaffList, mentorCount, adminCount, teachingCount, leadershipCount, leadershipStaffList } = useMemo(() => {
         const active: Staff[] = []
         const archived: Staff[] = []
+        const leadership: Staff[] = []
         let mentors = 0
         let admins = 0
+        let teaching = 0
+        let leadershipTotal = 0
         for (const s of staff) {
             if (s.is_active === false) {
                 archived.push(s)
             } else {
                 active.push(s)
-                if (['usthad', 'staff', 'teacher'].includes(s.role)) mentors++
-                else if (['admin', 'principal', 'vice_principal', 'controller'].includes(s.role)) admins++
+                if (staffCategory(s) === "teaching") {
+                    teaching++
+                    mentors++
+                } else {
+                    leadership.push(s)
+                    leadershipTotal++
+                    if (LEADERSHIP_ROLES.includes(s.role)) admins++
+                }
             }
         }
-        return { activeStaffList: active, archivedStaffList: archived, mentorCount: mentors, adminCount: admins }
+        return { activeStaffList: active, archivedStaffList: archived, mentorCount: mentors, adminCount: admins, teachingCount: teaching, leadershipCount: leadershipTotal, leadershipStaffList: leadership }
     }, [staff])
 
     const displayedStaff = activeTab === "active" ? activeStaffList : archivedStaffList
@@ -392,7 +437,7 @@ export default function StaffPage() {
                 </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                 <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-[#1a2234]">
                     <CardContent className="p-4 sm:p-5 flex flex-col justify-center">
                         <div className="flex items-center gap-3">
@@ -415,6 +460,32 @@ export default function StaffPage() {
                             <div>
                                 <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-none">{loading ? "..." : mentorCount}</p>
                                 <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">Mentors</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-[#1a2234]">
+                    <CardContent className="p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/20">
+                                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                            </div>
+                            <div>
+                                <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-none">{loading ? "..." : teachingCount}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">Teaching Staff</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-[#1a2234]">
+                    <CardContent className="p-4 sm:p-5 flex flex-col justify-center">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-sky-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
+                                <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                            </div>
+                            <div>
+                                <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-none">{loading ? "..." : leadershipCount}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">Leadership Staff</p>
                             </div>
                         </div>
                     </CardContent>
@@ -446,6 +517,47 @@ export default function StaffPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {leadershipStaffList.length > 0 && (
+                <Card className="border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-[#1a2234]">
+                    <CardContent className="p-4 sm:p-5">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Leadership Staff</h2>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Oversight and administration roles are tracked separately from mentor reporting.</p>
+                            </div>
+                            <Badge variant="secondary">{leadershipStaffList.length}</Badge>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {leadershipStaffList.map((leader) => (
+                                <div key={leader.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate font-bold text-slate-900 dark:text-white">{leader.name}</p>
+                                            <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-300">{leader.role_label || roleLabel(leader.role)}</p>
+                                        </div>
+                                        <Badge className={leader.is_active === false ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}>
+                                            {leader.is_active === false ? "Inactive" : "Active"}
+                                        </Badge>
+                                    </div>
+                                    <div className="mt-4 grid gap-2 text-sm">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="text-slate-500">Last Login</span>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300">{formatLastLogin(leader.last_login)}</span>
+                                        </div>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <span className="text-slate-500">Responsibilities</span>
+                                            <span className="text-right font-semibold text-slate-700 dark:text-slate-300">
+                                                {(leader.assigned_responsibilities || ["Leadership Role"]).join(", ")}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Tabs & Search */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-8 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -577,12 +689,12 @@ export default function StaffPage() {
                                         </TableCell>
                                         <TableCell>
                                             <Badge
-                                                className={`capitalize border-none ${['admin', 'principal', 'vice_principal', 'controller'].includes(s.role)
+                                                className={`capitalize border-none ${staffCategory(s) !== "teaching"
                                                     ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                                     : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                                                     }`}
                                             >
-                                                {s.role === 'usthad' ? 'Mentor' : s.role === 'vice_principal' ? 'Vice Principal' : s.role}
+                                                {s.role_label || roleLabel(s.role)}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right pr-6">

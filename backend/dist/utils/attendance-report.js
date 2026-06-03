@@ -91,6 +91,40 @@ function isStandardCancelled(row, standard) {
         return true;
     return standards.includes(normalizeScheduleStandard(standard));
 }
+function scheduleDateTime(dateKey, timeValue) {
+    return new Date(`${dateKey}T${String(timeValue || '00:00:00').slice(0, 8)}+05:30`);
+}
+function institutionalLeaveCancellationForStudent(schedule, student, dateKey, leaves) {
+    const scheduleStart = scheduleDateTime(dateKey, schedule.start_time);
+    const scheduleEnd = scheduleDateTime(dateKey, schedule.end_time);
+    const scheduleStandards = parseStandards(schedule.standards).map(normalizeScheduleStandard);
+    const studentStandard = normalizeScheduleStandard(String(student.attendance_standard || student.standard || '').trim());
+    for (const leave of leaves) {
+        const leaveStart = new Date(leave.start_datetime);
+        const leaveEnd = new Date(leave.end_datetime);
+        if (!(scheduleStart < leaveEnd && scheduleEnd > leaveStart))
+            continue;
+        if (leave.is_entire_institution) {
+            return {
+                schedule_id: schedule.id,
+                date: dateKey,
+                cancelled_standards: null,
+            };
+        }
+        const targetStandards = parseStandards(leave.target_classes).map(normalizeScheduleStandard);
+        if (!targetStandards.includes(studentStandard))
+            continue;
+        const cancelledStandards = scheduleStandards.length > 0 && targetStandards.length < scheduleStandards.length
+            ? targetStandards.filter(std => scheduleStandards.includes(std))
+            : null;
+        return {
+            schedule_id: schedule.id,
+            date: dateKey,
+            cancelled_standards: cancelledStandards,
+        };
+    }
+    return null;
+}
 function scheduleAppliesToDate(schedule, dateStr) {
     const date = new Date(`${dateStr}T00:00:00`);
     if (schedule.day_of_week !== date.getDay())
@@ -129,8 +163,8 @@ async function getStudentAttendanceSummaries(db, students, startDate, endDate, c
         params.push(classType.toLowerCase());
         typeClause = `AND LOWER(class_type) = $${params.length}`;
     }
-    const [schedulesRes, cancellationsRes, marksRes] = await Promise.all([
-        db.query(`SELECT id, class_type, name, standards, day_of_week, effective_from, effective_until
+    const [schedulesRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
+        db.query(`SELECT id, class_type, name, standards, day_of_week, start_time, end_time, effective_from, effective_until
              FROM attendance_schedules
              WHERE effective_from <= $2::date
                AND (effective_until IS NULL OR effective_until >= $1::date)
@@ -143,6 +177,10 @@ async function getStudentAttendanceSummaries(db, students, startDate, endDate, c
              WHERE date >= $1::date
                AND date <= $2::date
                AND student_id = ANY($3::text[])`, [startDate, endDate, students.map(student => student.adm_no)]),
+        db.query(`SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution
+             FROM institutional_leaves
+             WHERE start_datetime < ($2::date + 1)
+               AND end_datetime >= $1::date`, [startDate, endDate]),
     ]);
     const schedulesByDay = new Map();
     schedulesRes.rows.forEach(schedule => {
@@ -193,7 +231,8 @@ async function getStudentAttendanceSummaries(db, students, startDate, endDate, c
                 }
                 summary.plannedClasses += 1;
                 session.planned += 1;
-                const cancellation = cancellationsByScheduleDate.get(`${schedule.id}|${dateStr}`);
+                const cancellation = cancellationsByScheduleDate.get(`${schedule.id}|${dateStr}`)
+                    || institutionalLeaveCancellationForStudent(schedule, student, dateStr, institutionalLeavesRes.rows);
                 if (isStandardCancelled(cancellation, student.attendance_standard || student.standard || '')) {
                     summary.cancelledClasses += 1;
                     session.cancelled += 1;

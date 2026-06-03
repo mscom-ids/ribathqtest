@@ -16,6 +16,26 @@ function toLocalDateStr(d: Date) {
 function getDayOfWeek(d: Date) {
     return d.getDay()
 }
+function normalizeStandardLabel(label: string) {
+    const l = String(label || '').trim()
+    if (l === 'Hifz Only') return 'Hifz'
+    if (l === '+1 (Plus One)') return 'Plus One'
+    if (l === '+2 (Plus Two)') return 'Plus Two'
+    if (l.endsWith(' Standard')) return l.replace(' Standard', '')
+    return l
+}
+function parseCancelledStandards(value: any): string[] {
+    if (Array.isArray(value)) return value.map(normalizeStandardLabel).filter(Boolean)
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value || '[]')
+            return Array.isArray(parsed) ? parsed.map(normalizeStandardLabel).filter(Boolean) : []
+        } catch {
+            return []
+        }
+    }
+    return []
+}
 
 export default function StudentAttendancePage() {
     const [loading, setLoading] = useState(true)
@@ -145,24 +165,42 @@ export default function StudentAttendancePage() {
 
     // ── Slot status ─────────────────────────────────────────────────────────────
     const getSlotStatus = (sched: any) => {
+        const serverStatus = dashboardData.class_statuses?.find(
+            (s: any) => s.schedule_id === sched.id && s.date?.split('T')[0] === viewDateStr
+        )
+        if (serverStatus) {
+            const state = serverStatus.status === 'in_progress' || serverStatus.status === 'pending'
+                ? 'active'
+                : serverStatus.status
+            return { ...serverStatus, state }
+        }
+
         const cancelled = dashboardData.cancellations?.find(
             (c: any) => c.schedule_id === sched.id && c.date?.split('T')[0] === viewDateStr
         )
-        if (cancelled) return { state: 'cancelled' as const }
+        const cancelledStandards = parseCancelledStandards(cancelled?.cancelled_standards)
+        const scheduleStandards = (typeof sched.standards === 'string' ? JSON.parse(sched.standards || '[]') : (sched.standards || []))
+            .map(normalizeStandardLabel)
+        const isFullyCancelled = !!cancelled && (
+            cancelledStandards.length === 0 ||
+            (scheduleStandards.length > 0 && scheduleStandards.every((std: string) => cancelledStandards.includes(std)))
+        )
+        const partialCancellation = !!cancelled && !isFullyCancelled ? cancelled : null
+        if (isFullyCancelled) return { state: 'cancelled' as const, cancellation: cancelled }
 
         const marked = dashboardData.marks?.find(
             (m: any) => m.schedule_id === sched.id && m.date?.split('T')[0] === viewDateStr
         )
-        if (marked) return { state: 'completed' as const }
+        if (marked) return { state: 'completed' as const, partialCancellation }
 
-        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const }
+        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation }
 
         if (diffFromToday === 0) {
             const classStart = new Date(`${viewDateStr}T${sched.start_time}`)
-            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time) }
+            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation }
         }
 
-        return { state: 'active' as const }
+        return { state: 'active' as const, partialCancellation }
     }
 
     // ── Roster ──────────────────────────────────────────────────────────────────
@@ -252,10 +290,19 @@ export default function StudentAttendancePage() {
         return <XCircle className="w-3.5 h-3.5" />
     }
 
-    const totalCount = daySchedules.length
-    const completedCount = daySchedules.filter(s => getSlotStatus(s).state === 'completed').length
-    const cancelledCount = daySchedules.filter(s => getSlotStatus(s).state === 'cancelled').length
-    const pendingCount = daySchedules.filter(s => ['active', 'upcoming'].includes(getSlotStatus(s).state)).length
+    const visibleStatusItems = dashboardData.class_statuses?.filter(
+        (s: any) => s.date?.split('T')[0] === viewDateStr && daySchedules.some(ds => ds.id === s.schedule_id)
+    ) || []
+    const totalCount = visibleStatusItems.length > 0 ? visibleStatusItems.length : daySchedules.length
+    const completedCount = visibleStatusItems.length > 0
+        ? visibleStatusItems.filter((s: any) => s.status === 'completed').length
+        : daySchedules.filter(s => getSlotStatus(s).state === 'completed').length
+    const cancelledCount = visibleStatusItems.length > 0
+        ? visibleStatusItems.filter((s: any) => s.status === 'cancelled').length
+        : daySchedules.filter(s => getSlotStatus(s).state === 'cancelled').length
+    const pendingCount = visibleStatusItems.length > 0
+        ? visibleStatusItems.filter((s: any) => ['pending', 'in_progress', 'upcoming'].includes(s.status)).length
+        : daySchedules.filter(s => ['active', 'upcoming'].includes(getSlotStatus(s).state)).length
 
     const dateLabel = isToday ? "Today" : isYesterday ? "Yesterday" : viewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
@@ -494,9 +541,10 @@ export default function StudentAttendancePage() {
                             const isCancelled = status.state === 'cancelled'
                             const isCompleted = status.state === 'completed'
                             const isActive = status.state === 'active'
+                            const isPartiallyCancelled = status.state === 'partial_cancelled' || !!(status as any).partialCancellation
                             const isUpcoming = status.state === 'upcoming'
                             const isLocked = status.state === 'locked'
-                            const isClickable = isActive || isCompleted
+                            const isClickable = isActive || isCompleted || isPartiallyCancelled
 
                             return (
                                 <div
@@ -519,6 +567,7 @@ export default function StudentAttendancePage() {
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             {isCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Cancelled</span>}
+                                            {isPartiallyCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Some standards cancelled</span>}
                                             {isLocked && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="h-2.5 w-2.5"/>Locked</span>}
                                             {isCompleted && <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />}
                                             {isUpcoming && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Upcoming</span>}
@@ -556,7 +605,12 @@ export default function StudentAttendancePage() {
                                             </p>
                                         )}
                                         {isLocked && <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1"><Lock className="h-3 w-3"/>Outside edit window</p>}
+                                        {isPartiallyCancelled && (status as any).cancelledStandards?.length > 0 && <p className="text-[11px] text-slate-500">Cancelled: {(status as any).cancelledStandards.join(', ')}</p>}
+                                        {isPartiallyCancelled && (status as any).activeStandards?.length > 0 && <p className="text-[11px] text-slate-500">Active: {(status as any).activeStandards.join(', ')}</p>}
+                                        {isCancelled && (status as any).statusLabel && <p className="text-[11px] font-bold text-rose-500">{(status as any).statusLabel}</p>}
+                                        {isCancelled && (status as any).cancelReason && <p className="text-[11px] text-slate-500">Reason: {(status as any).cancelReason}</p>}
                                         {isCancelled && <p className="text-[11px] font-medium text-rose-400">Class cancelled</p>}
+                                        {isPartiallyCancelled && <p className="text-[11px] font-medium text-rose-400">Selected standards cancelled</p>}
                                     </div>
                                 </div>
                             )

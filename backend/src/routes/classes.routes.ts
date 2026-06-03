@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
     getAcademicYears, upsertAcademicYear, deleteAcademicYear,
     getClasses, upsertClass, deleteClass,
+    getClassStudents, getStudentClassAssignments, upsertStudentClassAssignment,
     getEnrollments, enrollStudent, deleteEnrollment,
     getWeeklySchedule, upsertWeeklySchedule, deleteWeeklySchedule,
     getClassEvents, generateDailyEvents, updateClassEventStatus, createManualClassEvent
@@ -24,6 +25,9 @@ router.delete('/academic-years/:id', requireRole(['admin', 'principal']), delete
 // Classes
 router.get('/', getClasses);
 router.post('/', requireRole(['admin', 'principal']), upsertClass);
+router.get('/student-assignments', getStudentClassAssignments);
+router.post('/student-assignments', requireRole(['admin', 'principal', 'vice_principal']), upsertStudentClassAssignment);
+router.get('/:id/students', getClassStudents);
 router.delete('/:id', requireRole(['admin', 'principal']), deleteClass);
 
 // Enrollments

@@ -1,7 +1,50 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDelegationContext = exports.getStaffId = void 0;
+exports.getDelegationContext = exports.getStaffId = exports.NON_TEACHING_STAFF_ROLES = exports.ADMINISTRATIVE_STAFF_ROLES = exports.LEADERSHIP_STAFF_ROLES = exports.TEACHING_STAFF_ROLES = void 0;
+exports.normalizeStaffRole = normalizeStaffRole;
+exports.isTeachingStaffRole = isTeachingStaffRole;
+exports.isLeadershipStaffRole = isLeadershipStaffRole;
+exports.isAdministrativeStaffRole = isAdministrativeStaffRole;
+exports.staffDomainForRole = staffDomainForRole;
+exports.staffRoleLabel = staffRoleLabel;
 const db_1 = require("../config/db");
+exports.TEACHING_STAFF_ROLES = ['usthad', 'mentor', 'staff', 'teacher'];
+exports.LEADERSHIP_STAFF_ROLES = ['principal', 'vice_principal'];
+exports.ADMINISTRATIVE_STAFF_ROLES = ['admin', 'controller'];
+exports.NON_TEACHING_STAFF_ROLES = [...exports.LEADERSHIP_STAFF_ROLES, ...exports.ADMINISTRATIVE_STAFF_ROLES];
+function normalizeStaffRole(role) {
+    return String(role || '').trim().toLowerCase();
+}
+function isTeachingStaffRole(role) {
+    return exports.TEACHING_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+function isLeadershipStaffRole(role) {
+    return exports.LEADERSHIP_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+function isAdministrativeStaffRole(role) {
+    return exports.ADMINISTRATIVE_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+function staffDomainForRole(role) {
+    if (isLeadershipStaffRole(role))
+        return 'leadership';
+    if (isAdministrativeStaffRole(role))
+        return 'administrative';
+    return 'teaching';
+}
+function staffRoleLabel(role) {
+    const normalized = normalizeStaffRole(role);
+    const labels = {
+        usthad: 'General Mentor',
+        mentor: 'General Mentor',
+        staff: 'General Mentor',
+        teacher: 'General Mentor',
+        principal: 'Principal',
+        vice_principal: 'Vice Principal',
+        admin: 'Administrator',
+        controller: 'Administrator',
+    };
+    return labels[normalized] || (role ? String(role) : 'Staff');
+}
 const getStaffId = async (req) => {
     const ctx = await (0, exports.getDelegationContext)(req);
     return ctx?.staffId || null;

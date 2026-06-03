@@ -16,6 +16,9 @@ router.delete('/academic-years/:id', (0, auth_middleware_1.requireRole)(['admin'
 // Classes
 router.get('/', classes_controller_1.getClasses);
 router.post('/', (0, auth_middleware_1.requireRole)(['admin', 'principal']), classes_controller_1.upsertClass);
+router.get('/student-assignments', classes_controller_1.getStudentClassAssignments);
+router.post('/student-assignments', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), classes_controller_1.upsertStudentClassAssignment);
+router.get('/:id/students', classes_controller_1.getClassStudents);
 router.delete('/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal']), classes_controller_1.deleteClass);
 // Enrollments
 router.get('/enrollments', classes_controller_1.getEnrollments);

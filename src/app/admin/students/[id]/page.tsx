@@ -155,6 +155,8 @@ export default function StudentDetailPage() {
     const [transferCourse, setTransferCourse] = useState('')
     const [transferring, setTransferring] = useState(false)
     const [transferError, setTransferError] = useState<string | null>(null)
+    const [alumniCleanupWarningOpen, setAlumniCleanupWarningOpen] = useState(false)
+    const [activeOperationalRecords, setActiveOperationalRecords] = useState<Record<string, number> | null>(null)
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -419,7 +421,7 @@ export default function StudentDetailPage() {
     }
 
     // ── Transfer to Alumni ─────────────────────────────────────
-    async function handleTransferToAlumni() {
+    async function handleTransferToAlumni(forceCleanup = false) {
         if (!studentData) return
         if (transferStatus === 'dropout' && !transferDropoutReason.trim()) {
             setTransferError('Please enter the reason for dropout.')
@@ -446,6 +448,7 @@ export default function StudentDetailPage() {
             const res = await api.put(`/students/${id}`, {
                 status: transferStatus,
                 comprehensive_details: comprehensiveUpdate,
+                ...(forceCleanup ? { forceAlumniTransfer: true, closeActiveRecords: true } : {}),
             })
             if (res.data.success) {
                 setStudentData((prev: any) => ({
@@ -454,10 +457,28 @@ export default function StudentDetailPage() {
                     comprehensive_details: { ...prev?.comprehensive_details, ...comprehensiveUpdate },
                 }))
                 setTransferModalOpen(false)
+                setAlumniCleanupWarningOpen(false)
+                setActiveOperationalRecords(null)
                 setSaveSuccess(true)
                 setTimeout(() => setSaveSuccess(false), 3000)
             }
         } catch (err: any) {
+            const conflictData = err?.response?.data || {}
+            const needsCleanupConfirmation =
+                err?.response?.status === 409 &&
+                (
+                    conflictData.code === 'ALUMNI_TRANSFER_REQUIRES_CONFIRMATION' ||
+                    !!conflictData.active_records ||
+                    String(conflictData.message || conflictData.error || '').toLowerCase().includes('active operational records')
+                )
+
+            if (needsCleanupConfirmation) {
+                setTransferError(null)
+                setActiveOperationalRecords(conflictData.active_records || null)
+                setTransferModalOpen(false)
+                setAlumniCleanupWarningOpen(true)
+                return
+            }
             setTransferError(err?.response?.data?.error || 'Transfer failed. Please try again.')
         } finally {
             setTransferring(false)
@@ -1259,12 +1280,49 @@ export default function StudentDetailPage() {
                         Cancel
                     </Button>
                     <Button
-                        onClick={handleTransferToAlumni}
+                        onClick={() => handleTransferToAlumni(false)}
                         disabled={transferring}
                         className="bg-red-600 hover:bg-red-700 text-white gap-2"
                     >
                         {transferring ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                         {transferring ? 'Transferring…' : 'Confirm Transfer'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={alumniCleanupWarningOpen} onOpenChange={setAlumniCleanupWarningOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-amber-500" />
+                        Active Records Found
+                    </DialogTitle>
+                    <DialogDescription>
+                        This student currently has active operational records. Transferring to Alumni will automatically cancel active leave records and clear current presence. Do you want to continue?
+                    </DialogDescription>
+                </DialogHeader>
+                {activeOperationalRecords && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        <p className="font-semibold">Records that will be updated:</p>
+                        <ul className="mt-2 space-y-1">
+                            <li>Active leave records: {activeOperationalRecords.active_leaves || 0}</li>
+                            <li>Current outside/on-campus records: {activeOperationalRecords.active_presence || 0}</li>
+                            <li>Active hostel records: {activeOperationalRecords.active_hostel || 0}</li>
+                        </ul>
+                    </div>
+                )}
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={() => setAlumniCleanupWarningOpen(false)} disabled={transferring}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={() => handleTransferToAlumni(true)}
+                        disabled={transferring}
+                        className="bg-red-600 hover:bg-red-700 text-white gap-2"
+                    >
+                        {transferring ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                        Transfer and Cancel Active Leaves
                     </Button>
                 </DialogFooter>
             </DialogContent>

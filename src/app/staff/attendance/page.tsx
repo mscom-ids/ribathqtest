@@ -339,6 +339,7 @@ export default function StaffAttendancePage() {
             const existingAtt = attRes.data?.data || []
             existingAtt.forEach((a: any) => {
                 if (map[a.student_id] !== undefined && !locks[a.student_id]) {
+                    if (a.status === "Leave") return
                     map[a.student_id] = a.status
                 }
             })

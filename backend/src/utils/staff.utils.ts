@@ -1,6 +1,50 @@
 import { Request } from 'express';
 import { db } from '../config/db';
 
+export type StaffDomain = 'teaching' | 'leadership' | 'administrative';
+
+export const TEACHING_STAFF_ROLES = ['usthad', 'mentor', 'staff', 'teacher'];
+export const LEADERSHIP_STAFF_ROLES = ['principal', 'vice_principal'];
+export const ADMINISTRATIVE_STAFF_ROLES = ['admin', 'controller'];
+export const NON_TEACHING_STAFF_ROLES = [...LEADERSHIP_STAFF_ROLES, ...ADMINISTRATIVE_STAFF_ROLES];
+
+export function normalizeStaffRole(role?: string | null) {
+    return String(role || '').trim().toLowerCase();
+}
+
+export function isTeachingStaffRole(role?: string | null) {
+    return TEACHING_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+
+export function isLeadershipStaffRole(role?: string | null) {
+    return LEADERSHIP_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+
+export function isAdministrativeStaffRole(role?: string | null) {
+    return ADMINISTRATIVE_STAFF_ROLES.includes(normalizeStaffRole(role));
+}
+
+export function staffDomainForRole(role?: string | null): StaffDomain {
+    if (isLeadershipStaffRole(role)) return 'leadership';
+    if (isAdministrativeStaffRole(role)) return 'administrative';
+    return 'teaching';
+}
+
+export function staffRoleLabel(role?: string | null) {
+    const normalized = normalizeStaffRole(role);
+    const labels: Record<string, string> = {
+        usthad: 'General Mentor',
+        mentor: 'General Mentor',
+        staff: 'General Mentor',
+        teacher: 'General Mentor',
+        principal: 'Principal',
+        vice_principal: 'Vice Principal',
+        admin: 'Administrator',
+        controller: 'Administrator',
+    };
+    return labels[normalized] || (role ? String(role) : 'Staff');
+}
+
 export interface DelegationContext {
     staffId: string;
     studentId: string | null;

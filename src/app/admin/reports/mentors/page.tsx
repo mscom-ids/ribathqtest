@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ElementType } from "react"
+import { useCallback, useEffect, useState, type ElementType } from "react"
 import { useRouter } from "next/navigation"
 import {
     AlertTriangle,
@@ -22,8 +22,13 @@ type MentorReport = {
     id: string
     name: string
     role?: string
+    role_label?: string
     phone?: string
     active?: boolean
+    assigned_students?: number
+    hifz_students?: number
+    school_students?: number
+    madrasa_students?: number
     planned_classes: number
     cancelled_classes: number
     required_classes: number
@@ -31,6 +36,7 @@ type MentorReport = {
     not_marked_classes: number
     marking_percentage: number
     missing_percentage: number
+    class_breakdown?: Record<"hifz" | "school" | "madrasa", { required: number; marked: number; not_marked: number; cancelled: number }>
 }
 
 type Totals = {
@@ -48,6 +54,36 @@ const emptyTotals: Totals = {
     marked_classes: 0,
     not_marked_classes: 0,
 }
+
+type MentorSummary = {
+    best_reporting_mentor: MentorReport | null
+    lowest_reporting_mentor: MentorReport | null
+    average_reporting_rate: number
+    teaching_staff_count: number
+    missing_reports_count: number
+}
+
+const emptySummary: MentorSummary = {
+    best_reporting_mentor: null,
+    lowest_reporting_mentor: null,
+    average_reporting_rate: 0,
+    teaching_staff_count: 0,
+    missing_reports_count: 0,
+}
+
+const filterOptions = [
+    { value: "active", label: "Active Mentors" },
+    { value: "hifz", label: "Hifz Mentors" },
+    { value: "school", label: "School Mentors" },
+    { value: "madrasa", label: "Madrasa Mentors" },
+] as const
+
+const sortOptions = [
+    { value: "highest_percentage", label: "Highest Reporting %" },
+    { value: "lowest_percentage", label: "Lowest Reporting %" },
+    { value: "most_marked", label: "Most Classes Marked" },
+    { value: "least_marked", label: "Least Classes Marked" },
+] as const
 
 function toDateInputValue(date: Date) {
     const year = date.getFullYear()
@@ -76,59 +112,104 @@ function pct(value: number) {
     return `${Number(value || 0).toFixed(1).replace(".0", "")}%`
 }
 
+function reportingTone(value: number, required: number) {
+    if (!required) return {
+        text: "text-slate-500",
+        bg: "bg-slate-100",
+        bar: "bg-slate-400",
+        label: "Not Applicable",
+    }
+    if (value >= 80) return {
+        text: "text-emerald-700",
+        bg: "bg-emerald-50",
+        bar: "bg-emerald-500",
+        label: "Healthy",
+    }
+    if (value >= 60) return {
+        text: "text-orange-700",
+        bg: "bg-orange-50",
+        bar: "bg-orange-500",
+        label: "Watch",
+    }
+    return {
+        text: "text-rose-700",
+        bg: "bg-rose-50",
+        bar: "bg-rose-500",
+        label: "Needs Follow-up",
+    }
+}
+
 export default function MentorReportsPage() {
     const weekRange = getWeekRange()
     const [data, setData] = useState<MentorReport[]>([])
     const [totals, setTotals] = useState<Totals>(emptyTotals)
+    const [summary, setSummary] = useState<MentorSummary>(emptySummary)
+    const [totalRows, setTotalRows] = useState(0)
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
+    const [debouncedSearch, setDebouncedSearch] = useState("")
+    const [mentorFilter, setMentorFilter] = useState<(typeof filterOptions)[number]["value"]>("active")
+    const [sortBy, setSortBy] = useState<(typeof sortOptions)[number]["value"]>("lowest_percentage")
+    const [page, setPage] = useState(1)
     const [startDate, setStartDate] = useState(weekRange.start)
     const [endDate, setEndDate] = useState(weekRange.end)
     const [activePreset, setActivePreset] = useState("This Week")
     const { toast } = useToast()
     const router = useRouter()
 
-    useEffect(() => {
-        fetchReports()
-    }, [startDate, endDate])
-
-    const fetchReports = async () => {
+    const fetchReports = useCallback(async () => {
         setLoading(true)
         try {
-            const res = await cachedGet('/reports/mentors', { start_date: startDate, end_date: endDate }, 30_000)
+            const res = await cachedGet('/reports/mentors', {
+                start_date: startDate,
+                end_date: endDate,
+                filter: mentorFilter,
+                sort: sortBy,
+                search: debouncedSearch || undefined,
+                limit: 50,
+                offset: (page - 1) * 50,
+            }, 60_000)
             if (res.data?.success) {
                 setData(res.data.data || [])
                 setTotals(res.data.totals || emptyTotals)
+                setSummary(res.data.summary || emptySummary)
+                setTotalRows(res.data.pagination?.total || 0)
             }
-        } catch (error) {
+        } catch {
             toast({ title: "Error", description: "Failed to load mentor marking report", variant: "destructive" })
         } finally {
             setLoading(false)
         }
-    }
+    }, [debouncedSearch, endDate, mentorFilter, page, sortBy, startDate, toast])
+
+    useEffect(() => {
+        fetchReports()
+    }, [fetchReports])
+
+    useEffect(() => {
+        const handle = window.setTimeout(() => {
+            setDebouncedSearch(searchTerm)
+            setPage(1)
+        }, 250)
+        return () => window.clearTimeout(handle)
+    }, [searchTerm])
 
     const applyPreset = (preset: "This Week" | "Last Week" | "This Month") => {
         const range = preset === "This Month" ? getMonthRange() : getWeekRange(preset === "Last Week" ? -1 : 0)
         setActivePreset(preset)
+        setPage(1)
         setStartDate(range.start)
         setEndDate(range.end)
     }
 
-    const filtered = data.filter(mentor => {
-        const query = searchTerm.toLowerCase()
-        return (
-            mentor.name?.toLowerCase().includes(query) ||
-            mentor.role?.toLowerCase().includes(query) ||
-            mentor.phone?.toLowerCase().includes(query)
-        )
-    })
+    const filtered = data
 
     const overallMarkedPercentage = totals.required_classes > 0
         ? Math.round((totals.marked_classes / totals.required_classes) * 1000) / 10
         : 0
 
     const handleDownloadCsv = () => {
-        if (filtered.length === 0) {
+        if (data.length === 0) {
             toast({ title: "No Data", description: "There is no mentor report data to export." })
             return
         }
@@ -145,9 +226,9 @@ export default function MentorReportsPage() {
             "Marked %",
             "Not Marked %",
         ]
-        const rows = filtered.map(mentor => [
+        const rows = data.map(mentor => [
             `"${mentor.name || "Unnamed Mentor"}"`,
-            `"${mentor.role || "N/A"}"`,
+            `"${mentor.role_label || mentor.role || "N/A"}"`,
             mentor.phone || "N/A",
             mentor.planned_classes || 0,
             mentor.cancelled_classes || 0,
@@ -270,6 +351,14 @@ export default function MentorReportsPage() {
                     <MetricCard label="Required After Cancel" value={totals.required_classes} tone="blue" />
                     <MetricCard label="Marked Percentage" value={pct(overallMarkedPercentage)} tone="emerald" />
                 </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-5">
+                    <MetricCard label="Best Reporting Mentor" value={summary.best_reporting_mentor?.name || "-"} tone="emerald" compact />
+                    <MetricCard label="Lowest Reporting Mentor" value={summary.lowest_reporting_mentor?.name || "-"} tone="rose" compact />
+                    <MetricCard label="Average Reporting Rate" value={pct(summary.average_reporting_rate)} tone="blue" compact />
+                    <MetricCard label="Teaching Staff Count" value={summary.teaching_staff_count} tone="slate" compact />
+                    <MetricCard label="Missing Reports Count" value={summary.missing_reports_count} tone="rose" compact />
+                </div>
             </div>
 
             <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
@@ -280,14 +369,30 @@ export default function MentorReportsPage() {
                             A class is counted as marked only when that mentor submitted attendance for that schedule and date.
                         </p>
                     </div>
-                    <div className="relative w-full md:max-w-sm">
-                        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                            value={searchTerm}
-                            onChange={event => setSearchTerm(event.target.value)}
-                            placeholder="Search mentor, role, phone..."
-                            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                        />
+                    <div className="grid w-full gap-2 md:max-w-3xl md:grid-cols-[1fr_190px_210px]">
+                        <div className="relative">
+                            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                value={searchTerm}
+                                onChange={event => setSearchTerm(event.target.value)}
+                                placeholder="Search mentor, role, phone..."
+                                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                            />
+                        </div>
+                        <select
+                            value={mentorFilter}
+                            onChange={event => { setMentorFilter(event.target.value as typeof mentorFilter); setPage(1) }}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
+                        >
+                            {filterOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                        <select
+                            value={sortBy}
+                            onChange={event => { setSortBy(event.target.value as typeof sortBy); setPage(1) }}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
+                        >
+                            {sortOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
                     </div>
                 </div>
 
@@ -319,7 +424,9 @@ export default function MentorReportsPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filtered.map(mentor => (
+                                filtered.map(mentor => {
+                                    const tone = reportingTone(mentor.marking_percentage || 0, mentor.required_classes || 0)
+                                    return (
                                     <tr key={mentor.id} className="transition hover:bg-slate-50/80">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -329,7 +436,10 @@ export default function MentorReportsPage() {
                                                 <div>
                                                     <div className="text-sm font-black text-slate-900">{mentor.name || "Unnamed Mentor"}</div>
                                                     <div className="text-xs font-semibold text-slate-500">
-                                                        {mentor.role || "Mentor"} {mentor.phone ? `• ${mentor.phone}` : ""}
+                                                        {mentor.role_label || mentor.role || "Mentor"} {mentor.phone ? `- ${mentor.phone}` : ""}
+                                                    </div>
+                                                    <div className="mt-1 text-[11px] font-bold text-slate-400">
+                                                        Hifz {mentor.hifz_students || 0} / School {mentor.school_students || 0} / Madrasa {mentor.madrasa_students || 0}
                                                     </div>
                                                 </div>
                                             </div>
@@ -340,12 +450,12 @@ export default function MentorReportsPage() {
                                         <td className="px-4 py-4 text-center text-base font-black text-slate-500">{mentor.cancelled_classes || 0}</td>
                                         <td className="px-6 py-4">
                                             <div className="mb-2 flex items-center justify-between text-xs font-black">
-                                                <span className="text-emerald-700">{pct(mentor.marking_percentage)} marked</span>
+                                                <span className={tone.text}>{pct(mentor.marking_percentage)} marked</span>
                                                 <span className="text-rose-600">{pct(mentor.missing_percentage)} missed</span>
                                             </div>
                                             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                                 <div
-                                                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
+                                                    className={`h-full rounded-full ${tone.bar}`}
                                                     style={{ width: `${Math.min(100, Math.max(0, mentor.marking_percentage || 0))}%` }}
                                                 />
                                             </div>
@@ -353,23 +463,46 @@ export default function MentorReportsPage() {
                                         <td className="px-4 py-4 text-center">
                                             {(mentor.required_classes || 0) === 0 ? (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
-                                                    No Classes
+                                                    Not Applicable
                                                 </span>
                                             ) : (mentor.not_marked_classes || 0) === 0 ? (
                                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
                                                     <CheckCircle className="h-3.5 w-3.5" /> Complete
                                                 </span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
-                                                    <AlertTriangle className="h-3.5 w-3.5" /> Pending
+                                                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-black ${tone.bg} ${tone.text}`}>
+                                                    <AlertTriangle className="h-3.5 w-3.5" /> {tone.label}
                                                 </span>
                                             )}
                                         </td>
                                     </tr>
-                                ))
+                                    )
+                                })
                             )}
                         </tbody>
                     </table>
+                </div>
+                <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm font-bold text-slate-500 md:flex-row md:items-center md:justify-between">
+                    <span>
+                        Showing {data.length ? (page - 1) * 50 + 1 : 0}-{Math.min(page * 50, totalRows)} of {totalRows} teaching staff
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            disabled={page === 1 || loading}
+                            onClick={() => setPage(current => Math.max(1, current - 1))}
+                            className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40"
+                        >
+                            Previous
+                        </button>
+                        <span className="px-2">Page {page}</span>
+                        <button
+                            disabled={page * 50 >= totalRows || loading}
+                            onClick={() => setPage(current => current + 1)}
+                            className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -386,7 +519,7 @@ function SummaryPill({ icon: Icon, label, value }: { icon: ElementType; label: s
     )
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string | number; tone: "slate" | "rose" | "blue" | "emerald" }) {
+function MetricCard({ label, value, tone, compact = false }: { label: string; value: string | number; tone: "slate" | "rose" | "blue" | "emerald"; compact?: boolean }) {
     const colors = {
         slate: "bg-slate-50 text-slate-700 ring-slate-100",
         rose: "bg-rose-50 text-rose-700 ring-rose-100",
@@ -397,7 +530,7 @@ function MetricCard({ label, value, tone }: { label: string; value: string | num
     return (
         <div className={`rounded-2xl p-4 ring-1 ${colors[tone]}`}>
             <div className="text-xs font-black uppercase tracking-wider opacity-70">{label}</div>
-            <div className="mt-2 text-3xl font-black">{value}</div>
+            <div className={`mt-2 font-black ${compact ? "text-lg leading-tight" : "text-3xl"}`}>{value}</div>
         </div>
     )
 }

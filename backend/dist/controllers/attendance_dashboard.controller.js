@@ -5,6 +5,7 @@ const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const server_cache_1 = require("../utils/server-cache");
 const mentor_access_policy_1 = require("../utils/mentor-access-policy");
+const hifz_session_eligibility_1 = require("../utils/hifz-session-eligibility");
 // All roles treated as a mentor (filtered access)
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 // Helper: calculate next occurrence of a day_of_week from a given date
@@ -63,6 +64,139 @@ function isStandardCancelled(row, standard) {
     if (standards.length === 0)
         return true;
     return standards.includes(normalizeScheduleStandard(standard));
+}
+function toDateKey(value) {
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value))
+        return value.slice(0, 10);
+    const d = new Date(value);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dateKeysBetween(start, end) {
+    const dates = [];
+    const cursor = new Date(`${start}T00:00:00+05:30`);
+    const last = new Date(`${end}T00:00:00+05:30`);
+    while (cursor <= last) {
+        dates.push(toDateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+    }
+    return dates;
+}
+function scheduleDateTime(dateKey, timeValue) {
+    return new Date(`${dateKey}T${String(timeValue || '00:00:00').slice(0, 8)}+05:30`);
+}
+function cancellationMeta(row) {
+    if (!row)
+        return { cancelReason: null, cancelType: null };
+    const isInstitutional = String(row.reason || '').startsWith('Institutional Leave:');
+    return {
+        cancelReason: row.resolved_reason || (isInstitutional ? 'Institutional Leave' : row.reason || 'Class cancelled'),
+        cancelType: isInstitutional ? 'institutional' : 'manual',
+    };
+}
+function computeClassStatus(schedule, dateKey, cancellation, marked, now = new Date()) {
+    const rawStandards = parseStandardList(schedule.standards);
+    const scheduleStandards = normalizeStandardList(rawStandards);
+    const cancelledStandards = cancellationStandards(cancellation);
+    const fullCancellation = isFullCancellation(cancellation)
+        || (scheduleStandards.length > 0 && cancelledStandards.length > 0 && scheduleStandards.every(std => cancelledStandards.includes(std)));
+    const partialCancellation = !!cancellation && !fullCancellation;
+    const activeStandards = partialCancellation
+        ? scheduleStandards.filter(std => !cancelledStandards.includes(std))
+        : scheduleStandards;
+    const meta = cancellationMeta(cancellation);
+    if (fullCancellation) {
+        return {
+            schedule_id: schedule.id,
+            date: dateKey,
+            status: 'cancelled',
+            statusLabel: meta.cancelType === 'institutional' ? 'Cancelled by Institutional Leave' : 'Cancelled',
+            isCancelled: true,
+            isPartialCancellation: false,
+            isInstitutionWide: cancelledStandards.length === 0,
+            cancelReason: meta.cancelReason,
+            cancelType: meta.cancelType,
+            activeStandards: [],
+            cancelledStandards,
+        };
+    }
+    if (partialCancellation) {
+        return {
+            schedule_id: schedule.id,
+            date: dateKey,
+            status: 'partial_cancelled',
+            statusLabel: 'Some Standards Cancelled',
+            isCancelled: true,
+            isPartialCancellation: true,
+            isInstitutionWide: false,
+            cancelReason: meta.cancelReason,
+            cancelType: meta.cancelType,
+            activeStandards,
+            cancelledStandards,
+        };
+    }
+    if (marked) {
+        return {
+            schedule_id: schedule.id,
+            date: dateKey,
+            status: 'completed',
+            statusLabel: 'Completed',
+            isCancelled: false,
+            isPartialCancellation: false,
+            isInstitutionWide: false,
+            cancelReason: null,
+            cancelType: null,
+            activeStandards,
+            cancelledStandards: [],
+        };
+    }
+    const start = scheduleDateTime(dateKey, schedule.start_time);
+    const end = scheduleDateTime(dateKey, schedule.end_time);
+    const status = now < start ? 'upcoming' : (now <= end ? 'in_progress' : 'pending');
+    return {
+        schedule_id: schedule.id,
+        date: dateKey,
+        status,
+        statusLabel: status === 'upcoming' ? 'Upcoming' : (status === 'in_progress' ? 'In Progress' : 'Pending Attendance'),
+        isCancelled: false,
+        isPartialCancellation: false,
+        isInstitutionWide: false,
+        cancelReason: null,
+        cancelType: null,
+        activeStandards,
+        cancelledStandards: [],
+    };
+}
+function institutionalLeaveCancellationForSlot(schedule, dateKey, leaves) {
+    const scheduleStart = scheduleDateTime(dateKey, schedule.start_time);
+    const scheduleEnd = scheduleDateTime(dateKey, schedule.end_time);
+    const scheduleStandards = normalizeStandardList(parseStandardList(schedule.standards));
+    for (const leave of leaves) {
+        const leaveStart = new Date(leave.start_datetime);
+        const leaveEnd = new Date(leave.end_datetime);
+        if (!(scheduleStart < leaveEnd && scheduleEnd > leaveStart))
+            continue;
+        let cancelledStandards = null;
+        if (!leave.is_entire_institution) {
+            const targetStandards = normalizeStandardList(parseStandardList(leave.target_classes));
+            const affectedStandards = scheduleStandards.length > 0
+                ? targetStandards.filter(std => scheduleStandards.includes(std))
+                : targetStandards;
+            if (affectedStandards.length === 0)
+                continue;
+            cancelledStandards = scheduleStandards.length > 0 && affectedStandards.length === scheduleStandards.length
+                ? null
+                : affectedStandards;
+        }
+        return {
+            id: `institutional:${leave.id}:${schedule.id}:${dateKey}`,
+            schedule_id: schedule.id,
+            date: dateKey,
+            reason: `Institutional Leave:${leave.id}`,
+            resolved_reason: leave.name || 'Institutional Leave',
+            cancelled_standards: cancelledStandards,
+        };
+    }
+    return null;
 }
 // Maps schedule.class_type → the corresponding students.<col> column.
 // Centralised so all attendance queries stay in sync.
@@ -150,6 +284,19 @@ function countStudentsForSchedule(schedule, counts) {
     }
     return total;
 }
+async function countStudentsForScheduleWithRules(schedule, counts, mentorId, academicYearId, date) {
+    if ((0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && academicYearId) {
+        const eligible = await (0, hifz_session_eligibility_1.getEligibleHifzStudentsForSchedule)({
+            schedule,
+            academicYearId,
+            mentorId,
+            date,
+        });
+        if (eligible.usedRules && eligible.students)
+            return eligible.students.length;
+    }
+    return countStudentsForSchedule(schedule, counts);
+}
 const getSchedules = async (req, res) => {
     try {
         const { academic_year_id, show_inactive } = req.query;
@@ -169,9 +316,12 @@ const getSchedules = async (req, res) => {
         if (cached) {
             return res.json({ success: true, data: cached });
         }
-        let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
+        let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
+                            c.name as class_setup_name, c.standard as class_standard,
+                            c.section as class_section, c.type as class_department
                      FROM attendance_schedules a
-                     LEFT JOIN staff s ON a.mentor_id = s.id`;
+                     LEFT JOIN staff s ON a.mentor_id = s.id
+                     LEFT JOIN classes c ON a.class_id = c.id`;
         const conditions = [];
         const params = [];
         let paramCount = 1;
@@ -194,12 +344,10 @@ const getSchedules = async (req, res) => {
             // ONE query for all mentor↔standard counts, then in-memory lookup
             // per schedule. Replaces the previous N+1 COUNT(*) loop.
             const counts = await getMentorStudentCounts(mentorId);
-            const filteredSchedules = schedules
-                .map(schedule => ({
+            const filteredSchedules = (await Promise.all(schedules.map(async (schedule) => ({
                 ...schedule,
-                student_count: countStudentsForSchedule(schedule, counts),
-            }))
-                .filter(s => s.student_count > 0);
+                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, academic_year_id),
+            })))).filter(s => s.student_count > 0);
             (0, server_cache_1.setCached)(cacheKey, filteredSchedules, 5 * 60000);
             return res.json({ success: true, data: filteredSchedules });
         }
@@ -251,9 +399,12 @@ const getSchedulesForDate = async (req, res) => {
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
         const user = req.user;
-        let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo
+        let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
+                            c.name as class_setup_name, c.standard as class_standard,
+                            c.section as class_section, c.type as class_department
                      FROM attendance_schedules a
                      LEFT JOIN staff s ON a.mentor_id = s.id
+                     LEFT JOIN classes c ON a.class_id = c.id
                      WHERE a.day_of_week = $1
                        AND (a.is_deleted = false OR a.is_deleted IS NULL)
                        AND a.effective_from <= $2
@@ -274,12 +425,10 @@ const getSchedulesForDate = async (req, res) => {
                 return res.json({ success: true, data: [] });
             // ONE query, then in-memory filter. See getMentorStudentCounts.
             const counts = await getMentorStudentCounts(mentorId);
-            const filteredSchedules = result.rows
-                .map((schedule) => ({
+            const filteredSchedules = (await Promise.all(result.rows.map(async (schedule) => ({
                 ...schedule,
-                student_count: countStudentsForSchedule(schedule, counts),
-            }))
-                .filter((s) => s.student_count > 0);
+                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, academic_year_id, date),
+            })))).filter((s) => s.student_count > 0);
             return res.json({ success: true, data: filteredSchedules });
         }
         // For Admins/Principals, attach expected mentors to each schedule
@@ -322,9 +471,29 @@ const getSchedulesForDate = async (req, res) => {
 exports.getSchedulesForDate = getSchedulesForDate;
 const createSchedule = async (req, res) => {
     try {
-        const { class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from } = req.body;
+        const { class_id, academic_year_id, class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from } = req.body;
         // Auto-calculate effective_from: next occurrence of the selected day
         const startDate = effective_from || getNextOccurrence(day_of_week);
+        let effectiveClassType = class_type;
+        let effectiveName = name || null;
+        let effectiveStandards = Array.isArray(standards) ? standards : [];
+        if (class_id) {
+            const classRes = await db_1.db.query(`SELECT id, name, type, standard, section
+                 FROM classes
+                 WHERE id = $1
+                   AND ($2::uuid IS NULL OR academic_year_id = $2::uuid)
+                   AND COALESCE(is_archived, false) = false`, [class_id, academic_year_id || null]);
+            if (classRes.rows.length === 0) {
+                return res.status(400).json({ success: false, error: 'Select a valid active class before creating timetable.' });
+            }
+            const classRow = classRes.rows[0];
+            effectiveClassType = String(classRow.type || '').toLowerCase();
+            effectiveName = name || classRow.name;
+            effectiveStandards = [classRow.standard].filter(Boolean);
+        }
+        if (!effectiveClassType || effectiveStandards.length === 0) {
+            return res.status(400).json({ success: false, error: 'Class and standard are required.' });
+        }
         // Conflict Validator: only check against active (non-deleted) schedules
         const existingSchedules = await db_1.db.query(`SELECT * FROM attendance_schedules 
              WHERE day_of_week = $1 
@@ -332,8 +501,11 @@ const createSchedule = async (req, res) => {
                AND (effective_until IS NULL OR effective_until >= $2)`, [day_of_week, startDate]);
         for (const existing of existingSchedules.rows) {
             if (start_time < existing.end_time && end_time > existing.start_time) {
+                if (class_id && existing.class_id && existing.class_id !== class_id) {
+                    continue;
+                }
                 const extStds = typeof existing.standards === 'string' ? JSON.parse(existing.standards || '[]') : existing.standards;
-                const reqStds = Array.isArray(standards) ? standards : [];
+                const reqStds = effectiveStandards;
                 const collision = reqStds.find((s) => extStds.includes(s));
                 if (collision) {
                     return res.status(400).json({
@@ -343,8 +515,8 @@ const createSchedule = async (req, res) => {
                 }
             }
         }
-        const result = await db_1.db.query(`INSERT INTO attendance_schedules (class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, [class_type, name || null, JSON.stringify(standards), day_of_week, start_time, end_time, duration_mins, startDate]);
+        const result = await db_1.db.query(`INSERT INTO attendance_schedules (class_id, academic_year_id, class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [class_id || null, academic_year_id || null, effectiveClassType, effectiveName, JSON.stringify(effectiveStandards), day_of_week, start_time, end_time, duration_mins, startDate]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         res.json({ success: true, data: result.rows[0] });
     }
@@ -387,19 +559,89 @@ const getDashboardData = async (req, res) => {
         if (cachedDashboard) {
             return res.json({ success: true, ...cachedDashboard });
         }
-        const cancels = await db_1.db.query('SELECT * FROM attendance_cancellations WHERE date >= $1 AND date <= $2', [start_date, end_date]);
-        let marksQuery;
+        const cancelsPromise = db_1.db.query(`SELECT c.*,
+                    COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason
+             FROM attendance_cancellations c
+             LEFT JOIN institutional_leaves il ON c.reason = ('Institutional Leave:' || il.id::text)
+             WHERE c.date >= $1 AND c.date <= $2`, [start_date, end_date]);
+        let marksPromise;
         if (MENTOR_ROLES.includes(user?.role)) {
             // Mentors only see their own marks — so "Marked" status is per-mentor
-            marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3', [start_date, end_date, mentorId || user.id]);
+            marksPromise = db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3', [start_date, end_date, mentorId || user.id]);
         }
         else {
             // Admin/Principal: see all marks (session shown as completed if anyone marked it)
-            marksQuery = await db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2', [start_date, end_date]);
+            marksPromise = db_1.db.query('SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2', [start_date, end_date]);
         }
+        const schedulesPromise = db_1.db.query(`SELECT id, standards, day_of_week, start_time, end_time
+             FROM attendance_schedules
+             WHERE (is_deleted = false OR is_deleted IS NULL)
+               AND effective_from <= $2::date
+               AND (effective_until IS NULL OR effective_until >= $1::date)`, [start_date, end_date]);
+        const institutionalLeavesPromise = db_1.db.query(`SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution
+             FROM institutional_leaves
+             WHERE start_datetime < ($2::date + 1)
+               AND end_datetime >= $1::date`, [start_date, end_date]);
+        const [cancels, marksQuery, schedulesQuery, institutionalLeavesQuery] = await Promise.all([
+            cancelsPromise,
+            marksPromise,
+            schedulesPromise,
+            institutionalLeavesPromise,
+        ]);
+        const cancellationBySlot = new Map(cancels.rows.map((row) => [`${row.schedule_id}:${toDateKey(row.date)}`, row]));
+        const markBySlot = new Map(marksQuery.rows.map((row) => [`${row.schedule_id}:${toDateKey(row.date)}`, row]));
+        const classStatuses = [];
+        const virtualCancellations = [];
+        for (const dateKey of dateKeysBetween(String(start_date), String(end_date))) {
+            const dayOfWeek = new Date(`${dateKey}T12:00:00+05:30`).getDay();
+            for (const schedule of schedulesQuery.rows) {
+                if (Number(schedule.day_of_week) !== dayOfWeek)
+                    continue;
+                const slotKey = `${schedule.id}:${dateKey}`;
+                const cancellation = cancellationBySlot.get(slotKey)
+                    || institutionalLeaveCancellationForSlot(schedule, dateKey, institutionalLeavesQuery.rows);
+                if (cancellation && !cancellationBySlot.has(slotKey)) {
+                    virtualCancellations.push(cancellation);
+                }
+                classStatuses.push(computeClassStatus(schedule, dateKey, cancellation, markBySlot.get(slotKey)));
+            }
+        }
+        const stats = classStatuses.reduce((acc, item) => {
+            acc.total += 1;
+            if (item.status === 'completed')
+                acc.completed += 1;
+            else if (item.status === 'cancelled') {
+                acc.cancelled += 1;
+                if (item.cancelType === 'institutional')
+                    acc.institutionalCancelled += 1;
+                else
+                    acc.manualCancelled += 1;
+            }
+            else if (item.status === 'partial_cancelled') {
+                acc.partialCancelled += 1;
+                if (item.cancelType === 'institutional')
+                    acc.institutionalCancelled += 1;
+                else
+                    acc.manualCancelled += 1;
+            }
+            else {
+                acc.pending += 1;
+            }
+            return acc;
+        }, {
+            total: 0,
+            completed: 0,
+            pending: 0,
+            cancelled: 0,
+            partialCancelled: 0,
+            institutionalCancelled: 0,
+            manualCancelled: 0,
+        });
         const dashboardPayload = {
-            cancellations: cancels.rows,
-            marks: marksQuery.rows
+            cancellations: [...cancels.rows, ...virtualCancellations],
+            marks: marksQuery.rows,
+            class_statuses: classStatuses,
+            stats,
         };
         (0, server_cache_1.setCached)(dashboardCacheKey, dashboardPayload, 30000);
         res.json({
@@ -444,8 +686,11 @@ const getMentorSchedules = async (req, res) => {
         // ONE query for all per-(class_type, standard) counts; then a pure
         // in-memory filter. Replaces N COUNT(*) queries.
         const counts = await getMentorStudentCounts(mentor_id);
-        const relevantIds = allScheds.rows
-            .filter((sched) => countStudentsForSchedule(sched, counts) > 0)
+        const relevantIds = (await Promise.all(allScheds.rows.map(async (sched) => ({
+            id: sched.id,
+            count: await countStudentsForScheduleWithRules(sched, counts, mentor_id, academic_year_id),
+        }))))
+            .filter((sched) => sched.count > 0)
             .map((sched) => sched.id);
         res.json({ success: true, schedule_ids: relevantIds, mentor_standards: mentorStudentStds });
     }
@@ -456,7 +701,7 @@ const getMentorSchedules = async (req, res) => {
 exports.getMentorSchedules = getMentorSchedules;
 const getStudentsForSchedule = async (req, res) => {
     try {
-        let { schedule_id, date, mentor_id } = req.query;
+        let { schedule_id, date, mentor_id, academic_year_id } = req.query;
         const user = req.user;
         if (!schedule_id)
             return res.status(400).json({ success: false, error: "schedule_id required" });
@@ -466,7 +711,7 @@ const getStudentsForSchedule = async (req, res) => {
         const isMentorRole = MENTOR_ROLES.includes(user?.role);
         const [resolvedMentorId, schedRes, cancellationRes] = await Promise.all([
             isMentorRole ? (0, staff_utils_1.getStaffId)(req) : Promise.resolve(null),
-            db_1.db.query('SELECT standards, class_type, start_time, end_time FROM attendance_schedules WHERE id = $1', [schedule_id]),
+            db_1.db.query('SELECT id, name, standards, class_type, start_time, end_time, academic_year_id FROM attendance_schedules WHERE id = $1', [schedule_id]),
             date
                 ? db_1.db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date])
                 : Promise.resolve({ rows: [] }),
@@ -476,11 +721,14 @@ const getStudentsForSchedule = async (req, res) => {
         }
         if (schedRes.rows.length === 0)
             return res.status(404).json({ success: false, error: "Schedule not found" });
-        const rawStds = typeof schedRes.rows[0].standards === 'string'
-            ? JSON.parse(schedRes.rows[0].standards || '[]')
-            : (schedRes.rows[0].standards || []);
-        const classType = (schedRes.rows[0].class_type || '').toLowerCase();
-        const sessionEndStr = schedRes.rows[0].end_time; // 'HH:mm:ss'
+        const schedule = schedRes.rows[0];
+        const rawStds = typeof schedule.standards === 'string'
+            ? JSON.parse(schedule.standards || '[]')
+            : (schedule.standards || []);
+        const classType = (schedule.class_type || '').toLowerCase();
+        const sessionStartStr = schedule.start_time; // 'HH:mm:ss'
+        const sessionEndStr = schedule.end_time; // 'HH:mm:ss'
+        const effectiveAcademicYearId = academic_year_id || schedule.academic_year_id || null;
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
         const cancellation = cancellationRes.rows[0] || null;
@@ -501,7 +749,18 @@ const getStudentsForSchedule = async (req, res) => {
         const mentorCol = MENTOR_COL_MAP[classType];
         let permanentStudents = [];
         let delegatedStudents = [];
-        if (mentor_id && mentorCol) {
+        const ruleEligible = await (0, hifz_session_eligibility_1.getEligibleHifzStudentsForSchedule)({
+            schedule,
+            academicYearId: effectiveAcademicYearId,
+            date: date,
+            mentorId: mentor_id,
+        });
+        if (ruleEligible.usedRules && ruleEligible.students) {
+            permanentStudents = ruleEligible.students
+                .filter((s) => !cancellation || !isStandardCancelled(cancellation, s.standard))
+                .map((s) => ({ ...s, is_temp: false }));
+        }
+        else if (mentor_id && mentorCol) {
             // ── Phase 2 (parallel): permanent students + delegated students ──
             // These two queries are independent — running them serially
             // doubled the round-trip cost for no reason.
@@ -554,13 +813,9 @@ const getStudentsForSchedule = async (req, res) => {
         if (students.length > 0 && date) {
             try {
                 const studentIds = students.map((s) => s.adm_no);
-                // Phase 3: leave overlap check.
-                // Removed `start_datetime::date` casts on the indexed columns —
-                // PG can't use a btree index when the indexed column is wrapped
-                // in a function/cast. Compare directly to date-bounded timestamps
-                // so the existing student_id index can be combined with the new
-                // (status, start_datetime, end_datetime) index.
-                const leavesRes = await db_1.db.query(`SELECT student_id, start_datetime
+                // Phase 3: leave overlap check. Fetch all leaves touching this date,
+                // then compare the leave interval against the specific class interval.
+                const leavesRes = await db_1.db.query(`SELECT student_id, start_datetime, end_datetime, actual_return_datetime, status
                      FROM student_leaves
                      WHERE student_id = ANY($1)
                        AND (
@@ -576,36 +831,41 @@ const getStudentsForSchedule = async (req, res) => {
                             AND COALESCE(actual_return_datetime, end_datetime) >= $2::date)
                        )
                      ORDER BY start_datetime DESC`, [studentIds, date]);
-                const leaveMap = new Map();
+                const leavesByStudent = new Map();
                 for (const r of leavesRes.rows) {
-                    if (!leaveMap.has(r.student_id)) {
-                        leaveMap.set(r.student_id, r.start_datetime); // keep most recent leave of the day
-                    }
+                    const leaves = leavesByStudent.get(r.student_id) || [];
+                    leaves.push(r);
+                    leavesByStudent.set(r.student_id, leaves);
                 }
-                // If no exact session end time is known, fallback to now
-                const referenceTimeStr = sessionEndStr || "23:59:00";
-                // Build a precise timestamp object for when the session finished
-                const sessionEndDateTimeObj = new Date(`${date}T${referenceTimeStr}+05:30`);
+                const sessionStartDateTimeObj = new Date(`${date}T${sessionStartStr || '00:00:00'}+05:30`);
+                const sessionEndDateTimeObj = new Date(`${date}T${sessionEndStr || '23:59:00'}+05:30`);
                 studentsWithLeave = students.map((s) => {
-                    const lStart = leaveMap.get(s.adm_no);
+                    const leaves = leavesByStudent.get(s.adm_no) || [];
                     let isLockedOutside = false;
                     let wentOutsideLater = false;
-                    if (lStart) {
-                        const leaveStartObj = new Date(lStart);
-                        if (sessionEndDateTimeObj >= leaveStartObj) {
-                            // Leave happened before or during the session completion
+                    let relevantLeave = null;
+                    for (const leave of leaves) {
+                        const leaveStartObj = new Date(leave.start_datetime);
+                        const leaveReturnObj = leave.actual_return_datetime || leave.end_datetime
+                            ? new Date(leave.actual_return_datetime || leave.end_datetime)
+                            : null;
+                        const overlapsSession = leaveStartObj < sessionEndDateTimeObj
+                            && (!leaveReturnObj || leaveReturnObj > sessionStartDateTimeObj);
+                        if (overlapsSession) {
                             isLockedOutside = true;
+                            relevantLeave = leave;
+                            break;
                         }
-                        else {
-                            // Session ended cleanly before the student left campus
+                        if (leaveStartObj >= sessionEndDateTimeObj && !wentOutsideLater) {
                             wentOutsideLater = true;
+                            relevantLeave = leave;
                         }
                     }
                     return {
                         ...s,
                         is_locked_outside: isLockedOutside,
                         went_outside_later: wentOutsideLater,
-                        leave_start_time: lStart || null,
+                        leave_start_time: relevantLeave?.start_datetime || null,
                         is_on_leave: isLockedOutside, // backwards compat
                         attendance_status: isLockedOutside ? 'outside' : 'pending' // backwards compat
                     };

@@ -39,7 +39,10 @@ const db_1 = require("../config/db");
 const logger_1 = require("../utils/logger");
 const staff_utils_1 = require("../utils/staff.utils");
 const server_cache_1 = require("../utils/server-cache");
+const academic_year_1 = require("../utils/academic-year");
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+const ALUMNI_STATUSES = ['completed', 'dropout', 'stopped', 'higher_education'];
+const ACTIVE_OPERATIONAL_LEAVE_STATUSES = ['approved', 'outside'];
 // Columns required for the listing/grid views and the dashboard. Excludes the
 // heavy `comprehensive_details` JSON blob and `address` text — callers that
 // actually need those should fetch the single student via /students/:id.
@@ -59,9 +62,52 @@ const formatJoinedAdmittedBatchYear = (student) => {
     }
     return student.batch_year || '';
 };
+function isAlumniStatus(status) {
+    return ALUMNI_STATUSES.includes(String(status || '').toLowerCase());
+}
+async function hasStudentCurrentPresenceTable(client) {
+    const result = await client.query(`SELECT to_regclass('public.student_current_presence') AS table_name`);
+    return Boolean(result.rows[0]?.table_name);
+}
+async function getActiveOperationalRecords(client, studentId) {
+    const [leaveRes, hasPresenceTable] = await Promise.all([
+        client.query(`SELECT COUNT(*)::integer AS count
+       FROM student_leaves
+       WHERE student_id = $1 AND status = ANY($2::text[])`, [studentId, ACTIVE_OPERATIONAL_LEAVE_STATUSES]),
+        hasStudentCurrentPresenceTable(client),
+    ]);
+    const presenceRes = hasPresenceTable
+        ? await client.query(`SELECT COUNT(*)::integer AS count
+       FROM student_current_presence
+       WHERE student_id = $1 AND status IN ('outside', 'on-campus')`, [studentId])
+        : { rows: [{ count: 0 }] };
+    return {
+        active_leaves: Number(leaveRes.rows[0]?.count || 0),
+        active_presence: Number(presenceRes.rows[0]?.count || 0),
+        active_hostel: 0,
+    };
+}
+function hasActiveOperationalRecords(records) {
+    return records.active_leaves > 0 || records.active_presence > 0 || records.active_hostel > 0;
+}
+async function closeActiveOperationalRecords(client, studentId, userId) {
+    const cancelledLeavesRes = await client.query(`UPDATE student_leaves
+     SET status = 'cancelled',
+         actual_return_datetime = NULL,
+         return_status = NULL,
+         updated_at = NOW()
+     WHERE student_id = $1 AND status = ANY($2::text[])
+     RETURNING id, status`, [studentId, ACTIVE_OPERATIONAL_LEAVE_STATUSES]);
+    if (await hasStudentCurrentPresenceTable(client)) {
+        await client.query(`DELETE FROM student_current_presence
+       WHERE student_id = $1 AND status IN ('outside', 'on-campus')`, [studentId]);
+    }
+    return { cancelled_leaves: cancelledLeavesRes.rowCount || 0 };
+}
 const getAllStudents = async (req, res) => {
     try {
         const { search, class: className, status, light, sort } = req.query;
+        const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         const rawLimit = Number(req.query.limit);
         const rawOffset = Number(req.query.offset);
         const shouldPaginate = Number.isFinite(rawLimit);
@@ -93,9 +139,23 @@ const getAllStudents = async (req, res) => {
             paramCount++;
         }
         if (className && className !== 'all') {
-            whereParts.push(`standard = $${paramCount}`);
-            params.push(className);
-            paramCount++;
+            if (academicContext.mode === 'historical' && academicContext.academicYearId) {
+                const yearParam = paramCount++;
+                const classParam = paramCount++;
+                whereParts.push(`EXISTS (
+          SELECT 1
+          FROM student_year_snapshots sys
+          WHERE sys.student_id = students.adm_no
+            AND sys.academic_year_id = $${yearParam}
+            AND sys.school_standard = $${classParam}
+        )`);
+                params.push(academicContext.academicYearId, className);
+            }
+            else {
+                whereParts.push(`standard = $${paramCount}`);
+                params.push(className);
+                paramCount++;
+            }
         }
         if (status) {
             if (status === 'alumni') {
@@ -128,14 +188,21 @@ const getAllStudents = async (req, res) => {
                 db_1.db.query(query, pagedParams),
                 db_1.db.query(countQuery, params),
             ]);
+            const snapshotMap = await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, result.rows.map((student) => student.adm_no), academicContext.academicYearId);
             return res.json({
                 success: true,
-                students: result.rows,
+                students: result.rows.map((student) => (0, academic_year_1.applyAcademicSnapshot)(student, snapshotMap.get(student.adm_no))),
+                academic_year_mode: academicContext.mode,
                 pagination: { limit, offset, total: countRes.rows[0]?.total || 0 },
             });
         }
         const result = await db_1.db.query(query, params);
-        res.json({ success: true, students: result.rows });
+        const snapshotMap = await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, result.rows.map((student) => student.adm_no), academicContext.academicYearId);
+        res.json({
+            success: true,
+            students: result.rows.map((student) => (0, academic_year_1.applyAcademicSnapshot)(student, snapshotMap.get(student.adm_no))),
+            academic_year_mode: academicContext.mode,
+        });
     }
     catch (err) {
         console.error('Error fetching students:', err);
@@ -156,16 +223,20 @@ const getStudentCounts = async (_req, _res) => {
               COUNT(*) AS total
             FROM students`),
                 db_1.db.query(`SELECT
-              COUNT(*) FILTER (WHERE status = 'outside') AS out_campus,
-              COUNT(*) FILTER (WHERE status = 'on-campus') AS on_campus_leave
-           FROM student_current_presence`).catch((err) => {
+              COUNT(*) FILTER (WHERE scp.status = 'outside') AS out_campus,
+              COUNT(*) FILTER (WHERE scp.status = 'on-campus') AS on_campus_leave
+           FROM student_current_presence scp
+           JOIN students s ON scp.student_id = s.adm_no
+           WHERE s.status = 'active'`).catch((err) => {
                     if (err?.code !== '42P01')
                         throw err;
                     return db_1.db.query(`SELECT
                 COUNT(DISTINCT student_id) AS out_campus,
                 0::integer AS on_campus_leave
-             FROM student_leaves
-             WHERE status = 'outside'`);
+             FROM student_leaves sl
+             JOIN students s ON sl.student_id = s.adm_no
+             WHERE sl.status = 'outside'
+               AND s.status = 'active'`);
                 }),
             ]);
             const r = statusRes.rows[0];
@@ -199,12 +270,14 @@ exports.getStudentCounts = getStudentCounts;
 const getStudentById = async (req, res) => {
     try {
         const { id } = req.params;
+        const studentId = String(id);
         const { light } = req.query;
+        const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         // ?light=true skips the heavy comprehensive_details JSON for callers like
         // the daily-entry form that only need name + a couple of flags.
         const cols = light === 'true' ? LIGHT_STUDENT_COLS : '*';
         const user = req.user;
-        const params = [id];
+        const params = [studentId];
         let studentQuery = `SELECT ${cols} FROM students WHERE adm_no = $1`;
         if (MENTOR_ROLES.includes(user?.role)) {
             const staffId = await (0, staff_utils_1.getStaffId)(req);
@@ -217,13 +290,21 @@ const getStudentById = async (req, res) => {
         // Both queries are independent — fire in parallel (was sequential).
         const [result, leaveRes] = await Promise.all([
             db_1.db.query(studentQuery, params),
-            db_1.db.query(`SELECT id FROM student_leaves WHERE student_id = $1 AND status = 'outside' LIMIT 1`, [id]),
+            db_1.db.query(`SELECT sl.id
+         FROM student_leaves sl
+         JOIN students s ON sl.student_id = s.adm_no
+         WHERE sl.student_id = $1
+           AND sl.status = 'outside'
+           AND s.status = 'active'
+         LIMIT 1`, [studentId]),
         ]);
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
         const is_outside = leaveRes.rows.length > 0;
-        res.json({ success: true, student: { ...result.rows[0], is_outside } });
+        const snapshotMap = await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, [studentId], academicContext.academicYearId);
+        const student = (0, academic_year_1.applyAcademicSnapshot)(result.rows[0], snapshotMap.get(studentId));
+        res.json({ success: true, student: { ...student, is_outside, academic_year_mode: academicContext.mode } });
     }
     catch (err) {
         console.error('Error fetching student:', err);
@@ -310,7 +391,9 @@ const updateStudent = async (req, res) => {
         if (!id) {
             return res.status(400).json({ success: false, error: 'Student ID is required' });
         }
+        const studentId = String(id);
         const updateData = req.body;
+        const user = req.user;
         (0, logger_1.devLog)('[updateStudent] id:', id, 'keys:', Object.keys(updateData));
         // Safety check - don't allow updating ID
         delete updateData.id;
@@ -330,37 +413,76 @@ const updateStudent = async (req, res) => {
         if (keysToUpdate.length === 0) {
             return res.status(400).json({ success: false, error: 'No valid data provided for update' });
         }
-        const setClauses = [];
-        const values = [];
-        let paramCount = 1;
-        for (const key of keysToUpdate) {
-            if (key === 'comprehensive_details') {
-                // Deep merge the new JSON inside Postgres so we don't accidentally overwrite other saved tabs
-                setClauses.push(`${key} = COALESCE(students.${key}, '{}'::jsonb) || $${paramCount}::jsonb`);
+        const client = await db_1.db.getClient();
+        try {
+            await client.query('BEGIN');
+            const currentRes = await client.query(`SELECT adm_no, status FROM students WHERE adm_no = $1 FOR UPDATE`, [studentId]);
+            if (currentRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ success: false, error: 'Student not found' });
             }
-            else {
-                setClauses.push(`${key} = $${paramCount}`);
+            const nextStatus = updateData.status;
+            const becomingAlumni = nextStatus !== undefined
+                && isAlumniStatus(nextStatus)
+                && !isAlumniStatus(currentRes.rows[0].status);
+            if (becomingAlumni) {
+                const activeRecords = await getActiveOperationalRecords(client, studentId);
+                const forceTransfer = updateData.forceAlumniTransfer === true || updateData.closeActiveRecords === true;
+                if (hasActiveOperationalRecords(activeRecords) && !forceTransfer) {
+                    await client.query('ROLLBACK');
+                    const message = 'This student currently has active operational records. Transferring to Alumni will automatically cancel active leave records. Do you want to continue?';
+                    return res.status(409).json({
+                        success: false,
+                        code: 'ALUMNI_TRANSFER_REQUIRES_CONFIRMATION',
+                        message,
+                        error: message,
+                        active_records: activeRecords,
+                    });
+                }
+                if (hasActiveOperationalRecords(activeRecords)) {
+                    await closeActiveOperationalRecords(client, studentId, user?.id);
+                }
             }
-            values.push(updateData[key]);
-            paramCount++;
+            delete updateData.forceAlumniTransfer;
+            delete updateData.closeActiveRecords;
+            const setClauses = [];
+            const values = [];
+            let paramCount = 1;
+            for (const key of keysToUpdate) {
+                if (key === 'comprehensive_details') {
+                    // Deep merge the new JSON inside Postgres so we don't accidentally overwrite other saved tabs
+                    setClauses.push(`${key} = COALESCE(students.${key}, '{}'::jsonb) || $${paramCount}::jsonb`);
+                }
+                else {
+                    setClauses.push(`${key} = $${paramCount}`);
+                }
+                values.push(updateData[key]);
+                paramCount++;
+            }
+            // Add exactly one more parameter for the ID
+            values.push(studentId);
+            const query = `
+        UPDATE students 
+        SET ${setClauses.join(', ')} 
+        WHERE adm_no = $${paramCount} 
+        RETURNING *
+      `;
+            const result = await client.query(query, values);
+            await client.query('COMMIT');
+            (0, server_cache_1.invalidateCacheByPrefix)('students:');
+            (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+            (0, server_cache_1.invalidateCacheByPrefix)('finance:active-students');
+            (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+            (0, server_cache_1.invalidateCacheByPrefix)('leaves:');
+            res.json({ success: true, student: result.rows[0] });
         }
-        // Add exactly one more parameter for the ID
-        values.push(id);
-        const query = `
-      UPDATE students 
-      SET ${setClauses.join(', ')} 
-      WHERE adm_no = $${paramCount} 
-      RETURNING *
-    `;
-        const result = await db_1.db.query(query, values);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Student not found' });
+        catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
         }
-        (0, server_cache_1.invalidateCacheByPrefix)('students:');
-        (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
-        (0, server_cache_1.invalidateCacheByPrefix)('finance:active-students');
-        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
-        res.json({ success: true, student: result.rows[0] });
+        finally {
+            client.release();
+        }
     }
     catch (err) {
         console.error('Error updating student:', err);

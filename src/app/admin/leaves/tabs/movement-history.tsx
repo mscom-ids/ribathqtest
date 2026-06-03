@@ -16,18 +16,24 @@ export function MovementHistoryTab() {
     const [leaves, setLeaves] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
+    const [totalItems, setTotalItems] = useState(0)
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
-    const [pageSize, setPageSize] = useState(10)
+    const [pageSize, setPageSize] = useState(100)
 
     useEffect(() => {
         const fetchLeaves = async () => {
             setLoading(true)
             try {
-                const res = await cachedGet('/leaves', undefined, 30_000)
+                const res = await cachedGet('/leaves', {
+                    limit: pageSize,
+                    offset: (currentPage - 1) * pageSize,
+                    search: searchQuery.trim() || undefined,
+                }, 30_000)
                 if (res.data.success) {
                     setLeaves(res.data.leaves || [])
+                    setTotalItems(Number(res.data.pagination?.total || 0))
                 }
             } catch {
                 console.warn("Failed to load movement history")
@@ -36,9 +42,10 @@ export function MovementHistoryTab() {
             }
         }
         fetchLeaves()
-    }, [])
+    }, [currentPage, pageSize, searchQuery])
 
     const filtered = useMemo(() => {
+        if (searchQuery.trim()) return leaves
         return leaves.filter(l => 
             l.student_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
             l.student_adm_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -47,7 +54,6 @@ export function MovementHistoryTab() {
     }, [leaves, searchQuery])
 
     // Pagination logic
-    const totalItems = filtered.length
     const totalPages = Math.ceil(totalItems / pageSize) || 1
     
     // Ensure we don't sit on an empty outer page if filters reduce data
@@ -58,9 +64,8 @@ export function MovementHistoryTab() {
     }, [totalPages, currentPage]);
 
     const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * pageSize
-        return filtered.slice(start, start + pageSize)
-    }, [filtered, currentPage, pageSize])
+        return filtered
+    }, [filtered])
 
     const formatDateTime = (dateStr: string | null) => {
         if (!dateStr) return "—"
@@ -79,7 +84,10 @@ export function MovementHistoryTab() {
                     <Input
                         placeholder="Search student, ID, or batch..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value)
+                            setCurrentPage(1)
+                        }}
                         className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                 </div>
@@ -111,7 +119,9 @@ export function MovementHistoryTab() {
                                         <p>No movement history found</p>
                                     </div>
                                 </TableCell></TableRow>
-                            ) : paginatedData.map((leave, index) => (
+                            ) : paginatedData.map((leave, index) => {
+                                const returnStatus = leave.computed_return_status || leave.return_status
+                                return (
                                 <TableRow key={leave.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                     <TableCell className="text-slate-500">
                                         {(currentPage - 1) * pageSize + index + 1}
@@ -145,17 +155,18 @@ export function MovementHistoryTab() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {leave.status === 'returned' && leave.return_status === 'late' && (
+                                        {leave.status === 'returned' && returnStatus === 'late' && (
                                             <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-300">LATE</Badge>
                                         )}
-                                        {leave.status === 'returned' && leave.return_status === 'normal' && (
+                                        {leave.status === 'returned' && returnStatus === 'normal' && (
                                             <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-300">NORMAL</Badge>
                                         )}
                                         {leave.status === 'outside' && <span className="text-xs font-bold text-amber-500 uppercase tracking-widest">Ongoing</span>}
                                         {leave.status === 'pending' && <span className="text-xs text-slate-400">—</span>}
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                                )
+                            })}
                         </TableBody>
                     </Table>
                 </div>
