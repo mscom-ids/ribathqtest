@@ -463,10 +463,10 @@ export default function StaffDashboard() {
                             </div>
                         </div>
 
-                        {/* Today's Entries */}
+                        {/* Today's Hifz Entries */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Entries</h3>
+                                <h3 className="font-semibold text-slate-900 dark:text-white text-sm">Today's Hifz Entries</h3>
                                 <TrendingUp className="h-4 w-4 text-blue-500" />
                             </div>
                             <div className="flex items-center gap-4">
@@ -475,8 +475,8 @@ export default function StaffDashboard() {
                                     <div className="absolute text-lg font-bold">{entryPct}%</div>
                                 </div>
                                 <div className="space-y-1 flex-1">
-                                    <div className="text-xs text-slate-500 dark:text-gray-300">Recorded: <b className="dark:text-white">{entryCount}</b></div>
-                                    <div className="text-xs text-slate-500 dark:text-gray-300">Pending: <b className="dark:text-white">{myStudents.length - entryCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Logged: <b className="dark:text-white">{entryCount}</b></div>
+                                    <div className="text-xs text-slate-500 dark:text-gray-300">Not Logged: <b className="dark:text-white">{myStudents.length - entryCount}</b></div>
                                 </div>
                             </div>
                         </div>
