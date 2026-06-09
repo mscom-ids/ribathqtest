@@ -5,7 +5,8 @@ import {
     getClassStudents, getStudentClassAssignments, upsertStudentClassAssignment,
     getEnrollments, enrollStudent, deleteEnrollment,
     getWeeklySchedule, upsertWeeklySchedule, deleteWeeklySchedule,
-    getClassEvents, generateDailyEvents, updateClassEventStatus, createManualClassEvent
+    getClassEvents, generateDailyEvents, updateClassEventStatus, createManualClassEvent,
+    bulkAssignHifzClass
 } from '../controllers/classes.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
@@ -27,6 +28,7 @@ router.get('/', getClasses);
 router.post('/', requireRole(['admin', 'principal']), upsertClass);
 router.get('/student-assignments', getStudentClassAssignments);
 router.post('/student-assignments', requireRole(['admin', 'principal', 'vice_principal']), upsertStudentClassAssignment);
+router.post('/bulk-assign-hifz', requireRole(['admin', 'principal', 'vice_principal']), bulkAssignHifzClass);
 router.get('/:id/students', getClassStudents);
 router.delete('/:id', requireRole(['admin', 'principal']), deleteClass);
 

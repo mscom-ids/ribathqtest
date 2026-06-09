@@ -10,13 +10,22 @@ const staff_utils_1 = require("../utils/staff.utils");
 const server_cache_1 = require("../utils/server-cache");
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+let studentCurrentPresenceTableExists = null;
 function invalidateLeaveCaches() {
     (0, server_cache_1.invalidateCacheByPrefix)('leaves:');
+    (0, server_cache_1.invalidateCacheByPrefix)('students:');
     (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
     (0, server_cache_1.invalidateCacheByPrefix)('attendance:daily-stats');
     (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
     (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
     (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
+}
+async function hasStudentCurrentPresenceTable() {
+    if (studentCurrentPresenceTableExists !== null)
+        return studentCurrentPresenceTableExists;
+    const result = await db_1.db.query(`SELECT to_regclass('public.student_current_presence') AS table_name`);
+    studentCurrentPresenceTableExists = Boolean(result.rows[0]?.table_name);
+    return studentCurrentPresenceTableExists;
 }
 function parseLimitOffset(query, defaultLimit = 100, maxLimit = 500) {
     const rawLimit = Number(query.limit ?? defaultLimit);
@@ -1121,10 +1130,12 @@ const getOutsideStudents = async (req, res) => {
             staff: MENTOR_ROLES.includes(user.role) ? String(params[1] || '') : 'all',
             outdoor: String(canViewOutdoor),
         });
-        const students = await (0, server_cache_1.cachedResult)(cacheKey, 10000, async () => {
-            // Prefer the current-state helper table. It keeps this endpoint small
-            // even when student_leaves/student_movements history becomes large.
-            const presenceQuery = `
+        const students = await (0, server_cache_1.cachedResult)(cacheKey, 60000, async () => {
+            // Prefer the current-state helper table when it exists. Older
+            // databases do not have it, so avoid throwing/catching 42P01 on
+            // every cache miss.
+            if (await hasStudentCurrentPresenceTable()) {
+                const presenceQuery = `
             SELECT 
                 sl.id as leave_id,
                 scp.student_id,
@@ -1170,14 +1181,10 @@ const getOutsideStudents = async (req, res) => {
               ${assignmentFilter}
             ORDER BY sl.start_datetime DESC
         `;
-            try {
                 const presenceResult = await db_1.db.query(presenceQuery, params);
                 return presenceResult.rows;
             }
-            catch (presenceErr) {
-                if (presenceErr?.code !== '42P01')
-                    throw presenceErr;
-                const fallbackResult = await db_1.db.query(`
+            const fallbackResult = await db_1.db.query(`
                     SELECT 
                         sl.id as leave_id,
                         sl.student_id,
@@ -1222,8 +1229,7 @@ const getOutsideStudents = async (req, res) => {
                       ${assignmentFilter}
                     ORDER BY sl.start_datetime DESC
                 `, params);
-                return fallbackResult.rows;
-            }
+            return fallbackResult.rows;
         });
         res.json({ success: true, students });
     }

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getStudentAttendanceSummaries = getStudentAttendanceSummaries;
+const server_cache_1 = require("./server-cache");
 const emptySummary = () => ({
     plannedClasses: 0,
     cancelledClasses: 0,
@@ -152,7 +153,25 @@ function formatAttendanceLabel(summary) {
         parts.push(`${summary.cancelledClasses} cancelled`);
     return parts.join(', ');
 }
-async function getStudentAttendanceSummaries(db, students, startDate, endDate, classType) {
+function attendanceStudentsFingerprint(students) {
+    const text = students
+        .map(student => [
+        student.adm_no,
+        student.standard || '',
+        student.attendance_standard || '',
+        student.report_start_date || '',
+        student.report_end_date || '',
+    ].join(':'))
+        .sort()
+        .join('|');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `${students.length}:${(hash >>> 0).toString(36)}`;
+}
+async function computeStudentAttendanceSummaries(db, students, startDate, endDate, classType) {
     const summaries = new Map();
     students.forEach(student => summaries.set(student.adm_no, emptySummary()));
     if (students.length === 0)
@@ -205,6 +224,10 @@ async function getStudentAttendanceSummaries(db, students, startDate, endDate, c
             if (!scheduleAppliesToDate(schedule, dateStr))
                 continue;
             for (const [studentId, student] of studentById) {
+                if (student.report_start_date && dateStr < student.report_start_date)
+                    continue;
+                if (student.report_end_date && dateStr > student.report_end_date)
+                    continue;
                 if (!scheduleAppliesToStudent(schedule, student))
                     continue;
                 const summary = summaries.get(studentId) || emptySummary();
@@ -295,4 +318,14 @@ async function getStudentAttendanceSummaries(db, students, startDate, endDate, c
         }, 0);
     });
     return summaries;
+}
+async function getStudentAttendanceSummaries(db, students, startDate, endDate, classType) {
+    if (students.length === 0)
+        return new Map();
+    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:student-summaries', {
+        startDate,
+        endDate,
+        classType: classType || 'all',
+        students: attendanceStudentsFingerprint(students),
+    }), 60000, () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType));
 }

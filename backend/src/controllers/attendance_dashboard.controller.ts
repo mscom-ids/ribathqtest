@@ -4,6 +4,7 @@ import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, getCached, invalidateCacheByPrefix, makeCacheKey, setCached } from '../utils/server-cache';
 import { getMentorAccessDecision } from '../utils/mentor-access-policy';
 import { getEligibleHifzStudentsForSchedule, isHifzSchedule } from '../utils/hifz-session-eligibility';
+import { getAcademicYearContext } from '../utils/academic-year';
 
 // All roles treated as a mentor (filtered access)
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -330,6 +331,8 @@ async function countStudentsForScheduleWithRules(
 export const getSchedules = async (req: Request, res: Response) => {
     try {
         const { academic_year_id, show_inactive } = req.query;
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveAcademicYearId = yearContext.academicYearId;
         const user = (req as any).user;
         const isMentor = MENTOR_ROLES.includes(user?.role);
         const mentorId = isMentor ? await getStaffId(req) : null;
@@ -338,7 +341,7 @@ export const getSchedules = async (req: Request, res: Response) => {
         }
 
         const cacheKey = makeCacheKey('attendance:schedules', {
-            academic_year_id: academic_year_id || '',
+            academic_year_id: effectiveAcademicYearId || 'legacy',
             show_inactive: show_inactive === 'true' ? 'true' : 'false',
             role: user?.role || '',
             staff: mentorId || 'all',
@@ -358,9 +361,12 @@ export const getSchedules = async (req: Request, res: Response) => {
         const params: any[] = [];
         let paramCount = 1;
         
-        if (academic_year_id) {
-            conditions.push(`(a.academic_year_id = $${paramCount} OR a.academic_year_id IS NULL)`);
-            params.push(academic_year_id);
+        if (effectiveAcademicYearId) {
+            // Strict year filter: only return schedules explicitly linked to this year.
+            // Do NOT include NULL academic_year_id rows — those are old/unlinked records
+            // from before year tracking was added and should not bleed into other years.
+            conditions.push(`a.academic_year_id = $${paramCount}`);
+            params.push(effectiveAcademicYearId);
             paramCount++;
         }
 
@@ -384,7 +390,7 @@ export const getSchedules = async (req: Request, res: Response) => {
 
             const filteredSchedules = (await Promise.all(schedules.map(async schedule => ({
                 ...schedule,
-                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, academic_year_id as string | undefined),
+                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, effectiveAcademicYearId || undefined),
             })))).filter(s => s.student_count > 0);
 
             setCached(cacheKey, filteredSchedules, 5 * 60_000);
@@ -440,6 +446,8 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         const { date, academic_year_id } = req.query;
         if (!date) return res.status(400).json({ success: false, error: 'date is required (YYYY-MM-DD)' });
 
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveAcademicYearId = yearContext.academicYearId;
         const targetDate = new Date(date as string);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
         const user = (req as any).user;
@@ -457,9 +465,9 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         const params: any[] = [dayOfWeek, date];
         let paramCount = 3;
 
-        if (academic_year_id) {
+        if (effectiveAcademicYearId) {
             query += ` AND a.academic_year_id = $${paramCount}`;
-            params.push(academic_year_id);
+            params.push(effectiveAcademicYearId);
             paramCount++;
         }
 
@@ -477,7 +485,7 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
 
             const filteredSchedules = (await Promise.all(result.rows.map(async (schedule: any) => ({
                 ...schedule,
-                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, academic_year_id as string | undefined, date as string),
+                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, effectiveAcademicYearId || undefined, date as string),
             })))).filter((s: any) => s.student_count > 0);
 
             return res.json({ success: true, data: filteredSchedules });
@@ -618,14 +626,17 @@ export const deleteSchedule = async (req: Request, res: Response) => {
 
 export const getDashboardData = async (req: Request, res: Response) => {
     try {
-        const { start_date, end_date } = req.query;
+        const { start_date, end_date, academic_year_id } = req.query;
         if (!start_date || !end_date) return res.status(400).json({ success: false, error: "Dates required" });
 
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveAcademicYearId = yearContext.academicYearId;
         const user = (req as any).user;
         const mentorId = MENTOR_ROLES.includes(user?.role) ? await getStaffId(req) : null;
         const dashboardCacheKey = makeCacheKey('attendance:dashboard', {
             start_date,
             end_date,
+            academic_year_id: effectiveAcademicYearId || 'legacy',
             role: user?.role || '',
             staff: MENTOR_ROLES.includes(user?.role) ? (mentorId || user.id || '') : 'all',
         });
@@ -658,14 +669,17 @@ export const getDashboardData = async (req: Request, res: Response) => {
             );
         }
 
-        const schedulesPromise = db.query(
-            `SELECT id, standards, day_of_week, start_time, end_time
+        const scheduleParams: any[] = [start_date, end_date];
+        let scheduleQuery = `SELECT id, standards, day_of_week, start_time, end_time
              FROM attendance_schedules
              WHERE (is_deleted = false OR is_deleted IS NULL)
                AND effective_from <= $2::date
-               AND (effective_until IS NULL OR effective_until >= $1::date)`,
-            [start_date, end_date]
-        );
+               AND (effective_until IS NULL OR effective_until >= $1::date)`;
+        if (effectiveAcademicYearId) {
+            scheduleParams.push(effectiveAcademicYearId);
+            scheduleQuery += ` AND academic_year_id = $${scheduleParams.length}`;
+        }
+        const schedulesPromise = db.query(scheduleQuery, scheduleParams);
         const institutionalLeavesPromise = db.query(
             `SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution
              FROM institutional_leaves
@@ -750,7 +764,10 @@ export const getDashboardData = async (req: Request, res: Response) => {
 // by checking which standards their assigned students are in
 export const getMentorSchedules = async (req: Request, res: Response) => {
     try {
-        let { mentor_id, academic_year_id } = req.query;
+        let { mentor_id } = req.query;
+        const { academic_year_id } = req.query;
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveAcademicYearId = yearContext.academicYearId;
         const user = (req as any).user;
         if (user.role === 'staff') {
             const resolvedId = await getStaffId(req);
@@ -775,9 +792,10 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
         // Get all active (non-deleted) schedules for this academic year
         let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL)';
         const params: any[] = [];
-        if (academic_year_id) {
-            schedQuery += ' AND (academic_year_id = $1 OR academic_year_id IS NULL)';
-            params.push(academic_year_id);
+        if (effectiveAcademicYearId) {
+            // Strict: only schedules explicitly for this year (no NULL bleed-through)
+            schedQuery += ' AND academic_year_id = $1';
+            params.push(effectiveAcademicYearId);
         }
         const allScheds = await db.query(schedQuery, params);
 
@@ -787,7 +805,7 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
 
         const relevantIds = (await Promise.all(allScheds.rows.map(async (sched: any) => ({
             id: sched.id,
-            count: await countStudentsForScheduleWithRules(sched, counts, mentor_id as string, academic_year_id as string | undefined),
+            count: await countStudentsForScheduleWithRules(sched, counts, mentor_id as string, effectiveAcademicYearId || undefined),
         }))))
             .filter((sched: any) => sched.count > 0)
             .map((sched: any) => sched.id);
@@ -800,10 +818,19 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
 
 export const getStudentsForSchedule = async (req: Request, res: Response) => {
     try {
-        let { schedule_id, date, mentor_id, academic_year_id } = req.query;
+        const { schedule_id, date, academic_year_id } = req.query;
+        let { mentor_id } = req.query;
         const user = (req as any).user;
 
         if (!schedule_id) return res.status(400).json({ success: false, error: "schedule_id required" });
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveRequestAcademicYearId = yearContext.academicYearId;
+        const scheduleParams: any[] = [schedule_id];
+        let scheduleQuery = 'SELECT id, name, standards, class_type, start_time, end_time, academic_year_id FROM attendance_schedules WHERE id = $1';
+        if (effectiveRequestAcademicYearId) {
+            scheduleParams.push(effectiveRequestAcademicYearId);
+            scheduleQuery += ` AND academic_year_id = $${scheduleParams.length}`;
+        }
 
         // ── Phase 1 (parallel): resolve mentor id + load schedule ──
         // Previously these were sequential awaits even though the schedule
@@ -811,10 +838,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const isMentorRole = MENTOR_ROLES.includes(user?.role);
         const [resolvedMentorId, schedRes, cancellationRes] = await Promise.all([
             isMentorRole ? getStaffId(req) : Promise.resolve(null),
-            db.query(
-                'SELECT id, name, standards, class_type, start_time, end_time, academic_year_id FROM attendance_schedules WHERE id = $1',
-                [schedule_id]
-            ),
+            db.query(scheduleQuery, scheduleParams),
             date
                 ? db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date])
                 : Promise.resolve({ rows: [] as any[] }),
@@ -833,7 +857,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const classType = (schedule.class_type || '').toLowerCase();
         const sessionStartStr = schedule.start_time; // 'HH:mm:ss'
         const sessionEndStr = schedule.end_time; // 'HH:mm:ss'
-        const effectiveAcademicYearId = (academic_year_id as string) || schedule.academic_year_id || null;
+        const effectiveAcademicYearId = effectiveRequestAcademicYearId || schedule.academic_year_id || null;
 
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
@@ -1027,6 +1051,13 @@ export const markAttendance = async (req: Request, res: Response) => {
         const schedRes = await db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
         const schedule = schedRes.rows[0];
+        const currentYearContext = await getAcademicYearContext(db);
+        if (currentYearContext.academicYearId && schedule.academic_year_id !== currentYearContext.academicYearId) {
+            return res.status(409).json({
+                success: false,
+                error: "This attendance schedule belongs to a previous academic year. Please use the current academic year timetable.",
+            });
+        }
 
         // ── Security Guard: mentor roles may only mark their own students ──
         if (MENTOR_ROLES.includes(userRole) && student_marks?.length > 0) {
@@ -1271,9 +1302,20 @@ export const getStudentMarksForSchedule = async (req: Request, res: Response) =>
     try {
         const { schedule_id, date, student_ids } = req.query;
         if (!schedule_id || !date) return res.status(400).json({ success: false, error: "Missing required parameters" });
+        const yearContext = await getAcademicYearContext(db, req.query.academic_year_id);
+        const effectiveAcademicYearId = yearContext.academicYearId;
         
         let query = 'SELECT student_id, status FROM student_attendance_marks WHERE schedule_id = $1 AND date = $2';
         const params: any[] = [schedule_id, date];
+        if (effectiveAcademicYearId) {
+            const scheduleRes = await db.query(
+                'SELECT id FROM attendance_schedules WHERE id = $1 AND academic_year_id = $2',
+                [schedule_id, effectiveAcademicYearId]
+            );
+            if (scheduleRes.rows.length === 0) {
+                return res.json({ success: true, data: [] });
+            }
+        }
         if (student_ids && typeof student_ids === 'string') {
             const ids = student_ids.split(',');
             if (ids.length > 0) {
@@ -1334,13 +1376,22 @@ export const getDailyAttendanceStats = async (req: Request, res: Response) => {
             makeCacheKey('attendance:daily-stats', { start_date, end_date }),
             60_000,
             async () => {
-                const studentRes = await db.query(
-                    `SELECT status, count(*) as count
-                     FROM student_attendance_marks
-                     WHERE date >= $1 AND date <= $2
-                     GROUP BY status`,
-                    [start_date, end_date]
-                );
+                const [studentRes, mentorRes] = await Promise.all([
+                    db.query(
+                        `SELECT status, count(*) as count
+                         FROM student_attendance_marks
+                         WHERE date >= $1 AND date <= $2
+                         GROUP BY status`,
+                        [start_date, end_date]
+                    ),
+                    db.query(
+                        `SELECT status, count(*) as count
+                         FROM staff_attendance
+                         WHERE date >= $1 AND date <= $2
+                         GROUP BY status`,
+                        [start_date, end_date]
+                    ),
+                ]);
 
                 const students = { present: 0, absent: 0, late: 0, total: 0 };
                 studentRes.rows.forEach(r => {
@@ -1351,14 +1402,6 @@ export const getDailyAttendanceStats = async (req: Request, res: Response) => {
                     else if (st === 'late') students.late += cnt;
                 });
                 students.total = students.present + students.absent + students.late;
-
-                const mentorRes = await db.query(
-                    `SELECT status, count(*) as count
-                     FROM staff_attendance
-                     WHERE date >= $1 AND date <= $2
-                     GROUP BY status`,
-                    [start_date, end_date]
-                );
 
                 const mentors = { present: 0, absent: 0, late: 0, total: 0 };
                 mentorRes.rows.forEach(r => {

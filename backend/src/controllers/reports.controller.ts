@@ -5,6 +5,7 @@ import { cachedResult, makeCacheKey } from '../utils/server-cache';
 import { TEACHING_STAFF_ROLES, staffRoleLabel } from '../utils/staff.utils';
 import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
 import { resolveHifzStandardsForSchedule } from '../utils/hifz-session-eligibility';
+import { getAcademicYearBounds, resolveStudentReportWindow } from '../utils/report-window';
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 
@@ -184,22 +185,20 @@ export const getStudentReports = async (req: Request, res: Response) => {
   try {
     const { month, year } = req.query;
     const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
-    
+    const { startDate, endDate } = resolveReportRange(req);
     const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
     const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
 
-    const monthStart = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
-    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
-    const monthEnd = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
     // All 3 queries are independent — fire in parallel.
     const mapped = await cachedResult(
-      makeCacheKey('reports:students', { month: targetMonth, year: targetYear, academic_year_id: academicContext.academicYearId || 'legacy' }),
+      makeCacheKey('reports:students', { month: targetMonth, year: targetYear, startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }),
       60_000,
       async () => {
+    const academicBounds = await getAcademicYearBounds(db, academicContext.academicYearId);
     const studentsQuery = academicContext.mode === 'historical' && academicContext.academicYearId
       ? {
           text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                        s.admission_date, s.comprehensive_details,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
@@ -209,12 +208,13 @@ export const getStudentReports = async (req: Request, res: Response) => {
                  LEFT JOIN staff sm ON s.school_mentor_id = sm.id
                  LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
                  WHERE sys.academic_year_id = $1
-                   AND COALESCE(sys.status, 'active') = 'active'
+                   AND COALESCE(sys.status, 'active') IN ('active', 'completed', 'transferred')
                  ORDER BY s.name ASC`,
           params: [academicContext.academicYearId],
         }
       : {
           text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                        s.admission_date, s.comprehensive_details,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
@@ -229,23 +229,51 @@ export const getStudentReports = async (req: Request, res: Response) => {
     const [studentsRes, hifzRes] = await Promise.all([
       db.query(studentsQuery.text, studentsQuery.params),
       db.query(
-        `SELECT DISTINCT ON (student_id) student_id, juz_number as juz, COALESCE(end_page, start_page) as page
+        `SELECT student_id, mode, entry_date, start_v, end_v, start_page, end_page, juz_number
          FROM hifz_logs
-         WHERE juz_number IS NOT NULL OR end_page IS NOT NULL OR start_page IS NOT NULL
-         ORDER BY student_id, entry_date DESC, created_at DESC`
+         WHERE entry_date >= $1::date
+           AND entry_date <= $2::date
+         ORDER BY student_id, entry_date DESC, created_at DESC`,
+        [startDate, endDate]
       ),
     ]);
-    const snapshotMap = await getStudentYearSnapshotMap(
-      db,
-      studentsRes.rows.map((s: any) => s.adm_no),
-      academicContext.academicYearId
-    );
-    const students = studentsRes.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no)));
-    const attendanceSummaries = await getStudentAttendanceSummaries(db, students, monthStart, monthEnd);
+    const snapshotMap = academicContext.mode === 'historical'
+      ? await getStudentYearSnapshotMap(
+          db,
+          studentsRes.rows.map((s: any) => s.adm_no),
+          academicContext.academicYearId
+        )
+      : new Map<string, any>();
+    const students = studentsRes.rows
+      .map((student: any) => {
+        const resolved = applyAcademicSnapshot(student, snapshotMap.get(student.adm_no));
+        const reportWindow = resolveStudentReportWindow(resolved, startDate, endDate, academicBounds);
+        return {
+          ...resolved,
+          report_window: reportWindow,
+          report_start_date: reportWindow.effective_start_date,
+          report_end_date: reportWindow.effective_end_date,
+        };
+      })
+      .filter((student: any) => student.report_window.has_overlap);
+    const attendanceSummaries = await getStudentAttendanceSummaries(db, students, startDate, endDate);
 
     // Build O(1) lookup maps; the previous .find()-per-row was O(N×M).
-    const hifzMap = new Map<string, any>();
-    hifzRes.rows.forEach((h: any) => hifzMap.set(h.student_id, h));
+    const hifzMap = new Map<string, { entries: number; pages: number; verses: number }>();
+    const studentWindowMap = new Map(students.map((student: any) => [student.adm_no, student.report_window]));
+    hifzRes.rows.forEach((log: any) => {
+      const reportWindow = studentWindowMap.get(log.student_id);
+      const entryDate = toDateKey(log.entry_date);
+      if (!reportWindow || entryDate < reportWindow.effective_start_date || entryDate > reportWindow.effective_end_date) return;
+
+      const current = hifzMap.get(log.student_id) || { entries: 0, pages: 0, verses: 0 };
+      current.entries += 1;
+      if (log.mode === 'New Verses') {
+        if (log.start_page && log.end_page) current.pages += Math.max(0, Number(log.end_page) - Number(log.start_page) + 1);
+        if (log.start_v && log.end_v) current.verses += Math.max(0, Number(log.end_v) - Number(log.start_v) + 1);
+      }
+      hifzMap.set(log.student_id, current);
+    });
 
     return students.map((s: any) => {
        const summary = attendanceSummaries.get(s.adm_no);
@@ -272,16 +300,16 @@ export const getStudentReports = async (req: Request, res: Response) => {
          ...s,
          academic_year_mode: academicContext.mode,
          attendance: att,
-         hifz_progress: hifz 
-           ? (hifz.juz && hifz.page ? `Juz ${hifz.juz}, Pg ${hifz.page}` : hifz.juz ? `Juz ${hifz.juz}` : `Pg ${hifz.page}`) 
-           : 'N/A',
+         hifz_progress: hifz
+           ? `${hifz.entries} entries, ${hifz.pages} pages, ${hifz.verses} verses`
+           : 'No Hifz activity in valid period',
          latest_exam_score: 'N/A'
        };
     });
       }
     );
 
-    res.json({ success: true, data: mapped });
+    res.json({ success: true, period: { start_date: startDate, end_date: endDate }, data: mapped });
   } catch (error) {
     console.error("Error generating student report:", error);
     res.status(500).json({ success: false, error: "Failed to generate student report" });
@@ -304,7 +332,7 @@ export const getMentorReports = async (req: Request, res: Response) => {
 
      const basePayload = await cachedResult(
        makeCacheKey('reports:mentors', { startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }),
-       60_000,
+       5 * 60_000,
        async () => {
      const [mentorsRes, schedulesRes, studentsRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
        db.query(
@@ -408,6 +436,13 @@ export const getMentorReports = async (req: Request, res: Response) => {
        markedSet.add(`${row.schedule_id}|${toDateKey(row.date)}|${row.marked_by}`);
      });
 
+     const resolvedHifzBySchedule = new Map<string, any>();
+     await Promise.all(schedulesRes.rows.map(async (schedule: any) => {
+       if (String(schedule.class_type || '').toLowerCase() !== 'hifz') return;
+       const resolved = await resolveHifzStandardsForSchedule(schedule, academicContext.academicYearId, startDate);
+       resolvedHifzBySchedule.set(String(schedule.id), resolved);
+     }));
+
      const mentorStandardsBySchedule = new Map<string, Map<string, Set<string>>>();
      for (const schedule of schedulesRes.rows) {
        const classType = String(schedule.class_type || '').toLowerCase();
@@ -415,8 +450,8 @@ export const getMentorReports = async (req: Request, res: Response) => {
        const mentorCol = MENTOR_COL_MAP[normalizedClassType];
        if (!mentorCol) continue;
 
-       const resolvedHifz = await resolveHifzStandardsForSchedule(schedule, academicContext.academicYearId, startDate);
-       const scheduleStandards = String(schedule.class_type || '').toLowerCase() === 'hifz' && resolvedHifz.usedRules
+       const resolvedHifz = resolvedHifzBySchedule.get(String(schedule.id));
+       const scheduleStandards = String(schedule.class_type || '').toLowerCase() === 'hifz' && resolvedHifz?.usedRules
          ? resolvedHifz.standards
          : normalizeStandardList(parseStandardList(schedule.standards));
        const mentorStandards = new Map<string, Set<string>>();
@@ -609,6 +644,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
             db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                      s.admission_date, s.comprehensive_details,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
                       (SELECT name FROM staff WHERE id = s.school_mentor_id) as school_mentor,
                       (SELECT name FROM staff WHERE id = s.madrasa_mentor_id) as madrasa_mentor
@@ -638,24 +674,45 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             return res.status(404).json({ success: false, error: "Student not found" });
         }
 
-        const snapshotMap = await getStudentYearSnapshotMap(
-            db,
-            [student_id as string],
-            academicContext.academicYearId
-        );
+        const snapshotMap = academicContext.mode === 'historical'
+            ? await getStudentYearSnapshotMap(
+                db,
+                [student_id as string],
+                academicContext.academicYearId
+            )
+            : new Map<string, any>();
         const studentRows = studentRes.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no)));
+        const academicBounds = await getAcademicYearBounds(db, academicContext.academicYearId);
+        const reportWindow = resolveStudentReportWindow(studentRows[0], start_date as string, end_date as string, academicBounds);
+        if (!reportWindow.has_overlap) {
+            return res.status(422).json({
+                success: false,
+                error: "No report is available for this period because it is outside the student's admission or exit dates.",
+                report_window: reportWindow,
+            });
+        }
+        const effectiveStudentRows = studentRows.map((student: any) => ({
+            ...student,
+            report_window: reportWindow,
+            report_start_date: reportWindow.effective_start_date,
+            report_end_date: reportWindow.effective_end_date,
+        }));
+        const periodLogs = logsRes.rows.filter((log: any) => {
+            const entryDate = toDateKey(log.entry_date);
+            return entryDate >= reportWindow.effective_start_date && entryDate <= reportWindow.effective_end_date;
+        });
 
         const attendanceSummaries = await getStudentAttendanceSummaries(
             db,
-            studentRows,
-            start_date as string,
-            end_date as string
+            effectiveStudentRows,
+            reportWindow.effective_start_date,
+            reportWindow.effective_end_date
         );
         const attendanceSummary = attendanceSummaries.get(student_id as string);
 
         // Compute aggregations in memory for UI compatibility
         const hifzAggByMode = new Map<string, any>();
-        logsRes.rows.forEach((log: any) => {
+        periodLogs.forEach((log: any) => {
             const mode = log.mode || 'Unknown';
             const metric = hifzAggByMode.get(mode) || { mode, entry_count: 0, verses_recited: 0, pages_recited: 0 };
             metric.entry_count++;
@@ -668,7 +725,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         const hifz_logs_agg = Array.from(hifzAggByMode.values());
 
         const revision_days = new Set(
-            logsRes.rows.filter(l => l.mode === 'Recent Revision').map(l => {
+            periodLogs.filter(l => l.mode === 'Recent Revision').map(l => {
                 // Ensure date format string consistency for Set uniqueness
                 return l.entry_date instanceof Date ? l.entry_date.toISOString().split('T')[0] : l.entry_date;
             })
@@ -677,10 +734,11 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         res.json({
             success: true,
             data: {
-                student: { ...studentRows[0], academic_year_mode: academicContext.mode },
+                student: { ...effectiveStudentRows[0], academic_year_mode: academicContext.mode },
+                report_window: reportWindow,
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,
-                period_logs: logsRes.rows,
+                period_logs: periodLogs,
                 lifetime_new_logs: lifetimeLogsRes.rows,
                 hifz_logs_agg,
                 revision_days

@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
+import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 // ── Constants ────────────────────────────────────────────────
 const INDIAN_STATES = [
@@ -488,9 +489,8 @@ export default function StudentDetailPage() {
     // ── Loading / Error states ────────────────────────────────
     if (fetching) {
         return (
-            <div className="flex flex-col items-center justify-center py-32">
-                <div className="h-8 w-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin mb-4" />
-                <p className="text-sm text-slate-500">Loading student details...</p>
+            <div className="py-32">
+                <ThreeBallLoader label="Loading student details..." />
             </div>
         )
     }

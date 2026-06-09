@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, useRef, Suspense } from "react"
+import { useEffect, useState, useMemo, useRef, Suspense, useCallback } from "react"
 import Link from "next/link"
 import { useSearchParams, useRouter } from "next/navigation"
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
+import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 export type Student = {
     adm_no: string
@@ -349,7 +350,8 @@ function StudentsPageContent() {
     const [exportLoading, setExportLoading] = useState(false)
     const [userRole, setUserRole] = useState("")
     const [progressMap, setProgressMap] = useState<Record<string, number>>({})
-    const didMountPageReset = useRef(false)
+    const lastDebouncedSearch = useRef(search.trim())
+    const knownStatusTotalRef = useRef(0)
     const [studentCounts, setStudentCounts] = useState<StudentCounts>({
         total: 0,
         active: 0,
@@ -359,26 +361,47 @@ function StudentsPageContent() {
     })
 
     useEffect(() => {
-        const token = localStorage.getItem('auth_token')
-        if (token) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]))
-                setUserRole(payload.role || "")
-            } catch {}
-        }
+        api.get('/auth/me')
+            .then((res) => setUserRole(res.data?.user?.role || ""))
+            .catch(() => {})
         setStatusFilter(getStatusFilter(filterFromUrl))
     }, [filterFromUrl])
 
     const isPrincipalPortal = userRole === "principal" || userRole === "vice_principal"
+    const effectiveStatusFilter = isPrincipalPortal ? "active" : statusFilter
+
+    const getTotalForStatus = useCallback((counts: StudentCounts, filter: StudentStatusFilter) => {
+        if (filter === "active") return counts.active
+        if (filter === "completed") return counts.completed
+        if (filter === "dropout") return counts.dropout
+        return counts.total
+    }, [])
+
+    const knownStatusTotal = useMemo(
+        () => getTotalForStatus(studentCounts, effectiveStatusFilter),
+        [effectiveStatusFilter, getTotalForStatus, studentCounts]
+    )
 
     useEffect(() => {
         if (isPrincipalPortal && statusFilter !== "active") setStatusFilter("active")
     }, [isPrincipalPortal, statusFilter])
 
     useEffect(() => {
-        const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
+        const timeout = window.setTimeout(() => {
+            const trimmed = search.trim()
+            if (lastDebouncedSearch.current !== trimmed) {
+                lastDebouncedSearch.current = trimmed
+                setCurrentPage(1)
+                setDebouncedSearch(trimmed)
+            }
+        }, 250)
         return () => window.clearTimeout(timeout)
     }, [search])
+
+    useEffect(() => {
+        knownStatusTotalRef.current = knownStatusTotal
+        if (!debouncedSearch && knownStatusTotal > 0) setTotalRows(knownStatusTotal)
+    }, [debouncedSearch, knownStatusTotal])
 
     // ── Export to Excel ───────────────────────────────────────
     async function handleExportExcel() {
@@ -407,22 +430,21 @@ function StudentsPageContent() {
             setLoading(true)
             setLoadError(null)
             try {
-                const res = await api.get<StudentsPageResponse>('/students', {
-                    params: {
-                        light: 'true',
-                        limit: rowsPerPage,
-                        offset: (currentPage - 1) * rowsPerPage,
-                        search: debouncedSearch || undefined,
-                        status: isPrincipalPortal ? "active" : statusFilter,
-                        sort: sortBy,
-                    },
-                })
+                const needsExactCount = Boolean(debouncedSearch)
+                const res = await cachedGet<StudentsPageResponse>('/students', {
+                    light: 'true',
+                    limit: rowsPerPage,
+                    offset: (currentPage - 1) * rowsPerPage,
+                    search: debouncedSearch || undefined,
+                    status: effectiveStatusFilter,
+                    sort: sortBy,
+                    count: needsExactCount ? undefined : 'false',
+                }, needsExactCount ? 30_000 : 60_000)
                 if (!res.data.success) throw new Error(res.data.error || 'Failed to load')
                 const merged = (res.data.students || []).map(normalizeStudentRow)
-                    .map(s => ({ ...s, progress: progressMap[s.adm_no] || s.progress || 0 }))
                 if (cancelled) return
                 setStudents(merged)
-                setTotalRows(res.data.pagination?.total || merged.length)
+                setTotalRows(res.data.pagination?.total ?? (knownStatusTotalRef.current || merged.length))
             } catch (error: unknown) {
                 if (cancelled) return
                 console.error('Error loading students:', error instanceof Error ? error.message : error)
@@ -433,7 +455,7 @@ function StudentsPageContent() {
         }
         loadPage()
         return () => { cancelled = true }
-    }, [currentPage, debouncedSearch, isPrincipalPortal, progressMap, refreshKey, rowsPerPage, sortBy, statusFilter])
+    }, [currentPage, debouncedSearch, effectiveStatusFilter, refreshKey, rowsPerPage, sortBy])
 
     // ── Auto-poll every 3 min ───────────────────────────────────
     // Was 30s, which constantly re-pulled the full /students list (heavy
@@ -446,31 +468,33 @@ function StudentsPageContent() {
 
     // ── Filter + Sort ─────────────────────────────────────────
     useEffect(() => {
-        cachedGet('/hifz/progress-summary', undefined, 5 * 60_000)
-            .then(progRes => {
-                if (!progRes.data.success || !progRes.data.progressMap) return
-                setProgressMap(progRes.data.progressMap)
-            })
-            .catch(() => { /* hifz progress is optional */ })
-    }, [])
+        if (viewMode !== 'grid') return
+
+        let cancelled = false
+        const timeout = window.setTimeout(() => {
+            cachedGet('/hifz/progress-summary', undefined, 5 * 60_000)
+                .then(progRes => {
+                    if (cancelled || !progRes.data.success || !progRes.data.progressMap) return
+                    setProgressMap(progRes.data.progressMap)
+                })
+                .catch(() => { /* hifz progress is optional */ })
+        }, 300)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timeout)
+        }
+    }, [viewMode])
 
     useEffect(() => {
         let cancelled = false
-        cachedGet<{ success: boolean; counts?: StudentCounts }>('/students/counts', undefined, 60_000)
+        cachedGet<{ success: boolean; counts?: StudentCounts }>('/students/counts', undefined, 5 * 60_000)
             .then(res => {
                 if (!cancelled && res.data.success && res.data.counts) setStudentCounts(res.data.counts)
             })
             .catch(() => {})
         return () => { cancelled = true }
     }, [refreshKey])
-
-    useEffect(() => {
-        if (!didMountPageReset.current) {
-            didMountPageReset.current = true
-            return
-        }
-        setCurrentPage(1)
-    }, [debouncedSearch, rowsPerPage, sortBy, statusFilter])
 
     const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage))
 
@@ -501,6 +525,33 @@ function StudentsPageContent() {
         on_campus: studentCounts.on_campus ?? Math.max(0, studentCounts.active - studentCounts.out_campus),
         out_campus: studentCounts.out_campus,
     }), [studentCounts])
+
+    const studentsWithProgress = useMemo(() => {
+        if (viewMode !== 'grid') return students
+        return students.map(student => ({
+            ...student,
+            progress: progressMap[student.adm_no] || student.progress || 0,
+        }))
+    }, [progressMap, students, viewMode])
+
+    useEffect(() => {
+        if (loading || currentPage >= totalPages) return
+
+        const timeout = window.setTimeout(() => {
+            const needsExactCount = Boolean(debouncedSearch)
+            void cachedGet<StudentsPageResponse>('/students', {
+                light: 'true',
+                limit: rowsPerPage,
+                offset: currentPage * rowsPerPage,
+                search: debouncedSearch || undefined,
+                status: effectiveStatusFilter,
+                sort: sortBy,
+                count: needsExactCount ? undefined : 'false',
+            }, needsExactCount ? 30_000 : 60_000).catch(() => null)
+        }, 250)
+
+        return () => window.clearTimeout(timeout)
+    }, [currentPage, debouncedSearch, effectiveStatusFilter, loading, rowsPerPage, sortBy, totalPages])
 
     return (
         <div className="space-y-6">
@@ -543,7 +594,10 @@ function StudentsPageContent() {
                 {/* Active */}
                 <div
                     className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'active' ? 'border-emerald-300 shadow-sm ring-1 ring-emerald-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
-                    onClick={() => setStatusFilter('active')}
+                    onClick={() => {
+                        setStatusFilter('active')
+                        setCurrentPage(1)
+                    }}
                 >
                     <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center shrink-0">
                         <UserCheck className="h-5 w-5 text-emerald-600" />
@@ -579,7 +633,11 @@ function StudentsPageContent() {
                 {/* Total */}
                 <div
                     className={`flex items-center gap-3 bg-white dark:bg-[#1e2538] rounded-xl border p-4 hover:shadow-md transition-all cursor-pointer ${statusFilter === 'all' ? 'border-indigo-300 shadow-sm ring-1 ring-indigo-100' : 'border-[#e8ede9] dark:border-[#2a3348]'}`}
-                    onClick={() => !isPrincipalPortal && setStatusFilter('all')}
+                    onClick={() => {
+                        if (isPrincipalPortal) return
+                        setStatusFilter('all')
+                        setCurrentPage(1)
+                    }}
                 >
                     <div className="h-10 w-10 rounded-full bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center shrink-0">
                         <LayoutGrid className="h-5 w-5 text-indigo-600" />
@@ -619,7 +677,10 @@ function StudentsPageContent() {
 
                         {/* Filter */}
                         {!isPrincipalPortal && (
-                            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "completed" | "dropout")}>
+                            <Select value={statusFilter} onValueChange={(v) => {
+                                setStatusFilter(v as "all" | "active" | "completed" | "dropout")
+                                setCurrentPage(1)
+                            }}>
                                 <SelectTrigger className="w-[130px] h-9 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                     <Filter className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
                                     <SelectValue placeholder="Filter" />
@@ -634,7 +695,10 @@ function StudentsPageContent() {
                         )}
 
                         {/* Sort */}
-                        <Select value={sortBy} onValueChange={(v) => setSortBy(v as "name" | "adm_no" | "standard")}>
+                        <Select value={sortBy} onValueChange={(v) => {
+                            setSortBy(v as "name" | "adm_no" | "standard")
+                            setCurrentPage(1)
+                        }}>
                             <SelectTrigger className="w-[140px] h-9 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                                 <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-slate-400" />
                                 <SelectValue placeholder="Sort By" />
@@ -680,9 +744,8 @@ function StudentsPageContent() {
 
                 {/* Content */}
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-3">
-                        <div className="h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-                        <p className="text-sm text-slate-500">Loading students...</p>
+                    <div className="py-20">
+                        <ThreeBallLoader label="Loading students..." />
                     </div>
                 ) : students.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -717,7 +780,7 @@ function StudentsPageContent() {
                     /* ── GRID VIEW ─────────────────────────────── */
                     <div className="p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {students.map((student) => (
+                            {studentsWithProgress.map((student) => (
                                 <StudentGridCard key={student.adm_no} student={student} returnPath={listReturnPath} />
                             ))}
                         </div>
@@ -784,7 +847,7 @@ export default function StudentsPage() {
     return (
         <Suspense fallback={
             <div className="h-full flex items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                <ThreeBallLoader label="Loading page..." />
             </div>
         }>
             <StudentsPageContent />

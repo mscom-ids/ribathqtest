@@ -346,7 +346,6 @@ const parentLogin = async (req, res) => {
         });
         res.json({
             success: true,
-            token,
             user: {
                 role: 'parent',
                 student_id: student.adm_no,

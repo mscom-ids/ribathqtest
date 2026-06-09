@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { db } from '../config/db';
 import { devLog } from '../utils/logger';
 import { getStaffId } from '../utils/staff.utils';
-import { cachedResult, invalidateCacheByPrefix } from '../utils/server-cache';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
 
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -18,6 +18,8 @@ const LIGHT_STUDENT_COLS =
 
 const FULL_STUDENT_COLS =
     LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
+
+let studentCurrentPresenceTableExists: boolean | null = null;
 
 const formatJoinedAdmittedBatchYear = (student: any) => {
   if (student.admission_date) {
@@ -40,8 +42,11 @@ function isAlumniStatus(status: unknown) {
 }
 
 async function hasStudentCurrentPresenceTable(client: any) {
+  if (studentCurrentPresenceTableExists !== null) return studentCurrentPresenceTableExists;
+
   const result = await client.query(`SELECT to_regclass('public.student_current_presence') AS table_name`);
-  return Boolean(result.rows[0]?.table_name);
+  studentCurrentPresenceTableExists = Boolean(result.rows[0]?.table_name);
+  return studentCurrentPresenceTableExists;
 }
 
 async function getActiveOperationalRecords(client: any, studentId: string) {
@@ -101,6 +106,7 @@ async function closeActiveOperationalRecords(client: any, studentId: string, use
 export const getAllStudents = async (req: Request, res: Response) => {
   try {
     const { search, class: className, status, light, sort } = req.query;
+    const includeCount = req.query.count !== 'false';
     const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
     const rawLimit = Number(req.query.limit);
     const rawOffset = Number(req.query.offset);
@@ -117,6 +123,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
     const params: any[] = [];
     let paramCount = 1;
     const user = (req as any).user;
+    let mentorScopeStaffId = 'all';
 
     // By default, mentor roles only see their own assigned students.
     // Pass ?scope=all to see every student (used by the "All Students" tab).
@@ -125,6 +132,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
       if (!staffId) {
         return res.status(403).json({ success: false, error: 'Staff profile not found' });
       }
+      mentorScopeStaffId = String(staffId);
       whereParts.push(`(hifz_mentor_id = $${paramCount} OR school_mentor_id = $${paramCount} OR madrasa_mentor_id = $${paramCount})`);
       params.push(staffId);
       paramCount++;
@@ -182,32 +190,83 @@ export const getAllStudents = async (req: Request, res: Response) => {
       query += ` LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
       const pagedParams = [...params, limit, offset];
       const countQuery = `SELECT COUNT(*)::integer as total FROM students WHERE ${whereParts.join(' AND ')}`;
-      const [result, countRes] = await Promise.all([
-        db.query(query, pagedParams),
-        db.query(countQuery, params),
-      ]);
-      const snapshotMap = await getStudentYearSnapshotMap(
-        db,
-        result.rows.map((student: any) => student.adm_no),
-        academicContext.academicYearId
-      );
+      const cacheable = light === 'true' && academicContext.mode !== 'historical';
+      const cacheKey = makeCacheKey('students:list', {
+        role: user?.role || '',
+        staff: mentorScopeStaffId,
+        scope: req.query.scope || '',
+        search: search || '',
+        class: className || '',
+        status: status || '',
+        sort: sort || 'name',
+        limit,
+        offset,
+        count: includeCount,
+        academic_year_id: academicContext.academicYearId || 'current',
+      });
+      const payload = await (cacheable
+        ? cachedResult(cacheKey, 60_000, async () => {
+            const [result, countRes] = await Promise.all([
+              db.query(query, pagedParams),
+              includeCount ? db.query(countQuery, params) : Promise.resolve({ rows: [{ total: null }] }),
+            ]);
+            return { rows: result.rows, total: countRes.rows[0]?.total ?? null };
+          })
+        : (async () => {
+            const [result, countRes] = await Promise.all([
+              db.query(query, pagedParams),
+              includeCount ? db.query(countQuery, params) : Promise.resolve({ rows: [{ total: null }] }),
+            ]);
+            return { rows: result.rows, total: countRes.rows[0]?.total ?? null };
+          })());
+      const snapshotMap = academicContext.mode === 'historical'
+        ? await getStudentYearSnapshotMap(
+            db,
+            payload.rows.map((student: any) => student.adm_no),
+            academicContext.academicYearId
+          )
+        : new Map<string, any>();
       return res.json({
         success: true,
-        students: result.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no))),
+        students: payload.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no))),
         academic_year_mode: academicContext.mode,
-        pagination: { limit, offset, total: countRes.rows[0]?.total || 0 },
+        pagination: { limit, offset, total: includeCount ? payload.total || 0 : null },
       });
     }
 
-    const result = await db.query(query, params);
-    const snapshotMap = await getStudentYearSnapshotMap(
-      db,
-      result.rows.map((student: any) => student.adm_no),
-      academicContext.academicYearId
-    );
+    const cacheable = light === 'true' && academicContext.mode !== 'historical';
+    const cacheKey = makeCacheKey('students:list', {
+      role: user?.role || '',
+      staff: mentorScopeStaffId,
+      scope: req.query.scope || '',
+      search: search || '',
+      class: className || '',
+      status: status || '',
+      sort: sort || 'name',
+      limit: 'all',
+      offset: 0,
+      count: false,
+      academic_year_id: academicContext.academicYearId || 'current',
+    });
+    const rows = await (cacheable
+      ? cachedResult(cacheKey, 60_000, async () => {
+          const result = await db.query(query, params);
+          return result.rows;
+        })
+      : (async () => {
+          const result = await db.query(query, params);
+          return result.rows;
+        })());
+    const snapshotMap = academicContext.mode === 'historical'
+      ? await getStudentYearSnapshotMap(
+          db,
+          rows.map((student: any) => student.adm_no),
+          academicContext.academicYearId
+        )
+      : new Map<string, any>();
     res.json({
       success: true,
-      students: result.rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no))),
+      students: rows.map((student: any) => applyAcademicSnapshot(student, snapshotMap.get(student.adm_no))),
       academic_year_mode: academicContext.mode,
     });
 
@@ -221,7 +280,30 @@ export const getAllStudents = async (req: Request, res: Response) => {
 // instead of fetching every row and counting in JS.
 export const getStudentCounts = async (_req: Request, _res: Response) => {
   try {
-    const counts = await cachedResult('students:counts', 60_000, async () => {
+    const counts = await cachedResult('students:counts', 5 * 60_000, async () => {
+      const presencePromise = hasStudentCurrentPresenceTable(db).then((hasPresenceTable) => {
+        if (hasPresenceTable) {
+          return db.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE scp.status = 'outside') AS out_campus,
+                COUNT(*) FILTER (WHERE scp.status = 'on-campus') AS on_campus_leave
+             FROM student_current_presence scp
+             JOIN students s ON scp.student_id = s.adm_no
+             WHERE s.status = 'active'`
+          );
+        }
+
+        return db.query(
+          `SELECT
+              COUNT(DISTINCT student_id) AS out_campus,
+              0::integer AS on_campus_leave
+           FROM student_leaves sl
+           JOIN students s ON sl.student_id = s.adm_no
+           WHERE sl.status = 'outside'
+             AND s.status = 'active'`
+        );
+      });
+
       const [statusRes, presenceRes] = await Promise.all([
         db.query(
           `SELECT
@@ -231,25 +313,7 @@ export const getStudentCounts = async (_req: Request, _res: Response) => {
               COUNT(*) AS total
             FROM students`
         ),
-        db.query(
-          `SELECT
-              COUNT(*) FILTER (WHERE scp.status = 'outside') AS out_campus,
-              COUNT(*) FILTER (WHERE scp.status = 'on-campus') AS on_campus_leave
-           FROM student_current_presence scp
-           JOIN students s ON scp.student_id = s.adm_no
-           WHERE s.status = 'active'`
-        ).catch((err: any) => {
-          if (err?.code !== '42P01') throw err;
-          return db.query(
-            `SELECT
-                COUNT(DISTINCT student_id) AS out_campus,
-                0::integer AS on_campus_leave
-             FROM student_leaves sl
-             JOIN students s ON sl.student_id = s.adm_no
-             WHERE sl.status = 'outside'
-               AND s.status = 'active'`
-          );
-        }),
+        presencePromise,
       ]);
 
       const r = statusRes.rows[0];
@@ -278,6 +342,124 @@ export const getStudentCounts = async (_req: Request, _res: Response) => {
   } catch (err) {
     console.error('Error fetching student counts:', err);
     _res.status(500).json({ success: false, error: 'Failed to fetch student counts' });
+  }
+};
+
+export const getStudentInsideOutsideSummary = async (req: Request, res: Response) => {
+  try {
+    const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+    const academicYearId = academicContext.academicYearId;
+
+    const buildQuery = (outsideSource: string) => `
+      WITH scoped_students AS (
+        SELECT
+          s.adm_no,
+          s.name,
+          s.batch_year,
+          s.photo_url,
+          COALESCE(sys.school_standard, s.standard, s.school_standard, s.hifz_standard, s.madrassa_standard, 'Unassigned') AS standard
+        FROM students s
+        LEFT JOIN student_year_snapshots sys
+          ON sys.student_id = s.adm_no
+         AND sys.academic_year_id = $1
+        WHERE s.status = 'active'
+      ),
+      outside_students AS (
+        ${outsideSource}
+      )
+      SELECT
+        ss.adm_no,
+        ss.name,
+        ss.batch_year,
+        ss.photo_url,
+        ss.standard,
+        (os.student_id IS NOT NULL) AS is_outside
+      FROM scoped_students ss
+      LEFT JOIN outside_students os ON os.student_id = ss.adm_no
+      ORDER BY ss.standard ASC NULLS LAST, ss.name ASC, ss.adm_no ASC
+    `;
+
+    const presenceOutsideSource = `
+      SELECT DISTINCT scp.student_id
+      FROM student_current_presence scp
+      WHERE scp.status = 'outside'
+    `;
+    const leaveOutsideSource = `
+      SELECT DISTINCT sl.student_id
+      FROM student_leaves sl
+      WHERE sl.status = 'outside'
+    `;
+
+    let result;
+    try {
+      result = await db.query(buildQuery(presenceOutsideSource), [academicYearId]);
+    } catch (presenceErr: any) {
+      if (presenceErr?.code !== '42P01') throw presenceErr;
+      result = await db.query(buildQuery(leaveOutsideSource), [academicYearId]);
+    }
+
+    const classMap = new Map<string, any>();
+    result.rows.forEach((student: any) => {
+      const standard = student.standard || 'Unassigned';
+      if (!classMap.has(standard)) {
+        classMap.set(standard, {
+          standard,
+          total: 0,
+          inside_count: 0,
+          outside_count: 0,
+          inside_students: [],
+          outside_students: [],
+        });
+      }
+
+      const group = classMap.get(standard);
+      const compactStudent = {
+        adm_no: student.adm_no,
+        name: student.name,
+        batch_year: student.batch_year,
+        photo_url: student.photo_url,
+      };
+
+      group.total += 1;
+      if (student.is_outside) {
+        group.outside_count += 1;
+        group.outside_students.push(compactStudent);
+      } else {
+        group.inside_count += 1;
+        group.inside_students.push(compactStudent);
+      }
+    });
+
+    const classSortValue = (standard: string) => {
+      const lower = standard.toLowerCase();
+      if (lower.includes('plus one')) return 11;
+      if (lower.includes('plus two')) return 12;
+      const numeric = lower.match(/\d+/);
+      return numeric ? Number(numeric[0]) : 999;
+    };
+
+    const classes = Array.from(classMap.values()).sort((a, b) => {
+      const rank = classSortValue(a.standard) - classSortValue(b.standard);
+      return rank !== 0 ? rank : String(a.standard).localeCompare(String(b.standard));
+    });
+
+    const totals = classes.reduce((acc, group) => ({
+      total: acc.total + group.total,
+      inside_count: acc.inside_count + group.inside_count,
+      outside_count: acc.outside_count + group.outside_count,
+    }), { total: 0, inside_count: 0, outside_count: 0 });
+
+    res.json({
+      success: true,
+      summary: {
+        ...totals,
+        classes,
+        academic_year_mode: academicContext.mode,
+      },
+    });
+  } catch (err) {
+    console.error('Error fetching inside/outside summary:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch inside/outside summary' });
   }
 };
 
@@ -324,7 +506,9 @@ export const getStudentById = async (req: Request, res: Response) => {
     }
 
     const is_outside = leaveRes.rows.length > 0;
-    const snapshotMap = await getStudentYearSnapshotMap(db, [studentId], academicContext.academicYearId);
+    const snapshotMap = academicContext.mode === 'historical'
+      ? await getStudentYearSnapshotMap(db, [studentId], academicContext.academicYearId)
+      : new Map<string, any>();
     const student = applyAcademicSnapshot(result.rows[0], snapshotMap.get(studentId));
 
     res.json({ success: true, student: { ...student, is_outside, academic_year_mode: academicContext.mode } });
@@ -452,7 +636,7 @@ export const updateStudent = async (req: Request, res: Response) => {
       await client.query('BEGIN');
 
       const currentRes = await client.query(
-        `SELECT adm_no, status FROM students WHERE adm_no = $1 FOR UPDATE`,
+        `SELECT adm_no, status, hifz_mentor_id FROM students WHERE adm_no = $1 FOR UPDATE`,
         [studentId]
       );
       if (currentRes.rows.length === 0) {
@@ -513,6 +697,40 @@ export const updateStudent = async (req: Request, res: Response) => {
       `;
 
       const result = await client.query(query, values);
+
+      // ── Hifz mentor history: if hifz_mentor_id changed, close old entry and open new one ──
+      const newHifzMentorId = updateData.hifz_mentor_id !== undefined ? (updateData.hifz_mentor_id || null) : undefined;
+      const oldHifzMentorId = currentRes.rows[0]?.hifz_mentor_id || null;
+      if (newHifzMentorId !== undefined && String(newHifzMentorId || '') !== String(oldHifzMentorId || '')) {
+        try {
+          // Close existing active entry
+          await client.query(
+            `UPDATE hifz_mentor_history
+             SET assigned_until = CURRENT_DATE
+             WHERE student_id = $1 AND assigned_until IS NULL`,
+            [studentId]
+          );
+          // Open new entry if a mentor is now assigned
+          if (newHifzMentorId) {
+            await client.query(
+              `INSERT INTO hifz_mentor_history (student_id, mentor_id, assigned_from)
+               VALUES ($1, $2, CURRENT_DATE)
+               ON CONFLICT DO NOTHING`,
+              [studentId, newHifzMentorId]
+            );
+          }
+          // Also sync student_hifz_profiles if it exists
+          await client.query(
+            `UPDATE student_hifz_profiles
+             SET mentor_id = $2, updated_at = now()
+             WHERE student_id = $1`,
+            [studentId, newHifzMentorId]
+          );
+        } catch (hifzErr: any) {
+          // Non-fatal: hifz_mentor_history table may not be applied yet
+          console.warn('[updateStudent] Could not record hifz mentor history:', hifzErr?.message);
+        }
+      }
 
       await client.query('COMMIT');
 

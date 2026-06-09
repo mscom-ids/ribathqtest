@@ -117,7 +117,7 @@ export const isSessionActiveForDate = (
     // Note: applyModeRules creates the map, but we should use what is stored in policy if exists, 
     // OR re-calculate if no policy exists but we are inferring mode.
 
-    let overrides = policy?.session_overrides
+    const overrides = policy?.session_overrides
 
     // If no policy exists, we simulate the default rules for that day mode
     if (!policy) {

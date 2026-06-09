@@ -4,7 +4,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, ArrowUpRight } from "lucide-react"
 import { useEffect } from "react"
-import Cookies from "js-cookie"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -18,13 +17,13 @@ const navLinks = [
     { href: "/admin/hifz/tracking", label: "Hifz", icon: BookOpen },
     { href: "/admin/staff", label: "Staff", icon: UserCog },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/academic", label: "Academic Year", icon: School },
     { href: "/admin/academic/class-setup", label: "Class Setup", icon: School },
-    { href: "/admin/academic/enrollments", label: "Enrollments", icon: Users },
-    { href: "/admin/academic/hifz-session-rules", label: "Hifz Rules", icon: BookOpen },
-    { href: "/admin/promotions", label: "Promotions", icon: ArrowUpRight },
-    { href: "/admin/timetable/setup", label: "Time Table", icon: Calendar },
+    { href: "/admin/academic/enrollments", label: "Student Placement", icon: Users },
+    { href: "/admin/timetable/setup", label: "Timetable Setup", icon: Calendar },
+    { href: "/admin/promotions", label: "Start New Year", icon: ArrowUpRight },
     { href: "/admin/calendar", label: "Events", icon: Calendar },
-    { href: "/admin/setup/academic-years", label: "Academic Years", icon: Settings },
+    { href: "/admin/reports/students", label: "Yearly Reports", icon: Settings },
 ]
 
 interface MobileSidebarProps {
@@ -38,7 +37,6 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
-        Cookies.remove('auth_token')
         onClose()
         router.push('/login')
     }

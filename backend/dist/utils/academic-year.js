@@ -6,6 +6,7 @@ exports.getStudentYearSnapshotMap = getStudentYearSnapshotMap;
 exports.applyAcademicSnapshot = applyAcademicSnapshot;
 exports.studentAcademicJoin = studentAcademicJoin;
 exports.studentAcademicSelect = studentAcademicSelect;
+const server_cache_1 = require("./server-cache");
 function getAcademicYearParam(value) {
     if (!value)
         return null;
@@ -17,12 +18,14 @@ function getAcademicYearParam(value) {
 }
 async function getAcademicYearContext(db, requestedAcademicYearId) {
     const requested = getAcademicYearParam(requestedAcademicYearId);
-    const currentRes = await db.query(`SELECT id
-     FROM academic_years
-     WHERE is_current = true
-     ORDER BY start_date DESC
-     LIMIT 1`);
-    const currentAcademicYearId = currentRes.rows[0]?.id || null;
+    const currentAcademicYearId = await (0, server_cache_1.cachedResult)('academic-year:current', 5 * 60000, async () => {
+        const currentRes = await db.query(`SELECT id
+         FROM academic_years
+         WHERE is_current = true
+         ORDER BY start_date DESC
+         LIMIT 1`);
+        return currentRes.rows[0]?.id || null;
+    });
     const academicYearId = requested || currentAcademicYearId;
     if (!academicYearId) {
         return { academicYearId: null, currentAcademicYearId: null, mode: 'legacy' };

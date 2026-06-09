@@ -24,16 +24,17 @@ import {
     TrendChart,
     usePrincipalRange,
 } from "../../_components/principal-ui"
-import { ArrowLeft, BookOpen, CalendarCheck, DoorOpen, GraduationCap, UserRound } from "lucide-react"
+import { ArrowLeft, BookOpen, CalendarCheck, DoorOpen, GraduationCap, UserRound, Award, Star, Compass, MapPin } from "lucide-react"
+import { toast } from "sonner"
 
 type TabKey = "overview" | "hifz" | "attendance" | "exams" | "leave"
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: "overview", label: "Overview", icon: UserRound },
-    { key: "hifz", label: "Hifz", icon: BookOpen },
+    { key: "hifz", label: "Quran / Hifz", icon: BookOpen },
     { key: "attendance", label: "Attendance", icon: CalendarCheck },
     { key: "exams", label: "Exams", icon: GraduationCap },
-    { key: "leave", label: "Leave", icon: DoorOpen },
+    { key: "leave", label: "Leaves", icon: DoorOpen },
 ]
 
 export default function PrincipalStudentProfilePage() {
@@ -127,99 +128,272 @@ export default function PrincipalStudentProfilePage() {
     const chartData = useMemo(() => hifzChartData(progress, range.startDate), [progress, range.startDate])
     const attendanceTrend = useMemo(() => chartData.map((item) => ({ label: item.label, value: attendancePercent })), [attendancePercent, chartData])
 
+    const initials = student?.name ? student.name.slice(0, 2).toUpperCase() : "ST"
+
     return (
-        <PrincipalFrame title={student?.name || "Student Profile"} subtitle="Student-centered reports with tab-based lazy loading." range={range}>
-            <div className="space-y-5">
-                <Link href="/principal/students" className="inline-flex items-center gap-2 text-sm font-black text-slate-600 hover:text-indigo-600">
+        <PrincipalFrame title={student?.name || "Student Profile"} subtitle="Detailed overview, Hifz, exams, and attendance metrics." range={range}>
+            <div className="space-y-6">
+                <Link href="/principal/students" className="inline-flex items-center gap-2 text-xs font-black text-slate-500 hover:text-teal-600 uppercase tracking-widest transition">
                     <ArrowLeft className="h-4 w-4" />
-                    Back to Students
+                    Back to Registry
                 </Link>
 
-                {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</div>}
+                {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-black text-rose-700 uppercase tracking-wider">{error}</div>}
 
                 {loading ? (
                     <LoadingBlock label="Loading student profile" />
                 ) : !student ? (
-                    <EmptyState title="Student not found" subtitle="This student is unavailable or not visible to the principal portal." />
+                    <EmptyState title="Student not found" subtitle="This student record is currently unindexed or unavailable to the principal portal." />
                 ) : (
                     <>
-                        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="grid h-14 w-14 place-items-center rounded-lg bg-indigo-100 text-lg font-black text-indigo-700">
-                                        {student.name.slice(0, 2).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-black">{student.name}</h2>
-                                        <p className="text-sm font-semibold text-slate-500">
-                                            {student.adm_no} {student.roll_no ? `- Roll ${student.roll_no}` : ""} - {student.standard || "Class not set"} - Batch {student.batch_year || "-"}
-                                        </p>
-                                    </div>
+                        {/* Premium Cover Banner & Profile Header */}
+                        <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 text-white shadow-md">
+                            {/* Banner Decorative Grid background */}
+                            <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                            <div className="absolute top-0 right-0 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl -z-10"></div>
+                            
+                            <div className="relative z-10 flex flex-col gap-5 p-6 md:flex-row md:items-center">
+                                {/* Profile Initial Bubble */}
+                                <div className="grid h-16 w-16 flex-none place-items-center rounded-2xl bg-gradient-to-br from-teal-500 to-teal-600 text-xl font-black text-white shadow-xl shadow-teal-500/20 ring-4 ring-slate-800">
+                                    {initials}
                                 </div>
-                                <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-black capitalize text-emerald-700">{student.status || "active"}</span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <h2 className="text-xl font-black tracking-tight leading-tight">{student.name}</h2>
+                                        <span className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-400">{student.status || "active"}</span>
+                                    </div>
+                                    <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wide">
+                                        Admission No: <strong className="text-white">{student.adm_no}</strong> {student.roll_no ? `• Roll No: ${student.roll_no}` : ""} • Class: <strong className="text-white">{student.standard || "Unassigned"}</strong> • Year Batch: <strong className="text-white">{student.batch_year || "-"}</strong>
+                                    </p>
+                                </div>
                             </div>
                         </section>
 
-                        <div className="sticky top-[121px] z-20 flex gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/90 py-2 backdrop-blur">
+                        {/* Sliding Tab Menu Navigator */}
+                        <div className="sticky top-[136px] sm:top-[76px] z-20 flex gap-1.5 overflow-x-auto rounded-2xl bg-slate-100 p-1.5 border border-slate-200/50 backdrop-blur-md">
                             {TABS.map((tab) => (
-                                <button suppressHydrationWarning key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-black ${activeTab === tab.key ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
+                                <button 
+                                    suppressHydrationWarning 
+                                    key={tab.key} 
+                                    onClick={() => setActiveTab(tab.key)} 
+                                    className={`flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-black uppercase tracking-wider transition-all duration-300 ${activeTab === tab.key ? "bg-white text-slate-900 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-900"}`}
+                                >
                                     <tab.icon className="h-4 w-4" />
                                     {tab.label}
                                 </button>
                             ))}
                         </div>
 
-                        {activeTab === "overview" && (
-                            <div className="space-y-5">
-                                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                    <StatCard icon={PrincipalIcons.TrendingUp} label="Attendance" value={`${attendancePercent}%`} sub={`${attendance?.attendedClasses || 0}/${attendance?.effectiveClasses || 0} classes`} tone="emerald" />
-                                    <StatCard icon={PrincipalIcons.BookOpen} label="Hifz Progress" value={totals.newPages + totals.recent + totals.juz} sub="Activity records" tone="indigo" />
-                                    <StatCard icon={PrincipalIcons.GraduationCap} label="Exam Average" value={examAvg ? `${examAvg}%` : "-"} sub="Open Exams tab to refresh" tone="amber" />
-                                    <StatCard icon={PrincipalIcons.DoorOpen} label="Leave Status" value={leaveHistory.length ? "Active" : "Clear"} sub="Open Leave tab for history" tone="sky" />
-                                </div>
-                                <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                    <SectionHeader icon={UserRound} title="Mentor Mapping" subtitle="Assigned academic and Hifz mentors." />
-                                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                                        <Info label="Hifz Mentor" value={mentorName(student.hifz_mentor)} />
-                                        <Info label="School Mentor" value={mentorName(student.school_mentor)} />
-                                        <Info label="Madrasa Mentor" value={mentorName(student.madrasa_mentor)} />
+                        {/* TAB CONTENTS */}
+                        <div className="space-y-6">
+                            
+                            {activeTab === "overview" && (
+                                <div className="space-y-6">
+                                    {/* StatCards grid */}
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <StatCard icon={PrincipalIcons.TrendingUp} label="Attendance Average" value={`${attendancePercent}%`} sub={`${attendance?.attendedClasses || 0}/${attendance?.effectiveClasses || 0} classes logged`} tone="emerald" />
+                                        <StatCard icon={PrincipalIcons.BookOpen} label="Total Memorizations" value={totals.newPages + totals.recent + totals.juz} sub={`${totals.newPages} new pages memorized`} tone="teal" />
+                                        <StatCard icon={PrincipalIcons.GraduationCap} label="Academic Average" value={examAvg ? `${examAvg}%` : "-"} sub="Average across exam papers" tone="amber" />
+                                        <StatCard icon={PrincipalIcons.DoorOpen} label="Outside/Leave Status" value={leaveHistory.length ? "Active Leaves" : "Clear"} sub="Leaves logged in ledger" tone="sky" />
                                     </div>
-                                </section>
-                            </div>
-                        )}
 
-                        {activeTab === "hifz" && (
-                            <div className="space-y-5">
-                                <div className="grid grid-cols-3 gap-3">
-                                    <Info label="New Pages" value={totals.newPages} />
-                                    <Info label="Recent Revision" value={totals.recent} />
-                                    <Info label="Juz Revision" value={totals.juz} />
+                                    {/* Visual Radial Progress / Metric Meter */}
+                                    <div className="grid gap-6 md:grid-cols-2">
+                                        {/* Left: Attendance summary card */}
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+                                            <div>
+                                                <SectionHeader icon={CalendarCheck} title="Attendance Metrics" subtitle="Student presence summary analysis for this period." />
+                                                <div className="mt-6 flex flex-col sm:flex-row items-center gap-6">
+                                                    {/* Custom styled dial widget */}
+                                                    <div className="relative w-28 h-28 flex-none grid place-items-center">
+                                                        <div className="absolute inset-0 rounded-full border-8 border-slate-100"></div>
+                                                        <div className="absolute inset-0 rounded-full border-8 border-teal-600 clip-progress" style={{ transform: `rotate(${attendancePercent * 3.6}deg)` }}></div>
+                                                        <span className="text-lg font-black text-slate-800">{attendancePercent}%</span>
+                                                    </div>
+                                                    <div className="space-y-2 text-xs font-semibold text-slate-500">
+                                                        <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Present: <strong className="text-slate-800 ml-auto">{attendance?.presentClasses || attendance?.attendedClasses || 0} classes</strong></p>
+                                                        <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Absent: <strong className="text-slate-800 ml-auto">{attendance?.absentClasses || attendance?.notAttendedClasses || 0} classes</strong></p>
+                                                        <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Late Check-in: <strong className="text-slate-800 ml-auto">{attendance?.lateClasses || 0} classes</strong></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Right: Quran Hifz Progress summary card */}
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+                                            <div>
+                                                <SectionHeader icon={BookOpen} title="Memorization Analysis" subtitle="Progress and volumes recited over the current window." />
+                                                <div className="mt-5 space-y-3">
+                                                    <ProgressBar label="New Pages Recited" value={totals.newPages} max={30} color="bg-teal-600" />
+                                                    <ProgressBar label="Revision Cycles (Recent)" value={totals.recent} max={25} color="bg-emerald-500" />
+                                                    <ProgressBar label="Juz Revision Count" value={totals.juz} max={10} color="bg-amber-500" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Mentor Assignments */}
+                                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                                        <SectionHeader icon={UserRound} title="Academic Mentorship Mapping" subtitle="Staff members assigned for academic and Hifz guidance." />
+                                        <div className="grid gap-4 sm:grid-cols-3 mt-4">
+                                            <MentorCard role="Hifz Mentor" name={mentorName(student.hifz_mentor)} icon={BookOpen} />
+                                            <MentorCard role="School Mentor" name={mentorName(student.school_mentor)} icon={Compass} />
+                                            <MentorCard role="Madrasa Mentor" name={mentorName(student.madrasa_mentor)} icon={Award} />
+                                        </div>
+                                    </section>
                                 </div>
-                                <HifzChart data={chartData} />
-                                <Records logs={progress?.period_logs || []} />
-                            </div>
-                        )}
+                            )}
 
-                        {activeTab === "attendance" && (
-                            <div className="space-y-5">
-                                <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                                    <StatCard icon={PrincipalIcons.TrendingUp} label="Attendance" value={`${attendancePercent}%`} sub="Selected range" tone="emerald" />
-                                    <Info label="Present" value={attendance?.presentClasses || attendance?.attendedClasses || 0} />
-                                    <Info label="Absent" value={attendance?.absentClasses || attendance?.notAttendedClasses || 0} />
-                                    <Info label="Late" value={attendance?.lateClasses || 0} />
-                                    <Info label="Leave" value={attendance?.leaveClasses || 0} />
+                            {activeTab === "hifz" && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">New Pages</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{totals.newPages}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent Revision</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{totals.recent}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Juz Revision</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{totals.juz}</p>
+                                        </div>
+                                    </div>
+                                    <HifzChart data={chartData} />
+                                    
+                                    {/* Timeline-style Recitation Feed */}
+                                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                        <SectionHeader icon={BookOpen} title="Recitation History Feed" subtitle="Timeline of recitation updates submitted by mentors." />
+                                        <div className="mt-6 relative pl-4 border-l-2 border-slate-100 space-y-6">
+                                            {(progress?.period_logs || []).length === 0 ? (
+                                                <EmptyState title="No recitation logs found" subtitle="No recitation records exist for this student in the selected date range." />
+                                            ) : (
+                                                progress?.period_logs.slice(0, 15).map((log) => {
+                                                    const isNew = log.mode === "New Verses"
+                                                    const isRecent = log.mode === "Recent Revision"
+                                                    return (
+                                                        <div key={log.id} className="relative group">
+                                                            {/* Custom Timeline dot */}
+                                                            <span className={`absolute -left-[22px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white ring-4 ring-slate-50 transition-transform duration-300 group-hover:scale-125 ${isNew ? "bg-teal-500" : isRecent ? "bg-emerald-500" : "bg-amber-500"}`}></span>
+                                                            
+                                                            <div className="flex items-start justify-between gap-4 ml-2">
+                                                                <div>
+                                                                    <p className="text-xs font-black text-slate-800 tracking-tight leading-none group-hover:text-teal-600 transition-colors">{log.mode}</p>
+                                                                    <p className="text-[10px] font-bold text-slate-400 mt-1.5 uppercase tracking-wide leading-none">{logDetail(log)}</p>
+                                                                </div>
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{formatDate(log.entry_date)}</span>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })
+                                            )}
+                                        </div>
+                                    </section>
                                 </div>
-                                <TrendChart data={attendanceTrend} />
-                            </div>
-                        )}
+                            )}
 
-                        {activeTab === "exams" && (
-                            tabLoading ? <LoadingBlock label="Loading exams" /> : <ExamList exams={exams} />
-                        )}
+                            {activeTab === "attendance" && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Present Ratio</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{attendance?.presentClasses || attendance?.attendedClasses || 0}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Absent Count</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{attendance?.absentClasses || attendance?.notAttendedClasses || 0}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Late Logs</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{attendance?.lateClasses || 0}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-center">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">On Leave</p>
+                                            <p className="text-xl font-black text-slate-800 mt-1">{attendance?.leaveClasses || 0}</p>
+                                        </div>
+                                    </div>
+                                    <TrendChart data={attendanceTrend} />
+                                </div>
+                            )}
 
-                        {activeTab === "leave" && (
-                            tabLoading ? <LoadingBlock label="Loading leave history" /> : <LeaveList rows={leaveHistory} />
-                        )}
+                            {activeTab === "exams" && (
+                                tabLoading ? (
+                                    <LoadingBlock label="Loading exam reports" />
+                                ) : exams.length === 0 ? (
+                                    <EmptyState title="No exam marks found" subtitle="No marked subject registers exist for this student." />
+                                ) : (
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        {exams.map((exam) => (
+                                            <section key={exam.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                                                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                                                    <div>
+                                                        <h3 className="text-sm font-black text-slate-800 leading-tight">{exam.title}</h3>
+                                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{exam.department || "Exam Department"} • {formatDate(exam.start_date)}</p>
+                                                    </div>
+                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider ${exam.percentage < 40 ? "bg-rose-50 text-rose-600 border border-rose-100" : exam.percentage < 75 ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"}`}>{exam.percentage}%</span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {exam.subjects.map((subject) => (
+                                                        <div key={subject.name} className="flex items-center justify-between rounded-xl bg-slate-50/50 px-3.5 py-2.5 text-xs font-bold text-slate-700">
+                                                            <span>{subject.name}</span>
+                                                            <span className="font-black text-slate-800">{subject.marks} / {subject.max}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white flex justify-between tracking-wide uppercase">
+                                                    <span>Aggregate Score:</span>
+                                                    <span>{exam.total} / {exam.max}</span>
+                                                </div>
+                                            </section>
+                                        ))}
+                                    </div>
+                                )
+                            )}
+
+                            {activeTab === "leave" && (
+                                tabLoading ? (
+                                    <LoadingBlock label="Loading leave logs" />
+                                ) : leaveHistory.length === 0 ? (
+                                    <EmptyState title="No leaves logged" subtitle="No registered checkout or leave ledger entries exist for this profile." />
+                                ) : (
+                                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                                        <SectionHeader icon={DoorOpen} title="Personal Leave History" subtitle="Ledger entries tracking checkout exit codes and check-in statuses." />
+                                        
+                                        <div className="overflow-x-auto border border-slate-100 rounded-xl mt-4">
+                                            <table className="w-full border-collapse text-left text-xs">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 bg-slate-50 font-black text-slate-400 uppercase tracking-widest">
+                                                        <th className="px-5 py-4">Leave Type</th>
+                                                        <th className="px-5 py-4">Reason Category</th>
+                                                        <th className="px-5 py-4">Remarks / Companion</th>
+                                                        <th className="px-5 py-4">Interval</th>
+                                                        <th className="px-5 py-4 text-right">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                                    {leaveHistory.map((row) => (
+                                                        <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="px-5 py-4">
+                                                                <span className="bg-teal-50 border border-teal-100/50 text-[10px] font-black uppercase text-teal-600 px-2 py-0.5 rounded-lg">{row.leave_type || "Leave"}</span>
+                                                            </td>
+                                                            <td className="px-5 py-4 text-slate-800 font-black">{row.reason_category || "-"}</td>
+                                                            <td className="px-5 py-4 text-slate-500 font-bold max-w-xs truncate">{row.remarks || row.companion_name || "-"}</td>
+                                                            <td className="px-5 py-4 text-slate-500 font-bold">{formatDate(row.start_datetime)} to {formatDate(row.end_datetime)}</td>
+                                                            <td className="px-5 py-4 text-right">
+                                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${row.status === "returned" || row.status === "completed" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-amber-50 text-amber-600 border border-amber-100"}`}>
+                                                                    {row.status || "-"}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </section>
+                                )
+                            )}
+                        </div>
                     </>
                 )}
             </div>
@@ -227,80 +401,31 @@ export default function PrincipalStudentProfilePage() {
     )
 }
 
-function Info({ label, value }: { label: string; value: string | number }) {
+function MentorCard({ role, name, icon: Icon }: { role: string; name: string; icon: React.ElementType }) {
     return (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-black uppercase text-slate-500">{label}</p>
-            <p className="mt-1 font-black text-slate-900">{value}</p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-teal-50 text-teal-600 border border-teal-100">
+                <Icon className="h-4.5 w-4.5" />
+            </div>
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">{role}</p>
+                <p className="font-black text-slate-800 text-sm tracking-tight mt-1.5 leading-none">{name}</p>
+            </div>
         </div>
     )
 }
 
-function Records({ logs }: { logs: StudentProgress["period_logs"] }) {
-    if (!logs.length) return <EmptyState title="No recitation records" subtitle="Records will appear here after Hifz entries are submitted." />
+function ProgressBar({ label, value, max, color = "bg-teal-600" }: { label: string; value: number; max: number; color?: string }) {
+    const pct = Math.min(100, Math.round((value / max) * 100))
     return (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <SectionHeader icon={BookOpen} title="Recent Recitation Records" subtitle="Latest records in the selected range." />
-            <div className="mt-4 divide-y divide-slate-100">
-                {logs.slice(0, 12).map((log) => (
-                    <div key={log.id} className="flex items-center justify-between gap-3 py-3">
-                        <div>
-                            <p className="font-black">{log.mode}</p>
-                            <p className="text-xs font-semibold text-slate-500">{logDetail(log)}</p>
-                        </div>
-                        <p className="text-xs font-black text-slate-500">{formatDate(log.entry_date)}</p>
-                    </div>
-                ))}
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                <span>{label}</span>
+                <span className="font-black text-slate-800">{value} / {max}</span>
             </div>
-        </section>
-    )
-}
-
-function ExamList({ exams }: { exams: ExamSummary[] }) {
-    if (!exams.length) return <EmptyState title="No exam marks" subtitle="No subject marks were found for this student." />
-    return (
-        <div className="grid gap-4 lg:grid-cols-2">
-            {exams.map((exam) => (
-                <section key={exam.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <h3 className="font-black">{exam.title}</h3>
-                            <p className="text-xs font-semibold text-slate-500">{exam.department || "Exam"} - {formatDate(exam.start_date)}</p>
-                        </div>
-                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-black text-indigo-700">{exam.percentage}%</span>
-                    </div>
-                    <div className="mt-4 space-y-2">
-                        {exam.subjects.map((subject) => (
-                            <div key={subject.name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm font-bold">
-                                <span>{subject.name}</span>
-                                <span>{subject.marks}/{subject.max}</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-sm font-black text-white">
-                        Total: {exam.total}/{exam.max}
-                    </div>
-                </section>
-            ))}
+            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }}></div>
+            </div>
         </div>
-    )
-}
-
-function LeaveList({ rows }: { rows: any[] }) {
-    if (!rows.length) return <EmptyState title="No leave history" subtitle="Leave records for this student will appear here." />
-    return (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <SectionHeader icon={DoorOpen} title="Leave History" subtitle="Current and previous leave records." />
-            <div className="mt-4 divide-y divide-slate-100">
-                {rows.map((row) => (
-                    <div key={row.id} className="grid gap-1 py-3 md:grid-cols-4 md:items-center">
-                        <p className="font-black">{row.leave_type || "Leave"}</p>
-                        <p className="text-sm font-semibold text-slate-500">{row.reason_category || row.remarks || "-"}</p>
-                        <p className="text-sm font-semibold text-slate-500">{formatDate(row.start_datetime)} - {formatDate(row.end_datetime)}</p>
-                        <p className="text-sm font-black capitalize text-slate-700">{row.status || "-"}</p>
-                    </div>
-                ))}
-            </div>
-        </section>
     )
 }

@@ -3,7 +3,6 @@
 import { Bell, Moon, Sun, Menu, Users, MessageSquare, PartyPopper, CheckCheck } from "lucide-react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
-import Cookies from "js-cookie"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { formatDistanceToNow } from "date-fns"
@@ -24,15 +23,17 @@ type Notification = {
 
 const ADMIN_NOTIFICATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_ADMIN_NOTIFICATIONS === "true"
 
-function decodeUser(token: string) {
-    try {
-        const p = JSON.parse(atob(token.split('.')[1]))
-        const roles: Record<string, string> = {
-            admin: 'Administrator', principal: 'Principal',
-            vice_principal: 'VP', controller: 'Controller', staff: 'Mentor'
-        }
-        return { name: p.name || 'Admin User', role: roles[p.role] || 'Staff', email: p.email || '' }
-    } catch { return { name: 'Admin User', role: 'Administrator', email: '' } }
+function roleLabel(role?: string) {
+    const roles: Record<string, string> = {
+        admin: 'Administrator',
+        principal: 'Principal',
+        vice_principal: 'VP',
+        controller: 'Controller',
+        staff: 'Mentor',
+        usthad: 'Usthad',
+        mentor: 'Mentor',
+    }
+    return roles[role || ''] || 'Staff'
 }
 
 // ── Notification Bell ───────────────────────────────────────────────────────
@@ -250,8 +251,18 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
 
     useEffect(() => {
         setMounted(true)
-        const token = localStorage.getItem('auth_token')
-        if (token) setUser(decodeUser(token))
+        api.get('/auth/me')
+            .then((res) => {
+                const profile = res.data?.user
+                if (profile) {
+                    setUser({
+                        name: profile.name || 'Admin User',
+                        role: roleLabel(profile.role),
+                        email: profile.email || '',
+                    })
+                }
+            })
+            .catch(() => {})
     }, [])
 
     const initials = user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()

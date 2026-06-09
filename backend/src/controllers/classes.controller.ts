@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { invalidateCacheByPrefix } from '../utils/server-cache';
 
 function normalizeDepartment(value: any) {
     const raw = String(value || '').trim().toLowerCase();
@@ -27,19 +28,26 @@ export const getAcademicYears = async (req: Request, res: Response) => {
 export const upsertAcademicYear = async (req: Request, res: Response) => {
     try {
         const { id, name, start_date, end_date, is_current, is_locked, promotion_window_open } = req.body;
+        if (is_current) {
+            await db.query('UPDATE academic_years SET is_current = false WHERE ($1::uuid IS NULL OR id <> $1::uuid)', [id || null]);
+        }
+
+        let result;
         if (id) {
-            const result = await db.query(
+            result = await db.query(
                 `UPDATE academic_years SET name=$1, start_date=$2, end_date=$3, is_current=$4, is_locked=$5, promotion_window_open=$6 WHERE id=$7 RETURNING *`,
                 [name, start_date, end_date, is_current || false, is_locked || false, promotion_window_open || false, id]
             );
-            return res.json({ success: true, data: result.rows[0] });
         } else {
-            const result = await db.query(
+            result = await db.query(
                 `INSERT INTO academic_years (name, start_date, end_date, is_current, is_locked, promotion_window_open) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
                 [name, start_date, end_date, is_current || false, is_locked || false, promotion_window_open || false]
             );
-            return res.json({ success: true, data: result.rows[0] });
         }
+        invalidateCacheByPrefix('academic-year:');
+        invalidateCacheByPrefix('attendance:');
+        invalidateCacheByPrefix('reports:');
+        return res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -163,7 +171,8 @@ export const getStudentClassAssignments = async (req: Request, res: Response) =>
                     mc.name AS madrasa_class_name,
                     mc.standard AS madrasa_standard,
                     mc.section AS madrasa_section,
-                    hc.id AS hifz_class_id,
+                    COALESCE(he.hifz_class_ids, '[]'::json) AS hifz_class_ids,
+                    hp.hifz_group_class_id AS hifz_class_id,
                     hc.name AS hifz_group_name
              FROM students s
              LEFT JOIN student_school_enrollments se
@@ -184,6 +193,13 @@ export const getStudentClassAssignments = async (req: Request, res: Response) =>
               AND COALESCE(mc.is_archived, false) = false
              LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
              LEFT JOIN classes hc ON hc.id = hp.hifz_group_class_id
+             LEFT JOIN (
+                 SELECT e.student_id, json_agg(e.class_id) AS hifz_class_ids
+                 FROM enrollments e
+                 JOIN classes c ON e.class_id = c.id
+                 WHERE c.type = 'Hifz' AND e.academic_year_id = $1
+                 GROUP BY e.student_id
+             ) he ON he.student_id = s.adm_no
              WHERE ${where}
              ORDER BY s.name
              LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -199,82 +215,163 @@ export const getStudentClassAssignments = async (req: Request, res: Response) =>
 export const upsertStudentClassAssignment = async (req: Request, res: Response) => {
     const client = await db.getClient();
     try {
-        const { student_id, academic_year_id, school_class_id, madrasa_class_id, hifz_class_id } = req.body;
+        const { student_id, academic_year_id, school_class_id, madrasa_class_id, hifz_class_id, hifz_class_ids } = req.body;
         if (!student_id || !academic_year_id) return res.status(400).json({ success: false, error: 'student_id and academic_year_id are required' });
 
+        // Determine which departments were explicitly included in this request.
+        // This allows partial updates: updating school won't touch hifz, and vice versa.
+        const has = (key: string) => Object.prototype.hasOwnProperty.call(req.body, key);
+        const schoolProvided  = has('school_class_id');
+        const madrasaProvided = has('madrasa_class_id');
+        const hifzProvided    = has('hifz_class_ids') || has('hifz_class_id');
+
+        let effectiveHifzClassIds: string[] = [];
+        if (hifzProvided) {
+            if (Array.isArray(hifz_class_ids)) effectiveHifzClassIds = hifz_class_ids.filter(Boolean);
+            else if (hifz_class_id)             effectiveHifzClassIds = [hifz_class_id];
+        }
+
         await client.query('BEGIN');
-        const classIds = [school_class_id, madrasa_class_id, hifz_class_id].filter(Boolean);
+
+        // Fetch only the classes we actually need
+        const classIds = [
+            ...(schoolProvided  && school_class_id  ? [school_class_id]  : []),
+            ...(madrasaProvided && madrasa_class_id ? [madrasa_class_id] : []),
+            ...effectiveHifzClassIds,
+        ].filter(Boolean);
+
         const classesRes = classIds.length
             ? await client.query(`SELECT * FROM classes WHERE id = ANY($1::uuid[])`, [classIds])
             : { rows: [] as any[] };
-        const classesById = new Map(classesRes.rows.map((row: any) => [row.id, row]));
-        const schoolClass = school_class_id ? classesById.get(school_class_id) : null;
+        const classesById = new Map(classesRes.rows.map((r: any) => [r.id, r]));
+        const schoolClass  = school_class_id  ? classesById.get(school_class_id)  : null;
         const madrasaClass = madrasa_class_id ? classesById.get(madrasa_class_id) : null;
-        const hifzClass = hifz_class_id ? classesById.get(hifz_class_id) : null;
 
-        if (school_class_id && (!schoolClass || schoolClass.type !== 'School')) throw new Error('Invalid school class selected');
-        if (madrasa_class_id && (!madrasaClass || madrasaClass.type !== 'Madrassa')) throw new Error('Invalid madrasa class selected');
-        if (hifz_class_id && (!hifzClass || hifzClass.type !== 'Hifz')) throw new Error('Invalid hifz group selected');
-
-        if (schoolClass) {
-            await client.query(
-                `INSERT INTO student_school_enrollments (student_id, academic_year_id, school_standard, school_section, status, joined_at)
-                 VALUES ($1, $2, $3, $4, 'active', now())
-                 ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
-                    school_standard = EXCLUDED.school_standard,
-                    school_section = EXCLUDED.school_section,
-                    status = 'active'`,
-                [student_id, academic_year_id, schoolClass.standard, schoolClass.section || null]
-            );
+        if (schoolProvided  && school_class_id  && (!schoolClass  || schoolClass.type  !== 'School'))   throw new Error('Invalid school class selected');
+        if (madrasaProvided && madrasa_class_id && (!madrasaClass || madrasaClass.type !== 'Madrassa')) throw new Error('Invalid madrasa class selected');
+        if (hifzProvided) {
+            for (const hid of effectiveHifzClassIds) {
+                const hc = classesById.get(hid);
+                if (!hc || hc.type !== 'Hifz') throw new Error('Invalid hifz class selected');
+            }
         }
 
-        if (madrasaClass) {
-            await client.query(
-                `INSERT INTO student_madrasa_enrollments (student_id, academic_year_id, madrasa_standard, madrasa_section, status, joined_at)
-                 VALUES ($1, $2, $3, $4, 'active', now())
-                 ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
-                    madrasa_standard = EXCLUDED.madrasa_standard,
-                    madrasa_section = EXCLUDED.madrasa_section,
-                    status = 'active'`,
-                [student_id, academic_year_id, madrasaClass.standard, madrasaClass.section || null]
-            );
+        const primaryHifzClassId = effectiveHifzClassIds[0] ?? null;
+
+        // ── School ──────────────────────────────────────────────────────────
+        if (schoolProvided) {
+            if (schoolClass) {
+                // Assign to school class
+                await client.query(
+                    `INSERT INTO student_school_enrollments (student_id, academic_year_id, school_standard, school_section, status, joined_at)
+                     VALUES ($1, $2, $3, $4, 'active', now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        school_standard = EXCLUDED.school_standard,
+                        school_section  = EXCLUDED.school_section,
+                        status          = 'active'`,
+                    [student_id, academic_year_id, schoolClass.standard, schoolClass.section || null]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='School')`,
+                    [student_id, academic_year_id]
+                );
+                await client.query(
+                    `INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                    [student_id, school_class_id, academic_year_id]
+                );
+            } else {
+                // null = remove from school class
+                await client.query(
+                    `UPDATE student_school_enrollments SET status='inactive' WHERE student_id=$1 AND academic_year_id=$2`,
+                    [student_id, academic_year_id]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='School')`,
+                    [student_id, academic_year_id]
+                );
+            }
         }
 
-        if (hifzClass) {
-            const studentRes = await client.query('SELECT hifz_mentor_id, admission_date FROM students WHERE adm_no = $1', [student_id]);
+        // ── Madrasa ─────────────────────────────────────────────────────────
+        if (madrasaProvided) {
+            if (madrasaClass) {
+                // Assign to madrasa class
+                await client.query(
+                    `INSERT INTO student_madrasa_enrollments (student_id, academic_year_id, madrasa_standard, madrasa_section, status, joined_at)
+                     VALUES ($1, $2, $3, $4, 'active', now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        madrasa_standard = EXCLUDED.madrasa_standard,
+                        madrasa_section  = EXCLUDED.madrasa_section,
+                        status           = 'active'`,
+                    [student_id, academic_year_id, madrasaClass.standard, madrasaClass.section || null]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='Madrassa')`,
+                    [student_id, academic_year_id]
+                );
+                await client.query(
+                    `INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                    [student_id, madrasa_class_id, academic_year_id]
+                );
+            } else {
+                // null = remove from madrasa class
+                await client.query(
+                    `UPDATE student_madrasa_enrollments SET status='inactive' WHERE student_id=$1 AND academic_year_id=$2`,
+                    [student_id, academic_year_id]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='Madrassa')`,
+                    [student_id, academic_year_id]
+                );
+            }
+        }
+
+        // ── Hifz ────────────────────────────────────────────────────────────
+        // Only touched when hifz data was explicitly sent in the request.
+        if (hifzProvided) {
+            const studentRes = await client.query(
+                `SELECT hifz_mentor_id, admission_date FROM students WHERE adm_no = $1`, [student_id]
+            );
             await client.query(
                 `INSERT INTO student_hifz_profiles (student_id, mentor_id, active, started_on, hifz_group_class_id, updated_at)
                  VALUES ($1, $2, true, COALESCE($3::date, CURRENT_DATE), $4, now())
                  ON CONFLICT (student_id) DO UPDATE SET
                     hifz_group_class_id = EXCLUDED.hifz_group_class_id,
-                    active = true,
-                    updated_at = now()`,
-                [student_id, studentRes.rows[0]?.hifz_mentor_id || null, studentRes.rows[0]?.admission_date || null, hifz_class_id]
+                    active              = true,
+                    updated_at          = now()`,
+                [student_id, studentRes.rows[0]?.hifz_mentor_id || null, studentRes.rows[0]?.admission_date || null, primaryHifzClassId]
             );
+            await client.query(
+                `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='Hifz')`,
+                [student_id, academic_year_id]
+            );
+            for (const hid of effectiveHifzClassIds) {
+                await client.query(
+                    `INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                    [student_id, hid, academic_year_id]
+                );
+            }
         }
 
+        // ── Snapshot ────────────────────────────────────────────────────────
         await client.query(
             `INSERT INTO student_year_snapshots (
                 student_id, academic_year_id, school_standard, school_section,
                 madrasa_standard, madrasa_section, hifz_group_class_id, status, updated_at
-             )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', now())
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,'active',now())
              ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
-                school_standard = COALESCE(EXCLUDED.school_standard, student_year_snapshots.school_standard),
-                school_section = COALESCE(EXCLUDED.school_section, student_year_snapshots.school_section),
-                madrasa_standard = COALESCE(EXCLUDED.madrasa_standard, student_year_snapshots.madrasa_standard),
-                madrasa_section = COALESCE(EXCLUDED.madrasa_section, student_year_snapshots.madrasa_section),
+                school_standard   = COALESCE(EXCLUDED.school_standard,   student_year_snapshots.school_standard),
+                school_section    = COALESCE(EXCLUDED.school_section,    student_year_snapshots.school_section),
+                madrasa_standard  = COALESCE(EXCLUDED.madrasa_standard,  student_year_snapshots.madrasa_standard),
+                madrasa_section   = COALESCE(EXCLUDED.madrasa_section,   student_year_snapshots.madrasa_section),
                 hifz_group_class_id = COALESCE(EXCLUDED.hifz_group_class_id, student_year_snapshots.hifz_group_class_id),
-                status = 'active',
-                updated_at = now()`,
+                status            = 'active',
+                updated_at        = now()`,
             [
-                student_id,
-                academic_year_id,
-                schoolClass?.standard || null,
-                schoolClass?.section || null,
-                madrasaClass?.standard || null,
-                madrasaClass?.section || null,
-                hifz_class_id || null,
+                student_id, academic_year_id,
+                schoolClass?.standard  || null, schoolClass?.section   || null,
+                madrasaClass?.standard || null, madrasaClass?.section  || null,
+                hifzProvided ? primaryHifzClassId : null,
             ]
         );
 
@@ -526,5 +623,33 @@ export const createManualClassEvent = async (req: Request, res: Response) => {
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+
+export const bulkAssignHifzClass = async (req: Request, res: Response) => {
+    const client = await db.getClient();
+    try {
+        const { academic_year_id, class_id, add_student_ids, remove_student_ids } = req.body;
+        if (!academic_year_id || !class_id) return res.status(400).json({ success: false, error: 'academic_year_id and class_id are required' });
+
+        await client.query('BEGIN');
+        
+        if (add_student_ids && add_student_ids.length > 0) {
+            const values = add_student_ids.map((id: string) => `('${id}', '${class_id}', '${academic_year_id}')`).join(',');
+            await client.query(`INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ${values} ON CONFLICT DO NOTHING`);
+        }
+
+        if (remove_student_ids && remove_student_ids.length > 0) {
+            await client.query(`DELETE FROM enrollments WHERE academic_year_id = $1 AND class_id = $2 AND student_id = ANY($3::text[])`, [academic_year_id, class_id, remove_student_ids]);
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (err: any) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ success: false, error: err.message });
+    } finally {
+        client.release();
     }
 };

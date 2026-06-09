@@ -265,7 +265,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             if (sRes?.data?.success) {
                 setStudent(sRes.data.student)
-                setAssignedUsthadId(sRes.data.student.assigned_usthad_id)
+                setAssignedUsthadId(sRes.data.student.hifz_mentor_id || sRes.data.student.assigned_usthad_id || null)
                 setIsOutside(!!sRes.data.student.is_outside)
             }
             const policies = policyRes?.data?.policies || []
@@ -456,7 +456,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         await api.post('/hifz/logs/bulk', { logs: recordsToInsert.slice(1) })
                     }
                 } else {
-                    await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
+                    if (recordsToInsert.length === 1) {
+                        await api.post('/hifz/logs', recordsToInsert[0])
+                    } else {
+                        await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
+                    }
                 }
             } else {
                 const recordsToInsert = values.juz_entries.map(j => ({
@@ -473,7 +477,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         await api.post('/hifz/logs/bulk', { logs: recordsToInsert.slice(1) })
                     }
                 } else {
-                    await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
+                    if (recordsToInsert.length === 1) {
+                        await api.post('/hifz/logs', recordsToInsert[0])
+                    } else {
+                        await api.post('/hifz/logs/bulk', { logs: recordsToInsert })
+                    }
                 }
             }
 

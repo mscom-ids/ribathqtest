@@ -2,28 +2,31 @@
 
 import { Search, Bell, Maximize, Moon, Sun } from "lucide-react"
 import { useState, useEffect } from "react"
-import Cookies from "js-cookie"
+import api from "@/lib/api"
 
-function decodeUser(token: string): { name: string; role: string } {
-    try {
-        const p = JSON.parse(atob(token.split('.')[1]))
-        const roleLabel: Record<string, string> = {
-            admin: 'Administrator',
-            principal: 'Principal',
-            vice_principal: 'Vice Principal',
-            controller: 'Controller',
-            staff: 'Mentor',
-        }
-        return { name: p.name || 'Admin User', role: roleLabel[p.role] || 'Staff' }
-    } catch { return { name: 'Admin User', role: 'Administrator' } }
+function roleLabel(role?: string) {
+    const roles: Record<string, string> = {
+        admin: 'Administrator',
+        principal: 'Principal',
+        vice_principal: 'Vice Principal',
+        controller: 'Controller',
+        staff: 'Mentor',
+        usthad: 'Usthad',
+        mentor: 'Mentor',
+    }
+    return roles[role || ''] || 'Staff'
 }
 
 export function TopHeader() {
     const [user, setUser] = useState({ name: 'Admin User', role: 'Administrator' })
 
     useEffect(() => {
-        const token = Cookies.get('auth_token')
-        if (token) setUser(decodeUser(token))
+        api.get('/auth/me')
+            .then((res) => {
+                const profile = res.data?.user
+                if (profile) setUser({ name: profile.name || 'Admin User', role: roleLabel(profile.role) })
+            })
+            .catch(() => {})
     }, [])
 
     const initials = user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()

@@ -496,9 +496,19 @@ export const commitYearStart = async (req: Request, res: Response) => {
             });
         }
 
+        // Determine target year start date for mentor history timestamps
+        const targetYearRes = await client.query(
+            `SELECT start_date FROM academic_years WHERE id = $1 LIMIT 1`,
+            [targetYearId]
+        );
+        const targetYearStart: string = targetYearRes.rows[0]?.start_date
+            ? new Date(targetYearRes.rows[0].start_date).toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+
         let hifzProfilesUpdated = 0;
         for (const row of preview.hifz_students as any[]) {
             const hifzPlan = plan.hifz || {};
+            const mentorChanging = hifzPlan.carry_mentor === false && row.to_mentor_id !== row.from_mentor_id;
             if (hifzPlan.carry_mentor === false || hifzPlan.carry_group === false) {
                 await client.query(
                     `UPDATE student_hifz_profiles
@@ -515,6 +525,28 @@ export const commitYearStart = async (req: Request, res: Response) => {
                     ]
                 );
                 hifzProfilesUpdated++;
+
+                // Record mentor transition in hifz_mentor_history
+                if (mentorChanging) {
+                    try {
+                        await client.query(
+                            `UPDATE hifz_mentor_history
+                             SET assigned_until = $2::date
+                             WHERE student_id = $1 AND assigned_until IS NULL`,
+                            [row.student_id, targetYearStart]
+                        );
+                        if (row.to_mentor_id) {
+                            await client.query(
+                                `INSERT INTO hifz_mentor_history (student_id, mentor_id, assigned_from, notes)
+                                 VALUES ($1, $2, $3::date, 'Year start promotion')
+                                 ON CONFLICT DO NOTHING`,
+                                [row.student_id, row.to_mentor_id, targetYearStart]
+                            );
+                        }
+                    } catch (hErr: any) {
+                        console.warn('[commitYearStart] hifz_mentor_history update skipped:', hErr?.message);
+                    }
+                }
             }
             merged.set(row.student_id, {
                 ...(merged.get(row.student_id) || {}),

@@ -1,4 +1,5 @@
 import { db } from '../config/db';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from './server-cache';
 
 type Queryable = {
     query: (text: string, params?: any[]) => Promise<{ rows: any[] }>;
@@ -12,6 +13,7 @@ export const MENTOR_ACCESS_ROLES = ['staff', 'usthad', 'mentor'];
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 const DEFAULT_WINDOW_DAYS = 7;
+const MENTOR_ACCESS_POLICY_TTL_MS = 5 * 60_000;
 
 function formatIndiaDate(date: Date): string {
     return new Intl.DateTimeFormat('en-CA', {
@@ -82,30 +84,40 @@ export async function getMentorAccessPolicy(feature: MentorAccessFeature, querya
     if (!MENTOR_ACCESS_FEATURES.includes(feature)) {
         throw new Error('Invalid access policy feature');
     }
-    await ensureMentorAccessPolicies(queryable);
-    const result = await queryable.query(
-        `SELECT *
-         FROM mentor_access_policies
-         WHERE feature = $1
-         LIMIT 1`,
-        [feature]
+    return cachedResult(
+        makeCacheKey('mentor-access:policy', { feature }),
+        MENTOR_ACCESS_POLICY_TTL_MS,
+        async () => {
+            const result = await queryable.query(
+                `SELECT *
+                 FROM mentor_access_policies
+                 WHERE feature = $1
+                 LIMIT 1`,
+                [feature]
+            );
+            return normalizePolicy(result.rows[0] || { feature, default_window_days: DEFAULT_WINDOW_DAYS });
+        }
     );
-    return normalizePolicy(result.rows[0] || { feature, default_window_days: DEFAULT_WINDOW_DAYS });
 }
 
 export async function listMentorAccessPolicies(queryable: Queryable = db) {
-    await ensureMentorAccessPolicies(queryable);
-    const result = await queryable.query(
-        `SELECT *
-         FROM mentor_access_policies
-         WHERE feature = ANY($1::text[])
-         ORDER BY feature`,
-        [MENTOR_ACCESS_FEATURES]
-    );
+    return cachedResult(
+        'mentor-access:policies',
+        MENTOR_ACCESS_POLICY_TTL_MS,
+        async () => {
+            const result = await queryable.query(
+                `SELECT *
+                 FROM mentor_access_policies
+                 WHERE feature = ANY($1::text[])
+                 ORDER BY feature`,
+                [MENTOR_ACCESS_FEATURES]
+            );
 
-    const byFeature = new Map(result.rows.map(row => [row.feature, row]));
-    return MENTOR_ACCESS_FEATURES.map(feature =>
-        normalizePolicy(byFeature.get(feature) || { feature, default_window_days: DEFAULT_WINDOW_DAYS })
+            const byFeature = new Map(result.rows.map(row => [row.feature, row]));
+            return MENTOR_ACCESS_FEATURES.map(feature =>
+                normalizePolicy(byFeature.get(feature) || { feature, default_window_days: DEFAULT_WINDOW_DAYS })
+            );
+        }
     );
 }
 
@@ -148,6 +160,7 @@ export async function saveMentorAccessPolicy(input: {
         [input.feature, defaultWindowDays, unlockStartDate, unlockEndDate, input.note || null, input.updated_by || null]
     );
 
+    invalidateCacheByPrefix('mentor-access:');
     return normalizePolicy(result.rows[0]);
 }
 

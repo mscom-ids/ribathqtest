@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-// Next.js middleware runs on the Edge runtime — no Node.js crypto.
-// We decode the JWT payload (base64) to read the role, but actual
-// cryptographic verification happens in the Express backend.
+// Next.js proxy runs on the Edge runtime, so this is only a UX/router guard.
+// API authorization is still enforced cryptographically by the Express backend.
 
 const ADMIN_ROLES = ['admin', 'controller'];
 const PRINCIPAL_ROLES = ['principal', 'vice_principal'];
@@ -24,15 +23,14 @@ function getPortalForRole(role: string): string {
   if (PRINCIPAL_ROLES.includes(role)) return '/principal';
   if (STAFF_ROLES.includes(role)) return '/staff';
   if (role === 'parent') return '/parent';
-  return '/staff'; // safe default
+  return '/staff';
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
   const token = request.cookies.get('auth_token');
   const role = token?.value ? decodeTokenRole(token.value) : null;
 
-  // ── Logged-in user visits /login or / → send them to their portal ──
   if (currentPath === '/login' || currentPath === '/') {
     if (role) {
       return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
@@ -40,7 +38,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Protected routes: /admin, /staff, /parent ──
   const isProtected =
     currentPath.startsWith('/admin') ||
     currentPath.startsWith('/principal') ||
@@ -49,22 +46,24 @@ export function middleware(request: NextRequest) {
 
   if (!isProtected) return NextResponse.next();
 
-  // No token at all → login
   if (!token?.value || !role) {
     const response = NextResponse.redirect(new URL('/login', request.url));
-    if (token?.value) response.cookies.delete('auth_token'); // malformed token
+    if (token?.value) response.cookies.delete('auth_token');
     return response;
   }
 
-  // ── Role-based access ──
   if (currentPath.startsWith('/admin') && !ADMIN_ROLES.includes(role)) {
-    // Wrong portal — redirect to their correct portal, NOT to login
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
   if (currentPath.startsWith('/principal') && !PRINCIPAL_ROLES.includes(role)) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
-  if (currentPath.startsWith('/staff') && !STAFF_ROLES.includes(role) && !ADMIN_ROLES.includes(role) && !PRINCIPAL_ROLES.includes(role)) {
+  if (
+    currentPath.startsWith('/staff') &&
+    !STAFF_ROLES.includes(role) &&
+    !ADMIN_ROLES.includes(role) &&
+    !PRINCIPAL_ROLES.includes(role)
+  ) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
   if (currentPath.startsWith('/parent') && role !== 'parent') {

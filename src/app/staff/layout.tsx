@@ -10,7 +10,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { ModeToggle } from "@/components/mode-toggle"
-import Cookies from "js-cookie"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 export default function StaffLayout({
@@ -45,8 +44,7 @@ export default function StaffLayout({
                 const res = await api.get('/staff/me')
                 if (!res.data.success || !res.data.staff) {
                     console.warn("Staff profile not found in database")
-                    // Clear cookie and hard-redirect to break any loop
-                    document.cookie = 'auth_token=; path=/; max-age=0'
+                    await api.post('/auth/logout').catch(() => {})
                     window.location.href = '/login'
                     return
                 }
@@ -66,9 +64,6 @@ export default function StaffLayout({
 
     const handleSignOut = async () => {
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
-        localStorage.removeItem('auth_token')
-        Cookies.remove('auth_token', { path: '/' })
-        document.cookie = 'auth_token=; path=/; max-age=0'
         sessionStorage.removeItem('delegationToken')
         sessionStorage.removeItem('delegationMentorName')
         sessionStorage.removeItem('delegationStudentName')

@@ -6,14 +6,24 @@ import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/se
 
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+let studentCurrentPresenceTableExists: boolean | null = null;
 
 function invalidateLeaveCaches() {
     invalidateCacheByPrefix('leaves:');
+    invalidateCacheByPrefix('students:');
     invalidateCacheByPrefix('attendance:');
     invalidateCacheByPrefix('attendance:daily-stats');
     invalidateCacheByPrefix('hifz:monthly');
     invalidateCacheByPrefix('reports:mentors');
     invalidateCacheByPrefix('reports:students');
+}
+
+async function hasStudentCurrentPresenceTable() {
+    if (studentCurrentPresenceTableExists !== null) return studentCurrentPresenceTableExists;
+
+    const result = await db.query(`SELECT to_regclass('public.student_current_presence') AS table_name`);
+    studentCurrentPresenceTableExists = Boolean(result.rows[0]?.table_name);
+    return studentCurrentPresenceTableExists;
 }
 
 function parseLimitOffset(query: Request['query'], defaultLimit = 100, maxLimit = 500) {
@@ -1266,10 +1276,12 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
             outdoor: String(canViewOutdoor),
         });
 
-        const students = await cachedResult(cacheKey, 10_000, async () => {
-            // Prefer the current-state helper table. It keeps this endpoint small
-            // even when student_leaves/student_movements history becomes large.
-            const presenceQuery = `
+        const students = await cachedResult(cacheKey, 60_000, async () => {
+            // Prefer the current-state helper table when it exists. Older
+            // databases do not have it, so avoid throwing/catching 42P01 on
+            // every cache miss.
+            if (await hasStudentCurrentPresenceTable()) {
+                const presenceQuery = `
             SELECT 
                 sl.id as leave_id,
                 scp.student_id,
@@ -1316,13 +1328,11 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
             ORDER BY sl.start_datetime DESC
         `;
 
-            try {
                 const presenceResult = await db.query(presenceQuery, params);
                 return presenceResult.rows;
-            } catch (presenceErr: any) {
-                if (presenceErr?.code !== '42P01') throw presenceErr;
+            }
 
-                const fallbackResult = await db.query(`
+            const fallbackResult = await db.query(`
                     SELECT 
                         sl.id as leave_id,
                         sl.student_id,
@@ -1367,8 +1377,7 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
                       ${assignmentFilter}
                     ORDER BY sl.start_datetime DESC
                 `, params);
-                return fallbackResult.rows;
-            }
+            return fallbackResult.rows;
         });
 
         res.json({ success: true, students });

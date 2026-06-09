@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import {
     EmptyState,
     LoadingBlock,
@@ -34,7 +36,7 @@ export default function PrincipalReportsPage() {
             try {
                 const [studentsRes, progressRes] = await Promise.allSettled([
                     api.get("/students", { params: { light: "true", status: "active", limit: 500, offset: 0, sort: "name" } }),
-                    api.get("/hifz/progress-summary"),
+                    cachedGet("/hifz/progress-summary", undefined, 60_000),
                 ])
                 if (cancelled) return
                 if (studentsRes.status === "fulfilled" && studentsRes.value.data?.success) setStudents(studentsRes.value.data.students || [])
@@ -63,16 +65,14 @@ export default function PrincipalReportsPage() {
         async function loadMentors() {
             setMentorLoading(true)
             try {
-                const res = await api.get("/reports/mentors", {
-                    params: {
+                const res = await cachedGet("/reports/mentors", {
                         start_date: range.startDate,
                         end_date: range.endDate,
                         filter: "active",
                         sort: "lowest_percentage",
                         limit: 50,
                         offset: 0,
-                    },
-                })
+                    }, 60_000)
                 if (!cancelled) setMentors(res.data?.data || [])
             } finally {
                 if (!cancelled) setMentorLoading(false)
@@ -101,68 +101,114 @@ export default function PrincipalReportsPage() {
     return (
         <PrincipalFrame title="Reports" subtitle="Institution-wide attendance, Hifz, exam, and mentor reporting." range={range}>
             {loading ? (
-                <LoadingBlock label="Loading reports" />
+                <LoadingBlock label="Loading reports dashboards" />
             ) : (
-                <div className="space-y-5">
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <StatCard icon={PrincipalIcons.Users} label="Classes Covered" value={classRows.length} sub="Active students only" />
-                        <StatCard icon={PrincipalIcons.BookOpen} label="Top Hifz Class" value={bestClass?.label || "-"} sub={`${bestClass?.hifzAvg || 0}% average`} tone="emerald" />
-                        <StatCard icon={PrincipalIcons.AlertTriangle} label="Lowest Hifz Class" value={weakClass?.label || "-"} sub={`${weakClass?.hifzAvg || 0}% average`} tone="rose" />
-                        <StatCard icon={PrincipalIcons.BarChart3} label="Mentor Reporting" value={`${mentorAvg}%`} sub="Completion average" tone="sky" />
+                <div className="space-y-6">
+                    {/* Stat Cards */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <StatCard icon={PrincipalIcons.Users} label="Classes Covered" value={classRows.length} sub="Active classes with placement lists" />
+                        <StatCard icon={PrincipalIcons.BookOpen} label="Top Hifz Class" value={bestClass?.label || "-"} sub={`${bestClass?.hifzAvg || 0}% avg progress`} tone="emerald" />
+                        <StatCard icon={PrincipalIcons.AlertTriangle} label="Lowest Hifz Class" value={weakClass?.label || "-"} sub={`${weakClass?.hifzAvg || 0}% avg progress`} tone="rose" />
+                        <StatCard icon={PrincipalIcons.BarChart3} label="Mentor Reporting" value={`${mentorAvg}%`} sub="Completion rate across active staff" tone="sky" />
                     </div>
 
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeader icon={PrincipalIcons.TrendingUp} title="Attendance Reports" subtitle="Class-wise and batch-wise attendance will use dedicated attendance endpoints when available." />
-                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            {classRows.map((row) => (
-                                <ReportRow key={row.label} title={row.label} value={`${row.students} students`} sub="Class-wise active count" />
-                            ))}
+                    {/* Class Metrics Table */}
+                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                        <SectionHeader icon={PrincipalIcons.TrendingUp} title="Cohort Analysis" subtitle="Standard-wise student distribution and average Quran memorization progress." />
+                        
+                        <div className="overflow-x-auto border border-slate-100 rounded-xl">
+                            <table className="w-full border-collapse text-left text-xs">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50 font-black text-slate-400 uppercase tracking-widest">
+                                        <th className="px-5 py-4">Standard / Class</th>
+                                        <th className="px-5 py-4 text-center">Student Count</th>
+                                        <th className="px-5 py-4">Hifz Average Progress</th>
+                                        <th className="px-5 py-4 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                    {classRows.map((row) => (
+                                        <tr key={row.label} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-5 py-4 font-black text-slate-800">{row.label}</td>
+                                            <td className="px-5 py-4 text-center">
+                                                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider">{row.students} students</span>
+                                            </td>
+                                            <td className="px-5 py-4 min-w-[200px]">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="w-9 font-black text-slate-800">{row.hifzAvg}%</span>
+                                                    <div className="flex-1 h-2 bg-slate-150 rounded-full overflow-hidden">
+                                                        <div className={`h-full rounded-full ${row.hifzAvg < 35 ? "bg-rose-500" : row.hifzAvg < 75 ? "bg-teal-500" : "bg-emerald-500"}`} style={{ width: `${row.hifzAvg}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-5 py-4 text-right">
+                                                <Link href={`/principal/students?standard=${row.label}`} className="text-[10px] font-black uppercase text-teal-600 hover:text-teal-800 tracking-wider">View Registry →</Link>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </section>
 
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeader icon={PrincipalIcons.BookOpen} title="Hifz Reports" subtitle="Class-wise progress and top performer signals." />
+                    {/* Hifz Trend graph */}
+                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                        <SectionHeader icon={PrincipalIcons.BookOpen} title="Hifz Progression Index" subtitle="Comparative analysis of average Hifz progression by class." />
                         <TrendChart data={classRows.map((row) => ({ label: row.label, value: row.hifzAvg }))} />
                     </section>
 
-                    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeader icon={PrincipalIcons.GraduationCap} title="Exam Reports" subtitle="Exam trends and subject analysis area." />
-                        <EmptyState title="Exam report endpoint pending" subtitle="Student exam details are available in each student profile. Class ranking needs a dedicated aggregate API." />
+                    {/* Exams placeholder card */}
+                    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                        <SectionHeader icon={PrincipalIcons.GraduationCap} title="Academic Assessment Overview" subtitle="Consolidated exam trends and subject analysis aggregates." />
+                        <EmptyState title="Exam statistics pending aggregate query" subtitle="Individual student mark transcripts are available in the respective student profile views. Class ranking aggregates will be available in future releases." />
                     </section>
 
-                    <section ref={mentorSectionRef} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeader icon={PrincipalIcons.BarChart3} title="Mentor Reports" subtitle="Reporting completion rate and attendance recording consistency." />
+                    {/* Mentor Performance Leaderboard Table */}
+                    <section ref={mentorSectionRef} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                        <SectionHeader icon={PrincipalIcons.BarChart3} title="Mentor Reporting Consistency" subtitle="Tracking submission rates and classroom attendance logs per assigned staff member." />
+                        
                         {mentorLoading ? (
-                            <div className="mt-4">
-                                <LoadingBlock label="Loading mentor reports" />
-                            </div>
+                            <LoadingBlock label="Loading mentor records" />
+                        ) : mentors.length === 0 ? (
+                            <EmptyState title="No teaching mentor reports available" subtitle="Leadership and administrative users are omitted from reporting metrics." />
                         ) : (
-                            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            {mentors.length === 0 && shouldLoadMentors ? (
-                                <EmptyState title="No teaching mentor reports" subtitle="Leadership and administrative users are excluded from mentor performance." />
-                            ) : mentors.map((mentor) => (
-                                <ReportRow
-                                    key={mentor.id}
-                                    title={mentor.name}
-                                    value={`${mentor.attendance?.marking_percentage || 0}%`}
-                                    sub={`${mentor.attendance?.marked_classes || 0}/${mentor.attendance?.required_classes || 0} classes marked`}
-                                />
-                            ))}
+                            <div className="overflow-x-auto border border-slate-100 rounded-xl mt-4">
+                                <table className="w-full border-collapse text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 bg-slate-50 font-black text-slate-400 uppercase tracking-widest">
+                                            <th className="px-5 py-4">Mentor Name</th>
+                                            <th className="px-5 py-4 text-center">Submission Rate</th>
+                                            <th className="px-5 py-4">Submission Ratio</th>
+                                            <th className="px-5 py-4 text-right">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                                        {mentors.map((mentor) => {
+                                            const pct = mentor.attendance?.marking_percentage || 0
+                                            return (
+                                                <tr key={mentor.id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-5 py-4 font-black text-slate-800">{mentor.name}</td>
+                                                    <td className="px-5 py-4 text-center">
+                                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider ${pct < 50 ? "bg-rose-50 text-rose-600 border border-rose-100" : pct < 90 ? "bg-amber-50 text-amber-600 border border-amber-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"}`}>{pct}%</span>
+                                                    </td>
+                                                    <td className="px-5 py-4 text-slate-500 font-bold">
+                                                        {mentor.attendance?.marked_classes || 0} of {mentor.attendance?.required_classes || 0} classes logged
+                                                    </td>
+                                                    <td className="px-5 py-4 text-right">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider ${pct >= 90 ? "text-emerald-600" : pct >= 50 ? "text-amber-500" : "text-rose-500"}`}>
+                                                            {pct >= 90 ? "Excellent" : pct >= 50 ? "Satisfactory" : "Needs Review"}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
                     </section>
                 </div>
             )}
         </PrincipalFrame>
-    )
-}
-
-function ReportRow({ title, value, sub }: { title: string; value: string; sub: string }) {
-    return (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="font-black">{title}</p>
-            <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
-            <p className="text-xs font-semibold text-slate-500">{sub}</p>
-        </div>
     )
 }

@@ -1,5 +1,11 @@
 import { db } from '../config/db';
 
+const HIFZ_SESSION_CACHE_TTL_MS = 5 * 60_000;
+const hifzSessionCache = new Map<string, { expiresAt: number; rows: any[] }>();
+const hifzRuleStandardCache = new Map<string, { expiresAt: number; rows: any[] }>();
+const hifzSessionInFlight = new Map<string, Promise<any[]>>();
+const hifzRuleStandardInFlight = new Map<string, Promise<any[]>>();
+
 export function normalizeHifzStandard(label: string): string {
     const l = String(label || '').trim();
     if (l === 'Hifz Only') return 'Hifz';
@@ -35,22 +41,70 @@ export function isHifzSchedule(schedule: any) {
     return String(schedule?.class_type || '').toLowerCase() === 'hifz';
 }
 
-export async function findHifzSessionForSchedule(schedule: any, academicYearId?: string | null) {
-    if (!academicYearId || !isHifzSchedule(schedule)) return null;
+async function getActiveHifzSessions(academicYearId: string) {
+    const key = `sessions:${academicYearId}`;
+    const cached = hifzSessionCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.rows;
 
-    const result = await db.query(
+    const existingRequest = hifzSessionInFlight.get(key);
+    if (existingRequest) return existingRequest;
+
+    const request = db.query(
         `SELECT id, name, code
          FROM hifz_sessions
          WHERE academic_year_id = $1
            AND is_active = true
          ORDER BY sort_order, name`,
         [academicYearId]
-    );
+    ).then((result) => {
+        hifzSessionCache.set(key, { expiresAt: Date.now() + HIFZ_SESSION_CACHE_TTL_MS, rows: result.rows });
+        return result.rows;
+    }).finally(() => {
+        hifzSessionInFlight.delete(key);
+    });
+
+    hifzSessionInFlight.set(key, request);
+    return request;
+}
+
+async function getRuleStandards(academicYearId: string, hifzSessionId: string, date?: string | null) {
+    const dateKey = date || 'current';
+    const key = `rules:${academicYearId}:${hifzSessionId}:${dateKey}`;
+    const cached = hifzRuleStandardCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.rows;
+
+    const existingRequest = hifzRuleStandardInFlight.get(key);
+    if (existingRequest) return existingRequest;
+
+    const request = db.query(
+        `SELECT DISTINCT standard
+         FROM hifz_session_rules
+         WHERE academic_year_id = $1
+           AND hifz_session_id = $2
+           AND is_active = true
+           AND ${dateWindowSql('hifz_session_rules')}
+         ORDER BY standard`,
+        [academicYearId, hifzSessionId, date || null]
+    ).then((result) => {
+        hifzRuleStandardCache.set(key, { expiresAt: Date.now() + HIFZ_SESSION_CACHE_TTL_MS, rows: result.rows });
+        return result.rows;
+    }).finally(() => {
+        hifzRuleStandardInFlight.delete(key);
+    });
+
+    hifzRuleStandardInFlight.set(key, request);
+    return request;
+}
+
+export async function findHifzSessionForSchedule(schedule: any, academicYearId?: string | null) {
+    if (!academicYearId || !isHifzSchedule(schedule)) return null;
+
+    const sessions = await getActiveHifzSessions(academicYearId);
 
     const scheduleName = norm(schedule.name);
     if (!scheduleName) return null;
 
-    return result.rows.find((session: any) => {
+    return sessions.find((session: any) => {
         const name = norm(session.name);
         const code = norm(session.code);
         return (name && scheduleName.includes(name)) || (code && scheduleName.includes(code));
@@ -66,18 +120,8 @@ export async function resolveHifzStandardsForSchedule(schedule: any, academicYea
     const session = await findHifzSessionForSchedule(schedule, academicYearId);
     if (!session) return { standards: fallbackStandards, usedRules: false, session: null };
 
-    const result = await db.query(
-        `SELECT DISTINCT standard
-         FROM hifz_session_rules
-         WHERE academic_year_id = $1
-           AND hifz_session_id = $2
-           AND is_active = true
-           AND ${dateWindowSql('hifz_session_rules')}
-         ORDER BY standard`,
-        [academicYearId, session.id, date || null]
-    );
-
-    const standards = result.rows.map((row: any) => String(row.standard || '').trim()).filter(Boolean);
+    const rows = await getRuleStandards(academicYearId, session.id, date);
+    const standards = rows.map((row: any) => String(row.standard || '').trim()).filter(Boolean);
     if (standards.length === 0) return { standards: fallbackStandards, usedRules: false, session };
     return { standards, usedRules: true, session };
 }

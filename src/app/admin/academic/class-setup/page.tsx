@@ -22,7 +22,7 @@ type ClassModel = {
     is_archived?: boolean
 }
 
-const standards = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "+1", "+2"]
+const standards = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "Plus One", "Plus Two"]
 const departments = [
     { value: "School", label: "School" },
     { value: "Madrassa", label: "Madrasa" },
@@ -90,7 +90,7 @@ export default function ClassSetupPage() {
 
     function startCreate(type = "School") {
         setEditing(null)
-        setForm({ type, standard: type === "Hifz" ? "Hifz" : "5th", section: type === "Hifz" ? "" : "A", name: type === "Hifz" ? "Cohort A" : "" })
+        setForm({ type, standard: type === "Hifz" ? "Hifz" : "5th", section: type === "Hifz" ? "" : "A", name: type === "Hifz" ? "Morning" : "" })
         setOpen(true)
     }
 
@@ -139,7 +139,7 @@ export default function ClassSetupPage() {
                     <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Academic</p>
                         <h1 className="mt-1 text-2xl font-black text-slate-950">Class Setup</h1>
-                        <p className="mt-1 text-sm font-medium text-slate-500">Create School classes, Madrasa classes, and optional Hifz cohorts. Hifz attendance sessions are managed separately.</p>
+                        <p className="mt-1 text-sm font-medium text-slate-500">Create School classes, Madrasa classes, and Hifz sessions (e.g. Morning, Noon, Subh). Students may be enrolled in multiple Hifz sessions per day.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Select value={yearId} onValueChange={setYearId}>
@@ -177,9 +177,9 @@ export default function ClassSetupPage() {
                                     <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
-                                                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{item.type === "Hifz" ? "Group" : "Class"}</p>
+                                                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{item.type === "Hifz" ? "Hifz Session" : "Class"}</p>
                                                 <h3 className="mt-1 text-lg font-black text-slate-900">{item.name}</h3>
-                                                <p className="text-sm font-semibold text-slate-500">{item.type === "Hifz" ? "Hifz Group" : `${item.standard}${item.section ? ` - Section ${item.section}` : ""}`}</p>
+                                                <p className="text-sm font-semibold text-slate-500">{item.type === "Hifz" ? "Hifz Session" : `${item.standard}${item.section ? ` - Section ${item.section}` : ""}`}</p>
                                             </div>
                                         </div>
                                         <div className="mt-4 flex gap-2">
@@ -192,7 +192,9 @@ export default function ClassSetupPage() {
                                     </div>
                                 ))}
                                 {(grouped[type] || []).length === 0 && (
-                                    <div className="rounded-lg border border-dashed border-slate-200 p-5 text-sm font-bold text-slate-400">No {type === "Madrassa" ? "Madrasa" : type} classes yet.</div>
+                                    <div className="rounded-lg border border-dashed border-slate-200 p-5 text-sm font-bold text-slate-400">
+                                        No {type === "Madrassa" ? "Madrasa" : type === "Hifz" ? "Hifz sessions" : "classes"} yet.
+                                    </div>
                                 )}
                             </div>
                         </section>
@@ -213,8 +215,9 @@ export default function ClassSetupPage() {
                         </div>
                         {form.type === "Hifz" ? (
                             <div className="grid gap-2">
-                                <Label>Group Name</Label>
-                                <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Cohort A, Revision Group" />
+                                <Label>Session Name</Label>
+                                <p className="text-xs text-slate-500">Name this time-slot session, e.g. <em>Morning</em>, <em>Noon</em>, <em>Subh</em>, <em>Evening</em>.</p>
+                                <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Morning, Noon, Subh…" />
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">

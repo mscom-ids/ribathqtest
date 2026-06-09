@@ -148,13 +148,9 @@ export default function StaffPage() {
 
     useEffect(() => {
         setMounted(true)
-        const token = localStorage.getItem('auth_token')
-        if (token) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]))
-                setUserRole(payload.role || "")
-            } catch {}
-        }
+        api.get('/auth/me')
+            .then((res) => setUserRole(res.data?.user?.role || ""))
+            .catch(() => {})
         loadStaff()
     }, [])
 

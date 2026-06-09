@@ -1,3 +1,5 @@
+import { cachedResult, makeCacheKey } from './server-cache';
+
 type Queryable = {
     query: (text: string, params?: any[]) => Promise<{ rows: any[] }>;
 };
@@ -6,6 +8,8 @@ type StudentForAttendanceReport = {
     adm_no: string;
     standard?: string | null;
     attendance_standard?: string | null;
+    report_start_date?: string | null;
+    report_end_date?: string | null;
 };
 
 export type AttendanceSessionSummary = {
@@ -201,7 +205,27 @@ function formatAttendanceLabel(summary: StudentAttendanceSummary) {
     return parts.join(', ');
 }
 
-export async function getStudentAttendanceSummaries(
+function attendanceStudentsFingerprint(students: StudentForAttendanceReport[]) {
+    const text = students
+        .map(student => [
+            student.adm_no,
+            student.standard || '',
+            student.attendance_standard || '',
+            student.report_start_date || '',
+            student.report_end_date || '',
+        ].join(':'))
+        .sort()
+        .join('|');
+
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `${students.length}:${(hash >>> 0).toString(36)}`;
+}
+
+async function computeStudentAttendanceSummaries(
     db: Queryable,
     students: StudentForAttendanceReport[],
     startDate: string,
@@ -280,6 +304,8 @@ export async function getStudentAttendanceSummaries(
             if (!scheduleAppliesToDate(schedule, dateStr)) continue;
 
             for (const [studentId, student] of studentById) {
+                if (student.report_start_date && dateStr < student.report_start_date) continue;
+                if (student.report_end_date && dateStr > student.report_end_date) continue;
                 if (!scheduleAppliesToStudent(schedule, student)) continue;
 
                 const summary = summaries.get(studentId) || emptySummary();
@@ -373,4 +399,25 @@ export async function getStudentAttendanceSummaries(
     });
 
     return summaries;
+}
+
+export async function getStudentAttendanceSummaries(
+    db: Queryable,
+    students: StudentForAttendanceReport[],
+    startDate: string,
+    endDate: string,
+    classType?: string
+) {
+    if (students.length === 0) return new Map<string, StudentAttendanceSummary>();
+
+    return cachedResult(
+        makeCacheKey('attendance:student-summaries', {
+            startDate,
+            endDate,
+            classType: classType || 'all',
+            students: attendanceStudentsFingerprint(students),
+        }),
+        60_000,
+        () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType)
+    );
 }

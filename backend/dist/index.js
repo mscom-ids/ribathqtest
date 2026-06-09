@@ -41,6 +41,7 @@ const delegations_routes_1 = __importDefault(require("./routes/delegations.route
 const access_control_routes_1 = __importDefault(require("./routes/access_control.routes"));
 const academic_history_routes_1 = __importDefault(require("./routes/academic_history.routes"));
 const hifz_session_rules_routes_1 = __importDefault(require("./routes/hifz_session_rules.routes"));
+const yearly_report_routes_1 = __importDefault(require("./routes/yearly_report.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 // ── Core middleware ──
@@ -109,6 +110,7 @@ app.use('/api/delegations', delegations_routes_1.default);
 app.use('/api/access-control', access_control_routes_1.default);
 app.use('/api/academic-history', academic_history_routes_1.default);
 app.use('/api/hifz-session-rules', hifz_session_rules_routes_1.default);
+app.use('/api/yearly-report', yearly_report_routes_1.default);
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
 });

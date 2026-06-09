@@ -289,8 +289,6 @@ export default function ParentDashboard() {
         } catch {
             // Local auth state is cleared below.
         }
-        localStorage.removeItem("auth_token")
-        document.cookie = "auth_token=; Max-Age=0; path=/"
         router.push("/login")
     }
 

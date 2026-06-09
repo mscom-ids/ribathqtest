@@ -21,6 +21,8 @@ router.get('/staff', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), s
 router.get('/export', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), students_controller_1.exportStudents);
 // GET /api/students/download-excel
 router.get('/download-excel', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), students_controller_1.downloadStudentsExcel);
+// GET /api/students/inside-outside-summary
+router.get('/inside-outside-summary', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), students_controller_1.getStudentInsideOutsideSummary);
 // GET /api/students
 router.get('/', (0, auth_middleware_1.requireRole)(STUDENT_VIEW_ROLES), students_controller_1.getAllStudents);
 // Disciplinary Records

@@ -1,27 +1,33 @@
-const { Client } = require('pg');
-require('dotenv').config();
+const { Pool } = require('pg');
+const dotenv = require('dotenv');
+const path = require('path');
 
-const connString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/postgres';
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+const postgresUrl = process.env.DATABASE_URL;
 
-async function main() {
-    const c = new Client({ connectionString: connString, ssl: { rejectUnauthorized: false } });
-    await c.connect();
-    console.log('Connected.');
+const pool = new Pool({
+  connectionString: postgresUrl,
+  ssl: {
+    rejectUnauthorized: false
+  },
+  connectionTimeoutMillis: 15000,
+});
 
-    const totStudents = await c.query("SELECT COUNT(*) FROM students");
-    console.log(`Total students in DB: ${totStudents.rows[0].count}`);
-
-    const uniqueStds = await c.query("SELECT DISTINCT standard FROM students");
-    console.log('\n--- Unique values in students.standard ---');
-    uniqueStds.rows.forEach(r => console.log(`Standard: "${r.standard}"`));
-
-    const samples = await c.query("SELECT adm_no, name, standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students LIMIT 5");
-    console.log('\n--- Sample students ---');
-    samples.rows.forEach(r => {
-        console.log(`Adm: ${r.adm_no} | Name: ${r.name} | Standard: "${r.standard}" | Mentors (Hifz: ${r.hifz_mentor_id}, School: ${r.school_mentor_id}, Madrasa: ${r.madrasa_mentor_id})`);
-    });
-
-    await c.end();
+async function run() {
+  const client = await pool.connect();
+  try {
+    const stds = await client.query('SELECT DISTINCT standard FROM students');
+    const madrasaStds = await client.query('SELECT DISTINCT madrassa_standard FROM students');
+    const hifzStds = await client.query('SELECT DISTINCT hifz_standard FROM students');
+    console.log('Students standard:', stds.rows);
+    console.log('Students madrassa_standard:', madrasaStds.rows);
+    console.log('Students hifz_standard:', hifzStds.rows);
+  } catch (err) {
+    console.error('Error executing query:', err);
+  } finally {
+    client.release();
+    await pool.end();
+  }
 }
 
-main().catch(console.error);
+run();

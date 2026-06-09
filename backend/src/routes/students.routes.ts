@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllStudents, getStudentById, getStudentCounts, createStudent, updateStudent, exportStudents, downloadStudentsExcel } from '../controllers/students.controller';
+import { getAllStudents, getStudentById, getStudentCounts, getStudentInsideOutsideSummary, createStudent, updateStudent, exportStudents, downloadStudentsExcel } from '../controllers/students.controller';
 import { getNextStudentId, getStaff } from '../controllers/students.helpers';
 import { getDisciplinaryRecords, createDisciplinaryRecord, deleteDisciplinaryRecord } from '../controllers/academics.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
@@ -26,6 +26,9 @@ router.get('/export', requireRole(STUDENT_MANAGE_ROLES), exportStudents);
 
 // GET /api/students/download-excel
 router.get('/download-excel', requireRole(STUDENT_MANAGE_ROLES), downloadStudentsExcel);
+
+// GET /api/students/inside-outside-summary
+router.get('/inside-outside-summary', requireRole(STUDENT_MANAGE_ROLES), getStudentInsideOutsideSummary);
 
 // GET /api/students
 router.get('/', requireRole(STUDENT_VIEW_ROLES), getAllStudents);

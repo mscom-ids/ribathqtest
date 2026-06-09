@@ -59,6 +59,88 @@ const getDetectedLogDays = async (startDate, endDate) => {
            AND entry_date <= $2::date`, [startDate, endDate]);
     return Number(result.rows[0]?.log_days || 0);
 };
+const VALID_HIFZ_MODES = new Set(['New Verses', 'Recent Revision', 'Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)']);
+const VALID_JUZ_PORTIONS = new Set(['Full', '1st Half', '2nd Half', 'Q1', 'Q2', 'Q3', 'Q4']);
+function toNullableNumber(value) {
+    if (value === '' || value === null || value === undefined)
+        return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+}
+function hifzValidationError(message) {
+    const err = new Error(message);
+    err.statusCode = 400;
+    return err;
+}
+function normalizeHifzLogInput(log, index = 0) {
+    const label = `Log ${index + 1}`;
+    const mode = String(log?.mode || '').trim();
+    const studentId = String(log?.student_id || '').trim();
+    const entryDate = String(log?.entry_date || '').slice(0, 10);
+    const juzNumber = toNullableNumber(log?.juz_number);
+    const startVerse = toNullableNumber(log?.start_v);
+    const endVerse = toNullableNumber(log?.end_v);
+    const startPage = toNullableNumber(log?.start_page);
+    const endPage = toNullableNumber(log?.end_page);
+    const juzPortion = log?.juz_portion ? String(log.juz_portion).trim() : null;
+    if (!studentId)
+        throw hifzValidationError(`${label}: student is required`);
+    if (!entryDate)
+        throw hifzValidationError(`${label}: entry date is required`);
+    if (!VALID_HIFZ_MODES.has(mode))
+        throw hifzValidationError(`${label}: invalid Hifz mode`);
+    if (['New Verses', 'Recent Revision'].includes(mode)) {
+        if (!log?.surah_name)
+            throw hifzValidationError(`${label}: Surah is required`);
+        if (!startVerse || Number.isNaN(startVerse))
+            throw hifzValidationError(`${label}: start verse is required`);
+        if (!endVerse || Number.isNaN(endVerse))
+            throw hifzValidationError(`${label}: end verse is required`);
+        if (startVerse > endVerse)
+            throw hifzValidationError(`${label}: end verse must be after start verse`);
+    }
+    if (mode.startsWith('Juz Revision')) {
+        if (!juzNumber || Number.isNaN(juzNumber) || juzNumber < 1 || juzNumber > 30) {
+            throw hifzValidationError(`${label}: Juz number must be between 1 and 30`);
+        }
+        if (!juzPortion || !VALID_JUZ_PORTIONS.has(juzPortion)) {
+            throw hifzValidationError(`${label}: valid Juz portion is required`);
+        }
+    }
+    return {
+        student_id: studentId,
+        usthad_id: log?.usthad_id || null,
+        entry_date: entryDate,
+        mode,
+        surah_name: log?.surah_name || null,
+        start_v: Number.isNaN(startVerse) ? null : startVerse,
+        end_v: Number.isNaN(endVerse) ? null : endVerse,
+        start_page: Number.isNaN(startPage) ? null : startPage,
+        end_page: Number.isNaN(endPage) ? null : endPage,
+        juz_number: Number.isNaN(juzNumber) ? null : juzNumber,
+        juz_portion: juzPortion,
+    };
+}
+function hifzLogErrorMessage(err) {
+    if (err?.statusCode)
+        return err.message;
+    if (err?.code === '23503') {
+        if (err.constraint?.includes('student'))
+            return 'Student not found for this Hifz log.';
+        if (err.constraint?.includes('usthad'))
+            return 'Selected Hifz mentor/staff was not found.';
+        return 'Referenced Hifz log data was not found.';
+    }
+    if (err?.code === '23514') {
+        if (err.constraint === 'hifz_logs_juz_number_check')
+            return 'Juz number must be between 1 and 30.';
+        if (err.constraint === 'hifz_logs_juz_portion_check')
+            return 'Invalid Juz portion.';
+        if (err.constraint === 'hifz_logs_mode_check')
+            return 'Invalid Hifz log mode.';
+    }
+    return err?.message || 'Failed to save Hifz log';
+}
 const getMonthlyClassDaysSetting = async (reportMonth) => {
     const result = await db_1.db.query(`SELECT expected_class_days
          FROM hifz_monthly_report_settings
@@ -220,13 +302,15 @@ const getMaxJuzForStudent = async (req, res) => {
 exports.getMaxJuzForStudent = getMaxJuzForStudent;
 const createHifzLog = async (req, res) => {
     try {
-        const { student_id, usthad_id, entry_date, mode, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion } = req.body;
-        await enforceHifzRecordingAccess(req, entry_date);
+        const log = normalizeHifzLogInput(req.body);
+        await enforceHifzRecordingAccess(req, log.entry_date);
         const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [student_id, usthad_id || null, entry_date, mode,
-            surah_name || null, start_v || null, end_v || null, start_page || null,
-            end_page || null, juz_number || null, juz_portion || null]);
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [
+            log.student_id, log.usthad_id, log.entry_date, log.mode,
+            log.surah_name, log.start_v, log.end_v, log.start_page,
+            log.end_page, log.juz_number, log.juz_portion,
+        ]);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
         res.json({ success: true, log: result.rows[0] });
@@ -235,7 +319,7 @@ const createHifzLog = async (req, res) => {
         console.error('Error creating hifz log:', err);
         res.status(err.statusCode || 500).json({
             success: false,
-            error: err.statusCode ? err.message : 'Failed to create hifz log',
+            error: hifzLogErrorMessage(err),
             access_policy: err.accessPolicy,
         });
     }
@@ -271,12 +355,13 @@ const updateHifzLog = async (req, res) => {
 exports.updateHifzLog = updateHifzLog;
 const bulkCreateHifzLogs = async (req, res) => {
     try {
-        const { logs } = req.body;
-        if (!Array.isArray(logs) || logs.length === 0) {
+        const { logs: rawLogs } = req.body;
+        if (!Array.isArray(rawLogs) || rawLogs.length === 0) {
             return res.status(400).json({ success: false, error: 'logs array is required' });
         }
+        const logs = rawLogs.map((log, index) => normalizeHifzLogInput(log, index));
         const uniqueEntryDates = [
-            ...new Set(logs.map((log) => String(log.entry_date || '').slice(0, 10)).filter(Boolean)),
+            ...new Set(logs.map((log) => log.entry_date).filter(Boolean)),
         ];
         for (const entryDate of uniqueEntryDates) {
             await enforceHifzRecordingAccess(req, entryDate);
@@ -330,7 +415,7 @@ const bulkCreateHifzLogs = async (req, res) => {
         console.error('Error bulk creating hifz logs:', err);
         res.status(err.statusCode || 500).json({
             success: false,
-            error: err.statusCode ? err.message : 'Failed to bulk create hifz logs',
+            error: hifzLogErrorMessage(err),
             access_policy: err.accessPolicy,
         });
     }

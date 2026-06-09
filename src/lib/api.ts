@@ -18,16 +18,12 @@ const api = axios.create({
   withCredentials: true, // send httpOnly cookies with cross-origin requests
 });
 
-// Request interceptor to add auth + delegation tokens
+// Auth is cookie-only in the browser: the backend sets an httpOnly auth_token
+// cookie and axios sends it through withCredentials. Avoiding localStorage keeps
+// the JWT out of JavaScript reach if an XSS bug appears.
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      // Primary: attach JWT as Authorization Bearer (works cross-domain, no cookie issues)
-      const authToken = localStorage.getItem('auth_token');
-      if (authToken) {
-        config.headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
       // Attach server-issued delegation token if active
       const delegationToken = sessionStorage.getItem('delegationToken');
       if (delegationToken) {
@@ -60,11 +56,13 @@ api.interceptors.response.use(
     if (error.response && error.response.status === 401) {
       // Token is invalid or expired — clear all auth state
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
         sessionStorage.removeItem('delegationToken');
         sessionStorage.removeItem('delegationMentorName');
         sessionStorage.removeItem('delegationStudentName');
-        document.cookie = 'auth_token=; path=/; max-age=0';
+        fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          credentials: 'include',
+        }).catch(() => {});
         if (!window.location.pathname.startsWith('/login')) {
           window.location.href = '/login';
         }

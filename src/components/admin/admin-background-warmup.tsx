@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { cachedGet } from "@/lib/api-cache"
 
 type WarmupTask = {
@@ -14,7 +14,10 @@ type NetworkAwareNavigator = Navigator & {
     connection?: { saveData?: boolean }
 }
 
-const WARMUP_DISABLED = process.env.NEXT_PUBLIC_DISABLE_ADMIN_WARMUP === "true"
+const WARMUP_DISABLED = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DISABLE_ADMIN_WARMUP === "true"
+const WARMUP_EXCLUDED_PATHS = [
+    "/admin/academic/enrollments",
+]
 
 const ROUTES_TO_PREFETCH = [
     "/admin/students",
@@ -58,6 +61,7 @@ function buildWarmupTasks(): WarmupTask[] {
 
     return [
         { url: "/students/counts", ttlMs: 60_000 },
+        { url: "/students", params: { light: "true", status: "active", limit: 15, offset: 0, sort: "name", count: "false" }, ttlMs: 60_000 },
         { url: "/staff", ttlMs: 5 * 60_000 },
         { url: "/events", ttlMs: 60_000 },
         { url: "/classes/academic-years", ttlMs: 5 * 60_000 },
@@ -68,15 +72,13 @@ function buildWarmupTasks(): WarmupTask[] {
         { url: "/attendance/daily-stats", params: { start_date: dates.today, end_date: dates.today }, ttlMs: 30_000 },
         { url: "/chat/conversations", ttlMs: 60_000 },
         { url: "/delegations/admin/all", params: { pending_only: "true", limit: 5 }, ttlMs: 60_000 },
-        { url: "/hifz/progress-summary", ttlMs: 5 * 60_000 },
-        { url: "/reports/students", params: { month: dates.month, year: dates.year }, ttlMs: 60_000 },
-        { url: "/reports/mentors", params: { start_date: dates.startDate, end_date: dates.endDate }, ttlMs: 30_000 },
         { url: "/access-control/mentor-policies", ttlMs: 60_000 },
     ]
 }
 
-function shouldSkipWarmup() {
+function shouldSkipWarmup(pathname?: string | null) {
     if (WARMUP_DISABLED) return true
+    if (pathname && WARMUP_EXCLUDED_PATHS.some(path => pathname.startsWith(path))) return true
     if (document.visibilityState === "hidden") return true
 
     const connection = (navigator as NetworkAwareNavigator).connection
@@ -125,14 +127,16 @@ async function runWarmupQueue(tasks: WarmupTask[], concurrency = 2) {
 
 export function AdminBackgroundWarmup() {
     const router = useRouter()
+    const pathname = usePathname()
     const hasStarted = useRef(false)
 
     useEffect(() => {
         if (hasStarted.current || typeof window === "undefined") return
+        if (shouldSkipWarmup(pathname)) return
         hasStarted.current = true
 
         const cancelRoutePrefetch = scheduleAfterIdle(() => {
-            if (shouldSkipWarmup()) return
+            if (shouldSkipWarmup(pathname)) return
 
             ROUTES_TO_PREFETCH.forEach((route, index) => {
                 window.setTimeout(() => router.prefetch(route), index * 120)
@@ -140,7 +144,7 @@ export function AdminBackgroundWarmup() {
         }, 1_000)
 
         const cancelDataWarmup = scheduleAfterIdle(() => {
-            if (shouldSkipWarmup()) return
+            if (shouldSkipWarmup(pathname)) return
 
             const tasks = buildWarmupTasks()
             const firstBatch = tasks.slice(0, 11)
@@ -148,7 +152,7 @@ export function AdminBackgroundWarmup() {
 
             void runWarmupQueue(firstBatch, 2).then(() => {
                 window.setTimeout(() => {
-                    if (!shouldSkipWarmup()) void runWarmupQueue(reportBatch, 1)
+                    if (!shouldSkipWarmup(pathname)) void runWarmupQueue(reportBatch, 1)
                 }, 2_500)
             })
         }, 1_600)
@@ -157,7 +161,7 @@ export function AdminBackgroundWarmup() {
             cancelRoutePrefetch()
             cancelDataWarmup()
         }
-    }, [router])
+    }, [pathname, router])
 
     return null
 }

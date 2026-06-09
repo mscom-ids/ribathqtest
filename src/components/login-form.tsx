@@ -103,11 +103,6 @@ export default function LoginForm() {
                 throw new Error(data.error || "Failed to login")
             }
 
-            if (data.token) {
-                localStorage.setItem("auth_token", data.token)
-                document.cookie = `auth_token=${data.token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`
-            }
-
             window.location.href = getRedirectPathForRole(profile.role)
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error("Failed to login")

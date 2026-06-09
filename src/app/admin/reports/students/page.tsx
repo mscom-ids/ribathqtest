@@ -3,11 +3,23 @@
 import { useState, useEffect } from "react"
 import { Download, Search, Loader2, ArrowLeft, GraduationCap, Calendar, CheckCircle, XCircle, Clock } from "lucide-react"
 import { cachedGet } from "@/lib/api-cache"
+import api from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 
+type AcademicYear = {
+    id: string
+    name: string
+    start_date: string
+    end_date: string
+    is_current?: boolean
+}
+
 export default function StudentReportsPage() {
     const [data, setData] = useState<any[]>([])
+    const [years, setYears] = useState<AcademicYear[]>([])
+    const [selectedAcademicYear, setSelectedAcademicYear] = useState("")
+    const [reportMode, setReportMode] = useState<"academic-year" | "monthly">("academic-year")
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
     const [targetMonth, setTargetMonth] = useState((new Date().getMonth() + 1).toString())
@@ -16,13 +28,32 @@ export default function StudentReportsPage() {
     const router = useRouter()
 
     useEffect(() => {
+        api.get("/academic-history/years")
+            .then((res) => {
+                const rows = res.data?.data || []
+                setYears(rows)
+                setSelectedAcademicYear(rows.find((year: AcademicYear) => year.is_current)?.id || rows[0]?.id || "")
+            })
+            .catch(() => {})
+    }, [])
+
+    useEffect(() => {
         fetchReports()
-    }, [targetMonth, targetYear])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetMonth, targetYear, reportMode, selectedAcademicYear])
 
     const fetchReports = async () => {
         setLoading(true)
         try {
-            const res = await cachedGet('/reports/students', { month: targetMonth, year: targetYear }, 60_000)
+            const selectedYear = years.find((year) => year.id === selectedAcademicYear)
+            const params = reportMode === "academic-year" && selectedYear
+                ? {
+                    academic_year_id: selectedYear.id,
+                    start_date: selectedYear.start_date?.slice(0, 10),
+                    end_date: selectedYear.end_date?.slice(0, 10),
+                }
+                : { month: targetMonth, year: targetYear }
+            const res = await cachedGet('/reports/students', params, 60_000)
             if (res.data?.success) setData(res.data.data)
         } catch (error) {
             toast({ title: "Error", description: "Failed to load student reports", variant: "destructive" })
@@ -43,7 +74,7 @@ export default function StudentReportsPage() {
             return
         }
 
-        const headers = ["ID", "Name", "Standard", "Batch", "Status", "Att-Classes Uncancelled", "Att-Classes Scheduled", "Att-Present", "Att-Absent", "Att-Late", "Att-Leave", "Hifz Progress", "Latest Exam Score"]
+        const headers = ["ID", "Name", "Standard", "Batch", "Status", "Report From", "Report To", "Att-Classes Uncancelled", "Att-Classes Scheduled", "Att-Present", "Att-Absent", "Att-Late", "Att-Leave", "Hifz Progress", "Latest Exam Score"]
         const csvRows = [headers.join(",")]
 
         filtered.forEach(s => {
@@ -53,6 +84,8 @@ export default function StudentReportsPage() {
                 `"${s.standard || 'N/A'}"`,
                 s.batch_year || 'N/A',
                 s.status || 'Active',
+                s.report_window?.effective_start_date || '',
+                s.report_window?.effective_end_date || '',
                 s.attendance?.total_classes || 0,
                 s.attendance?.planned_classes || 0,
                 s.attendance?.present || 0,
@@ -92,15 +125,34 @@ export default function StudentReportsPage() {
                         </div>
                         Student Reports
                     </h1>
-                    <p className="text-slate-500 font-medium mt-1">Comprehensive monthly snapshot of student performance & attendance</p>
+                    <p className="text-slate-500 font-medium mt-1">Academic-year records with admission and exit dates respected</p>
                 </div>
 
-                <div className="flex gap-4">
-                    <select value={targetMonth} onChange={e => setTargetMonth(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-36 cursor-pointer hover:border-cyan-400 focus:border-cyan-500 transition-colors">
-                        {months.map((m, i) => (
-                            <option key={i} value={i + 1}>{m}</option>
-                        ))}
+                <div className="flex flex-wrap gap-3">
+                    <select value={reportMode} onChange={e => setReportMode(e.target.value as "academic-year" | "monthly")} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-40 cursor-pointer hover:border-cyan-400 focus:border-cyan-500 transition-colors">
+                        <option value="academic-year">Academic Year</option>
+                        <option value="monthly">Monthly</option>
                     </select>
+                    {reportMode === "academic-year" ? (
+                        <select value={selectedAcademicYear} onChange={e => setSelectedAcademicYear(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-44 cursor-pointer hover:border-cyan-400 focus:border-cyan-500 transition-colors">
+                            {years.map((year) => (
+                                <option key={year.id} value={year.id}>{year.name}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <>
+                            <select value={targetMonth} onChange={e => setTargetMonth(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-36 cursor-pointer hover:border-cyan-400 focus:border-cyan-500 transition-colors">
+                                {months.map((m, i) => (
+                                    <option key={i} value={i + 1}>{m}</option>
+                                ))}
+                            </select>
+                            <select value={targetYear} onChange={e => setTargetYear(e.target.value)} className="bg-white border border-slate-200 text-sm font-bold text-slate-700 px-4 py-2.5 rounded-xl shadow-sm outline-none w-28 cursor-pointer hover:border-cyan-400 focus:border-cyan-500 transition-colors">
+                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </>
+                    )}
 
                     <button onClick={handleDownloadExcel} className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-[14px] px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
                         <Download className="h-4 w-4" />
@@ -165,6 +217,11 @@ export default function StudentReportsPage() {
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col">
                                                     <span className="text-[14px] font-extrabold text-slate-800">{s.name}</span>
+                                                    {s.report_window && (
+                                                        <span className="mt-1 text-[11px] font-semibold text-slate-400">
+                                                            {s.report_window.effective_start_date} to {s.report_window.effective_end_date}
+                                                        </span>
+                                                    )}
                                                     <span className="text-[12px] font-semibold text-slate-500">{s.adm_no} • {s.standard || 'No Std'}</span>
                                                 </div>
                                             </td>

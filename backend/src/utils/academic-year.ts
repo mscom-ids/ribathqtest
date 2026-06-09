@@ -1,3 +1,5 @@
+import { cachedResult } from './server-cache';
+
 type Queryable = {
   query: (text: string, params?: any[]) => Promise<{ rows: any[] }>;
 };
@@ -23,14 +25,20 @@ export async function getAcademicYearContext(
 ): Promise<AcademicYearContext> {
   const requested = getAcademicYearParam(requestedAcademicYearId);
 
-  const currentRes = await db.query(
-    `SELECT id
-     FROM academic_years
-     WHERE is_current = true
-     ORDER BY start_date DESC
-     LIMIT 1`
+  const currentAcademicYearId = await cachedResult(
+    'academic-year:current',
+    5 * 60_000,
+    async () => {
+      const currentRes = await db.query(
+        `SELECT id
+         FROM academic_years
+         WHERE is_current = true
+         ORDER BY start_date DESC
+         LIMIT 1`
+      );
+      return currentRes.rows[0]?.id || null;
+    }
   );
-  const currentAcademicYearId = currentRes.rows[0]?.id || null;
   const academicYearId = requested || currentAcademicYearId;
 
   if (!academicYearId) {

@@ -42,13 +42,15 @@ export default function TimeTableSetupPage() {
 
     const availableClasses = classes.filter(item => item.type === tabToClassType(activeTab))
 
-    async function fetchData(force = false) {
+    async function fetchData(force = false, yearOverride?: string) {
+        const yearId = yearOverride ?? academicYearId
+        if (!yearId) return
         setLoading(true)
         try {
             const [schedRes, breaksRes] = await Promise.all([
                 force
-                    ? api.get('/attendance/schedules', { params: { academic_year_id: academicYearId || undefined } })
-                    : cachedGet('/attendance/schedules', { academic_year_id: academicYearId || undefined }, 5 * 60_000),
+                    ? api.get('/attendance/schedules', { params: { academic_year_id: yearId } })
+                    : cachedGet('/attendance/schedules', { academic_year_id: yearId }, 5 * 60_000),
                 force ? api.get('/attendance/breaks') : cachedGet('/attendance/breaks', undefined, 5 * 60_000)
             ])
             if (schedRes.data.success) setSchedules(schedRes.data.data)
@@ -81,9 +83,13 @@ export default function TimeTableSetupPage() {
             })
             .catch(() => {})
         queueMicrotask(async () => {
+            // fetchAcademicSetup returns the resolved year; pass it directly to
+            // fetchData so we don't hit the stale-state race condition on first load.
             const selectedYear = await fetchAcademicSetup()
-            if (selectedYear) setAcademicYearId(selectedYear)
-            void fetchData()
+            if (selectedYear) {
+                setAcademicYearId(selectedYear)
+                void fetchData(true, selectedYear)
+            }
         })
     }, [])
 
@@ -92,7 +98,7 @@ export default function TimeTableSetupPage() {
         api.get('/classes', { params: { academic_year_id: academicYearId } })
             .then(res => setClasses(res.data?.data || []))
             .catch(() => setClasses([]))
-        void fetchData(true)
+        void fetchData(true, academicYearId)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [academicYearId])
 

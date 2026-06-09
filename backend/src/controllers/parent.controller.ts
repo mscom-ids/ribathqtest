@@ -401,7 +401,6 @@ export const parentLogin = async (req: Request, res: Response) => {
 
         res.json({
             success: true,
-            token,
             user: {
                 role: 'parent',
                 student_id: student.adm_no,

@@ -3,25 +3,26 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import Cookies from "js-cookie"
 import {
     LayoutDashboard, Users, Calendar, UserCog,
     Settings, HelpCircle, LogOut, DoorOpen, BookOpen,
     Landmark, BookMarked, School, GraduationCap,
-    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText, ShieldCheck
+    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText
 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-function decodeUser(token: string) {
-    try {
-        const p = JSON.parse(atob(token.split('.')[1]))
-        const roles: Record<string, string> = {
-            admin: 'Administrator', principal: 'Principal',
-            vice_principal: 'Vice Principal', controller: 'Controller', staff: 'Mentor'
-        }
-        return { name: p.name || 'Admin', role: roles[p.role] || 'Staff' }
-    } catch { return { name: 'Admin', role: 'Administrator' } }
+function roleLabel(role?: string) {
+    const roles: Record<string, string> = {
+        admin: 'Administrator',
+        principal: 'Principal',
+        vice_principal: 'Vice Principal',
+        controller: 'Controller',
+        staff: 'Mentor',
+        usthad: 'Usthad',
+        mentor: 'Mentor',
+    }
+    return roles[role || ''] || 'Staff'
 }
 
 type SimpleItem = {
@@ -40,13 +41,6 @@ const menuLinks: NavEntry[] = [
     { href: "/admin/students", label: "Students",  icon: Users,          group: ["/admin/students"] },
     { href: "/admin/alumni",   label: "Alumni",    icon: GraduationCap },
     { href: "/admin/calendar", label: "Calendar",  icon: Calendar },
-    {
-        label: "Time Table", icon: BookMarked, group: ["/admin/timetable"],
-        children: [
-            { href: "/admin/timetable/setup",     label: "Time Table Setup" },
-            { href: "/admin/timetable/view",      label: "Time Table View" },
-        ],
-    },
     { href: "/admin/student-attendance", label: "Attendance Dashboard", icon: ClipboardCheck, group: ["/admin/student-attendance"] },
     { href: "/admin/staff",    label: "Staff",     icon: UserCog },
     { href: "/admin/chat",     label: "Chat",      icon: MessageCircle },
@@ -54,14 +48,17 @@ const menuLinks: NavEntry[] = [
 
 const academicLinks: NavEntry[] = [
     {
-        label: "Academic", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable"],
+        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
         children: [
+            { href: "/admin/academic", label: "Start Here" },
+            { href: "/admin/academic-history", label: "Year Overview" },
             { href: "/admin/setup/academic-years", label: "Academic Years" },
             { href: "/admin/academic/class-setup", label: "Class Setup" },
-            { href: "/admin/academic/enrollments", label: "Student Enrollments" },
+            { href: "/admin/academic/enrollments", label: "Student Placement" },
+            { href: "/admin/timetable/setup", label: "Timetable Setup" },
             { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
-            { href: "/admin/promotions", label: "Promotion" },
-            { href: "/admin/timetable/setup", label: "Time Table" },
+            { href: "/admin/promotions", label: "Start New Year" },
+            { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },
     {
@@ -102,8 +99,7 @@ const managementLinks: NavEntry[] = [
 ]
 
 const generalLinks: SimpleItem[] = [
-    { href: "/admin/setup/academic-years", label: "Settings", icon: Settings },
-    { href: "/admin/academic-history", label: "History Layer", icon: ShieldCheck },
+    { href: "/admin/mentor-access", label: "Settings", icon: Settings },
     { href: "#help",                       label: "Help",     icon: HelpCircle },
 ]
 
@@ -111,12 +107,6 @@ const principalMenuLinks: NavEntry[] = [
     { href: "/admin",          label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/students", label: "Students",  icon: Users, group: ["/admin/students"] },
     { href: "/admin/calendar", label: "Calendar",  icon: Calendar },
-    {
-        label: "Time Table", icon: BookMarked, group: ["/admin/timetable"],
-        children: [
-            { href: "/admin/timetable/view", label: "Time Table View" },
-        ],
-    },
     { href: "/admin/student-attendance", label: "Attendance Dashboard", icon: ClipboardCheck, group: ["/admin/student-attendance"] },
     { href: "/admin/staff", label: "Mentors", icon: UserCog },
     { href: "/admin/chat", label: "Chat", icon: MessageCircle },
@@ -124,14 +114,17 @@ const principalMenuLinks: NavEntry[] = [
 
 const principalAcademicLinks: NavEntry[] = [
     {
-        label: "Academic", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable"],
+        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
         children: [
+            { href: "/admin/academic", label: "Start Here" },
+            { href: "/admin/academic-history", label: "Year Overview" },
             { href: "/admin/setup/academic-years", label: "Academic Years" },
             { href: "/admin/academic/class-setup", label: "Class Setup" },
-            { href: "/admin/academic/enrollments", label: "Student Enrollments" },
+            { href: "/admin/academic/enrollments", label: "Student Placement" },
+            { href: "/admin/timetable/setup", label: "Timetable Setup" },
             { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
-            { href: "/admin/promotions", label: "Promotion" },
-            { href: "/admin/timetable/setup", label: "Time Table" },
+            { href: "/admin/promotions", label: "Start New Year" },
+            { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },
     {
@@ -171,7 +164,6 @@ const principalManagementLinks: NavEntry[] = [
 ]
 
 const principalGeneralLinks: SimpleItem[] = [
-    { href: "/admin/academic-history", label: "History Layer", icon: ShieldCheck },
     { href: "#help", label: "Help", icon: HelpCircle },
 ]
 
@@ -200,7 +192,7 @@ export function AdminSidebar({
     const pathname = usePathname()
     const router   = useRouter()
     const [user, setUser]       = useState({ name: 'Admin User', role: 'Administrator' })
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+    const [openSection, setOpenSection] = useState<string | null>(null)
     const isPrincipalPortal = user.role === 'Principal' || user.role === 'Vice Principal'
     const visibleMenuLinks = isPrincipalPortal ? principalMenuLinks : menuLinks
     const visibleAcademicLinks = isPrincipalPortal ? principalAcademicLinks : academicLinks
@@ -208,27 +200,32 @@ export function AdminSidebar({
     const visibleGeneralLinks = isPrincipalPortal ? principalGeneralLinks : generalLinks
 
     useEffect(() => {
-        const token = localStorage.getItem('auth_token')
-        if (token) setUser(decodeUser(token))
+        api.get('/auth/me')
+            .then((res) => {
+                const profile = res.data?.user
+                if (profile) {
+                    setUser({
+                        name: profile.name || 'Admin',
+                        role: roleLabel(profile.role),
+                    })
+                }
+            })
+            .catch(() => {})
     }, [])
 
-    // Auto-expand active sections
+    // Auto-expand the active section, keeping the sidebar as a single-open accordion.
     useEffect(() => {
-        const open: Record<string, boolean> = {}
-        ;[...visibleMenuLinks, ...visibleAcademicLinks, ...visibleManagementLinks].forEach(item => {
-            if (item.children && isItemActive(item, pathname)) open[item.label] = true
-        })
-        setExpanded(prev => ({ ...prev, ...open }))
+        const activeExpandable = [...visibleMenuLinks, ...visibleAcademicLinks, ...visibleManagementLinks]
+            .find(item => item.children && isItemActive(item, pathname))
+        setOpenSection(activeExpandable?.label ?? null)
     }, [pathname, visibleMenuLinks, visibleAcademicLinks, visibleManagementLinks])
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch {}
-        localStorage.removeItem('auth_token')
-        document.cookie = 'auth_token=; Max-Age=0; path=/'
         router.push('/login')
     }
 
-    const toggle = (label: string) => setExpanded(prev => ({ ...prev, [label]: !prev[label] }))
+    const toggle = (label: string) => setOpenSection(prev => prev === label ? null : label)
     const initials = user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
     // ── renders label ─────────────────────────────────────────────────────────
@@ -258,7 +255,7 @@ export function AdminSidebar({
 
         /* ── Expandable ── */
         if (item.children) {
-            const isOpen = expanded[item.label] ?? false
+            const isOpen = openSection === item.label
             return (
                 <div className="mb-1">
                     <button

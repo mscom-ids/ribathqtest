@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, LogOut } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
-import Cookies from "js-cookie"
 import { cn } from "@/lib/utils"
+import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; attendance_status?: string }
 type StaffMember = { id: string; name: string; role: string; photo_url?: string }
@@ -62,14 +62,11 @@ export default function StudentAttendancePage() {
     const [selectedYearId, setSelectedYearId] = useState("")
 
     useEffect(() => {
-        const token = Cookies.get('auth_token')
-        if (token) {
-            try {
-                const p = JSON.parse(atob(token.split('.')[1]))
-                setUserRole(p.role)
-                setUserId(p.id)
-            } catch {}
-        }
+        api.get('/auth/me').then(res => {
+            const user = res.data?.user
+            if (user?.role) setUserRole(user.role)
+            if (user?.id) setUserId(user.id)
+        }).catch(() => {})
         fetchFilters()
         fetchStaff()
     }, [])
@@ -524,8 +521,8 @@ export default function StudentAttendancePage() {
                 </div>
 
                 {loading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <RefreshCw className="h-5 w-5 animate-spin text-slate-400" />
+                    <div className="py-20">
+                        <ThreeBallLoader label="Loading classes..." />
                     </div>
                 ) : daySchedules.length === 0 ? (
                     <div className="text-center py-20">
