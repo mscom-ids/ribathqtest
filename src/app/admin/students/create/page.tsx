@@ -115,7 +115,8 @@ export default function CreateStudentPage() {
             if (res.data.success) {
                 // The backend returns a relative url like `/public/avatars/avatar-xxx.jpg`
                 // Build the full absolute path so the NextJS image strictly loads from the active backend server
-                const backendBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+                const IS_DEV = process.env.NODE_ENV !== 'production';
+                const backendBase = IS_DEV ? 'http://localhost:5000' : '';
                 const fullUrl = backendBase + res.data.filePath;
                 setPhotoUrl(fullUrl);
             } else {

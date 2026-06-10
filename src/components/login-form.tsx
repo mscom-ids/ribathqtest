@@ -16,8 +16,11 @@ import { Label } from "@/components/ui/label"
 import { getRedirectPathForRole } from "@/lib/auth"
 
 function getApiUrl() {
-    const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-    return configuredApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`)
+    const IS_DEV = process.env.NODE_ENV !== 'production'
+    const baseApiUrl = IS_DEV ? "http://localhost:5000/api" : "/api"
+    return typeof window === 'undefined' || !IS_DEV
+        ? baseApiUrl
+        : baseApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`)
 }
 
 function normalizeParentDob(value: string) {

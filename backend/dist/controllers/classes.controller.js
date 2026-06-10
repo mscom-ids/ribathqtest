@@ -29,6 +29,36 @@ const getAcademicYears = async (req, res) => {
     }
 };
 exports.getAcademicYears = getAcademicYears;
+async function syncCurrentYearMentorAssignments(academicYearId) {
+    await db_1.db.query(`WITH snapshot_values AS (
+            SELECT student_id, hifz_mentor_id, school_mentor_id, madrasa_mentor_id
+            FROM student_year_snapshots
+            WHERE academic_year_id = $1
+         )
+         UPDATE students s
+         SET hifz_mentor_id = sv.hifz_mentor_id,
+             school_mentor_id = sv.school_mentor_id,
+             madrasa_mentor_id = sv.madrasa_mentor_id
+         FROM snapshot_values sv
+         WHERE s.adm_no = sv.student_id
+           AND s.status = 'active'`, [academicYearId]);
+    await db_1.db.query(`UPDATE students s
+         SET hifz_mentor_id = NULL,
+             school_mentor_id = NULL,
+             madrasa_mentor_id = NULL
+         WHERE s.status = 'active'
+           AND NOT EXISTS (
+               SELECT 1
+               FROM student_year_snapshots sys
+               WHERE sys.student_id = s.adm_no
+                 AND sys.academic_year_id = $1
+           )
+           AND (
+               s.hifz_mentor_id IS NOT NULL
+               OR s.school_mentor_id IS NOT NULL
+               OR s.madrasa_mentor_id IS NOT NULL
+           )`, [academicYearId]);
+}
 const upsertAcademicYear = async (req, res) => {
     try {
         const { id, name, start_date, end_date, is_current, is_locked, promotion_window_open } = req.body;
@@ -41,6 +71,9 @@ const upsertAcademicYear = async (req, res) => {
         }
         else {
             result = await db_1.db.query(`INSERT INTO academic_years (name, start_date, end_date, is_current, is_locked, promotion_window_open) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`, [name, start_date, end_date, is_current || false, is_locked || false, promotion_window_open || false]);
+        }
+        if (is_current && result.rows[0]?.id) {
+            await syncCurrentYearMentorAssignments(result.rows[0].id);
         }
         (0, server_cache_1.invalidateCacheByPrefix)('academic-year:');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');

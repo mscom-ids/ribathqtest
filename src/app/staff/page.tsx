@@ -177,25 +177,42 @@ export default function StaffDashboard() {
         async function load() {
             setLoading(true)
             try {
-                const [profileRes, studRes, sessRes] = await Promise.all([
+                const [profileResult, studResult, sessResult] = await Promise.allSettled([
                     api.get("/staff/me"),
                     api.get("/staff/me/students", { params: { date: todayStr } }),
                     api.get("/attendance/schedules-for-date", { params: { date: todayStr } }),
                 ])
 
-                if (!profileRes.data.success) { router.push("/login"); return }
+                if (profileResult.status === "rejected") {
+                    if (profileResult.reason?.response?.status === 401) router.push("/login")
+                    else console.warn("[STAFF PAGE] Profile load failed:", profileResult.reason)
+                    setLoading(false)
+                    return
+                }
+                const profileRes = profileResult.value
+                if (!profileRes.data.success) { setLoading(false); router.push("/login"); return }
                 setStaffName(profileRes.data.staff.name || "")
                 setStaffId(profileRes.data.staff.id || "")
                 setStaffPhoto(profileRes.data.staff.photo_url || "")
 
-                if (studRes.data.success) setMyStudents(studRes.data.students || [])
-                if (sessRes.data.data) setSessions(sessRes.data.data.map((s: any) => ({
+                if (studResult.status === "fulfilled" && studResult.value.data.success) {
+                    setMyStudents(studResult.value.data.students || [])
+                } else {
+                    console.warn("[STAFF PAGE] Students load failed:", studResult.status === "rejected" ? studResult.reason : studResult.value.data)
+                    setMyStudents([])
+                }
+
+                if (sessResult.status === "fulfilled" && sessResult.value.data.data) setSessions(sessResult.value.data.data.map((s: any) => ({
                     ...s,
                     name: s.name || `${s.class_type} Class`,
                 })))
+                else {
+                    console.warn("[STAFF PAGE] Sessions load failed:", sessResult.status === "rejected" ? sessResult.reason : sessResult.value.data)
+                    setSessions([])
+                }
             } catch (err: any) {
                 console.warn("[STAFF PAGE] Load error:", err)
-                router.push("/login")
+                if (err?.response?.status === 401) router.push("/login")
             }
             setLoading(false)
         }

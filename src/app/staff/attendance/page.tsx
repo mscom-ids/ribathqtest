@@ -185,7 +185,11 @@ export default function StaffAttendancePage() {
 
             } catch (error) {
                 console.warn("Auth init error:", error)
-                router.push("/login")
+                if ((error as any)?.response?.status === 401) {
+                    router.push("/login")
+                } else {
+                    toast.error("Attendance setup failed to load. Please refresh after the server is ready.")
+                }
             } finally {
                 setLoading(false)
             }

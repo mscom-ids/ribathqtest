@@ -12,6 +12,8 @@ import {
     staffRoleLabel,
 } from '../utils/staff.utils';
 import { supabaseAdmin } from '../config/supabase';
+import { getAcademicYearContext } from '../utils/academic-year';
+import { invalidateCacheByPrefix } from '../utils/server-cache';
 
 const SAFE_STAFF_COLUMNS = `
     id, profile_id, name, role, phone, email, photo_url, address, place,
@@ -49,6 +51,7 @@ export const getStaffStudents = async (req: Request, res: Response) => {
         if (!staffId) {
             return res.status(400).json({ success: false, error: 'id required' });
         }
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
 
         const staffResult = await db.query(
             'SELECT id, name, role FROM staff WHERE id = $1 LIMIT 1',
@@ -60,14 +63,17 @@ export const getStaffStudents = async (req: Request, res: Response) => {
 
         const result = await db.query(
             `SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year,
-                    (hifz_mentor_id = $1)    AS is_hifz,
-                    (school_mentor_id = $1)  AS is_school,
-                    (madrasa_mentor_id = $1) AS is_madrasa
+                    (sys.hifz_mentor_id = $1)    AS is_hifz,
+                    (sys.school_mentor_id = $1)  AS is_school,
+                    (sys.madrasa_mentor_id = $1) AS is_madrasa
              FROM students
-             WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
-               AND status = $2
+             JOIN student_year_snapshots sys
+               ON sys.student_id = students.adm_no
+              AND sys.academic_year_id = $2
+             WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
+               AND students.status = $3
              ORDER BY name`,
-            [staffId, 'active']
+            [staffId, academicContext.academicYearId, 'active']
         );
 
         res.json({ success: true, students: result.rows });
@@ -96,11 +102,40 @@ export const assignStudentsToMentor = async (req: Request, res: Response) => {
         };
         const field = fieldMap[section];
         if (!field) return res.status(400).json({ success: false, error: 'Invalid section' });
+        const academicContext = await getAcademicYearContext(db, req.body.academic_year_id || req.query.academic_year_id);
+        if (!academicContext.academicYearId) {
+            return res.status(400).json({ success: false, error: 'Current academic year not found' });
+        }
 
-        await db.query(
-            `UPDATE students SET ${field} = $1 WHERE adm_no = ANY($2::text[])`,
-            [id, student_ids]
-        );
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                `INSERT INTO student_year_snapshots (student_id, academic_year_id, ${field}, status, updated_at)
+                 SELECT sid, $2::uuid, $3::uuid, 'active', now()
+                 FROM unnest($1::text[]) AS sid
+                 ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                    ${field} = EXCLUDED.${field},
+                    status = 'active',
+                    updated_at = now()`,
+                [student_ids, academicContext.academicYearId, id]
+            );
+            if (academicContext.mode === 'current') {
+                await client.query(
+                    `UPDATE students SET ${field} = $1 WHERE adm_no = ANY($2::text[])`,
+                    [id, student_ids]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+        invalidateCacheByPrefix('students:');
+        invalidateCacheByPrefix('attendance:');
+        invalidateCacheByPrefix('reports:');
 
         res.json({ success: true });
     } catch (err: any) {
@@ -121,11 +156,38 @@ export const unassignStudentFromMentor = async (req: Request, res: Response) => 
         };
         const field = fieldMap[section];
         if (!field) return res.status(400).json({ success: false, error: 'Invalid section' });
+        const academicContext = await getAcademicYearContext(db, req.body.academic_year_id || req.query.academic_year_id);
+        if (!academicContext.academicYearId) {
+            return res.status(400).json({ success: false, error: 'Current academic year not found' });
+        }
 
-        await db.query(
-            `UPDATE students SET ${field} = NULL WHERE adm_no = $1 AND ${field} = $2`,
-            [student_id, id]
-        );
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+            await client.query(
+                `UPDATE student_year_snapshots
+                 SET ${field} = NULL, updated_at = now()
+                 WHERE student_id = $1
+                   AND academic_year_id = $2
+                   AND ${field} = $3`,
+                [student_id, academicContext.academicYearId, id]
+            );
+            if (academicContext.mode === 'current') {
+                await client.query(
+                    `UPDATE students SET ${field} = NULL WHERE adm_no = $1 AND ${field} = $2`,
+                    [student_id, id]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+        invalidateCacheByPrefix('students:');
+        invalidateCacheByPrefix('attendance:');
+        invalidateCacheByPrefix('reports:');
 
         res.json({ success: true });
     } catch (err: any) {
@@ -138,10 +200,18 @@ export const getMyAssignedStudents = async (req: Request, res: Response) => {
     try {
         const { staff_id } = req.query;
         if (!staff_id) return res.status(400).json({ success: false, error: 'staff_id required' });
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
 
         const result = await db.query(
-            'SELECT adm_no, name, photo_url, standard FROM students WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1) AND status = $2 ORDER BY name',
-            [staff_id, 'active']
+            `SELECT s.adm_no, s.name, s.photo_url, s.standard
+             FROM students s
+             JOIN student_year_snapshots sys
+               ON sys.student_id = s.adm_no
+              AND sys.academic_year_id = $2
+             WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
+               AND s.status = $3
+             ORDER BY s.name`,
+            [staff_id, academicContext.academicYearId, 'active']
         );
         
         res.json({ success: true, students: result.rows });
@@ -515,21 +585,25 @@ export const getMyStudentsWithStats = async (req: Request, res: Response) => {
         }
         const staffId = ctx.staffId;
         const actingStudentId = ctx.studentId;
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
 
         // Fetch assigned students
         let query = `
-            SELECT adm_no, name, photo_url, batch_year, standard, dob,
-            (SELECT name FROM staff WHERE id = hifz_mentor_id) as hifz_mentor_name,
-            (SELECT name FROM staff WHERE id = school_mentor_id) as school_mentor_name,
-            (SELECT name FROM staff WHERE id = madrasa_mentor_id) as madrasa_mentor_name
-            FROM students 
-            WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1) 
-              AND status = 'active'
+            SELECT s.adm_no, s.name, s.photo_url, s.batch_year, s.standard, s.dob,
+            (SELECT name FROM staff WHERE id = sys.hifz_mentor_id) as hifz_mentor_name,
+            (SELECT name FROM staff WHERE id = sys.school_mentor_id) as school_mentor_name,
+            (SELECT name FROM staff WHERE id = sys.madrasa_mentor_id) as madrasa_mentor_name
+            FROM students s
+            JOIN student_year_snapshots sys
+              ON sys.student_id = s.adm_no
+             AND sys.academic_year_id = $2
+            WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
+              AND s.status = 'active'
         `;
-        const params: any[] = [staffId];
+        const params: any[] = [staffId, academicContext.academicYearId];
 
         if (actingStudentId) {
-            query += ` AND adm_no = $2`;
+            query += ` AND s.adm_no = $3`;
             params.push(actingStudentId);
         }
 

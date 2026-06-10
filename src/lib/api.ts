@@ -1,13 +1,16 @@
 import axios from 'axios';
 
-// In production, NEXT_PUBLIC_API_URL should point to the deployed Express server
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-const API_URL = typeof window === 'undefined'
-  ? configuredApiUrl
-  : configuredApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`);
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+// In production, always use the relative path /api so requests go through the Next.js proxy.
+// In development, use localhost:5000 (or the local network IP).
+const baseApiUrl = IS_DEV ? 'http://localhost:5000/api' : '/api';
+
+const API_URL = typeof window === 'undefined' || !IS_DEV
+  ? baseApiUrl
+  : baseApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`);
 
 // Dev-only logger. Prod builds get no per-request console noise.
-const IS_DEV = process.env.NODE_ENV !== 'production';
 if (IS_DEV) console.log('>>> [api.ts] API_URL configured as:', API_URL);
 
 const api = axios.create({

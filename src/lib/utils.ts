@@ -5,12 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Backend origin (the API server, without /api). Derived from
-// NEXT_PUBLIC_API_URL so dev (localhost:5000) and prod (deployed origin)
-// both work without code changes.
-export const BACKEND_ORIGIN = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-).replace(/\/api\/?$/, "")
+// Backend origin. In production, we proxy /api and /public to the actual backend,
+// so we just return empty string to use relative paths. In dev, use localhost:5000.
+export const BACKEND_ORIGIN = process.env.NODE_ENV === 'production' 
+  ? "" 
+  : "http://localhost:5000"
 
 // Resolve a possibly-relative photo / file URL to an absolute one.
 // Backend stores relative paths like "/public/avatars/foo.jpg" — those need
