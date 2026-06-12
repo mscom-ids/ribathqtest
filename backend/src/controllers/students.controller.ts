@@ -15,8 +15,8 @@ const ACTIVE_OPERATIONAL_LEAVE_STATUSES = ['approved', 'outside'];
 // actually need those should fetch the single student via /students/:id.
 const LIGHT_STUDENT_COLS =
     `adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender,
-     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS admission_date,
-     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS date_of_join,
+     admission_date::text AS admission_date,
+     admission_date::text AS date_of_join,
      place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number`;
 
 const FULL_STUDENT_COLS =

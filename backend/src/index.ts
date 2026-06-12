@@ -61,6 +61,7 @@ app.use(cors({
 app.use(compression());
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
+  const requestPath = req.originalUrl.split('?')[0] || req.path;
   const originalWriteHead = res.writeHead.bind(res);
   (res as any).writeHead = (...args: any[]) => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
@@ -72,7 +73,7 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
     if (durationMs >= SLOW_API_THRESHOLD_MS) {
-      console.warn(`[SLOW API] ${req.method} ${req.path} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
+      console.warn(`[SLOW API] ${req.method} ${requestPath} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
     }
   });
   next();
