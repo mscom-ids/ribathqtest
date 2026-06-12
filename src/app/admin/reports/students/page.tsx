@@ -15,9 +15,32 @@ type AcademicYear = {
     is_current?: boolean
 }
 
+type StudentReportRow = {
+    adm_no: string
+    name: string
+    standard?: string | null
+    batch_year?: string | null
+    status?: string | null
+    report_window?: {
+        effective_start_date?: string
+        effective_end_date?: string
+    }
+    attendance?: {
+        total_classes?: number
+        planned_classes?: number
+        present?: number
+        absent?: number
+        late?: number
+        leave?: number
+    }
+    hifz_progress?: string
+    latest_exam_score?: string
+}
+
 export default function StudentReportsPage() {
-    const [data, setData] = useState<any[]>([])
+    const [data, setData] = useState<StudentReportRow[]>([])
     const [years, setYears] = useState<AcademicYear[]>([])
+    const [yearsLoaded, setYearsLoaded] = useState(false)
     const [selectedAcademicYear, setSelectedAcademicYear] = useState("")
     const [reportMode, setReportMode] = useState<"academic-year" | "monthly">("academic-year")
     const [loading, setLoading] = useState(true)
@@ -35,12 +58,19 @@ export default function StudentReportsPage() {
                 setSelectedAcademicYear(rows.find((year: AcademicYear) => year.is_current)?.id || rows[0]?.id || "")
             })
             .catch(() => {})
+            .finally(() => setYearsLoaded(true))
     }, [])
 
     useEffect(() => {
+        if (reportMode === "academic-year" && !yearsLoaded) return
+        if (reportMode === "academic-year" && !selectedAcademicYear) {
+            setData([])
+            setLoading(false)
+            return
+        }
         fetchReports()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [targetMonth, targetYear, reportMode, selectedAcademicYear])
+    }, [targetMonth, targetYear, reportMode, selectedAcademicYear, yearsLoaded])
 
     const fetchReports = async () => {
         setLoading(true)
@@ -55,7 +85,7 @@ export default function StudentReportsPage() {
                 : { month: targetMonth, year: targetYear }
             const res = await cachedGet('/reports/students', params, 60_000)
             if (res.data?.success) setData(res.data.data)
-        } catch (error) {
+        } catch {
             toast({ title: "Error", description: "Failed to load student reports", variant: "destructive" })
         } finally {
             setLoading(false)

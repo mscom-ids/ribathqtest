@@ -161,15 +161,19 @@ const getStudentReports = async (req, res) => {
     try {
         const { month, year } = req.query;
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
+        const shouldApplyAcademicSnapshot = Boolean(academicContext.academicYearId);
         const { startDate, endDate } = resolveReportRange(req);
         const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
         const targetYear = year ? parseInt(year) : new Date().getFullYear();
         // All 3 queries are independent — fire in parallel.
         const mapped = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('reports:students', { month: targetMonth, year: targetYear, startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }), 60000, async () => {
             const academicBounds = await (0, report_window_1.getAcademicYearBounds)(db_1.db, academicContext.academicYearId);
-            const studentsQuery = academicContext.mode === 'historical' && academicContext.academicYearId
+            const studentsQuery = shouldApplyAcademicSnapshot
                 ? {
-                    text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
+                    text: `SELECT s.adm_no, s.name, s.batch_year,
+                        COALESCE(sys.school_standard, s.standard) AS standard,
+                        COALESCE(sys.status, s.status) AS status,
+                        s.photo_url,
                         s.admission_date, s.comprehensive_details,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
@@ -206,7 +210,7 @@ const getStudentReports = async (req, res) => {
            AND entry_date <= $2::date
          ORDER BY student_id, entry_date DESC, created_at DESC`, [startDate, endDate]),
             ]);
-            const snapshotMap = academicContext.mode === 'historical'
+            const snapshotMap = shouldApplyAcademicSnapshot
                 ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, studentsRes.rows.map((s) => s.adm_no), academicContext.academicYearId)
                 : new Map();
             const students = studentsRes.rows

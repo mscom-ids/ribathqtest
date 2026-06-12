@@ -18,7 +18,8 @@ function getAcademicYearParam(value) {
 }
 async function getAcademicYearContext(db, requestedAcademicYearId) {
     const requested = getAcademicYearParam(requestedAcademicYearId);
-    const currentAcademicYearId = await (0, server_cache_1.cachedResult)('academic-year:current', 5 * 60000, async () => {
+    const currentAcademicYearId = await (0, server_cache_1.cachedResult)('academic-year:current', 30 * 60000, // 30 min — academic year changes at most once a year
+    async () => {
         const currentRes = await db.query(`SELECT id
          FROM academic_years
          WHERE is_current = true

@@ -170,7 +170,8 @@ const me = async (req, res) => {
         if (!userContext) {
             return res.status(401).json({ success: false, error: 'Unauthenticated' });
         }
-        const user = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('auth:me', { id: userContext.id }), 30000, async () => {
+        const user = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('auth:me', { id: userContext.id }), 5 * 60000, // 5 min — staff role/name rarely changes mid-session
+        async () => {
             const result = await db_1.db.query('SELECT id, email, name, role, photo_url FROM staff WHERE id = $1', [userContext.id]);
             return result.rows[0] || null;
         });
