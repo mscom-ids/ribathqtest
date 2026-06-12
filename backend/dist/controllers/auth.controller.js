@@ -9,6 +9,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = require("../config/db");
 const supabase_1 = require("../config/supabase");
 const logger_1 = require("../utils/logger");
+const server_cache_1 = require("../utils/server-cache");
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
@@ -169,11 +170,14 @@ const me = async (req, res) => {
         if (!userContext) {
             return res.status(401).json({ success: false, error: 'Unauthenticated' });
         }
-        const result = await db_1.db.query('SELECT id, email, name, role, photo_url FROM staff WHERE id = $1', [userContext.id]);
-        if (result.rows.length === 0) {
+        const user = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('auth:me', { id: userContext.id }), 30000, async () => {
+            const result = await db_1.db.query('SELECT id, email, name, role, photo_url FROM staff WHERE id = $1', [userContext.id]);
+            return result.rows[0] || null;
+        });
+        if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
         }
-        res.json({ success: true, user: result.rows[0] });
+        res.json({ success: true, user });
     }
     catch (err) {
         console.error('Me endpoint error:', err);

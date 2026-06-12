@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Archive, Edit2, Plus, RefreshCw, School, Users } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,7 +50,7 @@ export default function ClassSetupPage() {
     }, [classes])
 
     async function loadYears() {
-        const res = await api.get("/classes/academic-years")
+        const res = await cachedGet("/classes/academic-years", undefined, 5 * 60_000)
         const rows = res.data?.data || []
         setYears(rows)
         const selected = yearId || rows.find((year: AcademicYear) => year.is_current)?.id || rows[0]?.id || ""
@@ -57,16 +58,17 @@ export default function ClassSetupPage() {
         return selected
     }
 
-    async function loadClasses(targetYear = yearId) {
+    async function loadClasses(targetYear = yearId, force = false) {
         if (!targetYear) return
         setLoading(true)
         try {
-            const res = await api.get("/classes", {
-                params: {
-                    academic_year_id: targetYear,
-                    type: department,
-                },
-            })
+            const params = {
+                academic_year_id: targetYear,
+                type: department,
+            }
+            const res = force
+                ? await api.get("/classes", { params })
+                : await cachedGet("/classes", params, 60_000)
             setClasses(res.data?.data || [])
         } catch (err: any) {
             toast({ title: "Failed to load classes", description: err?.response?.data?.error || err.message, variant: "destructive" })
@@ -114,7 +116,8 @@ export default function ClassSetupPage() {
             if (res.data?.success) {
                 toast({ title: editing ? "Class updated" : "Class created" })
                 setOpen(false)
-                await loadClasses(yearId)
+                invalidateCache("/classes")
+                await loadClasses(yearId, true)
             }
         } catch (err: any) {
             toast({ title: "Save failed", description: err?.response?.data?.error || err.message, variant: "destructive" })
@@ -126,7 +129,8 @@ export default function ClassSetupPage() {
         try {
             await api.delete(`/classes/${id}`)
             toast({ title: "Class archived" })
-            await loadClasses(yearId)
+            invalidateCache("/classes")
+            await loadClasses(yearId, true)
         } catch (err: any) {
             toast({ title: "Archive failed", description: err?.response?.data?.error || err.message, variant: "destructive" })
         }
@@ -153,7 +157,7 @@ export default function ClassSetupPage() {
                                 {departments.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        <Button variant="outline" onClick={() => loadClasses(yearId)}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+                        <Button variant="outline" onClick={() => loadClasses(yearId, true)}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
                         <Button onClick={() => startCreate("School")}><Plus className="mr-2 h-4 w-4" />Create Class</Button>
                     </div>
                 </div>

@@ -93,6 +93,12 @@ function getPositiveNumber(value: string | null, fallback: number) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
+type AcademicYear = {
+    id: string
+    name: string
+    is_current?: boolean
+}
+
 function getStatusFilter(value: string | null): StudentStatusFilter {
     return VALID_STATUSES.includes(value as StudentStatusFilter) ? (value as StudentStatusFilter) : "active"
 }
@@ -148,9 +154,9 @@ function normalizeStudentRow(s: StudentApiRow): Student {
     }
 }
 
-function StudentTableRow({ student, returnPath }: { student: Student; returnPath: string }) {
+function StudentTableRow({ student, returnPath, selectedYearId }: { student: Student; returnPath: string; selectedYearId: string }) {
     const router = useRouter()
-    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}`
+    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}${selectedYearId ? `&academic_year_id=${selectedYearId}` : ''}`
     const statusColor = {
         active: "bg-emerald-50 text-emerald-700 border-emerald-200",
         completed: "bg-blue-50 text-blue-700 border-blue-200",
@@ -229,9 +235,9 @@ function StudentTableRow({ student, returnPath }: { student: Student; returnPath
 }
 
 // ─── STUDENT CARD for Grid View ──────────────────────────────
-function StudentGridCard({ student, returnPath }: { student: Student; returnPath: string }) {
+function StudentGridCard({ student, returnPath, selectedYearId }: { student: Student; returnPath: string; selectedYearId: string }) {
     const router = useRouter()
-    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}`
+    const href = `/admin/students/${student.adm_no}?returnTo=${encodeURIComponent(returnPath)}${selectedYearId ? `&academic_year_id=${selectedYearId}` : ''}`
     
     // Exact PreSkool colors
     const primaryBlue = "#3d5ee1"
@@ -350,6 +356,8 @@ function StudentsPageContent() {
     const [exportLoading, setExportLoading] = useState(false)
     const [userRole, setUserRole] = useState("")
     const [progressMap, setProgressMap] = useState<Record<string, number>>({})
+    const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+    const [selectedYearId, setSelectedYearId] = useState<string>("")
     const lastDebouncedSearch = useRef(search.trim())
     const knownStatusTotalRef = useRef(0)
     const [studentCounts, setStudentCounts] = useState<StudentCounts>({
@@ -361,11 +369,28 @@ function StudentsPageContent() {
     })
 
     useEffect(() => {
-        api.get('/auth/me')
+        cachedGet('/auth/me', undefined, 30_000)
             .then((res) => setUserRole(res.data?.user?.role || ""))
             .catch(() => {})
         setStatusFilter(getStatusFilter(filterFromUrl))
     }, [filterFromUrl])
+
+    // ── Load Academic Years ───────────────────────────────────
+    useEffect(() => {
+        let cancelled = false
+        cachedGet('/classes/academic-years', undefined, 5 * 60_000)
+            .then(res => {
+                if (cancelled) return
+                const rows = res.data?.data || []
+                setAcademicYears(rows)
+                if (rows.length > 0 && !selectedYearId) {
+                    const current = rows.find((y: AcademicYear) => y.is_current)
+                    setSelectedYearId(current ? current.id : rows[0].id)
+                }
+            })
+            .catch(console.error)
+        return () => { cancelled = true }
+    }, [selectedYearId])
 
     const isPrincipalPortal = userRole === "principal" || userRole === "vice_principal"
     const effectiveStatusFilter = isPrincipalPortal ? "active" : statusFilter
@@ -439,6 +464,7 @@ function StudentsPageContent() {
                     status: effectiveStatusFilter,
                     sort: sortBy,
                     count: needsExactCount ? undefined : 'false',
+                    academic_year_id: selectedYearId || undefined
                 }, needsExactCount ? 30_000 : 60_000)
                 if (!res.data.success) throw new Error(res.data.error || 'Failed to load')
                 const merged = (res.data.students || []).map(normalizeStudentRow)
@@ -455,7 +481,7 @@ function StudentsPageContent() {
         }
         loadPage()
         return () => { cancelled = true }
-    }, [currentPage, debouncedSearch, effectiveStatusFilter, refreshKey, rowsPerPage, sortBy])
+    }, [currentPage, debouncedSearch, effectiveStatusFilter, refreshKey, rowsPerPage, sortBy, selectedYearId])
 
     // ── Auto-poll every 3 min ───────────────────────────────────
     // Was 30s, which constantly re-pulled the full /students list (heavy
@@ -549,8 +575,7 @@ function StudentsPageContent() {
                 count: needsExactCount ? undefined : 'false',
             }, needsExactCount ? 30_000 : 60_000).catch(() => null)
         }, 250)
-
-        return () => window.clearTimeout(timeout)
+return () => window.clearTimeout(timeout)
     }, [currentPage, debouncedSearch, effectiveStatusFilter, loading, rowsPerPage, sortBy, totalPages])
 
     return (
@@ -558,7 +583,23 @@ function StudentsPageContent() {
             {/* ── Page Header ──────────────────────────────────── */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Students</h1>
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Students</h1>
+                        {academicYears.length > 0 && (
+                            <Select value={selectedYearId} onValueChange={setSelectedYearId}>
+                                <SelectTrigger className="w-[180px] h-9 bg-white dark:bg-[#1e2538] border-slate-200 dark:border-slate-800 focus:ring-indigo-500 rounded-md">
+                                    <SelectValue placeholder="Academic Year" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {academicYears.map(year => (
+                                        <SelectItem key={year.id} value={year.id}>
+                                            {year.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
                         Dashboard / Peoples / Students Grid
                     </p>
@@ -771,7 +812,7 @@ function StudentsPageContent() {
                             </TableHeader>
                             <TableBody>
                                 {students.map((student) => (
-                                    <StudentTableRow key={student.adm_no} student={student} returnPath={listReturnPath} />
+                                    <StudentTableRow key={student.adm_no} student={student} returnPath={listReturnPath} selectedYearId={selectedYearId} />
                                 ))}
                             </TableBody>
                         </Table>
@@ -781,15 +822,14 @@ function StudentsPageContent() {
                     <div className="p-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {studentsWithProgress.map((student) => (
-                                <StudentGridCard key={student.adm_no} student={student} returnPath={listReturnPath} />
+                                <StudentGridCard key={student.adm_no} student={student} returnPath={listReturnPath} selectedYearId={selectedYearId} />
                             ))}
                         </div>
                     </div>
                 )}
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                {!loading && students.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3 border-t border-slate-100 dark:border-slate-800">
                         <p className="text-xs text-slate-500">
                             Page {currentPage} of {totalPages}
                         </p>

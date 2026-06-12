@@ -24,6 +24,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 
 type SessionInfo = {
@@ -164,7 +165,7 @@ export default function StaffAttendancePage() {
             setLoading(true)
             try {
                 const [meRes, staffRes, policyRes] = await Promise.all([
-                    api.get('/auth/me'),
+                    cachedGet('/auth/me', undefined, 30_000),
                     api.get('/staff/me'),
                     api.get('/access-control/mentor-policies').catch(() => null),
                 ])

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import {
     Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form"
+import { DateTextInput } from "@/components/ui/date-text-input"
 import { Input } from "@/components/ui/input"
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -265,7 +266,7 @@ export default function StudentDetailPage() {
             try {
                 const [staffRes, res] = await Promise.all([
                     cachedGet('/staff', undefined, 5 * 60_000).catch(() => null),
-                    api.get(`/students/${id}`),
+                    api.get(`/students/${id}`, { params: { academic_year_id: searchParams.get('academic_year_id') || undefined } }),
                 ])
                 if (staffRes?.data?.success) setStaff(staffRes.data.staff)
                 if (res.data.success) {
@@ -813,7 +814,7 @@ export default function StudentDetailPage() {
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <FormField control={form.control} name="dob" render={({ field }) => (
                                                                 <FormItem><FormLabel>Date of Birth</FormLabel>
-                                                                    <FormControl><Input type="date" {...field} /></FormControl>
+                                                                    <FormControl><DateTextInput {...field} /></FormControl>
                                                                     <FormMessage /></FormItem>
                                                             )} />
                                                             <FormField control={form.control} name="standard" render={({ field }) => (

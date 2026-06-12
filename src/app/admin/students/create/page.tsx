@@ -19,6 +19,7 @@ import {
     FormLabel,
     FormMessage,
 } from "@/components/ui/form"
+import { DateTextInput } from "@/components/ui/date-text-input"
 import { Input } from "@/components/ui/input"
 import {
     Select,
@@ -239,7 +240,7 @@ export default function CreateStudentPage() {
                                         <FormItem>
                                             <FormLabel>Date of Birth</FormLabel>
                                             <FormControl>
-                                                <Input type="date" {...field} />
+                                                <DateTextInput {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>

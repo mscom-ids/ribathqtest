@@ -38,16 +38,21 @@ async function getAcademicYearContext(db, requestedAcademicYearId) {
 }
 async function getStudentYearSnapshotMap(db, studentIds, academicYearId) {
     const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
-    const snapshots = new Map();
     if (!academicYearId || uniqueIds.length === 0)
+        return new Map();
+    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('academic-year:snapshots', {
+        academic_year_id: academicYearId,
+        students: uniqueIds.sort().join(','),
+    }), 60000, async () => {
+        const snapshots = new Map();
+        const res = await db.query(`SELECT student_id, academic_year_id, school_standard, school_section,
+                madrasa_standard, madrasa_section, hifz_mentor_id, status
+         FROM student_year_snapshots
+         WHERE academic_year_id = $1
+           AND student_id = ANY($2::text[])`, [academicYearId, uniqueIds]);
+        res.rows.forEach((row) => snapshots.set(row.student_id, row));
         return snapshots;
-    const res = await db.query(`SELECT student_id, academic_year_id, school_standard, school_section,
-            madrasa_standard, madrasa_section, hifz_mentor_id, status
-     FROM student_year_snapshots
-     WHERE academic_year_id = $1
-       AND student_id = ANY($2::text[])`, [academicYearId, uniqueIds]);
-    res.rows.forEach((row) => snapshots.set(row.student_id, row));
-    return snapshots;
+    });
 }
 function applyAcademicSnapshot(student, snapshot) {
     if (!snapshot)

@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { db } from '../config/db';
 import { supabaseAdmin } from '../config/supabase';
 import { devLog } from '../utils/logger';
+import { cachedResult, makeCacheKey } from '../utils/server-cache';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -193,16 +194,23 @@ export const me = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, error: 'Unauthenticated' });
     }
 
-    const result = await db.query(
-      'SELECT id, email, name, role, photo_url FROM staff WHERE id = $1',
-      [userContext.id]
+    const user = await cachedResult(
+      makeCacheKey('auth:me', { id: userContext.id }),
+      30_000,
+      async () => {
+        const result = await db.query(
+          'SELECT id, email, name, role, photo_url FROM staff WHERE id = $1',
+          [userContext.id]
+        );
+        return result.rows[0] || null;
+      }
     );
-    
-    if (result.rows.length === 0) {
+
+    if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.json({ success: true, user: result.rows[0] });
+    res.json({ success: true, user });
   } catch (err) {
     console.error('Me endpoint error:', err);
     res.status(500).json({ success: false, error: 'Internal server error' });

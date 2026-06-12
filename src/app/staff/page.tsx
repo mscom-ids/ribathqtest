@@ -225,7 +225,16 @@ export default function StaffDashboard() {
         async function loadAll() {
             try {
                 // scope=all tells the backend to skip the mentor-assignment filter
-                const res = await api.get("/students", { params: { scope: "all" } })
+                const res = await api.get("/students", {
+                    params: {
+                        scope: "all",
+                        light: "true",
+                        status: "active",
+                        limit: 500,
+                        count: "false",
+                        sort: "name",
+                    },
+                })
                 if (res.data.success) setAllStudents(res.data.students || [])
             } catch { /* non-blocking */ }
             setAllStudentsLoaded(true)

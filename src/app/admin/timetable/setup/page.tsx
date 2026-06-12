@@ -62,20 +62,20 @@ export default function TimeTableSetupPage() {
     }
 
     async function fetchAcademicSetup() {
-        const yearsRes = await api.get('/classes/academic-years')
+        const yearsRes = await cachedGet('/classes/academic-years', undefined, 5 * 60_000)
         const years = yearsRes.data?.data || []
         setAcademicYears(years)
         const selectedYear = academicYearId || years.find((year: any) => year.is_current)?.id || years[0]?.id || ""
         setAcademicYearId(selectedYear)
         if (selectedYear) {
-            const classesRes = await api.get('/classes', { params: { academic_year_id: selectedYear } })
+            const classesRes = await cachedGet('/classes', { academic_year_id: selectedYear }, 60_000)
             setClasses(classesRes.data?.data || [])
         }
         return selectedYear
     }
 
     useEffect(() => {
-        api.get('/auth/me')
+        cachedGet('/auth/me', undefined, 30_000)
             .then(res => {
                 if (res.data?.success && res.data.user) {
                     setUserRole(res.data.user.role)
@@ -95,7 +95,7 @@ export default function TimeTableSetupPage() {
 
     useEffect(() => {
         if (!academicYearId) return
-        api.get('/classes', { params: { academic_year_id: academicYearId } })
+        cachedGet('/classes', { academic_year_id: academicYearId }, 60_000)
             .then(res => setClasses(res.data?.data || []))
             .catch(() => setClasses([]))
         void fetchData(true, academicYearId)

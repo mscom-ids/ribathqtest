@@ -62,7 +62,7 @@ export default function StudentAttendancePage() {
     const [selectedYearId, setSelectedYearId] = useState("")
 
     useEffect(() => {
-        api.get('/auth/me').then(res => {
+        cachedGet('/auth/me', undefined, 30_000).then(res => {
             const user = res.data?.user
             if (user?.role) setUserRole(user.role)
             if (user?.id) setUserId(user.id)

@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react"
 import { usePathname } from "next/navigation"
 import { Plus, Trash2, ArrowLeft, Loader2, UserMinus, CheckCircle2, BadgeAlert, Users, Search } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -38,8 +39,14 @@ export default function ClassEnrollmentsPage({ params }: { params: Promise<{ cla
             // Need class details (for academic_year_id), enrollments, and all students
             const [enrollRes, classRes, studentRes] = await Promise.all([
                 api.get(`/classes/enrollments?class_id=${classId}`),
-                api.get(`/classes`),
-                api.get('/students')
+                cachedGet(`/classes`, undefined, 60_000),
+                cachedGet('/students', {
+                    light: 'true',
+                    status: 'active',
+                    limit: 500,
+                    count: 'false',
+                    sort: 'name',
+                }, 60_000)
             ])
             
             if (enrollRes.data.success) {
@@ -72,6 +79,7 @@ export default function ClassEnrollmentsPage({ params }: { params: Promise<{ cla
             const res = await api.post('/classes/enrollments', payload)
             if (res.data.success) {
                 toast({ title: "Success", description: "Student enrolled successfully" })
+                invalidateCache('/classes/enrollments')
                 fetchData()
                 setOpen(false)
             }
@@ -90,6 +98,7 @@ export default function ClassEnrollmentsPage({ params }: { params: Promise<{ cla
             const res = await api.delete(`/classes/enrollments/${id}`)
             if (res.data.success) {
                 toast({ title: "Removed", description: "Student removed successfully" })
+                invalidateCache('/classes/enrollments')
                 fetchData()
             }
         } catch (error) {

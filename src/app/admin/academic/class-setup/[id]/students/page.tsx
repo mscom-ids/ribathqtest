@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, use } from "react"
 import Link from "next/link"
 import { ArrowLeft, RefreshCw, Users } from "lucide-react"
 import api from "@/lib/api"
@@ -26,7 +26,8 @@ type StudentRow = {
     group_name?: string | null
 }
 
-export default function ClassStudentsPage({ params }: { params: { id: string } }) {
+export default function ClassStudentsPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params)
     const { toast } = useToast()
     const [classInfo, setClassInfo] = useState<ClassInfo | null>(null)
     const [students, setStudents] = useState<StudentRow[]>([])
@@ -35,7 +36,7 @@ export default function ClassStudentsPage({ params }: { params: { id: string } }
     async function loadStudents() {
         setLoading(true)
         try {
-            const res = await api.get(`/classes/${params.id}/students`)
+            const res = await api.get(`/classes/${id}/students`)
             setClassInfo(res.data?.class || null)
             setStudents(res.data?.data || [])
         } catch (err: any) {
@@ -52,7 +53,7 @@ export default function ClassStudentsPage({ params }: { params: { id: string } }
     useEffect(() => {
         void loadStudents()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [params.id])
+    }, [id])
 
     return (
         <main className="space-y-5">

@@ -46,7 +46,10 @@ const ACTIVE_OPERATIONAL_LEAVE_STATUSES = ['approved', 'outside'];
 // Columns required for the listing/grid views and the dashboard. Excludes the
 // heavy `comprehensive_details` JSON blob and `address` text — callers that
 // actually need those should fetch the single student via /students/:id.
-const LIGHT_STUDENT_COLS = 'adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date, place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number';
+const LIGHT_STUDENT_COLS = `adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender,
+     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS admission_date,
+     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS date_of_join,
+     place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number`;
 const FULL_STUDENT_COLS = LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
 let studentCurrentPresenceTableExists = null;
 const formatJoinedAdmittedBatchYear = (student) => {
@@ -220,7 +223,7 @@ const getAllStudents = async (req, res) => {
                     ]);
                     return { rows: result.rows, total: countRes.rows[0]?.total ?? null };
                 })());
-            const snapshotMap = academicContext.mode === 'historical'
+            const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
                 ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, payload.rows.map((student) => student.adm_no), academicContext.academicYearId)
                 : new Map();
             return res.json({
@@ -253,7 +256,7 @@ const getAllStudents = async (req, res) => {
                 const result = await db_1.db.query(query, params);
                 return result.rows;
             })());
-        const snapshotMap = academicContext.mode === 'historical'
+        const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
             ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, rows.map((student) => student.adm_no), academicContext.academicYearId)
             : new Map();
         res.json({
@@ -476,7 +479,7 @@ const getStudentById = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
         const is_outside = leaveRes.rows.length > 0;
-        const snapshotMap = academicContext.mode === 'historical'
+        const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
             ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, [studentId], academicContext.academicYearId)
             : new Map();
         const student = (0, academic_year_1.applyAcademicSnapshot)(result.rows[0], snapshotMap.get(studentId));

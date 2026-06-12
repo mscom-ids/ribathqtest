@@ -6,7 +6,6 @@ import {
     ArrowRight,
     CalendarDays,
     ClipboardList,
-    GraduationCap,
     Users,
     CheckCircle2,
     AlertCircle,
@@ -42,14 +41,6 @@ const actions = [
         detail: "Assign students to School, Madrasa, and Hifz classes",
         step: 2,
         color: "indigo",
-    },
-    {
-        href: "/admin/promotions",
-        icon: GraduationCap,
-        title: "Start New Year / Promote",
-        detail: "Carry students forward to the next academic year",
-        step: 3,
-        color: "violet",
     },
     {
         href: "/admin/reports/yearly",

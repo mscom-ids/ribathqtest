@@ -148,7 +148,7 @@ export default function StaffPage() {
 
     useEffect(() => {
         setMounted(true)
-        api.get('/auth/me')
+        cachedGet('/auth/me', undefined, 30_000)
             .then((res) => setUserRole(res.data?.user?.role || ""))
             .catch(() => {})
         loadStaff()

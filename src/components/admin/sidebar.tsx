@@ -48,7 +48,7 @@ const menuLinks: NavEntry[] = [
 
 const academicLinks: NavEntry[] = [
     {
-        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
+        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
         children: [
             { href: "/admin/academic", label: "Start Here" },
             { href: "/admin/academic-history", label: "Year Overview" },
@@ -56,11 +56,10 @@ const academicLinks: NavEntry[] = [
             { href: "/admin/academic/class-setup", label: "Class Setup" },
             { href: "/admin/academic/enrollments", label: "Student Placement" },
             { href: "/admin/timetable/setup", label: "Timetable Setup" },
-            { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
-            { href: "/admin/promotions", label: "Start New Year" },
             { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },
+
     {
         label: "Madrasa", icon: BookMarked, group: ["/admin/madrassa"],
         children: [
@@ -114,7 +113,7 @@ const principalMenuLinks: NavEntry[] = [
 
 const principalAcademicLinks: NavEntry[] = [
     {
-        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/promotions", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
+        label: "Academic Year", icon: GraduationCap, group: ["/admin/academic", "/admin/setup/academic-years", "/admin/timetable", "/admin/academic-history", "/admin/reports/students"],
         children: [
             { href: "/admin/academic", label: "Start Here" },
             { href: "/admin/academic-history", label: "Year Overview" },
@@ -122,11 +121,10 @@ const principalAcademicLinks: NavEntry[] = [
             { href: "/admin/academic/class-setup", label: "Class Setup" },
             { href: "/admin/academic/enrollments", label: "Student Placement" },
             { href: "/admin/timetable/setup", label: "Timetable Setup" },
-            { href: "/admin/academic/hifz-session-rules", label: "Hifz Session Rules" },
-            { href: "/admin/promotions", label: "Start New Year" },
             { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },
+
     {
         label: "Madrasa", icon: BookMarked, group: ["/admin/madrassa"],
         children: [

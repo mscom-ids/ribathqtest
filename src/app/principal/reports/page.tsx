@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import {
     EmptyState,
@@ -35,7 +34,7 @@ export default function PrincipalReportsPage() {
             setLoading(true)
             try {
                 const [studentsRes, progressRes] = await Promise.allSettled([
-                    api.get("/students", { params: { light: "true", status: "active", limit: 500, offset: 0, sort: "name" } }),
+                    cachedGet("/students", { light: "true", status: "active", limit: 500, offset: 0, sort: "name", count: "false" }, 60_000),
                     cachedGet("/hifz/progress-summary", undefined, 60_000),
                 ])
                 if (cancelled) return

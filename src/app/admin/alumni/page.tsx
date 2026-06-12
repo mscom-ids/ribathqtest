@@ -17,6 +17,7 @@ import {
     Users
 } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { resolveBackendUrl } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,7 +47,13 @@ export default function AlumniPage() {
     const fetchAlumni = async () => {
         try {
             setLoading(true)
-            const res = await api.get('/students?status=alumni')
+            const res = await cachedGet('/students', {
+                status: 'alumni',
+                light: 'true',
+                limit: 500,
+                count: 'false',
+                sort: 'name',
+            }, 60_000)
             if (res.data.success) {
                 setAlumni(res.data.students || [])
             }
@@ -65,6 +72,7 @@ export default function AlumniPage() {
             const res = await api.put(`/students/${studentId}`, { status: 'active' })
             if (res.data.success) {
                 toast({ title: "Success", description: "Student has been reactivated successfully." })
+                invalidateCache('/students')
                 fetchAlumni() // Refresh list
             }
         } catch (error) {

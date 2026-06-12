@@ -2,10 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
 import path from 'path';
 import compression from 'compression';
-import { devLog } from './utils/logger';
 
 // Load env BEFORE any module that reads process.env
 dotenv.config();
@@ -38,10 +36,13 @@ import chatRoutes from './routes/chat.routes';
 import delegationsRoutes from './routes/delegations.routes';
 import accessControlRoutes from './routes/access_control.routes';
 import academicHistoryRoutes from './routes/academic_history.routes';
-import hifzSessionRulesRoutes from './routes/hifz_session_rules.routes';
 import yearlyReportRoutes from './routes/yearly_report.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
+const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
+const SLOW_API_THRESHOLD_MS = Number.isFinite(parsedSlowApiThreshold) && parsedSlowApiThreshold > 0
+  ? parsedSlowApiThreshold
+  : 500;
 
 // ── Core middleware ──
 const allowedOrigins = process.env.FRONTEND_URL
@@ -70,8 +71,8 @@ app.use((req, res, next) => {
   };
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
-    if (durationMs >= 500) {
-      devLog(`[SLOW API] ${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
+    if (durationMs >= SLOW_API_THRESHOLD_MS) {
+      console.warn(`[SLOW API] ${req.method} ${req.path} ${res.statusCode} ${durationMs.toFixed(1)}ms`);
     }
   });
   next();
@@ -79,20 +80,12 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
-// ── Req 7: Rate limit auth routes ──
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // 20 attempts per window
-  message: { success: false, error: 'Too many login attempts. Please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
+// Login rate limiting is applied inside auth.routes.ts.
 // Serve static files for avatars
 app.use('/public', express.static(path.join(__dirname, '../public')));
 
 // ── Routes ──
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/leaves', leavesRoutes);
 app.use('/api/finance', financeRoutes);
@@ -110,7 +103,6 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/delegations', delegationsRoutes);
 app.use('/api/access-control', accessControlRoutes);
 app.use('/api/academic-history', academicHistoryRoutes);
-app.use('/api/hifz-session-rules', hifzSessionRulesRoutes);
 app.use('/api/yearly-report', yearlyReportRoutes);
 
 app.get('/api/health', (req, res) => {

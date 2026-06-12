@@ -14,7 +14,10 @@ const ACTIVE_OPERATIONAL_LEAVE_STATUSES = ['approved', 'outside'];
 // heavy `comprehensive_details` JSON blob and `address` text — callers that
 // actually need those should fetch the single student via /students/:id.
 const LIGHT_STUDENT_COLS =
-    'adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date, place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number';
+    `adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender,
+     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS admission_date,
+     COALESCE(admission_date::text, comprehensive_details #>> '{admission,admission_date}') AS date_of_join,
+     place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number`;
 
 const FULL_STUDENT_COLS =
     LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
@@ -219,7 +222,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
             ]);
             return { rows: result.rows, total: countRes.rows[0]?.total ?? null };
           })());
-      const snapshotMap = academicContext.mode === 'historical'
+      const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
         ? await getStudentYearSnapshotMap(
             db,
             payload.rows.map((student: any) => student.adm_no),
@@ -257,7 +260,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
           const result = await db.query(query, params);
           return result.rows;
         })());
-    const snapshotMap = academicContext.mode === 'historical'
+    const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
       ? await getStudentYearSnapshotMap(
           db,
           rows.map((student: any) => student.adm_no),
@@ -506,7 +509,7 @@ export const getStudentById = async (req: Request, res: Response) => {
     }
 
     const is_outside = leaveRes.rows.length > 0;
-    const snapshotMap = academicContext.mode === 'historical'
+    const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
       ? await getStudentYearSnapshotMap(db, [studentId], academicContext.academicYearId)
       : new Map<string, any>();
     const student = applyAcademicSnapshot(result.rows[0], snapshotMap.get(studentId));

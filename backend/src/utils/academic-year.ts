@@ -1,4 +1,4 @@
-import { cachedResult } from './server-cache';
+import { cachedResult, makeCacheKey } from './server-cache';
 
 type Queryable = {
   query: (text: string, params?: any[]) => Promise<{ rows: any[] }>;
@@ -58,20 +58,29 @@ export async function getStudentYearSnapshotMap(
   academicYearId: string | null
 ) {
   const uniqueIds = Array.from(new Set(studentIds.filter(Boolean)));
-  const snapshots = new Map<string, any>();
-  if (!academicYearId || uniqueIds.length === 0) return snapshots;
+  if (!academicYearId || uniqueIds.length === 0) return new Map<string, any>();
 
-  const res = await db.query(
-    `SELECT student_id, academic_year_id, school_standard, school_section,
-            madrasa_standard, madrasa_section, hifz_mentor_id, status
-     FROM student_year_snapshots
-     WHERE academic_year_id = $1
-       AND student_id = ANY($2::text[])`,
-    [academicYearId, uniqueIds]
+  return cachedResult(
+    makeCacheKey('academic-year:snapshots', {
+      academic_year_id: academicYearId,
+      students: uniqueIds.sort().join(','),
+    }),
+    60_000,
+    async () => {
+      const snapshots = new Map<string, any>();
+      const res = await db.query(
+        `SELECT student_id, academic_year_id, school_standard, school_section,
+                madrasa_standard, madrasa_section, hifz_mentor_id, status
+         FROM student_year_snapshots
+         WHERE academic_year_id = $1
+           AND student_id = ANY($2::text[])`,
+        [academicYearId, uniqueIds]
+      );
+
+      res.rows.forEach((row: any) => snapshots.set(row.student_id, row));
+      return snapshots;
+    }
   );
-
-  res.rows.forEach((row: any) => snapshots.set(row.student_id, row));
-  return snapshots;
 }
 
 export function applyAcademicSnapshot(student: any, snapshot?: any) {

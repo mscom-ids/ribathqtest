@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import {
     EmptyState,
     formatDate,
@@ -76,7 +77,13 @@ export default function PrincipalLeavesPage() {
         if (!showModal) return
         async function fetchStudents() {
             try {
-                const res = await api.get("/students", { params: { light: "true", status: "active", limit: 300 } })
+                const res = await cachedGet("/students", {
+                    light: "true",
+                    status: "active",
+                    limit: 300,
+                    count: "false",
+                    sort: "name",
+                }, 60_000)
                 if (res.data?.success) {
                     setStudentsList(res.data.students || [])
                 }

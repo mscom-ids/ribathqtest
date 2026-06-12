@@ -14,8 +14,6 @@ router.get('/current', academic_history_controller_1.getCurrentAcademicYear);
 router.get('/health', (0, auth_middleware_1.requireRole)(HISTORY_MANAGE_ROLES), academic_history_controller_1.getHistoryHealth);
 router.get('/migration-reports', (0, auth_middleware_1.requireRole)(HISTORY_MANAGE_ROLES), academic_history_controller_1.getMigrationReports);
 router.get('/snapshots', academic_history_controller_1.getYearSnapshots);
-router.post('/year-start/preview', (0, auth_middleware_1.requireRole)(HISTORY_MANAGE_ROLES), academic_history_controller_1.previewYearStart);
-router.post('/year-start/commit', (0, auth_middleware_1.requireRole)(HISTORY_MANAGE_ROLES), academic_history_controller_1.commitYearStart);
 router.get('/students/:studentId', academic_history_controller_1.getStudentAcademicHistory);
 router.post('/settings', (0, auth_middleware_1.requireRole)(HISTORY_MANAGE_ROLES), academic_history_controller_1.upsertAcademicYearSettings);
 exports.default = router;

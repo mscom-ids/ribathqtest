@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
-import { invalidateCacheByPrefix } from '../utils/server-cache';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 
 function normalizeDepartment(value: any) {
     const raw = String(value || '').trim().toLowerCase();
@@ -18,8 +18,11 @@ function classDisplayName(type: string, standard?: string | null, section?: stri
 // --- ACADEMIC YEARS ---
 export const getAcademicYears = async (req: Request, res: Response) => {
     try {
-        const result = await db.query('SELECT * FROM academic_years ORDER BY start_date DESC');
-        res.json({ success: true, data: result.rows });
+        const rows = await cachedResult('classes:academic-years', 5 * 60_000, async () => {
+            const result = await db.query('SELECT * FROM academic_years ORDER BY start_date DESC');
+            return result.rows;
+        });
+        res.json({ success: true, data: rows });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -86,6 +89,8 @@ export const upsertAcademicYear = async (req: Request, res: Response) => {
             await syncCurrentYearMentorAssignments(result.rows[0].id);
         }
         invalidateCacheByPrefix('academic-year:');
+        invalidateCacheByPrefix('classes:');
+        invalidateCacheByPrefix('students:');
         invalidateCacheByPrefix('attendance:');
         invalidateCacheByPrefix('reports:');
         return res.json({ success: true, data: result.rows[0] });
@@ -97,6 +102,9 @@ export const upsertAcademicYear = async (req: Request, res: Response) => {
 export const deleteAcademicYear = async (req: Request, res: Response) => {
     try {
         await db.query('DELETE FROM academic_years WHERE id = $1', [req.params.id]);
+        invalidateCacheByPrefix('classes:');
+        invalidateCacheByPrefix('academic-year:');
+        invalidateCacheByPrefix('students:');
         res.json({ success: true });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
@@ -107,22 +115,29 @@ export const deleteAcademicYear = async (req: Request, res: Response) => {
 export const getClasses = async (req: Request, res: Response) => {
     try {
         const { academic_year_id, type, include_archived } = req.query;
-        let query = 'SELECT * FROM classes WHERE 1=1';
-        const params: any[] = [];
-        if (academic_year_id) {
-            params.push(academic_year_id);
-            query += ` AND academic_year_id = $${params.length}`;
-        }
-        if (type && type !== 'all') {
-            params.push(normalizeDepartment(type));
-            query += ` AND type = $${params.length}`;
-        }
-        if (include_archived !== 'true') {
-            query += ' AND COALESCE(is_archived, false) = false';
-        }
-        query += ' ORDER BY type, standard NULLS LAST, section NULLS LAST, name';
-        const result = await db.query(query, params);
-        res.json({ success: true, data: result.rows });
+        const rows = await cachedResult(
+            makeCacheKey('classes:list', { academic_year_id, type, include_archived }),
+            60_000,
+            async () => {
+                let query = 'SELECT * FROM classes WHERE 1=1';
+                const params: any[] = [];
+                if (academic_year_id) {
+                    params.push(academic_year_id);
+                    query += ` AND academic_year_id = $${params.length}`;
+                }
+                if (type && type !== 'all') {
+                    params.push(normalizeDepartment(type));
+                    query += ` AND type = $${params.length}`;
+                }
+                if (include_archived !== 'true') {
+                    query += ' AND COALESCE(is_archived, false) = false';
+                }
+                query += ' ORDER BY type, standard NULLS LAST, section NULLS LAST, name';
+                const result = await db.query(query, params);
+                return result.rows;
+            }
+        );
+        res.json({ success: true, data: rows });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -417,6 +432,9 @@ export const upsertStudentClassAssignment = async (req: Request, res: Response) 
         );
 
         await client.query('COMMIT');
+        invalidateCacheByPrefix('academic-year:snapshots');
+        invalidateCacheByPrefix('students:');
+        invalidateCacheByPrefix('reports:');
         res.json({ success: true });
     } catch (err: any) {
         await client.query('ROLLBACK');
@@ -440,12 +458,14 @@ export const upsertClass = async (req: Request, res: Response) => {
                 `UPDATE classes SET name=$1, type=$2, standard=$3, section=$4, updated_at=now() WHERE id=$5 RETURNING *`,
                 [name, type, standard, section || null, id]
             );
+            invalidateCacheByPrefix('classes:');
             return res.json({ success: true, data: result.rows[0] });
         } else {
             const result = await db.query(
                 `INSERT INTO classes (academic_year_id, name, type, standard, section) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
                 [academic_year_id, name, type, standard, section || null]
             );
+            invalidateCacheByPrefix('classes:');
             return res.json({ success: true, data: result.rows[0] });
         }
     } catch (err: any) {
@@ -456,9 +476,188 @@ export const upsertClass = async (req: Request, res: Response) => {
 export const deleteClass = async (req: Request, res: Response) => {
     try {
         await db.query('UPDATE classes SET is_archived = true, archived_at = now(), updated_at = now() WHERE id = $1', [req.params.id]);
+        invalidateCacheByPrefix('classes:');
         res.json({ success: true, message: 'Class archived. Existing history remains preserved.' });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
+    }
+};
+export const getPromotionStudents = async (req: Request, res: Response) => {
+    try {
+        const { from_academic_year_id, from_standard, from_section, to_academic_year_id, department } = req.query;
+        if (!from_academic_year_id || !from_standard || !to_academic_year_id || !department) {
+            return res.status(400).json({ success: false, error: 'Missing required parameters' });
+        }
+
+        const dept = normalizeDepartment(department);
+        const sourceSection = from_section && from_section !== 'all' ? String(from_section) : null;
+        let result;
+        if (dept === 'School') {
+            result = await db.query(
+                `SELECT se.student_id, s.name, s.name as student_name, s.gender, s.photo_url, s.adm_no,
+                        se.school_standard as from_standard, se.school_section as from_section,
+                        EXISTS(SELECT 1 FROM student_school_enrollments WHERE student_id = s.adm_no AND academic_year_id = $4 AND status = 'active') as already_assigned_in_target
+                 FROM student_school_enrollments se
+                 JOIN students s ON s.adm_no = se.student_id
+                 WHERE se.academic_year_id = $1
+                   AND se.school_standard = $2
+                   AND ($3::text IS NULL OR COALESCE(se.school_section, '') = COALESCE($3, ''))
+                   AND se.status = 'active'
+                   AND COALESCE(s.status, 'active') = 'active'
+                 ORDER BY s.name`,
+                [from_academic_year_id, from_standard, sourceSection, to_academic_year_id]
+            );
+        } else if (dept === 'Madrassa') {
+            result = await db.query(
+                `SELECT me.student_id, s.name, s.name as student_name, s.gender, s.photo_url, s.adm_no,
+                        me.madrasa_standard as from_standard, me.madrasa_section as from_section,
+                        EXISTS(SELECT 1 FROM student_madrasa_enrollments WHERE student_id = s.adm_no AND academic_year_id = $4 AND status = 'active') as already_assigned_in_target
+                 FROM student_madrasa_enrollments me
+                 JOIN students s ON s.adm_no = me.student_id
+                 WHERE me.academic_year_id = $1
+                   AND me.madrasa_standard = $2
+                   AND ($3::text IS NULL OR COALESCE(me.madrasa_section, '') = COALESCE($3, ''))
+                   AND me.status = 'active'
+                   AND COALESCE(s.status, 'active') = 'active'
+                 ORDER BY s.name`,
+                [from_academic_year_id, from_standard, sourceSection, to_academic_year_id]
+            );
+        } else {
+            return res.status(400).json({ success: false, error: 'Invalid department' });
+        }
+
+        res.json({ success: true, data: result.rows });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+export const executePromotion = async (req: Request, res: Response) => {
+    const client = await db.getClient();
+    try {
+        const { to_academic_year_id, to_class_id, from_standard, from_section, department, rows, actions } = req.body;
+        const dept = normalizeDepartment(department);
+        const promotionRows = Array.isArray(rows)
+            ? rows
+            : Object.entries(actions || {}).map(([student_id, action]) => ({
+                student_id,
+                action: action === 'stay' ? 'no_promotion' : action === 'none' ? 'skip' : action,
+            }));
+        const needsSourceClass = promotionRows.some((row: any) => row.action !== 'promote' && row.action !== 'skip');
+        if (!to_academic_year_id || !to_class_id || !department || !Array.isArray(promotionRows) || (needsSourceClass && !from_standard)) {
+            return res.status(400).json({ success: false, error: 'Missing required parameters' });
+        }
+
+        const classRes = await client.query('SELECT * FROM classes WHERE id = $1', [to_class_id]);
+        if (classRes.rows.length === 0) {
+            return res.status(400).json({ success: false, error: 'Target class not found' });
+        }
+        const targetClass = classRes.rows[0];
+
+        await client.query('BEGIN');
+
+        for (const row of promotionRows) {
+            if (row.action === 'skip') continue;
+
+            const studentRes = await client.query(
+                `SELECT adm_no FROM students WHERE adm_no = $1 AND COALESCE(status, 'active') = 'active'`,
+                [row.student_id]
+            );
+            if (studentRes.rows.length === 0) continue;
+
+            const targetStandard = row.action === 'promote' ? targetClass.standard : (row.from_standard || from_standard);
+            const targetSection = row.action === 'promote' ? targetClass.section : (row.from_section ?? from_section);
+
+            let enrollmentClassId = null;
+            if (row.action === 'promote') {
+                enrollmentClassId = to_class_id;
+            } else {
+                const sameClassRes = await client.query(
+                    `SELECT id FROM classes WHERE academic_year_id = $1 AND type = $2 AND standard = $3 AND COALESCE(section, '') = COALESCE($4, '') LIMIT 1`,
+                    [to_academic_year_id, dept, targetStandard, targetSection || '']
+                );
+                if (sameClassRes.rows.length > 0) {
+                    enrollmentClassId = sameClassRes.rows[0].id;
+                }
+            }
+
+            if (dept === 'School') {
+                await client.query(
+                    `INSERT INTO student_school_enrollments (student_id, academic_year_id, school_standard, school_section, status, joined_at)
+                     VALUES ($1, $2, $3, $4, 'active', now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        school_standard = EXCLUDED.school_standard,
+                        school_section  = EXCLUDED.school_section,
+                        status          = 'active'`,
+                    [row.student_id, to_academic_year_id, targetStandard, targetSection || null]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='School')`,
+                    [row.student_id, to_academic_year_id]
+                );
+                if (enrollmentClassId) {
+                    await client.query(
+                        `INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                        [row.student_id, enrollmentClassId, to_academic_year_id]
+                    );
+                }
+
+                await client.query(
+                    `INSERT INTO student_year_snapshots (
+                        student_id, academic_year_id, school_standard, school_section, status, updated_at
+                     ) VALUES ($1,$2,$3,$4,'active',now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        school_standard   = COALESCE(EXCLUDED.school_standard,   student_year_snapshots.school_standard),
+                        school_section    = COALESCE(EXCLUDED.school_section,    student_year_snapshots.school_section),
+                        status            = 'active',
+                        updated_at        = now()`,
+                    [row.student_id, to_academic_year_id, targetStandard, targetSection || null]
+                );
+            } else if (dept === 'Madrassa') {
+                await client.query(
+                    `INSERT INTO student_madrasa_enrollments (student_id, academic_year_id, madrasa_standard, madrasa_section, status, joined_at)
+                     VALUES ($1, $2, $3, $4, 'active', now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        madrasa_standard = EXCLUDED.madrasa_standard,
+                        madrasa_section  = EXCLUDED.madrasa_section,
+                        status           = 'active'`,
+                    [row.student_id, to_academic_year_id, targetStandard, targetSection || null]
+                );
+                await client.query(
+                    `DELETE FROM enrollments WHERE student_id=$1 AND academic_year_id=$2 AND class_id IN (SELECT id FROM classes WHERE type='Madrassa')`,
+                    [row.student_id, to_academic_year_id]
+                );
+                if (enrollmentClassId) {
+                    await client.query(
+                        `INSERT INTO enrollments (student_id, class_id, academic_year_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                        [row.student_id, enrollmentClassId, to_academic_year_id]
+                    );
+                }
+
+                await client.query(
+                    `INSERT INTO student_year_snapshots (
+                        student_id, academic_year_id, madrasa_standard, madrasa_section, status, updated_at
+                     ) VALUES ($1,$2,$3,$4,'active',now())
+                     ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                        madrasa_standard   = COALESCE(EXCLUDED.madrasa_standard,   student_year_snapshots.madrasa_standard),
+                        madrasa_section    = COALESCE(EXCLUDED.madrasa_section,    student_year_snapshots.madrasa_section),
+                        status            = 'active',
+                        updated_at        = now()`,
+                    [row.student_id, to_academic_year_id, targetStandard, targetSection || null]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        invalidateCacheByPrefix('academic-year:snapshots');
+        invalidateCacheByPrefix('students:');
+        invalidateCacheByPrefix('reports:');
+        res.json({ success: true });
+    } catch (err: any) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ success: false, error: err.message });
+    } finally {
+        client.release();
     }
 };
 
