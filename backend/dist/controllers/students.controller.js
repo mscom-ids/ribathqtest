@@ -116,6 +116,7 @@ const getAllStudents = async (req, res) => {
         const { search, class: className, status, light, sort } = req.query;
         const includeCount = req.query.count !== 'false';
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
+        const shouldApplyAcademicSnapshot = Boolean(academicContext.academicYearId);
         const rawLimit = Number(req.query.limit);
         const rawOffset = Number(req.query.offset);
         const shouldPaginate = Number.isFinite(rawLimit);
@@ -149,16 +150,16 @@ const getAllStudents = async (req, res) => {
             paramCount++;
         }
         if (className && className !== 'all') {
-            if (academicContext.mode === 'historical' && academicContext.academicYearId) {
+            if (shouldApplyAcademicSnapshot) {
                 const yearParam = paramCount++;
                 const classParam = paramCount++;
-                whereParts.push(`EXISTS (
-          SELECT 1
+                whereParts.push(`COALESCE((
+          SELECT sys.school_standard
           FROM student_year_snapshots sys
           WHERE sys.student_id = students.adm_no
             AND sys.academic_year_id = $${yearParam}
-            AND sys.school_standard = $${classParam}
-        )`);
+          LIMIT 1
+        ), students.standard) = $${classParam}`);
                 params.push(academicContext.academicYearId, className);
             }
             else {
@@ -223,7 +224,7 @@ const getAllStudents = async (req, res) => {
                     ]);
                     return { rows: result.rows, total: countRes.rows[0]?.total ?? null };
                 })());
-            const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
+            const snapshotMap = shouldApplyAcademicSnapshot
                 ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, payload.rows.map((student) => student.adm_no), academicContext.academicYearId)
                 : new Map();
             return res.json({
@@ -256,7 +257,7 @@ const getAllStudents = async (req, res) => {
                 const result = await db_1.db.query(query, params);
                 return result.rows;
             })());
-        const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
+        const snapshotMap = shouldApplyAcademicSnapshot
             ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, rows.map((student) => student.adm_no), academicContext.academicYearId)
             : new Map();
         res.json({
@@ -450,6 +451,7 @@ const getStudentById = async (req, res) => {
         const studentId = String(id);
         const { light } = req.query;
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
+        const shouldApplyAcademicSnapshot = Boolean(academicContext.academicYearId);
         // ?light=true skips the heavy comprehensive_details JSON for callers like
         // the daily-entry form that only need name + a couple of flags.
         const cols = light === 'true' ? LIGHT_STUDENT_COLS : '*';
@@ -479,7 +481,7 @@ const getStudentById = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
         const is_outside = leaveRes.rows.length > 0;
-        const snapshotMap = academicContext.mode === 'historical' && academicContext.academicYearId
+        const snapshotMap = shouldApplyAcademicSnapshot
             ? await (0, academic_year_1.getStudentYearSnapshotMap)(db_1.db, [studentId], academicContext.academicYearId)
             : new Map();
         const student = (0, academic_year_1.applyAcademicSnapshot)(result.rows[0], snapshotMap.get(studentId));
