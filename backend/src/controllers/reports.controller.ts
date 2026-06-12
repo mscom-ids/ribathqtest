@@ -193,7 +193,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
     // All 3 queries are independent — fire in parallel.
     const mapped = await cachedResult(
       makeCacheKey('reports:students', { month: targetMonth, year: targetYear, startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }),
-      60_000,
+      5 * 60_000,  // 5 min — report data doesn't change second-by-second
       async () => {
     const academicBounds = await getAcademicYearBounds(db, academicContext.academicYearId);
     const studentsQuery = shouldApplyAcademicSnapshot
@@ -201,8 +201,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
           text: `SELECT s.adm_no, s.name, s.batch_year,
                         COALESCE(sys.school_standard, s.standard) AS standard,
                         COALESCE(sys.status, s.status) AS status,
-                        s.photo_url,
-                        s.admission_date, s.comprehensive_details,
+                        s.photo_url, s.admission_date,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
@@ -218,7 +217,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
         }
       : {
           text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                        s.admission_date, s.comprehensive_details,
+                        s.admission_date,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
