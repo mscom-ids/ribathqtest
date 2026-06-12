@@ -27,7 +27,7 @@ export async function getAcademicYearContext(
 
   const currentAcademicYearId = await cachedResult(
     'academic-year:current',
-    5 * 60_000,
+    30 * 60_000,   // 30 min — academic year changes at most once a year
     async () => {
       const currentRes = await db.query(
         `SELECT id

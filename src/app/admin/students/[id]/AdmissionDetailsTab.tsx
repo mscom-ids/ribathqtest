@@ -23,7 +23,14 @@ const admissionSchema = z.object({
   recommended: z.string().optional(),
 })
 
-export default function AdmissionDetailsTab({ studentId, initialData }: { studentId: string, initialData?: any }) {
+type AdmissionDetails = z.infer<typeof admissionSchema>
+
+function getApiErrorMessage(error: unknown) {
+  const maybeError = error as { message?: string } | null
+  return maybeError?.message || "Unknown error"
+}
+
+export default function AdmissionDetailsTab({ studentId, initialData }: { studentId: string, initialData?: Partial<AdmissionDetails> }) {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
 
@@ -46,6 +53,7 @@ export default function AdmissionDetailsTab({ studentId, initialData }: { studen
     setLoading(true)
     try {
       const res = await api.put(`/students/${studentId}`, {
+        admission_date: values.admission_date || null,
         comprehensive_details: { admission: values }
       })
       if (res.data.success) {
@@ -54,9 +62,9 @@ export default function AdmissionDetailsTab({ studentId, initialData }: { studen
       } else {
         alert(`Failed to update: ${res.data.error}`)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error:", error)
-      alert(`Update failed: ${error.message}`)
+      alert(`Update failed: ${getApiErrorMessage(error)}`)
     } finally {
       setLoading(false)
     }
@@ -65,7 +73,7 @@ export default function AdmissionDetailsTab({ studentId, initialData }: { studen
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Ma'din Ribathul Qur'an College</CardTitle>
+        <CardTitle>Ma&apos;din Ribathul Qur&apos;an College</CardTitle>
         <Button variant="outline" size="sm" onClick={() => editing ? form.handleSubmit(onSubmit)() : setEditing(true)}>
           {loading ? "Saving..." : editing ? "Save" : "Update"}
         </Button>

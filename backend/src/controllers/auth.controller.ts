@@ -196,7 +196,7 @@ export const me = async (req: Request, res: Response) => {
 
     const user = await cachedResult(
       makeCacheKey('auth:me', { id: userContext.id }),
-      30_000,
+      5 * 60_000,  // 5 min — staff role/name rarely changes mid-session
       async () => {
         const result = await db.query(
           'SELECT id, email, name, role, photo_url FROM staff WHERE id = $1',
