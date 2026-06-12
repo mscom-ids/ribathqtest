@@ -8,6 +8,7 @@ exports.isAdministrativeStaffRole = isAdministrativeStaffRole;
 exports.staffDomainForRole = staffDomainForRole;
 exports.staffRoleLabel = staffRoleLabel;
 const db_1 = require("../config/db");
+const server_cache_1 = require("./server-cache");
 exports.TEACHING_STAFF_ROLES = ['usthad', 'mentor', 'staff', 'teacher'];
 exports.LEADERSHIP_STAFF_ROLES = ['principal', 'vice_principal'];
 exports.ADMINISTRATIVE_STAFF_ROLES = ['admin', 'controller'];
@@ -55,10 +56,14 @@ const getDelegationContext = async (req) => {
     if (!user)
         return null;
     // 1. Resolve the actual staff ID of the logged-in user.
-    const staffRes = await db_1.db.query('SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
-    if (staffRes.rows.length === 0)
+    //    Cache for 10 min per user — this lookup runs on EVERY API request
+    //    and was the top slow query (1000-1039ms each time).
+    const actualStaffId = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('staff:id-by-user', { uid: user.id }), 10 * 60000, async () => {
+        const staffRes = await db_1.db.query('SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
+        return staffRes.rows[0]?.id || null;
+    });
+    if (!actualStaffId)
         return null;
-    const actualStaffId = staffRes.rows[0].id;
     // 2. Check if a verified delegation token is attached by middleware
     const delegation = req.delegation;
     if (delegation && delegation.actingAsStaffId) {

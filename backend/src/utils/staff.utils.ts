@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import { db } from '../config/db';
+import { cachedResult, makeCacheKey } from './server-cache';
 
 export type StaffDomain = 'teaching' | 'leadership' | 'administrative';
 
@@ -61,9 +62,21 @@ export const getDelegationContext = async (req: Request): Promise<DelegationCont
     if (!user) return null;
 
     // 1. Resolve the actual staff ID of the logged-in user.
-    const staffRes = await db.query('SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1', [user.id, user.email]);
-    if (staffRes.rows.length === 0) return null;
-    const actualStaffId = staffRes.rows[0].id;
+    //    Cache for 10 min per user — this lookup runs on EVERY API request
+    //    and was the top slow query (1000-1039ms each time).
+    const actualStaffId = await cachedResult(
+        makeCacheKey('staff:id-by-user', { uid: user.id }),
+        10 * 60_000,
+        async () => {
+            const staffRes = await db.query(
+                'SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1',
+                [user.id, user.email]
+            );
+            return staffRes.rows[0]?.id || null;
+        }
+    );
+
+    if (!actualStaffId) return null;
 
     // 2. Check if a verified delegation token is attached by middleware
     const delegation = (req as any).delegation;

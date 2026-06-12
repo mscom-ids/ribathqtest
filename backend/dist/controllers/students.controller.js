@@ -44,11 +44,14 @@ const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 const ALUMNI_STATUSES = ['completed', 'dropout', 'stopped', 'higher_education'];
 const ACTIVE_OPERATIONAL_LEAVE_STATUSES = ['approved', 'outside'];
 // Columns required for the listing/grid views and the dashboard. Excludes the
-// heavy `comprehensive_details` JSON blob and `address` text — callers that
-// actually need those should fetch the single student via /students/:id.
+// heavy `comprehensive_details` JSON blob — callers that actually need it
+// should fetch the single student via /students/:id.
+// NOTE: We deliberately avoid touching comprehensive_details here because
+// reading a JSONB column forces Postgres to deserialize the entire blob for
+// every row, which was the primary cause of the 1000-1300ms student list queries.
 const LIGHT_STUDENT_COLS = `adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender,
-     COALESCE(admission_date::text, NULLIF(comprehensive_details->'admission'->>'admission_date', '')) AS admission_date,
-     COALESCE(admission_date::text, NULLIF(comprehensive_details->'admission'->>'admission_date', '')) AS date_of_join,
+     admission_date AS admission_date,
+     admission_date AS date_of_join,
      place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number`;
 const FULL_STUDENT_COLS = LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
 let studentCurrentPresenceTableExists = null;

@@ -166,15 +166,15 @@ const getStudentReports = async (req, res) => {
         const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
         const targetYear = year ? parseInt(year) : new Date().getFullYear();
         // All 3 queries are independent — fire in parallel.
-        const mapped = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('reports:students', { month: targetMonth, year: targetYear, startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }), 60000, async () => {
+        const mapped = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('reports:students', { month: targetMonth, year: targetYear, startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }), 5 * 60000, // 5 min — report data doesn't change second-by-second
+        async () => {
             const academicBounds = await (0, report_window_1.getAcademicYearBounds)(db_1.db, academicContext.academicYearId);
             const studentsQuery = shouldApplyAcademicSnapshot
                 ? {
                     text: `SELECT s.adm_no, s.name, s.batch_year,
                         COALESCE(sys.school_standard, s.standard) AS standard,
                         COALESCE(sys.status, s.status) AS status,
-                        s.photo_url,
-                        s.admission_date, s.comprehensive_details,
+                        s.photo_url, s.admission_date,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
@@ -190,7 +190,7 @@ const getStudentReports = async (req, res) => {
                 }
                 : {
                     text: `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                        s.admission_date, s.comprehensive_details,
+                        s.admission_date,
                         hm.name as hifz_mentor,
                         sm.name as school_mentor,
                         mm.name as madrasa_mentor
@@ -560,7 +560,7 @@ const getUnifiedStudentProgressReport = async (req, res) => {
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
             db_1.db.query(`SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                      s.admission_date, s.comprehensive_details,
+                      s.admission_date,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
                       (SELECT name FROM staff WHERE id = s.school_mentor_id) as school_mentor,
                       (SELECT name FROM staff WHERE id = s.madrasa_mentor_id) as madrasa_mentor

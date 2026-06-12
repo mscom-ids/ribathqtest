@@ -647,7 +647,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
             db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                      s.admission_date, s.comprehensive_details,
+                      s.admission_date,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
                       (SELECT name FROM staff WHERE id = s.school_mentor_id) as school_mentor,
                       (SELECT name FROM staff WHERE id = s.madrasa_mentor_id) as madrasa_mentor

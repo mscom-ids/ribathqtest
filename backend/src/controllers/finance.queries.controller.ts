@@ -104,8 +104,8 @@ export const getActiveStudents = async (req: Request, res: Response) => {
             const result = await db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.photo_url, s.dob as date_of_birth, s.status,
                         s.gender,
-                        COALESCE(s.admission_date::text, s.comprehensive_details #>> '{admission,admission_date}') as admission_date,
-                        COALESCE(s.admission_date::text, s.comprehensive_details #>> '{admission,admission_date}') as date_of_join,
+                        s.admission_date as admission_date,
+                        s.admission_date as date_of_join,
                         s.hifz_mentor_id, s.school_mentor_id, s.madrasa_mentor_id,
                         h.name as hifz_mentor_name, sc.name as school_mentor_name, m.name as madrasa_mentor_name
                  FROM students s
