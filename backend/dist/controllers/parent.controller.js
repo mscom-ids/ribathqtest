@@ -211,14 +211,13 @@ function buildWeeklyHifzReport(logs, startDate, endDate) {
 }
 function summarizeHifzLogs(logs) {
     const recentDates = new Set();
-    let newPages = 0;
     let recentPages = 0;
     let juzRevision = 0;
     let newRevision = 0;
     let oldRevision = 0;
+    const newVerseLogs = logs.filter((log) => log.mode === 'New Verses');
+    const newPages = (0, quran_data_1.calculateCoveredPagesFromLogs)(newVerseLogs);
     logs.forEach((log) => {
-        if (log.mode === 'New Verses')
-            newPages += getLogPages(log);
         if (log.mode === 'Recent Revision') {
             recentPages += getLogPages(log);
             recentDates.add(toDateKey(log.entry_date));

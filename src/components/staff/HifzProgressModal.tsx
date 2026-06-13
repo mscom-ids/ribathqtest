@@ -89,6 +89,79 @@ function formatVolume(value: number, unit: string) {
     return `${rounded.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`
 }
 
+// Calculates page coverage by merging overlapping verse ranges and checking mushaf boundaries
+function calculateMergedHifzPages(logs: Log[]): number {
+    let hifzPages = 0;
+    const newVerseRanges: { startSurah: number; startVerse: number; endSurah: number; endVerse: number }[] = [];
+
+    logs.forEach(log => {
+        if (log.mode === "New Verses") {
+            const sid = getSurahId(log.surah_name || "");
+            if (sid && log.start_v && log.end_v) {
+                newVerseRanges.push({
+                    startSurah: sid,
+                    startVerse: log.start_v,
+                    endSurah: sid,
+                    endVerse: log.end_v
+                });
+            } else if (log.start_page && log.end_page) {
+                hifzPages += (log.end_page - log.start_page + 1);
+            }
+        }
+    });
+
+    if (newVerseRanges.length > 0) {
+        type GlobalRange = { start: number; end: number };
+        const globalRanges: GlobalRange[] = newVerseRanges
+            .map(r => {
+                const startG = toGlobalVerseIndex(r.startSurah, r.startVerse);
+                const endG = toGlobalVerseIndex(r.endSurah, r.endVerse);
+                return { start: Math.min(startG, endG), end: Math.max(startG, endG) };
+            })
+            .filter(r => r.start >= 0 && r.end >= 0)
+            .sort((a, b) => a.start - b.start);
+
+        if (globalRanges.length > 0) {
+            const merged: GlobalRange[] = [globalRanges[0]];
+            for (let i = 1; i < globalRanges.length; i++) {
+                const cur = merged[merged.length - 1];
+                const next = globalRanges[i];
+                if (next.start <= cur.end + 1) {
+                    if (next.end > cur.end) cur.end = next.end;
+                } else {
+                    merged.push({ ...next });
+                }
+            }
+
+            type PageBound = { page: number; startGlobal: number; endGlobal: number };
+            const pageBounds: PageBound[] = MUSHAF_PAGES.map((p, i) => {
+                const startGlobal = toGlobalVerseIndex(p.surah, p.ayah);
+                let endGlobal: number;
+                if (i + 1 < MUSHAF_PAGES.length) {
+                    const nextP = MUSHAF_PAGES[i + 1];
+                    endGlobal = toGlobalVerseIndex(nextP.surah, nextP.ayah) - 1;
+                } else {
+                    endGlobal = toGlobalVerseIndex(114, 6);
+                }
+                return { page: p.page, startGlobal, endGlobal };
+            });
+
+            let pageCount = 0;
+            for (const pb of pageBounds) {
+                for (const range of merged) {
+                    if (range.start <= pb.endGlobal && range.end >= pb.endGlobal) {
+                        pageCount++;
+                        break;
+                    }
+                }
+            }
+            hifzPages += pageCount;
+        }
+    }
+
+    return parseFloat(hifzPages.toFixed(2));
+}
+
 // ── Week grouper (same logic as admin progress-tab) ──────────────────────────
 function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[], month: Date) {
     const monthStart = startOfMonth(month)
@@ -166,9 +239,7 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             weekNum: week.weekNum,
             days: dayRows,
             summary: {
-                totalNewPages: weekLogs
-                    .filter(l => l.mode === "New Verses")
-                    .reduce((sum, log) => sum + getLogPages(log), 0),
+                totalNewPages: calculateMergedHifzPages(weekLogs),
                 totalRecentPages: weekLogs
                     .filter(l => l.mode === "Recent Revision")
                     .reduce((sum, log) => sum + getLogPages(log), 0),
@@ -260,23 +331,14 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             isWithinInterval(new Date(l.entry_date), { start: monthStart, end: monthEnd })
         )
 
-        let hifzPages = 0
+        const hifzPages = calculateMergedHifzPages(monthLogs)
         const recentRevDates = new Set<string>()
         let juzRevTotal = 0
         let newRevCount = 0
         let oldRevCount = 0
 
         monthLogs.forEach(log => {
-            if (log.mode === "New Verses") {
-                const sid = getSurahId(log.surah_name || "")
-                let p = 0
-                if (sid && log.start_v && log.end_v) {
-                    p = calculatePages(sid, log.start_v, sid, log.end_v)
-                } else if (log.start_page && log.end_page) {
-                    p = log.start_page === log.end_page ? 0.5 : log.end_page - log.start_page + 1
-                }
-                hifzPages += p
-            } else if (log.mode === "Recent Revision") {
+            if (log.mode === "Recent Revision") {
                 recentRevDates.add(format(new Date(log.entry_date), "yyyy-MM-dd"))
             } else if (log.mode?.startsWith("Juz Revision")) {
                 const p = log.juz_portion

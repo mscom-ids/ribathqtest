@@ -8,7 +8,7 @@ import {
     getStudentAttendanceSummaries,
 } from '../utils/attendance-report';
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
-import { calculatePages, getSurahId } from '../utils/quran-data';
+import { calculatePages, getSurahId, calculateCoveredPagesFromLogs } from '../utils/quran-data';
 import { countCompletedJuz } from '../utils/quran-juz';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -251,14 +251,15 @@ function buildWeeklyHifzReport(logs: any[], startDate: string, endDate: string) 
 
 function summarizeHifzLogs(logs: any[]) {
     const recentDates = new Set<string>();
-    let newPages = 0;
     let recentPages = 0;
     let juzRevision = 0;
     let newRevision = 0;
     let oldRevision = 0;
 
+    const newVerseLogs = logs.filter((log) => log.mode === 'New Verses');
+    const newPages = calculateCoveredPagesFromLogs(newVerseLogs);
+
     logs.forEach((log) => {
-        if (log.mode === 'New Verses') newPages += getLogPages(log);
         if (log.mode === 'Recent Revision') {
             recentPages += getLogPages(log);
             recentDates.add(toDateKey(log.entry_date));
