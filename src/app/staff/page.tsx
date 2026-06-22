@@ -76,6 +76,11 @@ type MonthlyTopPerformer = {
     totalPoints: number
 }
 
+type MonthlyReportRow = {
+    adm_no: string
+    totalPoints?: number | string | null
+}
+
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
 function getGreeting(h: number) {
     if (h < 12) return "Good Morning"
@@ -244,6 +249,19 @@ export default function StaffDashboard() {
 
     useEffect(() => {
         if (!staffId || !todayStr) return
+        if (myStudents.length === 0) {
+            setMonthlyTopPerformers([])
+            return
+        }
+
+        let cancelled = false
+        const zeroPointPerformers = myStudents.map((student) => ({
+            adm_no: student.adm_no,
+            name: student.name,
+            standard: student.standard,
+            totalPoints: 0,
+        }))
+
         async function loadMonthlyTopPerformers() {
             setTopPerformersLoading(true)
             try {
@@ -253,30 +271,35 @@ export default function StaffDashboard() {
                 })
 
                 if (res.data.success && Array.isArray(res.data.reports)) {
-                    const topThree = res.data.reports
-                        .filter((student: any) => Number(student.totalPoints || 0) > 0)
-                        .sort((a: any, b: any) => Number(b.totalPoints || 0) - Number(a.totalPoints || 0))
-                        .slice(0, 3)
-                        .map((student: any) => ({
-                            adm_no: student.adm_no,
-                            name: student.name,
-                            standard: student.standard,
-                            totalPoints: Number(student.totalPoints || 0),
-                        }))
-                    setMonthlyTopPerformers(topThree)
-                } else {
-                    setMonthlyTopPerformers([])
+                    const reportByAdmNo = new Map<string, MonthlyReportRow>(
+                        (res.data.reports as MonthlyReportRow[]).map((student) => [student.adm_no, student])
+                    )
+                    const assignedPerformers = myStudents
+                        .map((student) => {
+                            const report = reportByAdmNo.get(student.adm_no)
+                            return {
+                                adm_no: student.adm_no,
+                                name: student.name,
+                                standard: student.standard,
+                                totalPoints: Number(report?.totalPoints || 0),
+                            }
+                        })
+                        .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+                    if (!cancelled) setMonthlyTopPerformers(assignedPerformers)
+                } else if (!cancelled) {
+                    setMonthlyTopPerformers(zeroPointPerformers)
                 }
             } catch (error) {
                 console.warn("[STAFF PAGE] Monthly top performers load failed:", error)
-                setMonthlyTopPerformers([])
+                if (!cancelled) setMonthlyTopPerformers(zeroPointPerformers)
             } finally {
-                setTopPerformersLoading(false)
+                if (!cancelled) setTopPerformersLoading(false)
             }
         }
 
         loadMonthlyTopPerformers()
-    }, [staffId, todayStr])
+        return () => { cancelled = true }
+    }, [staffId, todayStr, myStudents])
 
     // ── Derived ──────────────────────────────────────────────────
     const todaySessions = useMemo(() => {
@@ -966,3 +989,4 @@ export default function StaffDashboard() {
         </div>
     )
 }
+
