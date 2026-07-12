@@ -310,7 +310,11 @@ export default function StaffDashboard() {
     const presentCount = myStudents.filter(s => s.today_stats?.attendance === "Present" || s.today_stats?.attendance === "present").length
     const absentCount = myStudents.filter(s => s.today_stats?.attendance === "Absent").length
     const leaveCount = myStudents.filter(s => s.today_stats?.attendance === "Leave" || s.today_stats?.attendance === "Outside").length
-    const entryCount = myStudents.filter(s => s.today_stats && (s.today_stats.hifz > 0 || s.today_stats.revision > 0)).length
+    const entryCount = myStudents.filter(s => s.today_stats && (
+        s.today_stats.hifz > 0 ||
+        s.today_stats.revision > 0 ||
+        s.today_stats.juz > 0
+    )).length
     const attendancePct = myStudents.length > 0 ? Math.round((presentCount / myStudents.length) * 100) : 0
     const entryPct = myStudents.length > 0 ? Math.round((entryCount / myStudents.length) * 100) : 0
 

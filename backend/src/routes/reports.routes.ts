@@ -4,7 +4,7 @@ import { verifyToken, verifyDelegation, requireRole } from '../middleware/auth.m
 
 const router = Router();
 
-const REPORT_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const REPORT_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'mentor', 'usthad', 'staff', 'teacher'];
 
 router.use(verifyToken);
 router.use(verifyDelegation);

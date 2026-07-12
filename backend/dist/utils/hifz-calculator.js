@@ -52,7 +52,7 @@ function calculateHifzReportPoints(logs, attendance, options) {
     const totalPagesRecited = (0, quran_data_1.calculateCoveredPagesFromLogs)(logs.filter(l => l.mode === 'New Verses'));
     const expectedPages = totalClassDays * 0.9;
     let newVersePoints = expectedPages > 0 ? (totalPagesRecited / expectedPages) * 10 : 0;
-    newVersePoints = roundTo2(Math.min(newVersePoints, 10));
+    newVersePoints = roundTo2(Math.min(newVersePoints, 20));
     // STEP 3: RECENT REVISION POINT
     const uniqueRecentDates = new Set();
     logs.filter(l => l.mode === 'Recent Revision').forEach(log => {
@@ -63,7 +63,7 @@ function calculateHifzReportPoints(logs, attendance, options) {
     const daysRecitedRecent = uniqueRecentDates.size;
     const expectedRecentDays = totalClassDays * 0.7;
     let recentRevisionPoints = expectedRecentDays > 0 ? (daysRecitedRecent / expectedRecentDays) * 10 : 0;
-    recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, 10));
+    recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, 20));
     // STEP 4: JUZ REVISION POINT
     let totalJuzRecited = 0;
     logs.filter(l => l.mode?.startsWith('Juz Revision')).forEach(log => {
@@ -79,10 +79,10 @@ function calculateHifzReportPoints(logs, attendance, options) {
     });
     const expectedJuz = totalClassDays * 0.7;
     let juzPoints = expectedJuz > 0 ? (totalJuzRecited / expectedJuz) * 10 : 0;
-    juzPoints = roundTo2(Math.min(juzPoints, 10));
+    juzPoints = roundTo2(Math.min(juzPoints, 20));
     // STEP 5: TOTAL & GRADE
     const totalPoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints);
-    const totalPercentage = roundTo2((totalPoints / 30) * 100);
+    const totalPercentage = roundTo2((totalPoints / 60) * 100);
     let grade = 'NO GRADE';
     if (totalPercentage >= 95)
         grade = 'A++';

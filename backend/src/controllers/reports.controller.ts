@@ -6,6 +6,10 @@ import { TEACHING_STAFF_ROLES, staffRoleLabel } from '../utils/staff.utils';
 import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
 import { resolveHifzStandardsForSchedule } from '../utils/hifz-session-eligibility';
 import { getAcademicYearBounds, resolveStudentReportWindow } from '../utils/report-window';
+import { calculateHifzReportPoints } from '../utils/hifz-calculator';
+import { getStaffId, isTeachingStaffRole } from '../utils/staff.utils';
+import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
+import { countCompletedJuz } from '../utils/quran-juz';
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 
@@ -259,7 +263,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
         };
       })
       .filter((student: any) => student.report_window.has_overlap);
-    const attendanceSummaries = await getStudentAttendanceSummaries(db, students, startDate, endDate);
+    const attendanceSummaries = await getStudentAttendanceSummaries(db, students, startDate, endDate, undefined, academicContext.academicYearId);
 
     // Build O(1) lookup maps; the previous .find()-per-row was O(N×M).
     const hifzMap = new Map<string, { entries: number; pages: number; verses: number }>();
@@ -641,19 +645,36 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             }
         }
 
-        // All 4 queries are independent — fire in parallel.
+        // Resolve the caller before querying. Teaching staff can only report on
+        // students assigned to them in the selected academic year.
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+        const requesterRole = String((req as any).user?.role || '').toLowerCase();
+        const requesterIsTeachingStaff = isTeachingStaffRole(requesterRole);
+        const requesterStaffId = requesterIsTeachingStaff ? await getStaffId(req) : null;
+        if (requesterIsTeachingStaff && !requesterStaffId) {
+            return res.status(403).json({ success: false, error: 'Staff profile not found for this account.' });
+        }
 
-        const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
+        const [studentRes, logsRes, lifetimeLogsRes, pointDaysRes] = await Promise.all([
             db.query(
                 `SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                      s.admission_date,
+                      s.admission_date, COALESCE(s.phone_number, s.phone) AS parent_phone,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
                       (SELECT name FROM staff WHERE id = s.school_mentor_id) as school_mentor,
                       (SELECT name FROM staff WHERE id = s.madrasa_mentor_id) as madrasa_mentor
                FROM students s
-               WHERE s.adm_no = $1`,
-                [student_id]
+               WHERE s.adm_no = $1
+                 AND (
+                   $2::uuid IS NULL
+                   OR ($3::uuid IS NOT NULL AND EXISTS (
+                     SELECT 1 FROM student_year_snapshots sys
+                     WHERE sys.student_id = s.adm_no
+                       AND sys.academic_year_id = $3::uuid
+                       AND (sys.hifz_mentor_id = $2 OR sys.school_mentor_id = $2 OR sys.madrasa_mentor_id = $2)
+                   ))
+                   OR ($3::uuid IS NULL AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2))
+                 )`,
+                [student_id, requesterStaffId, academicContext.academicYearId]
             ),
             db.query(
                 `SELECT id, student_id, mode, entry_date, surah_name,
@@ -671,6 +692,15 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                  ORDER BY entry_date DESC, created_at DESC`,
                  [student_id]
             ),
+            type === 'Monthly'
+                ? db.query(
+                    `SELECT expected_class_days
+                     FROM hifz_monthly_report_settings
+                     WHERE report_month = date_trunc('month', $1::date)::date
+                     LIMIT 1`,
+                    [start_date]
+                )
+                : Promise.resolve({ rows: [] as any[] }),
         ]);
 
         if (studentRes.rows.length === 0) {
@@ -709,9 +739,17 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             db,
             effectiveStudentRows,
             reportWindow.effective_start_date,
-            reportWindow.effective_end_date
+            reportWindow.effective_end_date,
+            undefined,
+            academicContext.academicYearId
         );
         const attendanceSummary = attendanceSummaries.get(student_id as string);
+        const savedPointDays = pointDaysRes.rows[0]?.expected_class_days;
+        const performance = calculateHifzReportPoints(periodLogs as any, [], {
+            expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
+                ? Number(savedPointDays)
+                : attendanceSummary?.pointClassDays || attendanceSummary?.effectiveClasses || 0,
+        });
 
         // Compute aggregations in memory for UI compatibility
         const hifzAggByMode = new Map<string, any>();
@@ -725,6 +763,13 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             }
             hifzAggByMode.set(mode, metric);
         });
+        const periodNewVerseLogs = periodLogs.filter((log: any) => log.mode === 'New Verses');
+        const exactNewPages = calculateCoveredPagesFromLogs(periodNewVerseLogs);
+        const newVersesMetric = hifzAggByMode.get('New Verses');
+        if (newVersesMetric) {
+            // Count exact Madani Mushaf pages and merge overlapping ranges.
+            newVersesMetric.pages_recited = exactNewPages;
+        }
         const hifz_logs_agg = Array.from(hifzAggByMode.values());
 
         const revision_days = new Set(
@@ -741,9 +786,14 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                 report_window: reportWindow,
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,
+                performance,
                 period_logs: periodLogs,
                 lifetime_new_logs: lifetimeLogsRes.rows,
                 hifz_logs_agg,
+                hifz_activity: {
+                    new_pages_recited: exactNewPages,
+                    completed_lifetime_juz: countCompletedJuz(lifetimeLogsRes.rows),
+                },
                 revision_days
             }
         });

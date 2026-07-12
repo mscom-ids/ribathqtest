@@ -766,12 +766,17 @@ export const updateStudent = async (req: Request, res: Response) => {
 export const exportStudents = async (req: Request, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT adm_no, name, standard, admission_date, batch_year, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`
+      `SELECT adm_no, name, standard, admission_date, batch_year, phone_number,
+              COALESCE(NULLIF(place, ''), comprehensive_details #>> '{basic,place}') AS place
+       FROM students
+       WHERE status = 'active'
+       ORDER BY name ASC`
     );
     const data = result.rows.map((s: any) => ({
       rollNo: s.adm_no,
       name: s.name,
       standard: s.standard || '',
+      place: s.place || '',
       joinedAdmittedBatchYear: formatJoinedAdmittedBatchYear(s),
       phoneNumber: s.phone_number || ''
     }));
@@ -786,7 +791,11 @@ export const exportStudents = async (req: Request, res: Response) => {
 export const downloadStudentsExcel = async (req: Request, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT adm_no, name, standard, admission_date, batch_year, phone_number FROM students WHERE status = 'active' ORDER BY name ASC`
+      `SELECT adm_no, name, standard, admission_date, batch_year, phone_number,
+              COALESCE(NULLIF(place, ''), comprehensive_details #>> '{basic,place}') AS place
+       FROM students
+       WHERE status = 'active'
+       ORDER BY name ASC`
     );
 
     const rows = result.rows.map((s: any, i: number) => ({
@@ -794,6 +803,7 @@ export const downloadStudentsExcel = async (req: Request, res: Response) => {
       'Roll No': s.adm_no,
       'Student Name': s.name,
       'Class / Standard': s.standard || '',
+      'Place': s.place || '',
       'Joined / Admitted / Batch Year': formatJoinedAdmittedBatchYear(s),
       'Phone Number': s.phone_number || ''
     }));
@@ -802,7 +812,15 @@ export const downloadStudentsExcel = async (req: Request, res: Response) => {
     const ws = XLSX.utils.json_to_sheet(rows);
 
     // Column widths
-    ws['!cols'] = [{ wch: 6 }, { wch: 12 }, { wch: 30 }, { wch: 18 }, { wch: 28 }, { wch: 15 }];
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 12 },
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 28 },
+      { wch: 15 },
+    ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Students');
 

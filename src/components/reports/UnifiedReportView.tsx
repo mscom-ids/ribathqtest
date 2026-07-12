@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
-import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle } from "lucide-react"
+import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -114,6 +114,28 @@ export default function UnifiedReportView() {
 
     const printPdf = () => {
         window.print();
+    }
+
+    const openWhatsApp = () => {
+        const student = reportData?.student
+        const phone = String(student?.parent_phone || "").replace(/\D/g, "")
+        if (!phone) {
+            setErrorMsg("No parent phone number is saved for this student.")
+            return
+        }
+
+        const countryPhone = phone.length === 10 ? `91${phone}` : phone
+        const performance = reportData?.performance
+        const message = [
+            "Assalamu Alaikum,",
+            `${student.name}'s ${reportType.toLowerCase()} Hifz report (${format(dateRanges.start, 'MMMM yyyy')}):`,
+            `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
+            `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/20 points`,
+            `Juz Revision: ${performance?.juzPoints ?? 0}/20 points`,
+            `Total: ${performance?.totalPoints ?? 0}/60 points (${performance?.percentage ?? 0}%)`,
+            `Grade: ${performance?.grade || 'NO GRADE'}`,
+        ].join("\n")
+        window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
     }
 
     // Generator helpers for dropdowns
@@ -262,9 +284,14 @@ export default function UnifiedReportView() {
                             <h2 className="text-2xl font-black uppercase tracking-wider text-slate-800">Student Progress Report</h2>
                             <p className="text-sm text-slate-500 mt-1 font-medium">{format(dateRanges.start, 'MMM d, yyyy')} — {format(dateRanges.end, 'MMM d, yyyy')} ({reportType})</p>
                         </div>
-                        <Button variant="outline" className="print:hidden" onClick={printPdf}>
-                            <Download className="mr-2 h-4 w-4" /> Download PDF
-                        </Button>
+                        <div className="flex items-center gap-2 print:hidden">
+                            <Button variant="outline" onClick={openWhatsApp}>
+                                <MessageCircle className="mr-2 h-4 w-4" /> Send to Parent
+                            </Button>
+                            <Button variant="outline" onClick={printPdf}>
+                                <Download className="mr-2 h-4 w-4" /> Download PDF
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="mt-8 space-y-8">
@@ -382,6 +409,35 @@ export default function UnifiedReportView() {
                             )}
                         </div>
 
+                        {reportData.performance && (
+                            <div className="print:break-inside-avoid">
+                                <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Performance & Grade</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-xs font-semibold text-blue-700">New Verses</p>
+                                        <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/20</p>
+                                    </div>
+                                    <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-xs font-semibold text-orange-700">Recent Revision</p>
+                                        <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/20</p>
+                                    </div>
+                                    <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
+                                        <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/20</p>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-xs font-semibold text-emerald-700">Total</p>
+                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/60</p>
+                                        <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
+                                        <p className="text-xs font-semibold text-slate-600">Grade</p>
+                                        <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
+                                        <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {/* Hifz Progress Metrics */}
                         <div className="print:break-inside-avoid">
                             <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Hifz Activity</h3>
@@ -389,20 +445,15 @@ export default function UnifiedReportView() {
                                 {(()=>{
                                     const newVerses = reportData.hifz_logs_agg.find((l:any) => l.mode === 'New Verses')
                                     const juzRev = reportData.hifz_logs_agg.find((l:any) => l.mode === 'Juz Revision')
-                                    
-                                    const pagesFromVerses = newVerses?.verses_recited ? Math.ceil(Number(newVerses.verses_recited) / 15) : 0
-                                    const calculatedPages = Number(newVerses?.pages_recited) || pagesFromVerses
-
-                                    const totalLifetimePages = reportData.lifetime_new_logs.reduce((acc: number, log: any) => {
-                                        return acc + (Number(log.end_page) - Number(log.start_page) + 1 || Number(log.verses) / 15 || 0)
-                                    }, 0)
+                                    const exactNewPages = Number(reportData.hifz_activity?.new_pages_recited ?? newVerses?.pages_recited ?? 0)
+                                    const completedLifetimeJuz = Number(reportData.hifz_activity?.completed_lifetime_juz ?? 0)
 
                                     return (
                                         <>
                                            <div className="bg-blue-50 text-blue-900 border border-blue-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
-                                               <p className="text-xs text-blue-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">New Verses Recited</p>
-                                               <p className="text-3xl font-black">{newVerses?.verses_recited || 0}</p>
-                                               <p className="text-[10px] mt-1 text-blue-600/60 font-medium print:text-slate-400">Pages approx: {calculatedPages}</p>
+                                               <p className="text-xs text-blue-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">New Pages Recited</p>
+                                               <p className="text-3xl font-black">{exactNewPages}</p>
+                                               <p className="text-[10px] mt-1 text-blue-600/60 font-medium print:text-slate-400">Exact Mushaf page coverage</p>
                                            </div>
                                            <div className="bg-orange-50 text-orange-900 border border-orange-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
                                                <p className="text-xs text-orange-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Revision Days</p>
@@ -417,7 +468,7 @@ export default function UnifiedReportView() {
                                            <div className="bg-purple-50 text-purple-900 border border-purple-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
                                                <p className="text-xs text-purple-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Total Lifetime Juz</p>
                                                <p className="text-3xl font-black">
-                                                    {Math.floor(totalLifetimePages / 20) || 0}
+                                                    {completedLifetimeJuz}
                                                </p>
                                                <p className="text-[10px] mt-1 text-purple-600/60 font-medium print:text-slate-400">Completed entirely</p>
                                            </div>

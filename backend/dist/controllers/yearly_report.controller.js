@@ -4,6 +4,7 @@ exports.getAvailableClasses = exports.getClassYearlyReport = exports.getStudentY
 const db_1 = require("../config/db");
 const academic_year_1 = require("../utils/academic-year");
 const report_window_1 = require("../utils/report-window");
+const quran_data_1 = require("../utils/quran-data");
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -306,11 +307,12 @@ function computeHifzProgress(logs) {
         unique_juz: Array.from(data.juz).sort((a, b) => a - b),
     }));
     const newVerses = byMode.get('New Verses');
+    const exactNewPages = (0, quran_data_1.calculateCoveredPagesFromLogs)(logs.filter(log => log.mode === 'New Verses'));
     const revisionDays = new Set(logs.filter(l => l.mode === 'Recent Revision').map(l => toDateKey(l.entry_date))).size;
     return {
         total_sessions: logs.length,
         new_verses_sessions: newVerses?.count || 0,
-        new_pages_memorized: newVerses?.pages || 0,
+        new_pages_memorized: exactNewPages,
         new_verses_memorized: newVerses?.verses || 0,
         revision_days: revisionDays,
         breakdown_by_mode: modes,

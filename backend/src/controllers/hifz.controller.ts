@@ -6,6 +6,7 @@ import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/se
 import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
 import { getStudentAttendanceSummaries } from '../utils/attendance-report';
 import { getMentorAccessDecision, isMentorAccessRole } from '../utils/mentor-access-policy';
+import { getAcademicYearContext } from '../utils/academic-year';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
@@ -685,6 +686,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
 
         const { startDate, endDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month as string);
 
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
         const [studentResult, logsResult] = await Promise.all([
             db.query(
                 `SELECT adm_no, standard AS attendance_standard, COALESCE(hifz_standard, standard, 'Common') AS standard
@@ -705,7 +707,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         }
 
         const [attendanceSummaries, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
-            getStudentAttendanceSummaries(db, studentResult.rows, startDate, endDate, 'hifz'),
+            getStudentAttendanceSummaries(db, studentResult.rows, startDate, endDate, 'hifz', academicContext.academicYearId),
             getDetectedClassDays(startDate, endDate),
             getDetectedLogDays(startDate, endDate),
             getMonthlyClassDaysSetting(reportMonth),
@@ -761,9 +763,10 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
         }
 
         const period = getMonthlyReportPeriod(month as string);
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
 
         const results = await cachedResult(
-            makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
+            makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', academic_year_id: academicContext.academicYearId || 'legacy', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
             HIFZ_MONTHLY_TTL_MS,
             async () => {
                 const { startDate, endDate, reportMonth, isCurrentMonth } = period;
@@ -803,7 +806,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     studentsResult.rows,
                     startDate,
                     endDate,
-                    'hifz'
+                    'hifz',
+                    academicContext.academicYearId
                 );
 
                 const logsByStudent: Record<string, any[]> = {};
@@ -860,6 +864,12 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         allowFallback ? overrideClassDays : null
                     );
 
+                    // Manual monthly figures remain the report display values. Live
+                    // Hifz logs still determine performance points, including range entry.
+                    const studentLogs = logsByStudent[student.adm_no] || [];
+                    const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
+                        expectedClassDaysOverride: effectiveClassDays,
+                    });
                     if (manualRecord) {
                         return {
                             adm_no: student.adm_no,
@@ -873,11 +883,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             total_juz: Number(manualRecord.total_juz) || '-',
                             attendance: manualRecord.attendance || '-',
                             is_manual: true,
-                            newVersePoints: 0,
-                            recentRevisionPoints: 0,
-                            juzPoints: 0,
-                            totalPoints: 0,
-                            percentage: 0,
+                            ...calculatedPoints,
                             grade: manualRecord.grade || '-',
                             totalClassDays: effectiveClassDays,
                             detectedClassDays,
@@ -888,12 +894,6 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                         };
                     }
-
-                    const studentLogs = logsByStudent[student.adm_no] || [];
-
-                    const calc = calculateHifzReportPoints(studentLogs, [], {
-                        expectedClassDaysOverride: effectiveClassDays,
-                    });
 
                     const hifzPages = calculateCoveredPagesFromLogs(
                         studentLogs.filter((log: any) => log.mode === 'New Verses')
@@ -941,7 +941,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                         is_manual: false,
-                        ...calc
+                        ...calculatedPoints
                     };
                 });
 

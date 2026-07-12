@@ -230,7 +230,8 @@ async function computeStudentAttendanceSummaries(
     students: StudentForAttendanceReport[],
     startDate: string,
     endDate: string,
-    classType?: string
+    classType?: string,
+    academicYearId?: string | null
 ) {
     const summaries = new Map<string, StudentAttendanceSummary>();
     students.forEach(student => summaries.set(student.adm_no, emptySummary()));
@@ -243,6 +244,11 @@ async function computeStudentAttendanceSummaries(
         params.push(classType.toLowerCase());
         typeClause = `AND LOWER(class_type) = $${params.length}`;
     }
+    let academicYearClause = '';
+    if (academicYearId) {
+        params.push(academicYearId);
+        academicYearClause = `AND academic_year_id = $${params.length}`;
+    }
 
     const [schedulesRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
         db.query(
@@ -250,7 +256,9 @@ async function computeStudentAttendanceSummaries(
              FROM attendance_schedules
              WHERE effective_from <= $2::date
                AND (effective_until IS NULL OR effective_until >= $1::date)
-               ${typeClause}`,
+               AND (is_deleted = false OR is_deleted IS NULL)
+               ${typeClause}
+               ${academicYearClause}`,
             params
         ),
         db.query(
@@ -406,7 +414,8 @@ export async function getStudentAttendanceSummaries(
     students: StudentForAttendanceReport[],
     startDate: string,
     endDate: string,
-    classType?: string
+    classType?: string,
+    academicYearId?: string | null
 ) {
     if (students.length === 0) return new Map<string, StudentAttendanceSummary>();
 
@@ -415,9 +424,10 @@ export async function getStudentAttendanceSummaries(
             startDate,
             endDate,
             classType: classType || 'all',
+            academicYearId: academicYearId || 'legacy',
             students: attendanceStudentsFingerprint(students),
         }),
         60_000,
-        () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType)
+        () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType, academicYearId)
     );
 }

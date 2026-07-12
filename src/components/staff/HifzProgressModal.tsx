@@ -17,7 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn, resolveBackendUrl } from "@/lib/utils"
 import api from "@/lib/api"
 import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
-import { getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
+import { getCompletedJuzList, getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Log = {
@@ -405,7 +405,7 @@ export function HifzProgressModal({ open, onClose, student }: Props) {
             }
         }
 
-        const calcTotalJuz = Math.min(Math.floor(lifetimePages / 20), 30)
+        const calcTotalJuz = getCompletedJuzList(lifetimeLogs as any).length
 
         return {
             hifzPages: parseFloat(hifzPages.toFixed(2)),

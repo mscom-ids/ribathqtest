@@ -8,6 +8,10 @@ const staff_utils_1 = require("../utils/staff.utils");
 const academic_year_1 = require("../utils/academic-year");
 const hifz_session_eligibility_1 = require("../utils/hifz-session-eligibility");
 const report_window_1 = require("../utils/report-window");
+const hifz_calculator_1 = require("../utils/hifz-calculator");
+const staff_utils_2 = require("../utils/staff.utils");
+const quran_data_1 = require("../utils/quran-data");
+const quran_juz_1 = require("../utils/quran-juz");
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 const MENTOR_COL_MAP = {
     hifz: 'hifz_mentor_id',
@@ -225,7 +229,7 @@ const getStudentReports = async (req, res) => {
                 };
             })
                 .filter((student) => student.report_window.has_overlap);
-            const attendanceSummaries = await (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, students, startDate, endDate);
+            const attendanceSummaries = await (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, students, startDate, endDate, undefined, academicContext.academicYearId);
             // Build O(1) lookup maps; the previous .find()-per-row was O(N×M).
             const hifzMap = new Map();
             const studentWindowMap = new Map(students.map((student) => [student.adm_no, student.report_window]));
@@ -556,16 +560,33 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                 return res.status(403).json({ success: false, error: "Monthly report is only available 2 days after the month ends." });
             }
         }
-        // All 4 queries are independent — fire in parallel.
+        // Resolve the caller before querying. Teaching staff can only report on
+        // students assigned to them in the selected academic year.
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
-        const [studentRes, logsRes, lifetimeLogsRes] = await Promise.all([
+        const requesterRole = String(req.user?.role || '').toLowerCase();
+        const requesterIsTeachingStaff = (0, staff_utils_2.isTeachingStaffRole)(requesterRole);
+        const requesterStaffId = requesterIsTeachingStaff ? await (0, staff_utils_2.getStaffId)(req) : null;
+        if (requesterIsTeachingStaff && !requesterStaffId) {
+            return res.status(403).json({ success: false, error: 'Staff profile not found for this account.' });
+        }
+        const [studentRes, logsRes, lifetimeLogsRes, pointDaysRes] = await Promise.all([
             db_1.db.query(`SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url,
-                      s.admission_date,
+                      s.admission_date, COALESCE(s.phone_number, s.phone) AS parent_phone,
                       (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor,
                       (SELECT name FROM staff WHERE id = s.school_mentor_id) as school_mentor,
                       (SELECT name FROM staff WHERE id = s.madrasa_mentor_id) as madrasa_mentor
                FROM students s
-               WHERE s.adm_no = $1`, [student_id]),
+               WHERE s.adm_no = $1
+                 AND (
+                   $2::uuid IS NULL
+                   OR ($3::uuid IS NOT NULL AND EXISTS (
+                     SELECT 1 FROM student_year_snapshots sys
+                     WHERE sys.student_id = s.adm_no
+                       AND sys.academic_year_id = $3::uuid
+                       AND (sys.hifz_mentor_id = $2 OR sys.school_mentor_id = $2 OR sys.madrasa_mentor_id = $2)
+                   ))
+                   OR ($3::uuid IS NULL AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2))
+                 )`, [student_id, requesterStaffId, academicContext.academicYearId]),
             db_1.db.query(`SELECT id, student_id, mode, entry_date, surah_name,
                         start_v, end_v, start_page, end_page, juz_number, juz_portion
                  FROM hifz_logs
@@ -576,6 +597,12 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                  FROM hifz_logs
                  WHERE student_id = $1 AND mode = 'New Verses'
                  ORDER BY entry_date DESC, created_at DESC`, [student_id]),
+            type === 'Monthly'
+                ? db_1.db.query(`SELECT expected_class_days
+                     FROM hifz_monthly_report_settings
+                     WHERE report_month = date_trunc('month', $1::date)::date
+                     LIMIT 1`, [start_date])
+                : Promise.resolve({ rows: [] }),
         ]);
         if (studentRes.rows.length === 0) {
             return res.status(404).json({ success: false, error: "Student not found" });
@@ -603,8 +630,14 @@ const getUnifiedStudentProgressReport = async (req, res) => {
             const entryDate = toDateKey(log.entry_date);
             return entryDate >= reportWindow.effective_start_date && entryDate <= reportWindow.effective_end_date;
         });
-        const attendanceSummaries = await (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, effectiveStudentRows, reportWindow.effective_start_date, reportWindow.effective_end_date);
+        const attendanceSummaries = await (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, effectiveStudentRows, reportWindow.effective_start_date, reportWindow.effective_end_date, undefined, academicContext.academicYearId);
         const attendanceSummary = attendanceSummaries.get(student_id);
+        const savedPointDays = pointDaysRes.rows[0]?.expected_class_days;
+        const performance = (0, hifz_calculator_1.calculateHifzReportPoints)(periodLogs, [], {
+            expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
+                ? Number(savedPointDays)
+                : attendanceSummary?.pointClassDays || attendanceSummary?.effectiveClasses || 0,
+        });
         // Compute aggregations in memory for UI compatibility
         const hifzAggByMode = new Map();
         periodLogs.forEach((log) => {
@@ -619,6 +652,13 @@ const getUnifiedStudentProgressReport = async (req, res) => {
             }
             hifzAggByMode.set(mode, metric);
         });
+        const periodNewVerseLogs = periodLogs.filter((log) => log.mode === 'New Verses');
+        const exactNewPages = (0, quran_data_1.calculateCoveredPagesFromLogs)(periodNewVerseLogs);
+        const newVersesMetric = hifzAggByMode.get('New Verses');
+        if (newVersesMetric) {
+            // Count exact Madani Mushaf pages and merge overlapping ranges.
+            newVersesMetric.pages_recited = exactNewPages;
+        }
         const hifz_logs_agg = Array.from(hifzAggByMode.values());
         const revision_days = new Set(periodLogs.filter(l => l.mode === 'Recent Revision').map(l => {
             // Ensure date format string consistency for Set uniqueness
@@ -631,9 +671,14 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                 report_window: reportWindow,
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,
+                performance,
                 period_logs: periodLogs,
                 lifetime_new_logs: lifetimeLogsRes.rows,
                 hifz_logs_agg,
+                hifz_activity: {
+                    new_pages_recited: exactNewPages,
+                    completed_lifetime_juz: (0, quran_juz_1.countCompletedJuz)(lifetimeLogsRes.rows),
+                },
                 revision_days
             }
         });

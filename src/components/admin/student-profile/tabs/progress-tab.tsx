@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
-import { getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
+import { getCompletedJuzList, getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 
 export function ProgressTab({ student }: { student: Student }) {
     const [data, setData] = useState<any[]>([])
@@ -123,7 +123,7 @@ export function ProgressTab({ student }: { student: Student }) {
             }
 
             // Cap at 30 Juz (604 pages max)
-            const calcTotalJuz = Math.min(Math.floor(lifetimePages / 20), 30)
+            const calcTotalJuz = getCompletedJuzList(lifetimeLogs as any).length
             const studentIsHafiz = calcTotalJuz >= 30
             setIsHafiz(studentIsHafiz)
 

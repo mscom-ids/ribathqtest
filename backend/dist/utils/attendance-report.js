@@ -171,7 +171,7 @@ function attendanceStudentsFingerprint(students) {
     }
     return `${students.length}:${(hash >>> 0).toString(36)}`;
 }
-async function computeStudentAttendanceSummaries(db, students, startDate, endDate, classType) {
+async function computeStudentAttendanceSummaries(db, students, startDate, endDate, classType, academicYearId) {
     const summaries = new Map();
     students.forEach(student => summaries.set(student.adm_no, emptySummary()));
     if (students.length === 0)
@@ -182,12 +182,19 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
         params.push(classType.toLowerCase());
         typeClause = `AND LOWER(class_type) = $${params.length}`;
     }
+    let academicYearClause = '';
+    if (academicYearId) {
+        params.push(academicYearId);
+        academicYearClause = `AND academic_year_id = $${params.length}`;
+    }
     const [schedulesRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
         db.query(`SELECT id, class_type, name, standards, day_of_week, start_time, end_time, effective_from, effective_until
              FROM attendance_schedules
              WHERE effective_from <= $2::date
                AND (effective_until IS NULL OR effective_until >= $1::date)
-               ${typeClause}`, params),
+               AND (is_deleted = false OR is_deleted IS NULL)
+               ${typeClause}
+               ${academicYearClause}`, params),
         db.query(`SELECT schedule_id, date, cancelled_standards
              FROM attendance_cancellations
              WHERE date >= $1::date AND date <= $2::date`, [startDate, endDate]),
@@ -319,13 +326,14 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
     });
     return summaries;
 }
-async function getStudentAttendanceSummaries(db, students, startDate, endDate, classType) {
+async function getStudentAttendanceSummaries(db, students, startDate, endDate, classType, academicYearId) {
     if (students.length === 0)
         return new Map();
     return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:student-summaries', {
         startDate,
         endDate,
         classType: classType || 'all',
+        academicYearId: academicYearId || 'legacy',
         students: attendanceStudentsFingerprint(students),
-    }), 60000, () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType));
+    }), 60000, () => computeStudentAttendanceSummaries(db, students, startDate, endDate, classType, academicYearId));
 }

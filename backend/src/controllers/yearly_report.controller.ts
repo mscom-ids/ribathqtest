@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getAcademicYearContext } from '../utils/academic-year';
 import { getAcademicYearBounds, resolveStudentReportWindow, studentExitDate } from '../utils/report-window';
+import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -374,6 +375,9 @@ function computeHifzProgress(logs: any[]) {
   }));
 
   const newVerses = byMode.get('New Verses');
+  const exactNewPages = calculateCoveredPagesFromLogs(
+    logs.filter(log => log.mode === 'New Verses')
+  );
   const revisionDays = new Set(
     logs.filter(l => l.mode === 'Recent Revision').map(l => toDateKey(l.entry_date))
   ).size;
@@ -381,7 +385,7 @@ function computeHifzProgress(logs: any[]) {
   return {
     total_sessions: logs.length,
     new_verses_sessions: newVerses?.count || 0,
-    new_pages_memorized: newVerses?.pages || 0,
+    new_pages_memorized: exactNewPages,
     new_verses_memorized: newVerses?.verses || 0,
     revision_days: revisionDays,
     breakdown_by_mode: modes,

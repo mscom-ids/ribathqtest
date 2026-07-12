@@ -4,7 +4,7 @@ const express_1 = require("express");
 const reports_controller_1 = require("../controllers/reports.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
-const REPORT_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const REPORT_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'mentor', 'usthad', 'staff', 'teacher'];
 router.use(auth_middleware_1.verifyToken);
 router.use(auth_middleware_1.verifyDelegation);
 router.use((0, auth_middleware_1.requireRole)(REPORT_ROLES));
