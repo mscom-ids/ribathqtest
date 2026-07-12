@@ -130,9 +130,9 @@ export default function UnifiedReportView() {
             "Assalamu Alaikum,",
             `${student.name}'s ${reportType.toLowerCase()} Hifz report (${format(dateRanges.start, 'MMMM yyyy')}):`,
             `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
-            `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/20 points`,
-            `Juz Revision: ${performance?.juzPoints ?? 0}/20 points`,
-            `Total: ${performance?.totalPoints ?? 0}/60 points (${performance?.percentage ?? 0}%)`,
+            `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/15 points`,
+            `Juz Revision: ${performance?.juzPoints ?? 0}/15 points`,
+            `Total: ${performance?.totalPoints ?? 0}/50 points (${performance?.percentage ?? 0}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
         ].join("\n")
         window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
@@ -419,15 +419,15 @@ export default function UnifiedReportView() {
                                     </div>
                                     <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
                                         <p className="text-xs font-semibold text-orange-700">Recent Revision</p>
-                                        <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/20</p>
+                                        <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/15</p>
                                     </div>
                                     <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 print:border-slate-300 print:bg-transparent">
                                         <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
-                                        <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/20</p>
+                                        <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/15</p>
                                     </div>
                                     <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
                                         <p className="text-xs font-semibold text-emerald-700">Total</p>
-                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/60</p>
+                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/50</p>
                                         <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
                                     </div>
                                     <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">

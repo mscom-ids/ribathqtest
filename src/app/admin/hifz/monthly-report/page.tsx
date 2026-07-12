@@ -35,6 +35,7 @@ import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Badge } from "@/components/ui/badge"
+import { MonthlyReportExportButtons } from "./monthly-report-export-buttons"
 
 type StudentMonthlyStats = {
     adm_no: string
@@ -321,6 +322,13 @@ _Generated from Ma'din Ribathul Quran ERP_
                     <p className="text-slate-500 dark:text-slate-400">Track and share monthly student progress.</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    <MonthlyReportExportButtons
+                        month={selectedMonth}
+                        students={filteredStats}
+                        search={search}
+                        standard={standardFilter}
+                        usthad={usthadFilter}
+                    />
                     <Input
                         type="month"
                         value={selectedMonth}

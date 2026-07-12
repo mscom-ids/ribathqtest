@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const hifz_controller_1 = require("../controllers/hifz.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
+const hifz_export_controller_1 = require("../controllers/hifz-export.controller");
 const router = (0, express_1.Router)();
 router.use(auth_middleware_1.verifyToken);
 router.use(auth_middleware_1.verifyDelegation);
@@ -27,6 +28,10 @@ router.put('/logs/:id', hifz_controller_1.updateHifzLog);
 router.delete('/logs/:id', hifz_controller_1.deleteHifzLog);
 // GET /api/hifz/monthly-reports/calculate
 router.get('/monthly-reports/calculate', hifz_controller_1.calculateBulkMonthlyReport);
+// POST /api/hifz/monthly-reports/export/excel
+router.post('/monthly-reports/export/excel', hifz_export_controller_1.exportMonthlyReportExcel);
+// POST /api/hifz/monthly-reports/export/pdf
+router.post('/monthly-reports/export/pdf', hifz_export_controller_1.exportMonthlyReportPdf);
 // GET /api/hifz/monthly-report-settings
 router.get('/monthly-report-settings', hifz_controller_1.getMonthlyReportSettings);
 // POST /api/hifz/monthly-report-settings

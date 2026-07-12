@@ -7,6 +7,7 @@ import {
     upsertMonthlyReportSettings
 } from '../controllers/hifz.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
+import { exportMonthlyReportExcel, exportMonthlyReportPdf } from '../controllers/hifz-export.controller';
 
 const router = Router();
 
@@ -43,6 +44,12 @@ router.delete('/logs/:id', deleteHifzLog);
 
 // GET /api/hifz/monthly-reports/calculate
 router.get('/monthly-reports/calculate', calculateBulkMonthlyReport);
+
+// POST /api/hifz/monthly-reports/export/excel
+router.post('/monthly-reports/export/excel', exportMonthlyReportExcel);
+
+// POST /api/hifz/monthly-reports/export/pdf
+router.post('/monthly-reports/export/pdf', exportMonthlyReportPdf);
 
 // GET /api/hifz/monthly-report-settings
 router.get('/monthly-report-settings', getMonthlyReportSettings);
