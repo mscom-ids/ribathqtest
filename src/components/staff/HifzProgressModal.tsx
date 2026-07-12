@@ -18,6 +18,7 @@ import { cn, resolveBackendUrl } from "@/lib/utils"
 import api from "@/lib/api"
 import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
 import { getCompletedJuzList, getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
+import { formatCompactHifzEntries } from "@/lib/hifz-entry-summary"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Log = {
@@ -172,6 +173,22 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
         isWithinInterval(new Date(l.entry_date), { start: monthStart, end: monthEnd })
     )
 
+    const logsByDate = new Map<string, Log[]>()
+    for (const log of monthLogs) {
+        const dateKey = String(log.entry_date).slice(0, 10)
+        const items = logsByDate.get(dateKey)
+        if (items) items.push(log)
+        else logsByDate.set(dateKey, [log])
+    }
+    const attendanceByDate = new Map<string, AttendanceRecord[]>()
+    for (const record of attendanceRecords) {
+        if (record.department?.toLowerCase() !== "hifz") continue
+        const dateKey = String(record.date).slice(0, 10)
+        const items = attendanceByDate.get(dateKey)
+        if (items) items.push(record)
+        else attendanceByDate.set(dateKey, [record])
+    }
+
     const weeks: { days: Date[]; weekNum: number }[] = []
     let currentWeek: Date[] = []
     let weekNum = 1
@@ -190,27 +207,22 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
             const dateStr = format(day, "yyyy-MM-dd")
             const dow = getDay(day)
 
-            const dayLogs = monthLogs.filter(
-                l => format(new Date(l.entry_date), "yyyy-MM-dd") === dateStr
-            )
+            const dayLogs = logsByDate.get(dateStr) || []
             const newVerses = dayLogs.filter(l => l.mode === "New Verses")
             const recentRev = dayLogs.filter(l => l.mode === "Recent Revision")
             const juzRev = dayLogs.filter(l => l.mode === "Juz Revision")
             const newRevHafiz = dayLogs.filter(l => l.mode === "Juz Revision (New)")
             const oldRevHafiz = dayLogs.filter(l => l.mode === "Juz Revision (Old)")
 
-            const att = attendanceRecords.filter(
-                r => format(new Date(r.date), "yyyy-MM-dd") === dateStr &&
-                     r.department?.toLowerCase() === "hifz"
-            )
+            const att = attendanceByDate.get(dateStr) || []
             const isPresent = att.some(r => r.status === "Present")
             const isAbsent = att.some(r => r.status === "Absent")
 
-            const newHifzEntries = newVerses.map(l => formatHifzLogLabel(l)).filter(Boolean)
-            const recentRevEntries = recentRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
-            const juzRevEntries = juzRev.map(l => formatHifzLogLabel(l)).filter(Boolean)
-            const newRevHafizEntries = newRevHafiz.map(l => formatHifzLogLabel(l)).filter(Boolean)
-            const oldRevHafizEntries = oldRevHafiz.map(l => formatHifzLogLabel(l)).filter(Boolean)
+            const newHifzEntries = formatCompactHifzEntries(newVerses)
+            const recentRevEntries = formatCompactHifzEntries(recentRev)
+            const juzRevEntries = formatCompactHifzEntries(juzRev)
+            const newRevHafizEntries = formatCompactHifzEntries(newRevHafiz)
+            const oldRevHafizEntries = formatCompactHifzEntries(oldRevHafiz)
 
             return {
                 date: day,
@@ -225,15 +237,12 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
                 recentRevEntries,
                 juzRevEntries,
                 newRevHafizEntries,
+                logs: dayLogs,
                 oldRevHafizEntries,
             }
         })
 
-        const weekStart = week.days[0]
-        const weekEnd = week.days[week.days.length - 1]
-        const weekLogs = monthLogs.filter(l =>
-            isWithinInterval(new Date(l.entry_date), { start: weekStart, end: weekEnd })
-        )
+        const weekLogs = dayRows.flatMap(row => row.logs)
 
         return {
             weekNum: week.weekNum,

@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Search, BookOpen, X, Download, FileText } from "lucide-react"
+import { Calendar as CalendarIcon, Search, BookOpen, Download, FileText } from "lucide-react"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { formatHifzLogLabel } from "@/lib/hifz-progress"
+import { formatCompactHifzEntries } from "@/lib/hifz-entry-summary"
 
 interface Student {
     adm_no: string
@@ -104,7 +105,6 @@ export default function HifzTrackingPage() {
     const [hifzLogs, setHifzLogs] = useState<Record<string, HifzLog[]>>({})
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
-    const [refreshKey, setRefreshKey] = useState(0)
     const dateKey = format(date, "yyyy-MM-dd")
     const dateLabel = format(date, "PPP")
 
@@ -147,7 +147,7 @@ export default function HifzTrackingPage() {
             setLoading(false)
         }
         loadData()
-    }, [dateKey, refreshKey])
+    }, [dateKey])
 
     const filteredStudents = students.filter(s =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -172,17 +172,25 @@ export default function HifzTrackingPage() {
         return parts.length > 0 ? parts.join(" | ") : "Not set"
     }
 
-    const getModeLogs = (logs: HifzLog[], mode: HifzMode) => {
-        if (mode === "Juz Revision") {
-            return logs.filter(log => log.mode?.startsWith("Juz Revision"))
+    const compactEntriesByStudent = useMemo(() => {
+        const entries: Record<string, Record<HifzMode, string[]>> = {}
+        for (const [studentId, logs] of Object.entries(hifzLogs)) {
+            entries[studentId] = {
+                "New Verses": formatCompactHifzEntries(logs.filter(log => log.mode === "New Verses")),
+                "Recent Revision": formatCompactHifzEntries(logs.filter(log => log.mode === "Recent Revision")),
+                "Juz Revision": formatCompactHifzEntries(logs.filter(log => log.mode?.startsWith("Juz Revision"))),
+            }
         }
-        return logs.filter(log => log.mode === mode)
-    }
+        return entries
+    }, [hifzLogs])
+
+    const getCompactModeEntries = (studentId: string, mode: HifzMode) =>
+        compactEntriesByStudent[studentId]?.[mode] || []
 
     const exportRows: ExportRow[] = filteredStudents.map((student) => {
         const logs = getStudentLogs(student)
         const modeEntries = HIFZ_MODES.reduce<Record<HifzMode, string[]>>((entries, mode) => {
-            entries[mode] = getModeLogs(logs, mode).map(formatLogDisplay)
+            entries[mode] = getCompactModeEntries(student.adm_no, mode)
             return entries
         }, {
             "New Verses": [],
@@ -312,23 +320,6 @@ export default function HifzTrackingPage() {
         printWindow.print()
     }
 
-    const handleDeleteLog = async (logId: string) => {
-        if (!confirm("Are you sure you want to delete this specific entry?")) return
-
-        try {
-            const res = await api.delete(`/hifz/logs/${logId}`);
-            if (res.data && res.data.success) {
-                // Trigger refresh
-                setRefreshKey(prev => prev + 1)
-            } else {
-                alert("Error deleting log");
-            }
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Unknown error"
-            alert("Error deleting: " + message)
-        }
-    }
-
     const getModeColor = (mode: string) => {
         switch (mode) {
             case "New Verses": return "bg-emerald-100 text-emerald-800"
@@ -449,27 +440,20 @@ export default function HifzTrackingPage() {
                                                     </TableCell>
                                                     <TableCell>
                                                         {logs.length > 0 ? (() => {
-                                                            const newVerses = getModeLogs(logs, "New Verses");
-                                                            const recentRevisions = getModeLogs(logs, "Recent Revision");
-                                                            const juzRevisions = getModeLogs(logs, "Juz Revision");
+                                                            const newVerses = getCompactModeEntries(student.adm_no, "New Verses");
+                                                            const recentRevisions = getCompactModeEntries(student.adm_no, "Recent Revision");
+                                                            const juzRevisions = getCompactModeEntries(student.adm_no, "Juz Revision");
 
-                                                            const renderLogBadge = (log: HifzLog) => (
-                                                                <div key={log.id} className="flex items-center gap-1 group bg-slate-50 dark:bg-slate-900 border rounded pr-1 shadow-sm w-fit">
-                                                                    <Link href={`/staff/entry/${log.student_id}?log_id=${log.id}&returnTo=/admin/hifz/tracking`} className="flex items-center gap-1 pl-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-l transition-colors">
-                                                                        <span className={cn("px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider", getModeColor(log.mode))}>
-                                                                            {log.mode === "New Verses" ? "New" : log.mode === "Recent Revision" ? "Recent" : "Juz"}
+                                                            const renderLogBadge = (label: string, mode: HifzMode, index: number) => (
+                                                                <div key={`${mode}-${index}-${label}`} className="bg-slate-50 dark:bg-slate-900 border rounded shadow-sm w-fit">
+                                                                    <Link href={`/staff/entry/${student.adm_no}?date=${dateKey}&returnTo=/admin/hifz/tracking`} className="flex items-center gap-1 px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors">
+                                                                        <span className={cn("px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider", getModeColor(mode))}>
+                                                                            {mode === "New Verses" ? "New" : mode === "Recent Revision" ? "Recent" : "Juz"}
                                                                         </span>
                                                                         <span className="text-xs text-muted-foreground font-medium pr-1 hover:text-foreground hover:underline decoration-dotted underline-offset-2">
-                                                                            {formatLogDisplay(log)}
+                                                                            {label}
                                                                         </span>
                                                                     </Link>
-                                                                    <button
-                                                                        onClick={() => handleDeleteLog(log.id)}
-                                                                        className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                                                                        title="Delete Entry"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
                                                                 </div>
                                                             );
 
@@ -477,17 +461,17 @@ export default function HifzTrackingPage() {
                                                                 <div className="flex gap-3 items-start">
                                                                     {newVerses.length > 0 && (
                                                                         <div className="flex flex-col gap-1.5">
-                                                                            {newVerses.map(renderLogBadge)}
+                                                                            {newVerses.map((label, index) => renderLogBadge(label, "New Verses", index))}
                                                                         </div>
                                                                     )}
                                                                     {recentRevisions.length > 0 && (
                                                                         <div className="flex flex-col gap-1.5">
-                                                                            {recentRevisions.map(renderLogBadge)}
+                                                                            {recentRevisions.map((label, index) => renderLogBadge(label, "Recent Revision", index))}
                                                                         </div>
                                                                     )}
                                                                     {juzRevisions.length > 0 && (
                                                                         <div className="flex flex-col gap-1.5">
-                                                                            {juzRevisions.map(renderLogBadge)}
+                                                                            {juzRevisions.map((label, index) => renderLogBadge(label, "Juz Revision", index))}
                                                                         </div>
                                                                     )}
                                                                 </div>

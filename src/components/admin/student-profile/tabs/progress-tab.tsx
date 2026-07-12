@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Minus } from "lucide-
 import { cn } from "@/lib/utils"
 import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
 import { getCompletedJuzList, getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
+import { formatCompactHifzEntries } from "@/lib/hifz-entry-summary"
 
 export function ProgressTab({ student }: { student: Student }) {
     const [data, setData] = useState<any[]>([])
@@ -271,6 +272,22 @@ export function ProgressTab({ student }: { student: Student }) {
         const monthEnd = endOfMonth(reportMonth)
         const allDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
 
+        const logsByDate = new Map<string, typeof allLogs>()
+        for (const log of allLogs) {
+            const dateKey = String(log.entry_date).slice(0, 10)
+            const items = logsByDate.get(dateKey)
+            if (items) items.push(log)
+            else logsByDate.set(dateKey, [log])
+        }
+        const attendanceByDate = new Map<string, typeof attendanceRecords>()
+        for (const record of attendanceRecords) {
+            if (record.department?.toLowerCase() !== "hifz") continue
+            const dateKey = String(record.date).slice(0, 10)
+            const items = attendanceByDate.get(dateKey)
+            if (items) items.push(record)
+            else attendanceByDate.set(dateKey, [record])
+        }
+
         const weeks: { days: Date[]; weekNum: number }[] = []
         let currentWeek: Date[] = []
         let weekNum = 1
@@ -289,24 +306,22 @@ export function ProgressTab({ student }: { student: Student }) {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayOfWeek = getDay(day)
 
-                const hifzAttendance = attendanceRecords.filter(
-                    (r: any) => format(new Date(r.date), "yyyy-MM-dd") === dateStr && r.department?.toLowerCase() === "hifz"
-                )
+                const hifzAttendance = attendanceByDate.get(dateStr) || []
                 const isPresent = hifzAttendance.some((r: any) => r.status === "Present")
                 const isAbsent = hifzAttendance.some((r: any) => r.status === "Absent")
 
-                const dayLogs = allLogs.filter((l: any) => format(new Date(l.entry_date), "yyyy-MM-dd") === dateStr)
+                const dayLogs = logsByDate.get(dateStr) || []
                 const newVerses = dayLogs.filter((l: any) => l.mode === "New Verses")
                 const recentRev = dayLogs.filter((l: any) => l.mode === "Recent Revision")
                 const juzRev = dayLogs.filter((l: any) => l.mode === "Juz Revision")
                 const newRevHafiz = dayLogs.filter((l: any) => l.mode === "Juz Revision (New)")
                 const oldRevHafiz = dayLogs.filter((l: any) => l.mode === "Juz Revision (Old)")
 
-                const newVersesEntries = newVerses.map((l: any) => formatHifzLogLabel(l)).filter(Boolean)
-                const recentRevEntries = recentRev.map((l: any) => formatHifzLogLabel(l)).filter(Boolean)
-                const juzRevEntries = juzRev.map((l: any) => formatHifzLogLabel(l)).filter(Boolean)
-                const newRevHafizEntries = newRevHafiz.map((l: any) => formatHifzLogLabel(l)).filter(Boolean)
-                const oldRevHafizEntries = oldRevHafiz.map((l: any) => formatHifzLogLabel(l)).filter(Boolean)
+                const newVersesEntries = formatCompactHifzEntries(newVerses)
+                const recentRevEntries = formatCompactHifzEntries(recentRev)
+                const juzRevEntries = formatCompactHifzEntries(juzRev)
+                const newRevHafizEntries = formatCompactHifzEntries(newRevHafiz)
+                const oldRevHafizEntries = formatCompactHifzEntries(oldRevHafiz)
 
                 return {
                     date: day,
