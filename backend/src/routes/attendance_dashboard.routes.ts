@@ -4,6 +4,7 @@ import {
     getSchedules,
     getSchedulesForDate,
     createSchedule,
+    copyScheduleDay,
     deleteSchedule,
     getDashboardData,
     getMentorSchedules,
@@ -30,6 +31,7 @@ router.get('/daily-stats', getDailyAttendanceStats);
 router.get('/schedules', getSchedules);
 router.get('/schedules-for-date', getSchedulesForDate);
 router.post('/schedules', requireRole(['admin', 'principal']), createSchedule);
+router.post('/schedules/copy-day', requireRole(['admin', 'principal']), copyScheduleDay);
 router.delete('/schedules/:id', requireRole(['admin', 'principal']), deleteSchedule);
 
 // Dashboard data fetches

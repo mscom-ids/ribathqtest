@@ -7,6 +7,7 @@ import {
     CalendarDays,
     CheckSquare2,
     Clock3,
+    Copy,
     ExternalLink,
     Loader2,
     Plus,
@@ -139,6 +140,11 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     const [startTime, setStartTime] = useState("06:30")
     const [endTime, setEndTime] = useState("08:00")
     const [effectiveFrom, setEffectiveFrom] = useState(localDateKey())
+    const [copyOpen, setCopyOpen] = useState(false)
+    const [copying, setCopying] = useState(false)
+    const [copyTargetDay, setCopyTargetDay] = useState("1")
+    const [copySourceDay, setCopySourceDay] = useState("")
+    const [copyEffectiveFrom, setCopyEffectiveFrom] = useState(localDateKey())
 
     const loadData = useCallback(async () => {
         if (!academicYearId) return
@@ -220,6 +226,14 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     const scheduledRosterCount = new Set(
         mentorSchedules.flatMap(schedule => parseGroups(schedule.attendance_groups).map(group => group.id)),
     ).size
+    const copyTarget = DAYS.find(day => day.value === copyTargetDay)
+    const copySourceOptions = DAYS
+        .filter(day => day.value !== copyTargetDay)
+        .map(day => ({
+            ...day,
+            classCount: mentorSchedules.filter(schedule => schedule.day_of_week === Number(day.value)).length,
+        }))
+        .filter(day => day.classCount > 0)
     function changeDepartment(nextDepartment: Department) {
         setDepartment(nextDepartment)
         setSelectedMentorId("")
@@ -244,6 +258,25 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         setCreateOpen(true)
     }
 
+    function openCopy(dayValue: string) {
+        if (!selectedMentorId) return
+        const source = DAYS.find(day => (
+            day.value !== dayValue
+            && mentorSchedules.some(schedule => schedule.day_of_week === Number(day.value))
+        ))
+        if (!source) {
+            toast({
+                title: "No timetable day to copy",
+                description: "Add at least one class to another weekday first.",
+                variant: "destructive",
+            })
+            return
+        }
+        setCopyTargetDay(dayValue)
+        setCopySourceDay(source.value)
+        setCopyEffectiveFrom(localDateKey())
+        setCopyOpen(true)
+    }
     function toggleGroup(groupId: string) {
         setGroupIds(current => current.includes(groupId)
             ? current.filter(id => id !== groupId)
@@ -304,6 +337,35 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         }
     }
 
+    async function copyScheduleDay() {
+        if (!selectedMentorId || !copySourceDay || !copyTargetDay || !copyEffectiveFrom) return
+        setCopying(true)
+        try {
+            const response = await api.post("/attendance/schedules/copy-day", {
+                academic_year_id: academicYearId,
+                class_type: department,
+                mentor_id: selectedMentorId,
+                source_day: Number(copySourceDay),
+                target_day: Number(copyTargetDay),
+                effective_from: copyEffectiveFrom,
+            })
+            const copiedCount = Number(response.data?.data?.copied_count || 0)
+            const skippedCount = Number(response.data?.data?.skipped_count || 0)
+            setCopyOpen(false)
+            await loadData()
+            toast({
+                title: copiedCount > 0 ? "Timetable day copied" : "Timetable already up to date",
+                description: copiedCount > 0
+                    ? copiedCount + " classes copied to " + (copyTarget?.label || "the selected day")
+                        + (skippedCount > 0 ? "; " + skippedCount + " already existed." : ".")
+                    : "All classes from the source day already exist on " + (copyTarget?.label || "the target day") + ".",
+            })
+        } catch (error) {
+            toast({ title: "Could not copy timetable day", description: errorMessage(error), variant: "destructive" })
+        } finally {
+            setCopying(false)
+        }
+    }
     return (
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-5">
@@ -495,14 +557,26 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                                                 </div>
                                             )}
 
-                                            <button
-                                                type="button"
-                                                onClick={() => openCreate(day.value)}
-                                                className="mt-auto flex h-9 w-full items-center justify-center gap-1.5 border border-dashed border-slate-300 text-xs font-bold text-slate-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
-                                            >
-                                                <Plus className="h-3.5 w-3.5" />
-                                                Add class
-                                            </button>
+                                            <div className="mt-auto grid gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openCreate(day.value)}
+                                                    className="flex h-9 w-full items-center justify-center gap-1.5 border border-dashed border-slate-300 text-xs font-bold text-slate-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                    Add class
+                                                </button>
+                                                {mentorSchedules.some(schedule => schedule.day_of_week !== Number(day.value)) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openCopy(day.value)}
+                                                        className="flex h-9 w-full items-center justify-center gap-1.5 border border-slate-200 text-xs font-bold text-slate-500 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700"
+                                                    >
+                                                        <Copy className="h-3.5 w-3.5" />
+                                                        Copy day
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 )
@@ -651,6 +725,73 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                         >
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Create class
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={copyOpen} onOpenChange={setCopyOpen}>
+                <DialogContent className="max-w-lg p-0">
+                    <DialogHeader className="border-b border-slate-100 px-6 py-5">
+                        <DialogTitle>Copy classes to {copyTarget?.label || "weekday"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-5 px-6 py-5">
+                        <div className="border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            Copy every class, time, name, and division roster from one populated weekday.
+                            The whole copy is stopped if any timetable conflict is found.
+                        </div>
+                        <div>
+                            <p className="mb-2 text-xs font-bold text-slate-600">Copy from</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {copySourceOptions.map(day => {
+                                    const selected = copySourceDay === day.value
+                                    return (
+                                        <button
+                                            key={day.value}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => setCopySourceDay(day.value)}
+                                            className={
+                                                "flex items-center justify-between border px-3 py-3 text-left transition " +
+                                                (selected
+                                                    ? "border-blue-500 bg-blue-50 text-blue-800"
+                                                    : "border-slate-200 text-slate-700 hover:border-blue-300")
+                                            }
+                                        >
+                                            <span className="flex items-center gap-2 text-sm font-bold">
+                                                <Copy className="h-4 w-4" />
+                                                {day.label}
+                                            </span>
+                                            <span className="text-xs font-semibold text-slate-400">
+                                                {day.classCount} {day.classCount === 1 ? "class" : "classes"}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                        <div>
+                            <p className="mb-2 text-xs font-bold text-slate-600">Effective from</p>
+                            <Input
+                                type="date"
+                                value={copyEffectiveFrom}
+                                onChange={event => setCopyEffectiveFrom(event.target.value)}
+                            />
+                            <p className="mt-2 text-xs text-slate-400">
+                                Copied classes begin on this date. Existing source classes are unchanged.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter className="border-t border-slate-100 px-6 py-4">
+                        <Button variant="outline" onClick={() => setCopyOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => void copyScheduleDay()}
+                            disabled={copying || !copySourceDay || !copyEffectiveFrom}
+                        >
+                            {copying
+                                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                : <Copy className="mr-2 h-4 w-4" />}
+                            Copy classes
                         </Button>
                     </DialogFooter>
                 </DialogContent>

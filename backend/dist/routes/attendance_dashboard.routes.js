@@ -14,6 +14,7 @@ router.get('/daily-stats', attendance_dashboard_controller_1.getDailyAttendanceS
 router.get('/schedules', attendance_dashboard_controller_1.getSchedules);
 router.get('/schedules-for-date', attendance_dashboard_controller_1.getSchedulesForDate);
 router.post('/schedules', (0, auth_middleware_1.requireRole)(['admin', 'principal']), attendance_dashboard_controller_1.createSchedule);
+router.post('/schedules/copy-day', (0, auth_middleware_1.requireRole)(['admin', 'principal']), attendance_dashboard_controller_1.copyScheduleDay);
 router.delete('/schedules/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal']), attendance_dashboard_controller_1.deleteSchedule);
 // Dashboard data fetches
 router.get('/dashboard', attendance_dashboard_controller_1.getDashboardData);

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDailyAttendanceStats = exports.updateBreak = exports.getBreaks = exports.getStudentMarksForSchedule = exports.restoreSession = exports.cancelSession = exports.markAttendance = exports.getStudentsForSchedule = exports.getMentorSchedules = exports.getDashboardData = exports.deleteSchedule = exports.createSchedule = exports.getSchedulesForDate = exports.getSchedules = void 0;
+exports.getDailyAttendanceStats = exports.updateBreak = exports.getBreaks = exports.getStudentMarksForSchedule = exports.restoreSession = exports.cancelSession = exports.markAttendance = exports.getStudentsForSchedule = exports.getMentorSchedules = exports.getDashboardData = exports.deleteSchedule = exports.copyScheduleDay = exports.createSchedule = exports.getSchedulesForDate = exports.getSchedules = void 0;
 const db_1 = require("../config/db");
 const staff_utils_1 = require("../utils/staff.utils");
 const server_cache_1 = require("../utils/server-cache");
@@ -622,7 +622,7 @@ const createSchedule = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Department and at least one division are required.' });
         }
         effectiveName = effectiveName || (effectiveClassType.charAt(0).toUpperCase() + effectiveClassType.slice(1) + ' Class');
-        const existingSchedules = await client.query(`SELECT a.id, a.name, a.class_type, a.standards, a.start_time, a.end_time, a.mentor_id,
+        const existingSchedules = await client.query(`SELECT a.id, a.class_id, a.name, a.class_type, a.standards, a.start_time, a.end_time, a.mentor_id,
                     COALESCE(array_agg(asg.group_id)
                         FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids
              FROM attendance_schedules a
@@ -709,6 +709,171 @@ const createSchedule = async (req, res) => {
     }
 };
 exports.createSchedule = createSchedule;
+const copyScheduleDay = async (req, res) => {
+    const client = await db_1.db.getClient();
+    try {
+        const { academic_year_id, class_type, mentor_id, source_day, target_day, effective_from, } = req.body || {};
+        const sourceDay = Number(source_day);
+        const targetDay = Number(target_day);
+        const department = String(class_type || '').toLowerCase() === 'madrassa'
+            ? 'madrasa'
+            : String(class_type || '').toLowerCase();
+        if (!academic_year_id || !mentor_id) {
+            return res.status(400).json({ success: false, error: 'Academic year and mentor are required.' });
+        }
+        if (!['hifz', 'school', 'madrasa'].includes(department)) {
+            return res.status(400).json({ success: false, error: 'Select a valid department.' });
+        }
+        if (!Number.isInteger(sourceDay) || sourceDay < 0 || sourceDay > 6
+            || !Number.isInteger(targetDay) || targetDay < 0 || targetDay > 6) {
+            return res.status(400).json({ success: false, error: 'Select valid source and target weekdays.' });
+        }
+        if (sourceDay === targetDay) {
+            return res.status(400).json({ success: false, error: 'Source and target weekdays must be different.' });
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(effective_from || ''))) {
+            return res.status(400).json({ success: false, error: 'Select a valid effective date.' });
+        }
+        await client.query('BEGIN');
+        const sourceResult = await client.query(`SELECT a.*,
+                    COALESCE((
+                        SELECT array_agg(asg.group_id ORDER BY asg.group_id)
+                        FROM attendance_schedule_groups asg
+                        WHERE asg.schedule_id = a.id
+                    ), ARRAY[]::uuid[]) AS group_ids
+             FROM attendance_schedules a
+             WHERE a.academic_year_id = $1::uuid
+               AND a.mentor_id = $2::uuid
+               AND (CASE WHEN LOWER(a.class_type) = 'madrassa' THEN 'madrasa' ELSE LOWER(a.class_type) END) = $3
+               AND a.day_of_week = $4
+               AND (a.is_deleted = false OR a.is_deleted IS NULL)
+               AND (a.effective_until IS NULL OR a.effective_until >= $5::date)
+             ORDER BY a.start_time, a.end_time, a.id
+             FOR SHARE`, [academic_year_id, mentor_id, department, sourceDay, effective_from]);
+        if (sourceResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, error: 'The selected source day has no active classes to copy.' });
+        }
+        const existingResult = await client.query(`SELECT a.id, a.class_id, a.name, a.class_type, a.standards, a.start_time, a.end_time, a.mentor_id,
+                    COALESCE((
+                        SELECT array_agg(asg.group_id ORDER BY asg.group_id)
+                        FROM attendance_schedule_groups asg
+                        WHERE asg.schedule_id = a.id
+                    ), ARRAY[]::uuid[]) AS group_ids
+             FROM attendance_schedules a
+             WHERE a.academic_year_id = $1::uuid
+               AND a.day_of_week = $2
+               AND (a.is_deleted = false OR a.is_deleted IS NULL)
+               AND (a.effective_until IS NULL OR a.effective_until >= $3::date)
+             FOR SHARE`, [academic_year_id, targetDay, effective_from]);
+        const sourceIdsToCopy = [];
+        let skippedCount = 0;
+        for (const source of sourceResult.rows) {
+            const sourceGroupIds = new Set((source.group_ids || []).map(String));
+            const sourceStandards = normalizeStandardList(parseStandardList(source.standards));
+            let alreadyExists = false;
+            for (const existing of existingResult.rows) {
+                const existingGroupIds = new Set((existing.group_ids || []).map(String));
+                const existingDepartment = String(existing.class_type || '').toLowerCase() === 'madrassa'
+                    ? 'madrasa'
+                    : String(existing.class_type || '').toLowerCase();
+                const existingStandards = normalizeStandardList(parseStandardList(existing.standards));
+                const sameGroups = sourceGroupIds.size === existingGroupIds.size
+                    && Array.from(sourceGroupIds).every(groupId => existingGroupIds.has(groupId));
+                const sameStandards = sourceStandards.length === existingStandards.length
+                    && sourceStandards.every(standard => existingStandards.includes(standard));
+                const sameMentor = existing.mentor_id === mentor_id;
+                const sameClass = String(existing.class_id || '') === String(source.class_id || '')
+                    && String(existing.name || '') === String(source.name || '')
+                    && existingDepartment === department;
+                const sameTime = String(existing.start_time) === String(source.start_time)
+                    && String(existing.end_time) === String(source.end_time);
+                if (sameMentor && sameClass && sameTime && sameGroups
+                    && (sourceGroupIds.size > 0 || sameStandards)) {
+                    alreadyExists = true;
+                    break;
+                }
+                const overlaps = String(source.start_time) < String(existing.end_time)
+                    && String(source.end_time) > String(existing.start_time);
+                if (!overlaps)
+                    continue;
+                const groupCollision = Array.from(sourceGroupIds).some(groupId => existingGroupIds.has(groupId));
+                const legacyCollision = existingDepartment === department
+                    && (sourceGroupIds.size === 0 || existingGroupIds.size === 0)
+                    && sourceStandards.some(standard => existingStandards.includes(standard));
+                if (sameMentor || groupCollision || legacyCollision) {
+                    await client.query('ROLLBACK');
+                    const reason = sameMentor
+                        ? 'The mentor already has a class at this time.'
+                        : groupCollision
+                            ? 'One of the copied division rosters already has a class at this time.'
+                            : 'An older timetable entry already covers this standard at this time.';
+                    return res.status(409).json({
+                        success: false,
+                        error: 'Cannot copy ' + (source.name || 'class') + ' to the target day. ' + reason,
+                    });
+                }
+            }
+            if (alreadyExists)
+                skippedCount += 1;
+            else
+                sourceIdsToCopy.push(source.id);
+        }
+        if (sourceIdsToCopy.length === 0) {
+            await client.query('ROLLBACK');
+            return res.json({
+                success: true,
+                data: { copied_count: 0, skipped_count: skippedCount, schedule_ids: [] },
+                message: 'The target day already contains all selected classes.',
+            });
+        }
+        const copyResult = await client.query(`WITH source AS MATERIALIZED (
+                SELECT attendance_schedules.*, gen_random_uuid() AS copied_id
+                FROM attendance_schedules
+                WHERE id = ANY($1::uuid[])
+             ), inserted AS (
+                INSERT INTO attendance_schedules
+                    (id, class_id, academic_year_id, class_type, name, standards, day_of_week,
+                     start_time, end_time, duration_mins, effective_from, effective_until,
+                     mentor_id, is_deleted)
+                SELECT copied_id, class_id, academic_year_id, class_type, name, standards, $2,
+                       start_time, end_time, duration_mins, $3::date, NULL,
+                       mentor_id, false
+                FROM source
+                ORDER BY start_time, end_time, id
+                RETURNING id, name, class_type, start_time, end_time
+             ), linked AS (
+                INSERT INTO attendance_schedule_groups
+                    (schedule_id, group_id, academic_year_id, department)
+                SELECT source.copied_id, asg.group_id, asg.academic_year_id, asg.department
+                FROM source
+                JOIN inserted ON inserted.id = source.copied_id
+                JOIN attendance_schedule_groups asg ON asg.schedule_id = source.id
+                ON CONFLICT (schedule_id, group_id) DO NOTHING
+                RETURNING schedule_id
+             )
+             SELECT COUNT(*)::int AS copied_count,
+                    COALESCE(jsonb_agg(id ORDER BY start_time, end_time), '[]'::jsonb) AS schedule_ids,
+                    (SELECT COUNT(*)::int FROM linked) AS copied_roster_count
+             FROM inserted`, [sourceIdsToCopy, targetDay, effective_from]);
+        await client.query('COMMIT');
+        (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        return res.status(201).json({
+            success: true,
+            data: { ...copyResult.rows[0], skipped_count: skippedCount },
+            message: String(copyResult.rows[0]?.copied_count || 0) + ' timetable classes copied.',
+        });
+    }
+    catch (err) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        const status = err?.code === '22P02' ? 400 : 500;
+        return res.status(status).json({ success: false, error: err.message });
+    }
+    finally {
+        client.release();
+    }
+};
+exports.copyScheduleDay = copyScheduleDay;
 const deleteSchedule = async (req, res) => {
     try {
         const { id } = req.params;

@@ -204,9 +204,9 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             setManageGroup(null)
             await loadGroups()
             onGroupsChanged?.()
-            toast({ title: "Group students updated", description: String(selectedIds.length) + " students assigned." })
+            toast({ title: "Roster students updated", description: String(selectedIds.length) + " students assigned." })
         } catch (error) {
-            toast({ title: "Could not update group students", description: errorMessage(error), variant: "destructive" })
+            toast({ title: "Could not update roster students", description: errorMessage(error), variant: "destructive" })
         } finally {
             setSaving(false)
         }
@@ -219,7 +219,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             await loadGroups()
             onGroupsChanged?.()
         } catch (error) {
-            toast({ title: "Could not delete attendance group", description: errorMessage(error), variant: "destructive" })
+            toast({ title: "Could not delete division roster", description: errorMessage(error), variant: "destructive" })
         }
     }
 
@@ -230,9 +230,9 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                     <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Reusable attendance rosters</p>
                         <h2 className="mt-1 text-xl font-black text-slate-950">Division Rosters</h2>
-                        <p className="mt-1 text-sm text-slate-500">Define each department's students once, then reuse the roster in weekly timetable classes.</p>
+                        <p className="mt-1 text-sm text-slate-500">Define each department&apos;s students once, then reuse the roster in weekly timetable classes.</p>
                     </div>
-                    <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Create group</Button>
+                    <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Create roster</Button>
                 </div>
                 <div className="mt-4 inline-flex rounded-lg bg-slate-100 p-1">
                     {DEPARTMENTS.map(item => {
@@ -256,7 +256,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             <div className="grid gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-3">
                 <div className="flex items-center gap-3 bg-white px-5 py-4">
                     <Layers3 className="h-5 w-5 text-blue-600" />
-                    <div><p className="text-xl font-black text-slate-950">{departmentStats.groups}</p><p className="text-xs font-semibold text-slate-500">Groups</p></div>
+                    <div><p className="text-xl font-black text-slate-950">{departmentStats.groups}</p><p className="text-xs font-semibold text-slate-500">Division rosters</p></div>
                 </div>
                 <div className="flex items-center gap-3 bg-white px-5 py-4">
                     <UserRoundCheck className="h-5 w-5 text-emerald-600" />
@@ -264,14 +264,14 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                 </div>
                 <div className="flex items-center gap-3 bg-white px-5 py-4">
                     <UserRoundX className={"h-5 w-5 " + (departmentStats.unassignedMentors ? "text-amber-600" : "text-slate-400")} />
-                    <div><p className="text-xl font-black text-slate-950">{departmentStats.unassignedMentors}</p><p className="text-xs font-semibold text-slate-500">Groups without mentor</p></div>
+                    <div><p className="text-xl font-black text-slate-950">{departmentStats.unassignedMentors}</p><p className="text-xs font-semibold text-slate-500">Rosters without mentor</p></div>
                 </div>
             </div>
 
             {loadError && !loading ? (
                 <div className="flex flex-col items-center gap-3 px-5 py-14 text-center">
                     <AlertTriangle className="h-8 w-8 text-rose-500" />
-                    <div><p className="font-bold text-slate-900">Groups could not be loaded</p><p className="mt-1 text-sm text-slate-500">{loadError}</p></div>
+                    <div><p className="font-bold text-slate-900">Division rosters could not be loaded</p><p className="mt-1 text-sm text-slate-500">{loadError}</p></div>
                     <Button variant="outline" onClick={() => void loadGroups()}>Retry</Button>
                 </div>
             ) : loading ? (
@@ -279,7 +279,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             ) : visibleGroups.length === 0 ? (
                 <div className="flex flex-col items-center py-16 text-center">
                     <Users className="h-9 w-9 text-slate-300" />
-                    <p className="mt-3 font-bold text-slate-700">No {departmentLabel(department)} groups yet</p>
+                    <p className="mt-3 font-bold text-slate-700">No {departmentLabel(department)} division rosters yet</p>
                     <p className="mt-1 text-sm text-slate-400">Create the first standard division and assign its mentor.</p>
                 </div>
             ) : (
@@ -291,7 +291,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                                     <p className="text-lg font-black text-slate-950">{group.standard} - {group.division}</p>
                                     <p className="mt-1 text-xs font-semibold text-slate-500">{group.student_count} students</p>
                                 </div>
-                                <Button variant="ghost" size="icon" title="Delete group" onClick={() => void deleteGroup(group)}>
+                                <Button variant="ghost" size="icon" title="Delete roster" onClick={() => void deleteGroup(group)}>
                                     <Trash2 className="h-4 w-4 text-rose-500" />
                                 </Button>
                             </div>
@@ -315,7 +315,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
 
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogContent>
-                    <DialogHeader><DialogTitle>Create {departmentLabel(department)} attendance group</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Create {departmentLabel(department)} division roster</DialogTitle></DialogHeader>
                     <div className="space-y-4">
                         <div>
                             <p className="mb-2 text-xs font-black uppercase text-slate-500">Standard</p>
