@@ -79,6 +79,10 @@ function localDateKey() {
     return local.toISOString().slice(0, 10)
 }
 
+function divisionLabel(division: string) {
+    return division === "__none" ? "No division" : division
+}
+
 function parseGroups(value: Schedule["attendance_groups"]): AttendanceGroup[] {
     if (Array.isArray(value)) return value
     if (typeof value === "string") {
@@ -505,7 +509,7 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                                             {daySchedules.map(schedule => {
                                                 const linkedGroups = parseGroups(schedule.attendance_groups)
                                                 const rosterLabels = linkedGroups.length
-                                                    ? linkedGroups.map(group => group.standard + "-" + group.division)
+                                                    ? linkedGroups.map(group => group.standard + "-" + divisionLabel(group.division))
                                                     : parseStandards(schedule.standards)
                                                 const studentCount = linkedGroups.reduce(
                                                     (sum, group) => sum + Number(group.student_count || 0),

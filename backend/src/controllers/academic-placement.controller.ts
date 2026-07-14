@@ -6,6 +6,7 @@ import { TEACHING_STAFF_ROLES } from '../utils/staff.utils';
 export const BUILT_IN_STANDARDS = ['Non-class', '5th', '6th', '7th', '8th', '9th', '10th', 'Plus One', 'Plus Two'] as const;
 const ATTENDANCE_DEPARTMENTS = ['hifz', 'school', 'madrasa'] as const;
 const MENTOR_FIELD_BY_DEPARTMENT = { hifz: 'hifz_mentor_id', school: 'school_mentor_id', madrasa: 'madrasa_mentor_id' } as const;
+const NO_DIVISION_ROSTER = '__none';
 
 function isStandard(value: unknown): value is typeof BUILT_IN_STANDARDS[number] {
     return typeof value === 'string' && (BUILT_IN_STANDARDS as readonly string[]).includes(value);
@@ -126,10 +127,30 @@ export const saveAttendanceGroup = async (req: Request, res: Response) => {
     const client = await db.getClient();
     try {
         const { academic_year_id, department, standard, division, mentor_id } = req.body || {};
-        const normalizedDivision = cleanDivision(division);
-        if (!academic_year_id || !isAttendanceDepartment(department) || !isStandard(standard) || !normalizedDivision) {
-            return res.status(400).json({ success: false, error: 'Academic year, department, standard, and division are required.' });
+        const requestedDivision = cleanDivision(division);
+        if (!academic_year_id || !isAttendanceDepartment(department) || !isStandard(standard)) {
+            return res.status(400).json({ success: false, error: 'Academic year, department, and standard are required.' });
         }
+
+        const configuredDivisions = (await client.query(
+            `SELECT name FROM academic_standard_divisions
+             WHERE academic_year_id = $1 AND standard = $2`,
+            [academic_year_id, standard],
+        )).rows.map((row: any) => row.name);
+        const hasConfiguredDivisions = configuredDivisions.length > 0;
+        let normalizedDivision = requestedDivision;
+
+        if (!normalizedDivision || normalizedDivision === NO_DIVISION_ROSTER) {
+            if (hasConfiguredDivisions) {
+                return res.status(400).json({ success: false, error: 'Select a configured division for this standard.' });
+            }
+            normalizedDivision = NO_DIVISION_ROSTER;
+        } else if (!hasConfiguredDivisions) {
+            return res.status(400).json({ success: false, error: 'This standard has no configured divisions. Create a No division roster instead.' });
+        } else if (!configuredDivisions.includes(normalizedDivision)) {
+            return res.status(400).json({ success: false, error: 'Select a configured division for this standard.' });
+        }
+
         await client.query('BEGIN');
         if (mentor_id) {
             const mentor = await client.query(
@@ -189,7 +210,7 @@ export const replaceAttendanceGroupStudents = async (req: Request, res: Response
             : [];
         await client.query('BEGIN');
         const group = await client.query(
-            `SELECT id, academic_year_id, department, standard, mentor_id
+            `SELECT id, academic_year_id, department, standard, division, mentor_id
              FROM attendance_groups WHERE id = $1 FOR UPDATE`,
             [groupId],
         );
@@ -205,15 +226,21 @@ export const replaceAttendanceGroupStudents = async (req: Request, res: Response
         const previousIds = previous.rows.map((row: any) => row.student_id);
         if (studentIds.length) {
             const eligible = await client.query(
-                `SELECT student_id
-                 FROM academic_student_placements
-                 WHERE academic_year_id = $1 AND standard = $2 AND status = 'active'
-                   AND student_id = ANY($3::text[])`,
-                [target.academic_year_id, target.standard, studentIds],
+                `SELECT s.adm_no AS student_id
+                 FROM students s
+                 LEFT JOIN academic_student_placements p
+                   ON p.student_id = s.adm_no
+                  AND p.academic_year_id = $1
+                  AND p.status = 'active'
+                 WHERE s.status = 'active'
+                   AND (($2 = 'Non-class' AND COALESCE(p.standard, 'Non-class') = 'Non-class') OR p.standard = $2)
+                   AND (($3 = '__none' AND p.division IS NULL) OR ($3 <> '__none' AND p.division = $3))
+                   AND s.adm_no = ANY($4::text[])`,
+                [target.academic_year_id, target.standard, target.division, studentIds],
             );
             if (eligible.rows.length !== studentIds.length) {
                 await client.query('ROLLBACK');
-                return res.status(400).json({ success: false, error: 'Every selected student must belong to the group standard in this academic year.' });
+                return res.status(400).json({ success: false, error: 'Every selected student must match this roster standard and division in this academic year.' });
             }
         }
 
@@ -323,9 +350,7 @@ export const createStandardDivision = async (req: Request, res: Response) => {
         if (!academic_year_id || !isStandard(standard) || !division) {
             return res.status(400).json({ success: false, error: 'A valid academic year, standard, and division name are required.' });
         }
-        if (standard === 'Non-class') {
-            return res.status(400).json({ success: false, error: 'Non-class students cannot be divided.' });
-        }
+
         const result = await db.query(
             `INSERT INTO academic_standard_divisions (academic_year_id, standard, name)
              VALUES ($1, $2, $3)
@@ -348,9 +373,6 @@ export const saveAcademicPlacements = async (req: Request, res: Response) => {
         const normalizedDivision = cleanDivision(division);
         if (!academic_year_id || !isStandard(standard) || studentIds.length === 0) {
             return res.status(400).json({ success: false, error: 'Select at least one student and a valid standard.' });
-        }
-        if (standard === 'Non-class' && normalizedDivision) {
-            return res.status(400).json({ success: false, error: 'Non-class students cannot have a division.' });
         }
 
         await client.query('BEGIN');

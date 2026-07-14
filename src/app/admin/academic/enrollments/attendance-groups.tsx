@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 
 const DEPARTMENTS = ["hifz", "school", "madrasa"] as const
 const STANDARDS = ["Non-class", "5th", "6th", "7th", "8th", "9th", "10th", "Plus One", "Plus Two"] as const
+const NO_DIVISION_ROSTER = "__none"
 
 type Department = typeof DEPARTMENTS[number]
 type Placement = { adm_no: string; name: string; standard: string; division?: string | null }
@@ -40,6 +41,10 @@ function errorMessage(error: unknown) {
 
 function departmentLabel(department: Department) {
     return department === "hifz" ? "Hifz" : department === "school" ? "School" : "Madrasa"
+}
+
+function divisionLabel(division: string) {
+    return division === NO_DIVISION_ROSTER ? "No division" : division
 }
 
 export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: Props) {
@@ -120,7 +125,9 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
         const query = studentSearch.trim().toLowerCase()
         return students.filter(student =>
             student.standard === manageGroup.standard
-            && (student.division || "") === manageGroup.division
+            && (manageGroup.division === NO_DIVISION_ROSTER
+                ? !student.division
+                : student.division === manageGroup.division)
             && (!query || student.name.toLowerCase().includes(query) || student.adm_no.toLowerCase().includes(query)),
         )
     }, [manageGroup, studentSearch, students])
@@ -129,8 +136,10 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
     const allVisibleSelected = eligibleStudents.length > 0 && eligibleStudents.every(student => selectedSet.has(student.adm_no))
 
     function openCreate() {
-        setStandard("5th")
-        setDivision("")
+        const initialStandard = "5th"
+        const initialDivision = divisions.find(item => item.standard === initialStandard)?.name || NO_DIVISION_ROSTER
+        setStandard(initialStandard)
+        setDivision(initialDivision)
         setMentorId("__none")
         setCreateOpen(true)
     }
@@ -157,7 +166,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
     }
 
     async function createGroup() {
-        if (!academicYearId || !division.trim()) return
+        if (!academicYearId || !standard) return
         setSaving(true)
         try {
             await api.post("/academic-placements/attendance-groups", {
@@ -213,7 +222,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
     }
 
     async function deleteGroup(group: AttendanceGroup) {
-        if (!window.confirm("Delete " + group.standard + " " + group.division + " from " + departmentLabel(group.department) + "?")) return
+        if (!window.confirm("Delete " + group.standard + " " + divisionLabel(group.division) + " from " + departmentLabel(group.department) + "?")) return
         try {
             await api.delete("/academic-placements/attendance-groups/" + group.id)
             await loadGroups()
@@ -288,7 +297,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                         <article key={group.id} className="rounded-lg border border-slate-200 p-4">
                             <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <p className="text-lg font-black text-slate-950">{group.standard} - {group.division}</p>
+                                    <p className="text-lg font-black text-slate-950">{group.standard} - {divisionLabel(group.division)}</p>
                                     <p className="mt-1 text-xs font-semibold text-slate-500">{group.student_count} students</p>
                                 </div>
                                 <Button variant="ghost" size="icon" title="Delete roster" onClick={() => void deleteGroup(group)}>
@@ -321,7 +330,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                             <p className="mb-2 text-xs font-black uppercase text-slate-500">Standard</p>
                             <Select value={standard} onValueChange={nextStandard => {
                                 setStandard(nextStandard)
-                                setDivision("")
+                                setDivision(divisions.find(item => item.standard === nextStandard)?.name || NO_DIVISION_ROSTER)
                             }}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>{STANDARDS.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
@@ -329,16 +338,18 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                         </div>
                         <div>
                             <p className="mb-2 text-xs font-black uppercase text-slate-500">Division</p>
-                            <Select value={division} onValueChange={setDivision} disabled={divisionOptions.length === 0}>
-                                <SelectTrigger><SelectValue placeholder={divisionOptions.length ? "Select division" : "No divisions configured"} /></SelectTrigger>
+                            <Select value={division || NO_DIVISION_ROSTER} onValueChange={setDivision}>
+                                <SelectTrigger><SelectValue placeholder="Select division" /></SelectTrigger>
                                 <SelectContent>
-                                    {divisionOptions.map(item => <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>)}
+                                    {divisionOptions.length === 0
+                                        ? <SelectItem value={NO_DIVISION_ROSTER}>No division</SelectItem>
+                                        : divisionOptions.map(item => <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                             <p className="mt-2 text-xs text-slate-500">
                                 {divisionOptions.length
                                     ? "Only divisions configured for this standard are available."
-                                    : "Create a division for this standard in Student Placement first."}
+                                    : "No divisions are configured, so this roster includes students placed in this standard without a division."}
                             </p>
                         </div>
                         <div>
@@ -354,7 +365,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                     </div>
                     <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                        <Button onClick={() => void createGroup()} disabled={saving || !division}>
+                        <Button onClick={() => void createGroup()} disabled={saving || !standard}>
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create
                         </Button>
                     </div>
@@ -364,7 +375,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             <Dialog open={Boolean(manageGroup)} onOpenChange={open => { if (!open) setManageGroup(null) }}>
                 <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle>{manageGroup?.standard} - {manageGroup?.division} students</DialogTitle>
+                        <DialogTitle>{manageGroup?.standard} - {manageGroup ? divisionLabel(manageGroup.division) : ""} students</DialogTitle>
                     </DialogHeader>
                     <Input value={studentSearch} onChange={event => setStudentSearch(event.target.value)} placeholder="Search eligible students" />
                     <div className="flex items-center justify-between text-sm">
@@ -387,13 +398,13 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                                     </span>
                                     {assignedGroup && (
                                         <span className={"max-w-[160px] truncate rounded px-2 py-1 text-[11px] font-bold " + (assignedGroup.id === manageGroup?.id ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-                                            {assignedGroup.id === manageGroup?.id ? "In this group" : assignedGroup.standard + " - " + assignedGroup.division}
+                                            {assignedGroup.id === manageGroup?.id ? "In this group" : assignedGroup.standard + " - " + divisionLabel(assignedGroup.division)}
                                         </span>
                                     )}
                                 </button>
                             )
                         })}
-                        {eligibleStudents.length === 0 && <p className="py-10 text-center text-sm text-slate-400">No students in this standard and division.</p>}
+                        {eligibleStudents.length === 0 && <p className="py-10 text-center text-sm text-slate-400">No students match this roster.</p>}
                     </div>
                     <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setManageGroup(null)}>Cancel</Button>

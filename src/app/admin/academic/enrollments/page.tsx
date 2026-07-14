@@ -136,7 +136,7 @@ export default function StudentPlacementPage() {
     }
 
     async function createDivision() {
-        if (!yearId || standard === "Non-class" || !newDivision.trim()) return
+        if (!yearId || !newDivision.trim()) return
         setCreatingDivision(true)
         try {
             await api.post("/academic-placements/divisions", { academic_year_id: yearId, standard, name: newDivision.trim() })
@@ -158,7 +158,7 @@ export default function StudentPlacementPage() {
                     <div>
                         <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Academic</p>
                         <h1 className="mt-1 text-2xl font-black text-slate-950">Student Standards and Divisions</h1>
-                        <p className="mt-1 text-sm font-medium text-slate-500">Set each student&apos;s standard for this academic year. Non-class is a valid placement.</p>
+                        <p className="mt-1 text-sm font-medium text-slate-500">Set each student&apos;s standard and division for this academic year. Non-class can also use divisions when needed.</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <Select value={yearId} onValueChange={changeYear}>
@@ -183,8 +183,8 @@ export default function StudentPlacementPage() {
                     <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto] lg:items-end">
                         <div><p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Selected students</p><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by name or admission number" /></div>
                         <div><p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Standard</p><Select value={standard} onValueChange={chooseStandard}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{STANDARDS.map(item => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-                        <div><p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Division</p><Select value={division} onValueChange={setDivision} disabled={standard === "Non-class"}><SelectTrigger><SelectValue placeholder="No division" /></SelectTrigger><SelectContent><SelectItem value="__none">No division</SelectItem>{divisionOptions.map(item => <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="flex gap-2"><Button variant="outline" size="icon" title="Add division" disabled={standard === "Non-class"} onClick={() => setDivisionDialogOpen(true)}><Plus className="h-4 w-4" /></Button><Button onClick={savePlacement} disabled={saving || selectedIds.length === 0}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save {selectedIds.length || ""}</Button></div>
+                        <div><p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Division</p><Select value={division} onValueChange={setDivision}><SelectTrigger><SelectValue placeholder="No division" /></SelectTrigger><SelectContent>{divisionOptions.length === 0 ? <SelectItem value="__none">No division</SelectItem> : divisionOptions.map(item => <SelectItem key={item.id} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="flex gap-2"><Button variant="outline" size="icon" title="Add division" onClick={() => setDivisionDialogOpen(true)}><Plus className="h-4 w-4" /></Button><Button onClick={savePlacement} disabled={saving || selectedIds.length === 0}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save {selectedIds.length || ""}</Button></div>
                     </div>
                     <p className="mt-3 text-xs text-slate-500">Changes apply only to the selected academic year. Earlier year placements are preserved.</p>
                 </div>
