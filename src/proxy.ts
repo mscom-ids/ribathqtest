@@ -26,8 +26,36 @@ function getPortalForRole(role: string): string {
   return '/staff';
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
+
+  // ── Maintenance Mode (Edge Config) ──────────────────────────────
+  // Toggle instantly from Vercel Dashboard → Storage → Edge Config
+  // Set "isInMaintenanceMode" to true/false — no redeployment needed
+  try {
+    const { get } = await import('@vercel/edge-config');
+    const isInMaintenanceMode = await get<boolean>('isInMaintenanceMode');
+
+    if (isInMaintenanceMode) {
+      const allowedPaths = ['/maintenance.html', '/logo.png', '/favicon.ico'];
+      if (
+        !allowedPaths.includes(currentPath) &&
+        !currentPath.startsWith('/_next/') &&
+        !currentPath.startsWith('/api/')
+      ) {
+        const maintenanceUrl = request.nextUrl.clone();
+        maintenanceUrl.pathname = '/maintenance.html';
+        const response = NextResponse.rewrite(maintenanceUrl);
+        response.headers.set('Retry-After', '3600');
+        return response;
+      }
+      return NextResponse.next();
+    }
+  } catch {
+    // Edge Config not configured — continue normally
+  }
+  // ────────────────────────────────────────────────────────────────
+
   const token = request.cookies.get('auth_token');
   const role = token?.value ? decodeTokenRole(token.value) : null;
 
