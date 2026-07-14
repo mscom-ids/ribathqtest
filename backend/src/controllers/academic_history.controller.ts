@@ -19,7 +19,6 @@ export const getAcademicYearsWithSettings = async (_req: Request, res: Response)
             `SELECT ay.*,
                     ays.id AS settings_id,
                     COALESCE(ays.year_locked, ay.is_locked, false) AS year_locked,
-                    COALESCE(ays.promotion_completed, false) AS promotion_completed,
                     ays.school_fee_plan_id,
                     ays.madrasa_fee_plan_id,
                     ays.updated_at AS settings_updated_at
@@ -46,7 +45,6 @@ export const getCurrentAcademicYear = async (req: Request, res: Response) => {
             `SELECT ay.*,
                     ays.id AS settings_id,
                     COALESCE(ays.year_locked, ay.is_locked, false) AS year_locked,
-                    COALESCE(ays.promotion_completed, false) AS promotion_completed,
                     ays.school_fee_plan_id,
                     ays.madrasa_fee_plan_id
              FROM academic_years ay
@@ -65,7 +63,7 @@ export const getCurrentAcademicYear = async (req: Request, res: Response) => {
 
 export const upsertAcademicYearSettings = async (req: Request, res: Response) => {
     try {
-        const { academic_year_id, school_fee_plan_id, madrasa_fee_plan_id, promotion_completed, year_locked } = req.body;
+        const { academic_year_id, school_fee_plan_id, madrasa_fee_plan_id, year_locked } = req.body;
         if (!academic_year_id) {
             return res.status(400).json({ success: false, error: 'academic_year_id is required' });
         }
@@ -75,15 +73,13 @@ export const upsertAcademicYearSettings = async (req: Request, res: Response) =>
                 academic_year_id,
                 school_fee_plan_id,
                 madrasa_fee_plan_id,
-                promotion_completed,
                 year_locked,
                 updated_at
              )
-             VALUES ($1, $2, $3, COALESCE($4, false), COALESCE($5, false), now())
+             VALUES ($1, $2, $3, COALESCE($4, false), now())
              ON CONFLICT (academic_year_id) DO UPDATE SET
                 school_fee_plan_id = EXCLUDED.school_fee_plan_id,
                 madrasa_fee_plan_id = EXCLUDED.madrasa_fee_plan_id,
-                promotion_completed = EXCLUDED.promotion_completed,
                 year_locked = EXCLUDED.year_locked,
                 updated_at = now()
              RETURNING *`,
@@ -91,7 +87,6 @@ export const upsertAcademicYearSettings = async (req: Request, res: Response) =>
                 academic_year_id,
                 school_fee_plan_id || null,
                 madrasa_fee_plan_id || null,
-                promotion_completed,
                 year_locked,
             ]
         );

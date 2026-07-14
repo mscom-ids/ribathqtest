@@ -1,56 +1,35 @@
 import { Router } from 'express';
 import {
-    getAcademicYears, upsertAcademicYear, deleteAcademicYear,
-    getClasses, upsertClass, deleteClass,
-    getClassStudents, getStudentClassAssignments, upsertStudentClassAssignment,
-    getEnrollments, enrollStudent, deleteEnrollment,
+    getAcademicYears, upsertAcademicYear, deleteAcademicYear, getEnrollments,
     getWeeklySchedule, upsertWeeklySchedule, deleteWeeklySchedule,
     getClassEvents, generateDailyEvents, updateClassEventStatus, createManualClassEvent,
-    bulkAssignHifzClass,
-    getPromotionStudents, executePromotion
 } from '../controllers/classes.controller';
+import { copyPreviousYearPlacements } from '../controllers/academic-year-copy.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
-const CLASS_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
+const ATTENDANCE_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 
-// Protect all class routes
+// Legacy attendance schedules/events remain available while attendance is redesigned.
+// Dynamic class creation, class membership, and class placement routes are intentionally retired.
 router.use(verifyToken);
 router.use(verifyDelegation);
 router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 
-// Academic Years
 router.get('/academic-years', getAcademicYears);
 router.post('/academic-years', requireRole(['admin', 'principal']), upsertAcademicYear);
 router.delete('/academic-years/:id', requireRole(['admin', 'principal']), deleteAcademicYear);
+router.post('/academic-years/:id/copy-placements', requireRole(['admin', 'principal']), copyPreviousYearPlacements);
 
-// Classes
-router.get('/', getClasses);
-router.post('/', requireRole(['admin', 'principal']), upsertClass);
-router.get('/student-assignments', getStudentClassAssignments);
-router.post('/student-assignments', requireRole(['admin', 'principal', 'vice_principal']), upsertStudentClassAssignment);
-router.get('/promotion/students', requireRole(CLASS_MANAGE_ROLES), getPromotionStudents);
-router.post('/promotion/execute', requireRole(CLASS_MANAGE_ROLES), executePromotion);
-router.get('/promotion-students', requireRole(CLASS_MANAGE_ROLES), getPromotionStudents);
-router.post('/execute-promotion', requireRole(CLASS_MANAGE_ROLES), executePromotion);
-router.post('/bulk-assign-hifz', requireRole(['admin', 'principal', 'vice_principal']), bulkAssignHifzClass);
-router.get('/:id/students', getClassStudents);
-router.delete('/:id', requireRole(['admin', 'principal']), deleteClass);
-
-// Enrollments
+// Read-only legacy enrollment lookup is retained only for existing attendance history.
 router.get('/enrollments', getEnrollments);
-router.post('/enrollments', requireRole(['admin', 'principal', 'vice_principal']), enrollStudent);
-router.delete('/enrollments/:id', requireRole(['admin', 'principal', 'vice_principal']), deleteEnrollment);
 
-// Weekly Schedule
 router.get('/schedule', getWeeklySchedule);
-router.post('/schedule', requireRole(['admin', 'principal', 'vice_principal']), upsertWeeklySchedule);
-router.delete('/schedule/:id', requireRole(['admin', 'principal', 'vice_principal']), deleteWeeklySchedule);
-
-// Class Events
+router.post('/schedule', requireRole(ATTENDANCE_MANAGE_ROLES), upsertWeeklySchedule);
+router.delete('/schedule/:id', requireRole(ATTENDANCE_MANAGE_ROLES), deleteWeeklySchedule);
 router.get('/events', getClassEvents);
-router.post('/events/generate', requireRole(CLASS_MANAGE_ROLES), generateDailyEvents);
-router.post('/events/manual', requireRole(CLASS_MANAGE_ROLES), createManualClassEvent);
-router.patch('/events/:id/status', requireRole(CLASS_MANAGE_ROLES), updateClassEventStatus);
+router.post('/events/generate', requireRole(ATTENDANCE_MANAGE_ROLES), generateDailyEvents);
+router.post('/events/manual', requireRole(ATTENDANCE_MANAGE_ROLES), createManualClassEvent);
+router.patch('/events/:id/status', requireRole(ATTENDANCE_MANAGE_ROLES), updateClassEventStatus);
 
 export default router;

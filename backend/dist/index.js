@@ -11,7 +11,7 @@ const path_1 = __importDefault(require("path"));
 const compression_1 = __importDefault(require("compression"));
 // Load env BEFORE any module that reads process.env
 dotenv_1.default.config();
-// ── Req 9: Startup environment validation ──
+// â”€â”€ Req 9: Startup environment validation â”€â”€
 const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
 for (const key of REQUIRED_ENV) {
     if (!process.env[key]) {
@@ -19,7 +19,7 @@ for (const key of REQUIRED_ENV) {
         process.exit(1);
     }
 }
-console.log('[STARTUP] Environment validated — all required variables present.');
+console.log('[STARTUP] Environment validated â€” all required variables present.');
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const students_routes_1 = __importDefault(require("./routes/students.routes"));
 const leaves_routes_1 = __importDefault(require("./routes/leaves.routes"));
@@ -38,6 +38,7 @@ const chat_routes_1 = __importDefault(require("./routes/chat.routes"));
 const delegations_routes_1 = __importDefault(require("./routes/delegations.routes"));
 const access_control_routes_1 = __importDefault(require("./routes/access_control.routes"));
 const academic_history_routes_1 = __importDefault(require("./routes/academic_history.routes"));
+const academic_placement_routes_1 = __importDefault(require("./routes/academic-placement.routes"));
 const yearly_report_routes_1 = __importDefault(require("./routes/yearly_report.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -45,7 +46,7 @@ const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
 const SLOW_API_THRESHOLD_MS = Number.isFinite(parsedSlowApiThreshold) && parsedSlowApiThreshold > 0
     ? parsedSlowApiThreshold
     : 500;
-// ── Core middleware ──
+// â”€â”€ Core middleware â”€â”€
 const allowedOrigins = process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
     : ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -85,7 +86,7 @@ app.use((0, cookie_parser_1.default)());
 // Login rate limiting is applied inside auth.routes.ts.
 // Serve static files for avatars
 app.use('/public', express_1.default.static(path_1.default.join(__dirname, '../public')));
-// ── Routes ──
+// â”€â”€ Routes â”€â”€
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/students', students_routes_1.default);
 app.use('/api/leaves', leaves_routes_1.default);
@@ -104,6 +105,7 @@ app.use('/api/chat', chat_routes_1.default);
 app.use('/api/delegations', delegations_routes_1.default);
 app.use('/api/access-control', access_control_routes_1.default);
 app.use('/api/academic-history', academic_history_routes_1.default);
+app.use('/api/academic-placements', academic_placement_routes_1.default);
 app.use('/api/yearly-report', yearly_report_routes_1.default);
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });

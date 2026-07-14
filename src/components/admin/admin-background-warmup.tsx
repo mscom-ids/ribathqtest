@@ -23,7 +23,6 @@ const ROUTES_TO_PREFETCH = [
     "/admin/students",
     "/admin/alumni",
     "/admin/calendar",
-    "/admin/timetable/setup",
     "/admin/timetable/view",
     "/admin/student-attendance",
     "/admin/staff",
@@ -33,7 +32,6 @@ const ROUTES_TO_PREFETCH = [
     "/admin/reports/students",
     "/admin/reports/mentors",
     "/admin/setup/academic-years",
-    "/admin/setup/classes",
     "/admin/mentor-access",
 ]
 

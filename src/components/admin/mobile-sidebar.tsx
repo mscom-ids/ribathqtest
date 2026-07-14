@@ -18,9 +18,7 @@ const navLinks = [
     { href: "/admin/staff", label: "Staff", icon: UserCog },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
     { href: "/admin/academic", label: "Academic Year", icon: School },
-    { href: "/admin/academic/class-setup", label: "Class Setup", icon: School },
     { href: "/admin/academic/enrollments", label: "Student Placement", icon: Users },
-    { href: "/admin/timetable/setup", label: "Timetable Setup", icon: Calendar },
     { href: "/admin/calendar", label: "Events", icon: Calendar },
     { href: "/admin/reports/students", label: "Yearly Reports", icon: Settings },
 ]

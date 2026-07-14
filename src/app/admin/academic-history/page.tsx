@@ -12,7 +12,6 @@ type AcademicYear = {
     end_date: string
     is_current?: boolean
     year_locked?: boolean
-    promotion_completed?: boolean
 }
 
 type Health = {
@@ -131,7 +130,6 @@ export default function AcademicHistoryPage() {
                         <div className="mt-4 space-y-2">
                             <Info label="Current" value={selected?.is_current ? "Yes" : "No"} />
                             <Info label="Locked" value={selected?.year_locked ? "Yes" : "No"} />
-                            <Info label="Promotion Completed" value={selected?.promotion_completed ? "Yes" : "No"} />
                         </div>
                     </div>
 

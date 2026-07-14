@@ -222,7 +222,34 @@ type MentorCountMap = Record<'hifz' | 'school' | 'madrasa', Record<string, numbe
 // Single-query helper: returns, for one mentor, how many active students of each
 // (class_type, standard) they own. Replaces the N+1 COUNT(*) loops that used to
 // fire one query per schedule.
-async function getMentorStudentCounts(mentorId: string): Promise<MentorCountMap> {
+async function getMentorStudentCounts(mentorId: string, academicYearId?: string | null): Promise<MentorCountMap> {
+    if (academicYearId) {
+        const grouped = await db.query(
+            `WITH configured AS (
+                SELECT id, department, standard
+                FROM attendance_groups
+                WHERE academic_year_id = $2 AND mentor_id = $1
+             ),
+             assigned AS (
+                SELECT gs.student_id, c.department, c.standard
+                FROM configured c
+                JOIN attendance_group_students gs ON gs.group_id = c.id
+                JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+             )
+             SELECT EXISTS(SELECT 1 FROM configured) AS configured,
+                    COALESCE(jsonb_agg(assigned) FILTER (WHERE assigned.student_id IS NOT NULL), '[]'::jsonb) AS assignments
+             FROM assigned`,
+            [mentorId, academicYearId],
+        );
+        if (grouped.rows[0]?.configured) {
+            const counts: MentorCountMap = { hifz: {}, school: {}, madrasa: {} };
+            for (const row of grouped.rows[0].assignments || []) {
+                const department = row.department as keyof MentorCountMap;
+                counts[department][row.standard] = (counts[department][row.standard] || 0) + 1;
+            }
+            return counts;
+        }
+    }
     const result = await db.query(
         `SELECT adm_no, standard, is_hifz, is_school, is_madrasa
          FROM (
@@ -386,7 +413,7 @@ export const getSchedules = async (req: Request, res: Response) => {
         if (isMentor) {
             // ONE query for all mentor↔standard counts, then in-memory lookup
             // per schedule. Replaces the previous N+1 COUNT(*) loop.
-            const counts = await getMentorStudentCounts(mentorId!);
+            const counts = await getMentorStudentCounts(mentorId!, effectiveAcademicYearId);
 
             const filteredSchedules = (await Promise.all(schedules.map(async schedule => ({
                 ...schedule,
@@ -481,7 +508,7 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
             if (!mentorId) return res.json({ success: true, data: [] });
 
             // ONE query, then in-memory filter. See getMentorStudentCounts.
-            const counts = await getMentorStudentCounts(mentorId);
+            const counts = await getMentorStudentCounts(mentorId, effectiveAcademicYearId);
 
             const filteredSchedules = (await Promise.all(result.rows.map(async (schedule: any) => ({
                 ...schedule,
@@ -801,7 +828,7 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
 
         // ONE query for all per-(class_type, standard) counts; then a pure
         // in-memory filter. Replaces N COUNT(*) queries.
-        const counts = await getMentorStudentCounts(mentor_id as string);
+        const counts = await getMentorStudentCounts(mentor_id as string, effectiveAcademicYearId);
 
         const relevantIds = (await Promise.all(allScheds.rows.map(async (sched: any) => ({
             id: sched.id,
@@ -882,21 +909,63 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
         let permanentStudents: any[] = [];
         let delegatedStudents: any[] = [];
-        const ruleEligible = await getEligibleHifzStudentsForSchedule({
-            schedule,
-            academicYearId: effectiveAcademicYearId,
-            date: date as string | undefined,
-            mentorId: mentor_id as string | undefined,
-        });
+        const attendanceDepartment =
+            classType === 'school' ? 'school'
+            : (classType === 'madrasa' || classType === 'madrassa') ? 'madrasa'
+            : classType === 'hifz' ? 'hifz'
+            : null;
 
-        if (ruleEligible.usedRules && ruleEligible.students) {
+        let configuredGroupRoster: any[] | null = null;
+        if (mentor_id && effectiveAcademicYearId && attendanceDepartment) {
+            const groupRoster = await db.query(
+                `WITH configured AS (
+                    SELECT id
+                    FROM attendance_groups
+                    WHERE academic_year_id = $2
+                      AND mentor_id = $1
+                      AND department = $3
+                      AND standard = ANY($4::text[])
+                 ),
+                 assigned AS (
+                    SELECT s.adm_no, s.name, p.standard, s.photo_url
+                    FROM configured g
+                    JOIN attendance_group_students gs ON gs.group_id = g.id
+                    JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+                    JOIN academic_student_placements p
+                      ON p.student_id = s.adm_no
+                     AND p.academic_year_id = $2
+                     AND p.status = 'active'
+                    WHERE p.standard = ANY($4::text[])
+                 )
+                 SELECT EXISTS(SELECT 1 FROM configured) AS configured,
+                        COALESCE(jsonb_agg(assigned ORDER BY assigned.standard, assigned.name)
+                            FILTER (WHERE assigned.adm_no IS NOT NULL), '[]'::jsonb) AS students
+                 FROM assigned`,
+                [mentor_id, effectiveAcademicYearId, attendanceDepartment, activeDbStds],
+            );
+            if (groupRoster.rows[0]?.configured) {
+                configuredGroupRoster = groupRoster.rows[0].students || [];
+            }
+        }
+
+        const ruleEligible = configuredGroupRoster === null
+            ? await getEligibleHifzStudentsForSchedule({
+                schedule,
+                academicYearId: effectiveAcademicYearId,
+                date: date as string | undefined,
+                mentorId: mentor_id as string | undefined,
+            })
+            : { usedRules: false, students: null };
+
+        if (configuredGroupRoster !== null) {
+            permanentStudents = configuredGroupRoster
+                .filter((student: any) => !cancellation || !isStandardCancelled(cancellation, student.standard))
+                .map((student: any) => ({ ...student, is_temp: false }));
+        } else if (ruleEligible.usedRules && ruleEligible.students) {
             permanentStudents = ruleEligible.students
-                .filter((s: any) => !cancellation || !isStandardCancelled(cancellation, s.standard))
-                .map((s: any) => ({ ...s, is_temp: false }));
+                .filter((student: any) => !cancellation || !isStandardCancelled(cancellation, student.standard))
+                .map((student: any) => ({ ...student, is_temp: false }));
         } else if (mentor_id && mentorCol) {
-            // ── Phase 2 (parallel): permanent students + delegated students ──
-            // These two queries are independent — running them serially
-            // doubled the round-trip cost for no reason.
             const [permRes, delRes] = await Promise.all([
                 db.query(
                     `SELECT adm_no, name, standard, photo_url
@@ -911,14 +980,13 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                              AND (d.student_id IS NULL OR d.student_id = students.adm_no)
                        )
                      ORDER BY standard, name`,
-                    [activeDbStds, mentor_id]
+                    [activeDbStds, mentor_id],
                 ),
                 db.query(
                     `WITH incoming_delegations AS (
                         SELECT from_staff_id, student_id
                         FROM mentor_delegations
-                        WHERE to_staff_id = $1
-                          AND status = 'approved'
+                        WHERE to_staff_id = $1 AND status = 'approved'
                      )
                      SELECT s.adm_no, s.name, s.standard, s.photo_url
                      FROM incoming_delegations d
@@ -927,30 +995,39 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                        AND s.status = 'active'
                        AND s.standard = ANY($2)
                      ORDER BY s.name`,
-                    [mentor_id, activeDbStds]
+                    [mentor_id, activeDbStds],
                 ).catch((delErr: any) => {
                     console.warn('Delegation query skipped:', delErr.message);
                     return { rows: [] as any[] };
                 }),
             ]);
 
-            permanentStudents = permRes.rows.map((s: any) => ({ ...s, is_temp: false }));
-            const permIds = new Set(permanentStudents.map((s: any) => s.adm_no));
+            permanentStudents = permRes.rows.map((student: any) => ({ ...student, is_temp: false }));
+            const permanentIds = new Set(permanentStudents.map((student: any) => student.adm_no));
             delegatedStudents = delRes.rows
-                .filter((s: any) => !permIds.has(s.adm_no))
-                .map((s: any) => ({ ...s, is_temp: true }));
+                .filter((student: any) => !permanentIds.has(student.adm_no))
+                .map((student: any) => ({ ...student, is_temp: true }));
         } else {
-            // Admin/principal: return all students unfiltered
-            const allRes = await db.query(
-                `SELECT adm_no, name, standard, photo_url
-                 FROM students
-                 WHERE status = 'active' AND standard = ANY($1)
-                 ORDER BY standard, name`,
-                [activeDbStds]
-            );
-            permanentStudents = allRes.rows.map((s: any) => ({ ...s, is_temp: false }));
+            const allRes = effectiveAcademicYearId
+                ? await db.query(
+                    `SELECT s.adm_no, s.name, p.standard, s.photo_url
+                     FROM academic_student_placements p
+                     JOIN students s ON s.adm_no = p.student_id AND s.status = 'active'
+                     WHERE p.academic_year_id = $2
+                       AND p.status = 'active'
+                       AND p.standard = ANY($1)
+                     ORDER BY p.standard, s.name`,
+                    [activeDbStds, effectiveAcademicYearId],
+                )
+                : await db.query(
+                    `SELECT adm_no, name, standard, photo_url
+                     FROM students
+                     WHERE status = 'active' AND standard = ANY($1)
+                     ORDER BY standard, name`,
+                    [activeDbStds],
+                );
+            permanentStudents = allRes.rows.map((student: any) => ({ ...student, is_temp: false }));
         }
-
         const students = [...permanentStudents, ...delegatedStudents];
 
         let studentsWithLeave = students;

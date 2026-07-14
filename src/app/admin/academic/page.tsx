@@ -22,7 +22,6 @@ type AcademicYear = {
     end_date: string
     is_current?: boolean
     year_locked?: boolean
-    promotion_completed?: boolean
 }
 
 const actions = [
@@ -38,7 +37,7 @@ const actions = [
         href: "/admin/academic/enrollments",
         icon: Users,
         title: "Student Placement",
-        detail: "Assign students to School, Madrasa, and Hifz classes",
+        detail: "Set student standards, Non-class placements, and divisions",
         step: 2,
         color: "indigo",
     },
@@ -82,7 +81,6 @@ export default function AcademicHubPage() {
     useEffect(() => { void load() }, [])
 
     const setupComplete = !!(currentYear)
-    const promotionDone = !!(currentYear?.promotion_completed)
 
     return (
         <main className="space-y-6">
@@ -96,11 +94,11 @@ export default function AcademicHubPage() {
                         <div>
                             <p className="text-xs font-black uppercase tracking-widest text-blue-600">Academic Year</p>
                             <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-950">
-                                {loading ? "Loading…" : currentYear?.name || "No academic year set up"}
+                                {loading ? "Loading..." : currentYear?.name || "No academic year set up"}
                             </h1>
                             {currentYear ? (
                                 <p className="mt-1 text-sm font-semibold text-slate-500">
-                                    {currentYear.start_date?.slice(0, 10)} — {currentYear.end_date?.slice(0, 10)}
+                                    {currentYear.start_date?.slice(0, 10)} - {currentYear.end_date?.slice(0, 10)}
                                 </p>
                             ) : (
                                 <p className="mt-1 text-sm font-semibold text-amber-600">
@@ -119,14 +117,7 @@ export default function AcademicHubPage() {
                                         ? <><AlertCircle className="h-3 w-3" /> Year Locked</>
                                         : <><CheckCircle2 className="h-3 w-3" /> Active Year</>
                                     }
-                                </span>
-                                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${promotionDone ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                                    {promotionDone
-                                        ? <><CheckCircle2 className="h-3 w-3" /> Promotions Done</>
-                                        : <><AlertCircle className="h-3 w-3" /> Promotions Pending</>
-                                    }
-                                </span>
-                            </div>
+                                </span></div>
                         )}
                         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5">
                             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -145,12 +136,12 @@ export default function AcademicHubPage() {
             {!setupComplete && !loading && (
                 <section className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
                     <p className="text-sm font-bold text-amber-800">
-                        👋 <strong>Getting started:</strong> First, create an Academic Year (Step 1 below). Then assign students to classes (Step 2). Once the year is underway, you can view yearly reports anytime (Step 4).
+                        ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ¢â‚¬Â¹ <strong>Getting started:</strong> First, create an Academic Year (Step 1 below). Then place students in standards and divisions (Step 2). Once the year is underway, you can view yearly reports anytime (Step 4).
                     </p>
                 </section>
             )}
 
-            {/* Action cards — numbered workflow */}
+            {/* Action cards */}
             <section>
                 <h2 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Workflow</h2>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -199,7 +190,7 @@ export default function AcademicHubPage() {
                                     )}
                                 </div>
                                 <span className="text-xs font-semibold text-slate-400">
-                                    {year.start_date?.slice(0, 10)} — {year.end_date?.slice(0, 10)}
+                                    {year.start_date?.slice(0, 10)} - {year.end_date?.slice(0, 10)}
                                 </span>
                             </div>
                         ))}

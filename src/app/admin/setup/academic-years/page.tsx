@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Edit2, Trash2, Calendar, Lock, Unlock, CheckCircle2 } from "lucide-react"
+import { Plus, Edit2, Trash2, Calendar, Lock, Unlock, CheckCircle2, Copy } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { useToast } from "@/hooks/use-toast"
@@ -25,7 +25,6 @@ type AcademicYear = {
     end_date: string
     is_current: boolean
     is_locked: boolean
-    promotion_window_open: boolean
 }
 
 export default function AcademicYearsPage() {
@@ -36,13 +35,14 @@ export default function AcademicYearsPage() {
     // Dialog State
     const [open, setOpen] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [copyTarget, setCopyTarget] = useState<AcademicYear | null>(null)
+    const [copying, setCopying] = useState(false)
     const [formData, setFormData] = useState({
         name: "",
         start_date: "",
         end_date: "",
         is_current: false,
         is_locked: false,
-        promotion_window_open: false,
     })
 
     const fetchYears = async () => {
@@ -77,6 +77,7 @@ export default function AcademicYearsPage() {
                 invalidateCache('/classes/academic-years')
                 toast({ title: "Success", description: "Academic year saved successfully" })
                 setOpen(false)
+                if (!editingId && res.data.data) setCopyTarget(res.data.data)
                 fetchYears()
             }
         } catch (error) {
@@ -85,6 +86,29 @@ export default function AcademicYearsPage() {
         }
     }
 
+
+    const copyPreviousYearPlacements = async () => {
+        if (!copyTarget) return
+        try {
+            setCopying(true)
+            const res = await api.post(`/classes/academic-years/${copyTarget.id}/copy-placements`)
+            if (res.data?.success) {
+                const data = res.data.data
+                toast({
+                    title: "Previous-year placements copied",
+                    description: `${data.classes_created} classes and ${data.school_placements_copied + data.madrasa_placements_copied} School/Madrasa placements copied. Mentor assignments were not copied.`,
+                })
+                invalidateCache('/classes')
+                invalidateCache('/academic-placements')
+                setCopyTarget(null)
+                fetchYears()
+            }
+        } catch (error: any) {
+            toast({ title: "Copy failed", description: error?.response?.data?.error || error.message, variant: "destructive" })
+        } finally {
+            setCopying(false)
+        }
+    }
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure? This will delete all classes and enrollments for this year.")) return
         
@@ -109,7 +133,6 @@ export default function AcademicYearsPage() {
             end_date: y.end_date.split('T')[0],
             is_current: y.is_current,
             is_locked: y.is_locked,
-            promotion_window_open: y.promotion_window_open
         })
         setOpen(true)
     }
@@ -122,7 +145,6 @@ export default function AcademicYearsPage() {
             end_date: "",
             is_current: false,
             is_locked: false,
-            promotion_window_open: false,
         })
         setOpen(true)
     }
@@ -194,17 +216,6 @@ export default function AcademicYearsPage() {
                                     onCheckedChange={(c) => setFormData({...formData, is_locked: c})} 
                                 />
                             </div>
-
-                            <div className="flex items-center justify-between border rounded-lg p-3 bg-emerald-50/50">
-                                <div>
-                                    <Label className="text-base font-semibold">Promotions Window</Label>
-                                    <div className="text-xs text-muted-foreground">Allow students to be promoted automatically to the next year.</div>
-                                </div>
-                                <Switch 
-                                    checked={formData.promotion_window_open} 
-                                    onCheckedChange={(c) => setFormData({...formData, promotion_window_open: c})} 
-                                />
-                            </div>
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -248,14 +259,14 @@ export default function AcademicYearsPage() {
                                         <Unlock className="h-3 w-3" /> Open
                                     </span>
                                 )}
-                                {y.promotion_window_open && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-100 text-amber-700 text-xs font-semibold">
-                                        Promotions Allowed
-                                    </span>
-                                )}
                             </div>
 
                             <div className="flex gap-2 pt-4 border-t border-slate-100">
+                                {years.some((other) => new Date(other.start_date) < new Date(y.start_date)) && (
+                                    <Button size="sm" variant="outline" className="flex-1" onClick={() => setCopyTarget(y)}>
+                                        <Copy className="mr-2 h-3 w-3" /> Copy placements
+                                    </Button>
+                                )}
                                 <Button size="sm" variant="outline" className="flex-1" onClick={() => openEdit(y)}>
                                     <Edit2 className="h-3 w-3 mr-2" /> Edit
                                 </Button>
@@ -275,6 +286,20 @@ export default function AcademicYearsPage() {
                     )}
                 </div>
             )}
+
+            <Dialog open={!!copyTarget} onOpenChange={(next) => !next && setCopyTarget(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Copy Previous-Year Placement?</DialogTitle></DialogHeader>
+                    <div className="space-y-3 text-sm text-slate-600">
+                        <p>Copy the most recent earlier year&apos;s student standards, divisions, and active placements into <strong>{copyTarget?.name}</strong>.</p>
+                        <p className="rounded-lg bg-amber-50 p-3 text-xs font-medium text-amber-800">Students remain in the same standard. Timetables and mentor assignments are not copied, and any placement already made in this year stays unchanged.</p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setCopyTarget(null)} disabled={copying}>Not now</Button>
+                        <Button onClick={copyPreviousYearPlacements} disabled={copying} className="bg-[#4f46e5]"><Copy className="mr-2 h-4 w-4" /> {copying ? "Copying..." : "Copy placements"}</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

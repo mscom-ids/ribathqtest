@@ -8,7 +8,7 @@ import compression from 'compression';
 // Load env BEFORE any module that reads process.env
 dotenv.config();
 
-// ── Req 9: Startup environment validation ──
+// â”€â”€ Req 9: Startup environment validation â”€â”€
 const REQUIRED_ENV = ['JWT_SECRET', 'DATABASE_URL'];
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
@@ -16,7 +16,7 @@ for (const key of REQUIRED_ENV) {
     process.exit(1);
   }
 }
-console.log('[STARTUP] Environment validated — all required variables present.');
+console.log('[STARTUP] Environment validated â€” all required variables present.');
 
 import authRoutes from './routes/auth.routes';
 import studentRoutes from './routes/students.routes';
@@ -36,6 +36,7 @@ import chatRoutes from './routes/chat.routes';
 import delegationsRoutes from './routes/delegations.routes';
 import accessControlRoutes from './routes/access_control.routes';
 import academicHistoryRoutes from './routes/academic_history.routes';
+import academicPlacementRoutes from './routes/academic-placement.routes';
 import yearlyReportRoutes from './routes/yearly_report.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -44,7 +45,7 @@ const SLOW_API_THRESHOLD_MS = Number.isFinite(parsedSlowApiThreshold) && parsedS
   ? parsedSlowApiThreshold
   : 500;
 
-// ── Core middleware ──
+// â”€â”€ Core middleware â”€â”€
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',').map(o => o.trim())
   : ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -85,7 +86,7 @@ app.use(cookieParser());
 // Serve static files for avatars
 app.use('/public', express.static(path.join(__dirname, '../public')));
 
-// ── Routes ──
+// â”€â”€ Routes â”€â”€
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/leaves', leavesRoutes);
@@ -104,6 +105,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/delegations', delegationsRoutes);
 app.use('/api/access-control', accessControlRoutes);
 app.use('/api/academic-history', academicHistoryRoutes);
+app.use('/api/academic-placements', academicPlacementRoutes);
 app.use('/api/yearly-report', yearlyReportRoutes);
 
 app.get('/api/health', (req, res) => {
