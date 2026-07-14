@@ -1,7 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, LogOut } from "lucide-react"
+import { AlertTriangle, Calendar, X, CheckCircle2, XCircle, RefreshCw, Clock, Users, User, ChevronLeft, ChevronRight, Lock, ChevronDown, LogOut, Settings2 } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
@@ -24,6 +25,11 @@ function normalizeStandardLabel(label: string) {
     if (l.endsWith(' Standard')) return l.replace(' Standard', '')
     return l
 }
+function apiErrorMessage(error: unknown) {
+    const candidate = error as { response?: { data?: { error?: string; message?: string } } } | undefined
+    return candidate?.response?.data?.error || candidate?.response?.data?.message || "Attendance data could not be loaded. Please retry."
+}
+
 function parseCancelledStandards(value: any): string[] {
     if (Array.isArray(value)) return value.map(normalizeStandardLabel).filter(Boolean)
     if (typeof value === 'string') {
@@ -39,6 +45,7 @@ function parseCancelledStandards(value: any): string[] {
 
 export default function StudentAttendancePage() {
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState("")
     const [schedules, setSchedules] = useState<any[]>([])
     const [dashboardData, setDashboardData] = useState<any>({ marks: [], cancellations: [] })
 
@@ -81,7 +88,7 @@ export default function StudentAttendancePage() {
                 if (current) setSelectedYearId(current.id)
                 else if (res.data.data.length > 0) setSelectedYearId(res.data.data[0].id)
             }
-        } catch (e) { console.error("Failed to load academic years", e) }
+        } catch (error) { setLoadError(apiErrorMessage(error)) }
     }
 
     const fetchStaff = async () => {
@@ -90,7 +97,7 @@ export default function StudentAttendancePage() {
             const res = await cachedGet('/staff', undefined, 60_000)
             const data = res.data.data || res.data.staff || res.data || []
             setStaffList(Array.isArray(data) ? data : [])
-        } catch (e) { console.error("Failed to load staff", e) }
+        } catch { setStaffList([]) }
     }
 
     const effectiveMaxDays = ['admin', 'principal', 'vice_principal'].includes(userRole) ? 30 : 3
@@ -98,6 +105,7 @@ export default function StudentAttendancePage() {
     const fetchData = useCallback(async () => {
         if (!selectedYearId) return
         setLoading(true)
+        setLoadError("")
         try {
             const dateStr = toLocalDateStr(viewDate)
             const [schedRes, dashRes] = await Promise.all([
@@ -106,8 +114,11 @@ export default function StudentAttendancePage() {
             ])
             if (schedRes.data.success) setSchedules(schedRes.data.data)
             if (dashRes.data.success) setDashboardData(dashRes.data)
-        } catch (e) { console.error("Failed to load attendance data", e) }
-        setLoading(false)
+        } catch (error) {
+            setLoadError(apiErrorMessage(error))
+        } finally {
+            setLoading(false)
+        }
     }, [selectedYearId, viewDate])
 
     useEffect(() => {
@@ -128,7 +139,7 @@ export default function StudentAttendancePage() {
                 if (res.data.success) {
                     setMentorSchedules(res.data.schedule_ids || [])
                 }
-            } catch (e) { console.error("Failed to load mentor schedules", e) }
+            } catch (error) { setLoadError(apiErrorMessage(error)) }
         }
         fetchMentorSchedules()
     }, [selectedMentorId, selectedYearId])
@@ -320,13 +331,32 @@ export default function StudentAttendancePage() {
                             {academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
                         </select>
                     </div>
-                    <button onClick={fetchData} className="px-3 h-[38px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 transition text-slate-500">
-                        <RefreshCw className="h-[15px] w-[15px]" />
+                    <Link href="/admin/attendance-setup" className="inline-flex h-[38px] items-center gap-2 rounded border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        <Settings2 className="h-4 w-4" />
+                        Setup
+                    </Link>
+                    <button type="button" title="Refresh attendance" onClick={() => void fetchData()} className="flex h-[38px] w-[38px] items-center justify-center rounded border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                        <RefreshCw className={"h-[15px] w-[15px] " + (loading ? "animate-spin" : "")} />
                     </button>
                 </div>
             </div>
 
             {/* ── Mentor Selector + Date Navigator (Side by Side) ─────── */}
+            {loadError && (
+                <div className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                        <div>
+                            <p className="font-bold">Attendance could not be loaded</p>
+                            <p className="text-sm">{loadError}</p>
+                        </div>
+                    </div>
+                    <button type="button" onClick={() => void fetchData()} className="rounded border border-rose-300 bg-white px-4 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-100">
+                        Retry
+                    </button>
+                </div>
+            )}
+
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
 

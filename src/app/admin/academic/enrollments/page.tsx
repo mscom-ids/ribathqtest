@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 
+
 const STANDARDS = ["Non-class", "5th", "6th", "7th", "8th", "9th", "10th", "Plus One", "Plus Two"] as const
 
 type AcademicYear = { id: string; name: string; is_current?: boolean }
@@ -190,6 +191,8 @@ export default function StudentPlacementPage() {
                 <div className="flex items-center justify-between px-5 py-3 text-sm"><button className="flex items-center gap-2 font-semibold text-blue-700" onClick={toggleVisible}>{allVisibleSelected ? <CheckSquare2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}{allVisibleSelected ? "Clear visible" : "Select visible"}</button><span className="text-slate-500">{selectedIds.length} selected</span></div>
                 {loading ? <div className="flex items-center justify-center py-24"><Loader2 className="h-7 w-7 animate-spin text-slate-400" /></div> : <div className="divide-y divide-slate-100">{filteredStudents.map(student => <button key={student.adm_no} onClick={() => toggleStudent(student.adm_no)} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-slate-50"><span className="text-blue-600">{selectedSet.has(student.adm_no) ? <CheckSquare2 className="h-5 w-5" /> : <Square className="h-5 w-5 text-slate-300" />}</span><span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-600">{student.name.slice(0, 1)}</span><span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-900">{student.name}</span><span className="text-xs text-slate-500">{student.adm_no}</span></span><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{student.standard}{student.division ? ` - ${student.division}` : ""}</span></button>)}</div>}
             </section>
+
+
 
             <Dialog open={divisionDialogOpen} onOpenChange={setDivisionDialogOpen}><DialogContent><DialogHeader><DialogTitle>Add division for {standard}</DialogTitle></DialogHeader><Input value={newDivision} onChange={event => setNewDivision(event.target.value)} placeholder="Example: A" autoFocus /><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDivisionDialogOpen(false)}>Cancel</Button><Button onClick={createDivision} disabled={creatingDivision || !newDivision.trim()}>{creatingDivision && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Add division</Button></div></DialogContent></Dialog>
         </main>

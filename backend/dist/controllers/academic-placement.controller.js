@@ -6,6 +6,7 @@ const server_cache_1 = require("../utils/server-cache");
 const staff_utils_1 = require("../utils/staff.utils");
 exports.BUILT_IN_STANDARDS = ['Non-class', '5th', '6th', '7th', '8th', '9th', '10th', 'Plus One', 'Plus Two'];
 const ATTENDANCE_DEPARTMENTS = ['hifz', 'school', 'madrasa'];
+const MENTOR_FIELD_BY_DEPARTMENT = { hifz: 'hifz_mentor_id', school: 'school_mentor_id', madrasa: 'madrasa_mentor_id' };
 function isStandard(value) {
     return typeof value === 'string' && exports.BUILT_IN_STANDARDS.includes(value);
 }
@@ -113,27 +114,51 @@ const getAttendanceGroups = async (req, res) => {
 };
 exports.getAttendanceGroups = getAttendanceGroups;
 const saveAttendanceGroup = async (req, res) => {
+    const client = await db_1.db.getClient();
     try {
         const { academic_year_id, department, standard, division, mentor_id } = req.body || {};
         const normalizedDivision = cleanDivision(division);
         if (!academic_year_id || !isAttendanceDepartment(department) || !isStandard(standard) || !normalizedDivision) {
             return res.status(400).json({ success: false, error: 'Academic year, department, standard, and division are required.' });
         }
+        await client.query('BEGIN');
         if (mentor_id) {
-            const mentor = await db_1.db.query(`SELECT id FROM staff WHERE id = $1 AND is_active = true AND lower(role) = ANY($2::text[])`, [mentor_id, staff_utils_1.TEACHING_STAFF_ROLES]);
-            if (!mentor.rows.length)
+            const mentor = await client.query(`SELECT id FROM staff WHERE id = $1 AND is_active = true AND lower(role) = ANY($2::text[])`, [mentor_id, staff_utils_1.TEACHING_STAFF_ROLES]);
+            if (!mentor.rows.length) {
+                await client.query('ROLLBACK');
                 return res.status(400).json({ success: false, error: 'Select an active teaching staff member.' });
+            }
         }
-        const result = await db_1.db.query(`INSERT INTO attendance_groups (academic_year_id, department, standard, division, mentor_id, updated_at)
+        const result = await client.query(`INSERT INTO attendance_groups (academic_year_id, department, standard, division, mentor_id, updated_at)
              VALUES ($1, $2, $3, $4, $5, now())
              ON CONFLICT (academic_year_id, department, standard, division)
              DO UPDATE SET mentor_id = EXCLUDED.mentor_id, updated_at = now()
              RETURNING *`, [academic_year_id, department, standard, normalizedDivision, mentor_id || null]);
+        const group = result.rows[0];
+        const mentorField = MENTOR_FIELD_BY_DEPARTMENT[department];
+        await client.query(`UPDATE student_year_snapshots sys
+             SET ${mentorField} = $2, updated_at = now()
+             FROM attendance_group_students gs
+             WHERE gs.group_id = $1
+               AND sys.academic_year_id = gs.academic_year_id
+               AND sys.student_id = gs.student_id`, [group.id, mentor_id || null]);
+        const year = await client.query('SELECT is_current FROM academic_years WHERE id = $1', [academic_year_id]);
+        if (year.rows[0]?.is_current) {
+            await client.query(`UPDATE students s
+                 SET ${mentorField} = $2
+                 FROM attendance_group_students gs
+                 WHERE gs.group_id = $1 AND s.adm_no = gs.student_id`, [group.id, mentor_id || null]);
+        }
+        await client.query('COMMIT');
         invalidatePlacementCaches();
-        return res.status(201).json({ success: true, data: result.rows[0] });
+        return res.status(201).json({ success: true, data: group });
     }
     catch (err) {
+        await client.query('ROLLBACK');
         return res.status(500).json({ success: false, error: err.message });
+    }
+    finally {
+        client.release();
     }
 };
 exports.saveAttendanceGroup = saveAttendanceGroup;
@@ -145,12 +170,15 @@ const replaceAttendanceGroupStudents = async (req, res) => {
             ? [...new Set(req.body.student_ids.filter((id) => typeof id === 'string' && id.trim().length > 0))]
             : [];
         await client.query('BEGIN');
-        const group = await client.query(`SELECT id, academic_year_id, department, standard FROM attendance_groups WHERE id = $1 FOR UPDATE`, [groupId]);
+        const group = await client.query(`SELECT id, academic_year_id, department, standard, mentor_id
+             FROM attendance_groups WHERE id = $1 FOR UPDATE`, [groupId]);
         if (!group.rows.length) {
             await client.query('ROLLBACK');
             return res.status(404).json({ success: false, error: 'Attendance group not found.' });
         }
         const target = group.rows[0];
+        const previous = await client.query('SELECT student_id FROM attendance_group_students WHERE group_id = $1', [groupId]);
+        const previousIds = previous.rows.map((row) => row.student_id);
         if (studentIds.length) {
             const eligible = await client.query(`SELECT student_id
                  FROM academic_student_placements
@@ -168,6 +196,27 @@ const replaceAttendanceGroupStudents = async (req, res) => {
                  ON CONFLICT (academic_year_id, department, student_id)
                  DO UPDATE SET group_id = EXCLUDED.group_id, created_at = now()`, [groupId, target.academic_year_id, target.department, studentIds]);
         }
+        const mentorField = MENTOR_FIELD_BY_DEPARTMENT[target.department];
+        if (previousIds.length) {
+            await client.query(`UPDATE student_year_snapshots
+                 SET ${mentorField} = NULL, updated_at = now()
+                 WHERE academic_year_id = $1 AND student_id = ANY($2::text[])`, [target.academic_year_id, previousIds]);
+        }
+        if (studentIds.length) {
+            await client.query(`INSERT INTO student_year_snapshots (student_id, academic_year_id, ${mentorField}, status, updated_at)
+                 SELECT student_id, $2, $3, 'active', now() FROM unnest($1::text[]) AS student_id
+                 ON CONFLICT (student_id, academic_year_id)
+                 DO UPDATE SET ${mentorField} = EXCLUDED.${mentorField}, status = 'active', updated_at = now()`, [studentIds, target.academic_year_id, target.mentor_id || null]);
+        }
+        const year = await client.query('SELECT is_current FROM academic_years WHERE id = $1', [target.academic_year_id]);
+        if (year.rows[0]?.is_current) {
+            if (previousIds.length) {
+                await client.query(`UPDATE students SET ${mentorField} = NULL WHERE adm_no = ANY($1::text[])`, [previousIds]);
+            }
+            if (studentIds.length) {
+                await client.query(`UPDATE students SET ${mentorField} = $2 WHERE adm_no = ANY($1::text[])`, [studentIds, target.mentor_id || null]);
+            }
+        }
         await client.query('COMMIT');
         invalidatePlacementCaches();
         return res.json({ success: true, updated: studentIds.length });
@@ -182,15 +231,39 @@ const replaceAttendanceGroupStudents = async (req, res) => {
 };
 exports.replaceAttendanceGroupStudents = replaceAttendanceGroupStudents;
 const deleteAttendanceGroup = async (req, res) => {
+    const client = await db_1.db.getClient();
     try {
-        const result = await db_1.db.query('DELETE FROM attendance_groups WHERE id = $1 RETURNING id', [req.params.id]);
-        if (!result.rows.length)
+        await client.query('BEGIN');
+        const group = await client.query(`SELECT id, academic_year_id, department
+             FROM attendance_groups WHERE id = $1 FOR UPDATE`, [req.params.id]);
+        if (!group.rows.length) {
+            await client.query('ROLLBACK');
             return res.status(404).json({ success: false, error: 'Attendance group not found.' });
+        }
+        const target = group.rows[0];
+        const members = await client.query('SELECT student_id FROM attendance_group_students WHERE group_id = $1', [target.id]);
+        const studentIds = members.rows.map((row) => row.student_id);
+        const mentorField = MENTOR_FIELD_BY_DEPARTMENT[target.department];
+        if (studentIds.length) {
+            await client.query(`UPDATE student_year_snapshots
+                 SET ${mentorField} = NULL, updated_at = now()
+                 WHERE academic_year_id = $1 AND student_id = ANY($2::text[])`, [target.academic_year_id, studentIds]);
+            const year = await client.query('SELECT is_current FROM academic_years WHERE id = $1', [target.academic_year_id]);
+            if (year.rows[0]?.is_current) {
+                await client.query(`UPDATE students SET ${mentorField} = NULL WHERE adm_no = ANY($1::text[])`, [studentIds]);
+            }
+        }
+        await client.query('DELETE FROM attendance_groups WHERE id = $1', [target.id]);
+        await client.query('COMMIT');
         invalidatePlacementCaches();
         return res.json({ success: true });
     }
     catch (err) {
+        await client.query('ROLLBACK');
         return res.status(500).json({ success: false, error: err.message });
+    }
+    finally {
+        client.release();
     }
 };
 exports.deleteAttendanceGroup = deleteAttendanceGroup;
@@ -247,6 +320,37 @@ const saveAcademicPlacements = async (req, res) => {
                  WHERE p.academic_year_id = $1
                    AND p.student_id = s.adm_no
                    AND p.student_id = ANY($2::text[])`, [academic_year_id, studentIds]);
+        }
+        const removedGroups = await client.query(`SELECT gs.student_id, g.department
+             FROM attendance_group_students gs
+             JOIN attendance_groups g ON g.id = gs.group_id
+             JOIN academic_student_placements p
+               ON p.academic_year_id = g.academic_year_id
+              AND p.student_id = gs.student_id
+             WHERE p.academic_year_id = $1
+               AND p.student_id = ANY($2::text[])
+               AND p.standard <> g.standard`, [academic_year_id, studentIds]);
+        await client.query(`DELETE FROM attendance_group_students gs
+             USING attendance_groups g, academic_student_placements p
+             WHERE gs.group_id = g.id
+               AND p.academic_year_id = g.academic_year_id
+               AND p.student_id = gs.student_id
+               AND p.academic_year_id = $1
+               AND p.student_id = ANY($2::text[])
+               AND p.standard <> g.standard`, [academic_year_id, studentIds]);
+        for (const department of ATTENDANCE_DEPARTMENTS) {
+            const removedIds = removedGroups.rows
+                .filter((row) => row.department === department)
+                .map((row) => row.student_id);
+            if (!removedIds.length)
+                continue;
+            const mentorField = MENTOR_FIELD_BY_DEPARTMENT[department];
+            await client.query(`UPDATE student_year_snapshots
+                 SET ${mentorField} = NULL, updated_at = now()
+                 WHERE academic_year_id = $1 AND student_id = ANY($2::text[])`, [academic_year_id, removedIds]);
+            if (year.rows[0]?.is_current) {
+                await client.query(`UPDATE students SET ${mentorField} = NULL WHERE adm_no = ANY($1::text[])`, [removedIds]);
+            }
         }
         await client.query(`INSERT INTO student_year_snapshots (student_id, academic_year_id, school_standard, school_section, status, updated_at)
              SELECT p.student_id, p.academic_year_id, p.standard, p.division, 'active', now()

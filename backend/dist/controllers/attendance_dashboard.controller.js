@@ -47,6 +47,44 @@ function parseStandardList(value) {
     }
     return [];
 }
+function parseLinkedGroups(value) {
+    if (Array.isArray(value))
+        return value;
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value || '[]');
+            return Array.isArray(parsed) ? parsed : [];
+        }
+        catch {
+            return [];
+        }
+    }
+    return [];
+}
+const SCHEDULE_GROUPS_SELECT = `COALESCE((
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'id', ag.id,
+            'department', ag.department,
+            'standard', ag.standard,
+            'division', ag.division,
+            'mentor_id', ag.mentor_id,
+            'mentor_name', group_staff.name,
+            'student_count', (
+                SELECT COUNT(*)::int
+                FROM attendance_group_students ags
+                WHERE ags.group_id = ag.id
+            )
+        ) ORDER BY ag.standard, ag.division
+    )
+    FROM attendance_schedule_groups asg
+    JOIN attendance_groups ag
+      ON ag.id = asg.group_id
+     AND ag.academic_year_id = asg.academic_year_id
+     AND ag.department = asg.department
+    LEFT JOIN staff group_staff ON group_staff.id = ag.mentor_id
+    WHERE asg.schedule_id = a.id
+), '[]'::jsonb) AS attendance_groups`;
 function normalizeStandardList(values = []) {
     return values
         .map(value => normalizeScheduleStandard(String(value || '').trim()))
@@ -310,6 +348,12 @@ function countStudentsForSchedule(schedule, counts) {
     return total;
 }
 async function countStudentsForScheduleWithRules(schedule, counts, mentorId, academicYearId, date) {
+    const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
+    if (linkedGroups.length > 0) {
+        if (mentorId && schedule.mentor_id && schedule.mentor_id !== mentorId)
+            return 0;
+        return linkedGroups.reduce((total, group) => total + Number(group.student_count || 0), 0);
+    }
     if ((0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && academicYearId) {
         const eligible = await (0, hifz_session_eligibility_1.getEligibleHifzStudentsForSchedule)({
             schedule,
@@ -344,6 +388,7 @@ const getSchedules = async (req, res) => {
             return res.json({ success: true, data: cached });
         }
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
+                            ${SCHEDULE_GROUPS_SELECT},
                             c.name as class_setup_name, c.standard as class_standard,
                             c.section as class_section, c.type as class_department
                      FROM attendance_schedules a
@@ -432,6 +477,7 @@ const getSchedulesForDate = async (req, res) => {
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
         const user = req.user;
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
+                            ${SCHEDULE_GROUPS_SELECT},
                             c.name as class_setup_name, c.standard as class_standard,
                             c.section as class_section, c.type as class_department
                      FROM attendance_schedules a
@@ -502,58 +548,164 @@ const getSchedulesForDate = async (req, res) => {
 };
 exports.getSchedulesForDate = getSchedulesForDate;
 const createSchedule = async (req, res) => {
+    const client = await db_1.db.getClient();
     try {
-        const { class_id, academic_year_id, class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from } = req.body;
-        // Auto-calculate effective_from: next occurrence of the selected day
-        const startDate = effective_from || getNextOccurrence(day_of_week);
-        let effectiveClassType = class_type;
-        let effectiveName = name || null;
-        let effectiveStandards = Array.isArray(standards) ? standards : [];
+        const { class_id, academic_year_id, class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from, mentor_id, group_ids, } = req.body || {};
+        const selectedGroupIds = Array.isArray(group_ids)
+            ? Array.from(new Set(group_ids.map((id) => String(id || '').trim()).filter(Boolean)))
+            : [];
+        const normalizedDay = Number(day_of_week);
+        if (!Number.isInteger(normalizedDay) || normalizedDay < 0 || normalizedDay > 6) {
+            return res.status(400).json({ success: false, error: 'Select a valid weekday.' });
+        }
+        if (!start_time || !end_time || String(start_time) >= String(end_time)) {
+            return res.status(400).json({ success: false, error: 'End time must be after start time.' });
+        }
+        if (selectedGroupIds.length > 0 && !academic_year_id) {
+            return res.status(400).json({ success: false, error: 'Academic year is required for division schedules.' });
+        }
+        await client.query('BEGIN');
+        const startDate = effective_from || getNextOccurrence(normalizedDay);
+        let effectiveClassType = String(class_type || '').toLowerCase();
+        let effectiveName = String(name || '').trim() || null;
+        let effectiveStandards = Array.isArray(standards) ? normalizeStandardList(standards) : [];
+        let effectiveMentorId = mentor_id || null;
+        let scheduleGroups = [];
+        if (selectedGroupIds.length > 0) {
+            const groupResult = await client.query(`SELECT id, academic_year_id, department, standard, division, mentor_id
+                 FROM attendance_groups
+                 WHERE id = ANY($1::uuid[])
+                   AND academic_year_id = $2
+                 FOR SHARE`, [selectedGroupIds, academic_year_id]);
+            scheduleGroups = groupResult.rows;
+            if (scheduleGroups.length !== selectedGroupIds.length) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'One or more selected divisions are invalid for this academic year.' });
+            }
+            const departments = new Set(scheduleGroups.map(group => group.department));
+            if (departments.size !== 1) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'All selected divisions must belong to the same department.' });
+            }
+            effectiveClassType = scheduleGroups[0].department;
+            const groupMentorIds = Array.from(new Set(scheduleGroups.map(group => group.mentor_id).filter(Boolean)));
+            if (groupMentorIds.length !== 1) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'Selected divisions must all have the same teaching mentor.' });
+            }
+            if (effectiveMentorId && effectiveMentorId !== groupMentorIds[0]) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'The selected mentor does not match the division mentor.' });
+            }
+            effectiveMentorId = groupMentorIds[0];
+            effectiveStandards = Array.from(new Set(scheduleGroups.map(group => normalizeScheduleStandard(group.standard))));
+        }
         if (class_id) {
-            const classRes = await db_1.db.query(`SELECT id, name, type, standard, section
+            const classRes = await client.query(`SELECT id, name, type, standard, section
                  FROM classes
                  WHERE id = $1
                    AND ($2::uuid IS NULL OR academic_year_id = $2::uuid)
                    AND COALESCE(is_archived, false) = false`, [class_id, academic_year_id || null]);
             if (classRes.rows.length === 0) {
+                await client.query('ROLLBACK');
                 return res.status(400).json({ success: false, error: 'Select a valid active class before creating timetable.' });
             }
             const classRow = classRes.rows[0];
             effectiveClassType = String(classRow.type || '').toLowerCase();
-            effectiveName = name || classRow.name;
-            effectiveStandards = [classRow.standard].filter(Boolean);
-        }
-        if (!effectiveClassType || effectiveStandards.length === 0) {
-            return res.status(400).json({ success: false, error: 'Class and standard are required.' });
-        }
-        // Conflict Validator: only check against active (non-deleted) schedules
-        const existingSchedules = await db_1.db.query(`SELECT * FROM attendance_schedules 
-             WHERE day_of_week = $1 
-               AND (is_deleted = false OR is_deleted IS NULL)
-               AND (effective_until IS NULL OR effective_until >= $2)`, [day_of_week, startDate]);
-        for (const existing of existingSchedules.rows) {
-            if (start_time < existing.end_time && end_time > existing.start_time) {
-                if (class_id && existing.class_id && existing.class_id !== class_id) {
-                    continue;
-                }
-                const extStds = typeof existing.standards === 'string' ? JSON.parse(existing.standards || '[]') : existing.standards;
-                const reqStds = effectiveStandards;
-                const collision = reqStds.find((s) => extStds.includes(s));
-                if (collision) {
-                    return res.status(400).json({
-                        success: false,
-                        error: `Time Conflict: '${collision}' is already assigned to a ${existing.class_type} slot during this time.`
-                    });
-                }
+            effectiveName = effectiveName || classRow.name;
+            if (selectedGroupIds.length === 0) {
+                effectiveStandards = [classRow.standard].filter(Boolean);
             }
         }
-        const result = await db_1.db.query(`INSERT INTO attendance_schedules (class_id, academic_year_id, class_type, name, standards, day_of_week, start_time, end_time, duration_mins, effective_from)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [class_id || null, academic_year_id || null, effectiveClassType, effectiveName, JSON.stringify(effectiveStandards), day_of_week, start_time, end_time, duration_mins, startDate]);
+        if (!effectiveClassType || effectiveStandards.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, error: 'Department and at least one division are required.' });
+        }
+        effectiveName = effectiveName || (effectiveClassType.charAt(0).toUpperCase() + effectiveClassType.slice(1) + ' Class');
+        const existingSchedules = await client.query(`SELECT a.id, a.name, a.class_type, a.standards, a.start_time, a.end_time, a.mentor_id,
+                    COALESCE(array_agg(asg.group_id)
+                        FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids
+             FROM attendance_schedules a
+             LEFT JOIN attendance_schedule_groups asg ON asg.schedule_id = a.id
+             WHERE a.day_of_week = $1
+               AND (a.is_deleted = false OR a.is_deleted IS NULL)
+               AND (a.effective_until IS NULL OR a.effective_until >= $2)
+               AND ($3::uuid IS NULL OR a.academic_year_id = $3::uuid)
+             GROUP BY a.id`, [normalizedDay, startDate, academic_year_id || null]);
+        for (const existing of existingSchedules.rows) {
+            if (!(String(start_time) < String(existing.end_time) && String(end_time) > String(existing.start_time)))
+                continue;
+            const existingGroupIds = new Set((existing.group_ids || []).map(String));
+            const groupCollision = selectedGroupIds.find(groupId => existingGroupIds.has(groupId));
+            const sameMentor = Boolean(effectiveMentorId && existing.mentor_id === effectiveMentorId);
+            const existingStandards = normalizeStandardList(parseStandardList(existing.standards));
+            const standardCollision = effectiveStandards.find(standard => existingStandards.includes(standard));
+            const legacyCollision = Boolean(standardCollision
+                && (selectedGroupIds.length === 0 || existingGroupIds.size === 0)
+                && String(existing.class_type || '').toLowerCase() === effectiveClassType);
+            if (groupCollision || sameMentor || legacyCollision) {
+                const reason = sameMentor
+                    ? 'The mentor already has another class at this time.'
+                    : groupCollision
+                        ? 'One of the selected divisions already has a class at this time.'
+                        : 'An older timetable entry already covers this standard at this time.';
+                await client.query('ROLLBACK');
+                return res.status(409).json({
+                    success: false,
+                    error: 'Time conflict with ' + (existing.name || existing.class_type || 'another class') + '. ' + reason,
+                });
+            }
+        }
+        const computedDuration = Number(duration_mins) > 0
+            ? Number(duration_mins)
+            : (() => {
+                const [startHour, startMinute] = String(start_time).split(':').map(Number);
+                const [endHour, endMinute] = String(end_time).split(':').map(Number);
+                return (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+            })();
+        const result = await client.query(`INSERT INTO attendance_schedules
+                (class_id, academic_year_id, class_type, name, standards, day_of_week,
+                 start_time, end_time, duration_mins, effective_from, mentor_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING *`, [
+            class_id || null,
+            academic_year_id || null,
+            effectiveClassType,
+            effectiveName,
+            JSON.stringify(effectiveStandards),
+            normalizedDay,
+            start_time,
+            end_time,
+            computedDuration,
+            startDate,
+            effectiveMentorId,
+        ]);
+        const schedule = result.rows[0];
+        if (scheduleGroups.length > 0) {
+            await client.query(`INSERT INTO attendance_schedule_groups
+                    (schedule_id, group_id, academic_year_id, department)
+                 SELECT $1, id, academic_year_id, department
+                 FROM attendance_groups
+                 WHERE id = ANY($2::uuid[])
+                 ON CONFLICT (schedule_id, group_id) DO NOTHING`, [schedule.id, selectedGroupIds]);
+        }
+        await client.query('COMMIT');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
-        res.json({ success: true, data: result.rows[0] });
+        return res.status(201).json({
+            success: true,
+            data: {
+                ...schedule,
+                attendance_groups: scheduleGroups,
+            },
+        });
     }
     catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        await client.query('ROLLBACK').catch(() => undefined);
+        const status = err?.code === '22P02' ? 400 : 500;
+        return res.status(status).json({ success: false, error: err.message });
+    }
+    finally {
+        client.release();
     }
 };
 exports.createSchedule = createSchedule;
@@ -716,15 +868,15 @@ const getMentorSchedules = async (req, res) => {
              WHERE status = 'active' AND standard IS NOT NULL
                AND (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)`, [mentor_id]);
         const mentorStudentStds = studentStds.rows.map((r) => r.standard); // e.g. ["Plus One", "Plus Two"]
-        if (mentorStudentStds.length === 0) {
-            return res.json({ success: true, schedule_ids: [], mentor_standards: [] });
-        }
         // Get all active (non-deleted) schedules for this academic year
-        let schedQuery = 'SELECT id, standards, class_type FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL)';
+        let schedQuery = `SELECT a.id, a.standards, a.class_type, a.mentor_id,
+                                 ${SCHEDULE_GROUPS_SELECT}
+                          FROM attendance_schedules a
+                          WHERE (a.is_deleted = false OR a.is_deleted IS NULL)`;
         const params = [];
         if (effectiveAcademicYearId) {
             // Strict: only schedules explicitly for this year (no NULL bleed-through)
-            schedQuery += ' AND academic_year_id = $1';
+            schedQuery += ' AND a.academic_year_id = $1';
             params.push(effectiveAcademicYearId);
         }
         const allScheds = await db_1.db.query(schedQuery, params);
@@ -737,7 +889,11 @@ const getMentorSchedules = async (req, res) => {
         }))))
             .filter((sched) => sched.count > 0)
             .map((sched) => sched.id);
-        res.json({ success: true, schedule_ids: relevantIds, mentor_standards: mentorStudentStds });
+        const linkedMentorStandards = allScheds.rows.flatMap((schedule) => parseLinkedGroups(schedule.attendance_groups)
+            .filter(group => !group.mentor_id || group.mentor_id === mentor_id)
+            .map(group => normalizeScheduleStandard(group.standard)));
+        const mentorStandards = Array.from(new Set([...mentorStudentStds, ...linkedMentorStandards]));
+        res.json({ success: true, schedule_ids: relevantIds, mentor_standards: mentorStandards });
     }
     catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -754,7 +910,10 @@ const getStudentsForSchedule = async (req, res) => {
         const yearContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, academic_year_id);
         const effectiveRequestAcademicYearId = yearContext.academicYearId;
         const scheduleParams = [schedule_id];
-        let scheduleQuery = 'SELECT id, name, standards, class_type, start_time, end_time, academic_year_id FROM attendance_schedules WHERE id = $1';
+        let scheduleQuery = `SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time,
+                                    a.academic_year_id, a.mentor_id, ${SCHEDULE_GROUPS_SELECT}
+                             FROM attendance_schedules a
+                             WHERE a.id = $1`;
         if (effectiveRequestAcademicYearId) {
             scheduleParams.push(effectiveRequestAcademicYearId);
             scheduleQuery += ` AND academic_year_id = $${scheduleParams.length}`;
@@ -808,7 +967,36 @@ const getStudentsForSchedule = async (req, res) => {
                 : classType === 'hifz' ? 'hifz'
                     : null;
         let configuredGroupRoster = null;
-        if (mentor_id && effectiveAcademicYearId && attendanceDepartment) {
+        const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
+        if (linkedGroups.length > 0 && effectiveAcademicYearId) {
+            if (isMentorRole && schedule.mentor_id && schedule.mentor_id !== mentor_id) {
+                return res.status(403).json({ success: false, error: 'This timetable slot belongs to another mentor.' });
+            }
+            const groupIds = linkedGroups.map(group => group.id);
+            const groupRoster = await db_1.db.query(`WITH configured AS (
+                    SELECT id
+                    FROM attendance_groups
+                    WHERE id = ANY($1::uuid[])
+                      AND academic_year_id = $2
+                 ),
+                 assigned AS (
+                    SELECT s.adm_no, s.name, p.standard, s.photo_url
+                    FROM configured g
+                    JOIN attendance_group_students gs ON gs.group_id = g.id
+                    JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+                    JOIN academic_student_placements p
+                      ON p.student_id = s.adm_no
+                     AND p.academic_year_id = $2
+                     AND p.status = 'active'
+                    WHERE p.standard = ANY($3::text[])
+                 )
+                 SELECT EXISTS(SELECT 1 FROM configured) AS configured,
+                        COALESCE(jsonb_agg(assigned ORDER BY assigned.standard, assigned.name)
+                            FILTER (WHERE assigned.adm_no IS NOT NULL), '[]'::jsonb) AS students
+                 FROM assigned`, [groupIds, effectiveAcademicYearId, activeDbStds]);
+            configuredGroupRoster = groupRoster.rows[0]?.students || [];
+        }
+        else if (mentor_id && effectiveAcademicYearId && attendanceDepartment) {
             const groupRoster = await db_1.db.query(`WITH configured AS (
                     SELECT id
                     FROM attendance_groups

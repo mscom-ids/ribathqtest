@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, Calendar, UserCog,
     Settings, HelpCircle, LogOut, DoorOpen, BookOpen,
     Landmark, BookMarked, School, GraduationCap,
-    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText
+    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText, ListChecks
 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -42,6 +42,7 @@ const menuLinks: NavEntry[] = [
     { href: "/admin/alumni",   label: "Alumni",    icon: GraduationCap },
     { href: "/admin/calendar", label: "Calendar",  icon: Calendar },
     { href: "/admin/student-attendance", label: "Attendance Dashboard", icon: ClipboardCheck, group: ["/admin/student-attendance"] },
+    { href: "/admin/attendance-setup", label: "Timetable Setup", icon: ListChecks, group: ["/admin/attendance-setup"] },
     { href: "/admin/staff",    label: "Staff",     icon: UserCog },
     { href: "/admin/chat",     label: "Chat",      icon: MessageCircle },
 ]
@@ -54,6 +55,7 @@ const academicLinks: NavEntry[] = [
             { href: "/admin/academic-history", label: "Year Overview" },
             { href: "/admin/setup/academic-years", label: "Academic Years" },
             { href: "/admin/academic/enrollments", label: "Student Placement" },
+            { href: "/admin/timetable/view", label: "Timetable" },
             { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },
@@ -105,6 +107,7 @@ const principalMenuLinks: NavEntry[] = [
     { href: "/admin/students", label: "Students",  icon: Users, group: ["/admin/students"] },
     { href: "/admin/calendar", label: "Calendar",  icon: Calendar },
     { href: "/admin/student-attendance", label: "Attendance Dashboard", icon: ClipboardCheck, group: ["/admin/student-attendance"] },
+    { href: "/admin/attendance-setup", label: "Timetable Setup", icon: ListChecks, group: ["/admin/attendance-setup"] },
     { href: "/admin/staff", label: "Mentors", icon: UserCog },
     { href: "/admin/chat", label: "Chat", icon: MessageCircle },
 ]
@@ -117,6 +120,7 @@ const principalAcademicLinks: NavEntry[] = [
             { href: "/admin/academic-history", label: "Year Overview" },
             { href: "/admin/setup/academic-years", label: "Academic Years" },
             { href: "/admin/academic/enrollments", label: "Student Placement" },
+            { href: "/admin/timetable/view", label: "Timetable" },
             { href: "/admin/reports/students", label: "Yearly Student Reports" },
         ],
     },

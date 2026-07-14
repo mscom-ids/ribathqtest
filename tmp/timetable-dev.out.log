@@ -1,0 +1,216 @@
+
+> institution-os@0.1.0 dev
+> concurrently "npm run dev:frontend" "npm run dev:backend"
+
+[1] 
+[1] > institution-os@0.1.0 dev:backend
+[1] > cd backend && npm run dev
+[1] 
+[0] 
+[0] > institution-os@0.1.0 dev:frontend
+[0] > next dev --webpack
+[0] 
+[1] 
+[1] > backend@1.0.0 dev
+[1] > nodemon --watch src --exec ts-node src/index.ts
+[1] 
+[1] [33m[nodemon] 3.1.14[39m
+[1] [33m[nodemon] to restart at any time, enter `rs`[39m
+[1] [33m[nodemon] watching path(s): src\**\*[39m
+[1] [33m[nodemon] watching extensions: ts,json[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0] ⚠ Port 3000 is in use by process 30404, using available port 3001 instead.
+[0] ▲ Next.js 16.1.6 (webpack)
+[0] - Local:         http://localhost:3001
+[0] - Network:       http://192.168.100.109:3001
+[0] - Environments: .env.local
+[0] 
+[0] ✓ Starting...
+[1] [dotenv@17.3.1] injecting env (4) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (1) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[0] ⨯ Unable to acquire lock at D:\NewRQP\.next\dev\lock, is another instance of next dev running?
+[0]   Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[0] [?25h
+[0] npm run dev:frontend exited with code 1
+[1] [STARTUP] Server is running on port 5000
+[1] [32m[nodemon] clean exit - waiting for changes before restart[39m
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (4) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (1) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[1] [STARTUP] Server is running on port 5000
+[1] [SLOW DB] 1274ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW DB] 1303ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 1310.4ms
+[1] [SLOW DB] 1284ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW API] GET /api/attendance/schedules 500 1508.5ms
+[1] [SLOW DB] 274ms params=0 sql="SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW DB] 289ms params=0 sql="SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW DB] 286ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[1] [SLOW DB] 1380ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW DB] 1378ms params=1 sql="SELECT id, standard, name, created_at FROM academic_standard_divisions WHERE academic_year_id = $1 ORDER BY standard, name"
+[1] [SLOW API] GET /api/academic-placements/divisions 304 1380.0ms
+[1] [SLOW DB] 1414ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 1416.6ms
+[1] [SLOW DB] 5390ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[1] [SLOW API] GET /api/attendance/schedules 500 5396.0ms
+[1] [SLOW DB] 5400ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW DB] 5493ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 5506.5ms
+[1] [SLOW DB] 3193ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[1] [SLOW DB] 3197ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW DB] 3257ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 3259.3ms
+[1] [SLOW DB] 592ms params=0 sql="SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL"
+[1] [SLOW DB] 601ms params=0 sql="SELECT id, name FROM staff"
+[1] [SLOW API] GET /api/attendance/schedules 200 4387.9ms
+[1] [SLOW API] POST /api/attendance/schedules 201 2834.2ms
+[1] [SLOW API] GET /api/attendance/schedules 200 659.1ms
+[1] [SLOW DB] 1334ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW DB] 1429ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 1429.9ms
+[1] [SLOW DB] 1450ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW API] GET /api/classes/academic-years 304 1453.1ms
+[1] [SLOW DB] 1506ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 1512.7ms
+[1] [SLOW DB] 1541ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 1545.6ms
+[1] [SLOW DB] 1297ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[1] [SLOW DB] 1306ms params=2 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2"
+[1] [SLOW DB] 1375ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW API] GET /api/attendance/dashboard 304 1385.2ms
+[1] [SLOW DB] 357ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[1] [SLOW API] GET /api/attendance/students 200 695.9ms
+[1] [SLOW DB] 1948ms params=0 sql="SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW API] GET /api/academic-placements/academic-years 304 1976.4ms
+[1] [SLOW DB] 1939ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 1944.6ms
+[1] [SLOW DB] 388ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[1] [SLOW DB] 1333ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 1337ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW API] GET /api/academic-placements/attendance-groups 304 1349.2ms
+[1] [SLOW DB] 1333ms params=1 sql="SELECT id, standard, name, created_at FROM academic_standard_divisions WHERE academic_year_id = $1 ORDER BY standard, name"
+[1] [SLOW API] GET /api/academic-placements/divisions 304 1335.2ms
+[1] [SLOW API] GET /api/attendance/schedules 304 1933.6ms
+[1] [SLOW DB] 263ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW DB] 286ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 255ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 257ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 916ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 955ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1168.4ms
+[1] [SLOW DB] 1589ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1590ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 1799.7ms
+[1] [SLOW DB] 1557ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1558ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 1559.2ms
+[1] [SLOW DB] 2647ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 2853.6ms
+[1] [SLOW DB] 1393ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1444ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 1637.3ms
+[1] [SLOW DB] 1234ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1406.4ms
+[1] [SLOW DB] 1222ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1401.5ms
+[1] [SLOW DB] 1229ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1241ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1427.3ms
+[1] [SLOW DB] 1498ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1498ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 1690.6ms
+[1] [SLOW DB] 1482ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1484.6ms
+[1] [SLOW DB] 250ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW DB] 1291ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 1296.7ms
+[1] [SLOW DB] 1321ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[1] [SLOW DB] 1581ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW API] GET /api/students/R410 200 1797.7ms
+[1] [SLOW DB] 1238ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 304 1241.4ms
+[1] [SLOW DB] 1204ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 200 1377.7ms
+[1] [SLOW DB] 1190ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 304 1349.7ms
+[1] [SLOW DB] 2496ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 2564ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 2103ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 2130ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1675ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1675ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 2767.2ms
+[1] [SLOW API] GET /api/students 200 1852.9ms
+[1] [SLOW API] GET /api/students 200 2309.2ms
+[1] [SLOW DB] 291ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[1] [SLOW DB] 292ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 1395ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 1395ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW API] GET /api/students/counts 304 1396.3ms
+[1] [SLOW DB] 1398ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW API] GET /api/classes/academic-years 304 1399.3ms
+[1] [SLOW DB] 1401ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 1406.1ms
+[1] [SLOW DB] 1406ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1595.7ms
+[1] [SLOW DB] 1189ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1360.9ms
+[1] [SLOW DB] 1454ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1454ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 935ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 2391.1ms
+[1] [SLOW DB] 1696ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 2375ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1772ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1773ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 2532.6ms
+[1] [SLOW API] GET /api/students 304 1934.2ms
+[1] [SLOW DB] 1443ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1447ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1650.0ms
+[1] [SLOW DB] 1389ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1575.9ms
+[1] [SLOW DB] 1309ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1309ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1486.4ms
+[1] [SLOW DB] 1151ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 304 1311.6ms
+[1] [SLOW DB] 1224ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 304 1224.9ms
+[1] [SLOW DB] 277ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[1] [SLOW DB] 278ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 276ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW DB] 1383ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 1384.2ms
+[1] [SLOW DB] 1381ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1383ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW API] GET /api/classes/academic-years 304 1384.3ms
+[1] [SLOW API] GET /api/students 304 1572.3ms
+[1] [SLOW DB] 1570ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 1570ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW API] GET /api/students/counts 304 1571.9ms
+[1] [SLOW DB] 1521ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 1526ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 304 1733.4ms
+[1] [SLOW DB] 1461ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 1468ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 1562ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW API] GET /api/students/counts 304 1564.0ms
+[1] [SLOW API] GET /api/students 304 1872.4ms
+[1] [SLOW DB] 1354ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1538ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW API] GET /api/students 304 1738.9ms
+[1] [SLOW DB] 2675ms params=2 sql="SELECT COUNT(*)::integer as total FROM students WHERE 1=1 AND (name ILIKE $1 OR adm_no ILIKE $1) AND status = $2"
+[1] [SLOW DB] 2682ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 2754ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 2778ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW API] GET /api/students/counts 304 2802.4ms
+[1] [SLOW API] GET /api/students 304 2878.0ms
+[1] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
