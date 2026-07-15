@@ -814,6 +814,18 @@ const calculateBulkMonthlyReport = async (req, res) => {
                     ...calculatedPoints
                 };
             });
+            if (process.env.DEBUG_TOP_PERFORMERS === 'true') {
+                console.debug('[TOP PERFORMERS]', {
+                    mentor_id: mentor_id || null,
+                    month,
+                    report_start_date: startDate,
+                    report_end_date: endDate,
+                    reports: reports.map((report) => ({
+                        adm_no: report.adm_no,
+                        totalPoints: report.totalPoints,
+                    })),
+                });
+            }
             return {
                 reports,
                 class_days: reportClassDays,

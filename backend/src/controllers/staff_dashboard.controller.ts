@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getMyStaffProfile, getMyStudentsWithStats } from './staff.controller';
 import { getSchedulesForDate } from './attendance_dashboard.controller';
-import { calculateMonthlyReportData } from './hifz.controller';
+import { calculateBulkMonthlyReport } from './hifz.controller';
 
 export const getStaffSummary = async (req: Request, res: Response) => {
     try {
@@ -37,7 +37,7 @@ export const getStaffSummary = async (req: Request, res: Response) => {
         getMyStaffProfile(reqProfile, profileRes);
         getMyStudentsWithStats(reqStudents, studentsRes);
         getSchedulesForDate(reqSchedules, schedulesRes);
-        calculateMonthlyReportData(reqReport, reportRes);
+        calculateBulkMonthlyReport(reqReport, reportRes);
 
         const [profileData, studentsData, schedulesData, reportData] = await Promise.all([
             profilePromise, studentsPromise, schedulesPromise, reportPromise

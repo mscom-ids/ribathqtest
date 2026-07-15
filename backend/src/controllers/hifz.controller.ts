@@ -958,6 +958,19 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     };
                 });
 
+                if (process.env.DEBUG_TOP_PERFORMERS === 'true') {
+                    console.debug('[TOP PERFORMERS]', {
+                        mentor_id: mentor_id || null,
+                        month,
+                        report_start_date: startDate,
+                        report_end_date: endDate,
+                        reports: reports.map((report: any) => ({
+                            adm_no: report.adm_no,
+                            totalPoints: report.totalPoints,
+                        })),
+                    });
+                }
+
                 return {
                     reports,
                     class_days: reportClassDays,

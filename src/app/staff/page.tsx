@@ -80,6 +80,8 @@ type MonthlyTopPerformer = {
 type MonthlyReportRow = {
     adm_no: string
     totalPoints?: number | string | null
+    total_points?: number | string | null
+    points?: number | string | null
 }
 
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ export default function StaffDashboard() {
     const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
     const [topPerformersLoading, setTopPerformersLoading] = useState(false)
+    const [topPerformersError, setTopPerformersError] = useState<string | null>(null)
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [currentTime, setCurrentTime] = useState<Date | null>(null)
     // "my" = assigned only, "all" = every active student
@@ -182,6 +185,7 @@ export default function StaffDashboard() {
         async function load() {
             setLoading(true)
             setTopPerformersLoading(true)
+            setTopPerformersError(null)
             try {
                 const res = await cachedGet("/dashboard/staff", { date: todayStr }, 30_000)
 
@@ -207,30 +211,45 @@ export default function StaffDashboard() {
                 })))
 
                 // Process Monthly Top Performers from summary
-                const reports = summary.monthly_report || []
+                const reports = summary.monthly_report
+                if (!Array.isArray(reports)) {
+                    throw new Error("The monthly points response is missing its report rows")
+                }
                 const reportByAdmNo = new Map<string, MonthlyReportRow>(
                     reports.map((r: any) => [r.adm_no, r])
                 )
 
                 const assignedPerformers = students.map((student: any) => {
                     const report = reportByAdmNo.get(student.adm_no)
+                    const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
+                    const totalPoints = Number(rawPoints)
+                    if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) {
+                        throw new Error(`No valid monthly points were returned for ${student.name}`)
+                    }
                     return {
                         adm_no: student.adm_no,
                         name: student.name,
                         standard: student.standard,
-                        totalPoints: Number(report?.totalPoints || 0),
+                        totalPoints,
                     }
                 }).sort((a: any, b: any) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
 
-                setMonthlyTopPerformers(assignedPerformers.length > 0 ? assignedPerformers : students.map((s: any) => ({
-                    adm_no: s.adm_no,
-                    name: s.name,
-                    standard: s.standard,
-                    totalPoints: 0
-                })))
+                if (process.env.NODE_ENV !== "production") {
+                    console.debug("[STAFF TOP PERFORMERS]", {
+                        month: todayStr.slice(0, 7),
+                        studentCount: students.length,
+                        reports: reports.map((report: MonthlyReportRow) => ({
+                            adm_no: report.adm_no,
+                            totalPoints: report.totalPoints ?? report.total_points ?? report.points,
+                        })),
+                    })
+                }
+                setMonthlyTopPerformers(assignedPerformers)
 
             } catch (err: any) {
                 console.warn("[STAFF PAGE] Load error:", err)
+                setMonthlyTopPerformers([])
+                setTopPerformersError("Monthly points could not be calculated")
                 if (err?.response?.status === 401) router.push("/login")
             }
             setLoading(false)
@@ -885,9 +904,9 @@ export default function StaffDashboard() {
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     Loading monthly points...
                                 </div>
-                            ) : monthlyTopPerformers.length === 0 ? (
-                                <div className="text-center py-6 text-sm text-slate-400">
-                                    No point records available for this month
+                            ) : topPerformersError ? (
+                                <div className="text-center py-6 text-sm text-red-500">
+                                    {topPerformersError}
                                 </div>
                             ) : (
                                 <div className="space-y-4">

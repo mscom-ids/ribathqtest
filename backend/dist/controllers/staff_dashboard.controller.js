@@ -34,7 +34,7 @@ const getStaffSummary = async (req, res) => {
         (0, staff_controller_1.getMyStaffProfile)(reqProfile, profileRes);
         (0, staff_controller_1.getMyStudentsWithStats)(reqStudents, studentsRes);
         (0, attendance_dashboard_controller_1.getSchedulesForDate)(reqSchedules, schedulesRes);
-        (0, hifz_controller_1.calculateMonthlyReportData)(reqReport, reportRes);
+        (0, hifz_controller_1.calculateBulkMonthlyReport)(reqReport, reportRes);
         const [profileData, studentsData, schedulesData, reportData] = await Promise.all([
             profilePromise, studentsPromise, schedulesPromise, reportPromise
         ]);
