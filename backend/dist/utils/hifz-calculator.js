@@ -11,6 +11,8 @@ const HIFZ_POINT_MAX = {
 const HIFZ_TOTAL_POINT_MAX = HIFZ_POINT_MAX.newVerses +
     HIFZ_POINT_MAX.recentRevision +
     HIFZ_POINT_MAX.juzRevision;
+// A monthly ranking needs enough observed teaching time before a student can reach full marks.
+const MINIMUM_SCORING_CLASS_DAYS = 5;
 function calculateHifzReportPoints(logs, attendance, options) {
     // Rounding helper
     const roundTo2 = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
@@ -59,7 +61,8 @@ function calculateHifzReportPoints(logs, attendance, options) {
     }
     // STEP 2: NEW VERSE POINT CALCULATION
     const totalPagesRecited = (0, quran_data_1.calculateCoveredPagesFromLogs)(logs.filter(l => l.mode === 'New Verses'));
-    const expectedPages = totalClassDays * 0.9;
+    const scoringClassDays = Math.max(totalClassDays, MINIMUM_SCORING_CLASS_DAYS);
+    const expectedPages = scoringClassDays * 0.9;
     let newVersePoints = expectedPages > 0
         ? (totalPagesRecited / expectedPages) * HIFZ_POINT_MAX.newVerses
         : 0;
@@ -72,7 +75,7 @@ function calculateHifzReportPoints(logs, attendance, options) {
             uniqueRecentDates.add(iso);
     });
     const daysRecitedRecent = uniqueRecentDates.size;
-    const expectedRecentDays = totalClassDays * 0.7;
+    const expectedRecentDays = scoringClassDays * 0.7;
     let recentRevisionPoints = expectedRecentDays > 0
         ? (daysRecitedRecent / expectedRecentDays) * HIFZ_POINT_MAX.recentRevision
         : 0;
@@ -90,7 +93,7 @@ function calculateHifzReportPoints(logs, attendance, options) {
         else
             totalJuzRecited += 1; // Default
     });
-    const expectedJuz = totalClassDays * 0.7;
+    const expectedJuz = scoringClassDays * 0.7;
     let juzPoints = expectedJuz > 0
         ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
         : 0;
@@ -118,6 +121,7 @@ function calculateHifzReportPoints(logs, attendance, options) {
     return {
         detectedClassDays,
         totalClassDays,
+        scoringClassDays,
         newVersePoints,
         recentRevisionPoints,
         juzPoints,

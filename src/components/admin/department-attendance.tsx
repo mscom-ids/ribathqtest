@@ -7,8 +7,17 @@ import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
-type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; attendance_status?: string }
+type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; is_locked_outside?: boolean; attendance_status?: string }
 type StaffMember = { id: string; name: string; role: string; photo_url?: string }
+
+function isOutsideStudent(student: StudentMark) {
+    return Boolean(
+        student.is_locked_outside ||
+        student.is_on_leave ||
+        student.attendance_status === 'outside' ||
+        student.status === 'outside',
+    )
+}
 
 function toLocalDateStr(d: Date) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -117,7 +126,12 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                     setMentorSchedules(res.data.schedule_ids || [])
                     setMentorStandards(res.data.mentor_standards || [])
                 }
-            } catch (e) { console.error("Failed to load mentor schedules", e) }
+            } catch (e) {
+                // Do not retain an earlier mentor's schedule filter after a failed refresh.
+                console.error("Failed to load mentor schedules", e)
+                setMentorSchedules([])
+                setMentorStandards([])
+            }
         }
         fetchMentorSchedules()
     }, [selectedMentorId, selectedYearId])
@@ -268,12 +282,16 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             const yearParam = selectedYearId ? `&academic_year_id=${selectedYearId}` : ''
             const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}${yearParam}`)
             if (res.data.success) {
-                const students: StudentMark[] = res.data.students.map((st: any) => ({
-                    ...st,
-                    status: st.is_on_leave ? 'outside' : 'present',
-                    is_on_leave: st.is_on_leave || false,
-                    attendance_status: st.attendance_status || (st.is_on_leave ? 'outside' : 'pending')
-                }))
+                const students: StudentMark[] = res.data.students.map((st: any) => {
+                    const isOutside = Boolean(st.is_locked_outside || st.is_on_leave || st.attendance_status === 'outside')
+                    return {
+                        ...st,
+                        status: isOutside ? 'outside' : 'present',
+                        is_on_leave: isOutside,
+                        is_locked_outside: isOutside,
+                        attendance_status: isOutside ? 'outside' : (st.attendance_status || 'pending')
+                    }
+                })
                 setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: selectedMentorId })
             }
         } catch (e: any) {
@@ -284,7 +302,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     const toggleStudent = (idx: number) => {
         if (!rosterModal) return
         // Don't allow toggling if student is on leave
-        if (rosterModal.students[idx].is_on_leave) return
+        if (isOutsideStudent(rosterModal.students[idx])) return
         const updated = [...rosterModal.students]
         const cur = updated[idx].status
         if (cur === 'present') updated[idx].status = 'late'
@@ -299,10 +317,10 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
             const payload: any = {
                 schedule_id: rosterModal.schedule.id,
                 date: rosterModal.dateStr,
-                // Only include students NOT on leave
-                student_marks: rosterModal.students
-                    .filter(s => !s.is_on_leave)
-                    .map(s => ({ student_id: s.adm_no, status: s.status }))
+                student_marks: rosterModal.students.map(s => ({
+                    student_id: s.adm_no,
+                    status: isOutsideStudent(s) ? 'Outside' : s.status,
+                }))
             }
             // If admin is marking on behalf of a specific mentor, attribute the mark to them
             if (rosterModal.mentorId && rosterModal.mentorId !== 'all') {
@@ -1079,16 +1097,16 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                             {/* Count badges */}
                             <div className="flex gap-2 mt-3 flex-wrap">
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#22c55e]/10 text-[#22c55e]">
-                                    Present: {rosterModal.students.filter(s => s.status === 'present' && !s.is_on_leave).length}
+                                    Present: {rosterModal.students.filter(s => s.status === 'present' && !isOutsideStudent(s)).length}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600">
-                                    Late: {rosterModal.students.filter(s => s.status === 'late' && !s.is_on_leave).length}
+                                    Late: {rosterModal.students.filter(s => s.status === 'late' && !isOutsideStudent(s)).length}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-500">
-                                    Absent: {rosterModal.students.filter(s => s.status === 'absent' && !s.is_on_leave).length}
+                                    Absent: {rosterModal.students.filter(s => s.status === 'absent' && !isOutsideStudent(s)).length}
                                 </span>
                                 <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-500/10 text-purple-600">
-                                    Outside: {rosterModal.students.filter(s => s.is_on_leave).length}
+                                    Outside: {rosterModal.students.filter(s => isOutsideStudent(s)).length}
                                 </span>
                                 <span className="ml-auto px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">
                                     Total: {rosterModal.students.length}
@@ -1122,7 +1140,7 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                             key={st.adm_no}
                                             onClick={() => toggleStudent(i)}
                                             className={cn("grid grid-cols-[auto_1fr_auto] gap-3 items-center p-3 border rounded-lg transition",
-                                                st.is_on_leave
+                                                isOutsideStudent(st)
                                                     ? "border-purple-200 dark:border-purple-800/50 bg-purple-50/30 dark:bg-purple-900/10 cursor-not-allowed"
                                                     : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer"
                                             )}
@@ -1140,9 +1158,9 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                                                     <p className="text-[12px] text-slate-500">{st.standard} • {st.adm_no}</p>
                                                 </div>
                                             </div>
-                                            <div className={cn("px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border min-w-[90px] justify-center transition-all", statusBadgeStyle(st.status, st.is_on_leave))}>
-                                                {statusIcon(st.status, st.is_on_leave)}
-                                                <span className="capitalize">{st.is_on_leave ? 'outside' : st.status}</span>
+                                            <div className={cn("px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border min-w-[90px] justify-center transition-all", statusBadgeStyle(st.status, isOutsideStudent(st)))}>
+                                                {statusIcon(st.status, isOutsideStudent(st))}
+                                                <span className="capitalize">{isOutsideStudent(st) ? 'outside' : st.status}</span>
                                             </div>
                                         </div>
                                     ))}

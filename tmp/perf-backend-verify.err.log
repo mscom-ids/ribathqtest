@@ -1,0 +1,7 @@
+[SLOW DB] 254ms params=2 sql="SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2"
+[SLOW DB] 256ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[SLOW DB] 255ms params=2 sql="SELECT id FROM attendance_schedules WHERE id = $1 AND academic_year_id = $2"
+[SLOW DB] 256ms params=2 sql="SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time, a.academic_year_id, a.mentor_id, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standar"
+[SLOW API] GET /api/attendance/marks 304 701.0ms
+[SLOW DB] 309ms params=3 sql="SELECT DISTINCT ON (sl.student_id) sl.student_id, sl.start_datetime, sl.end_datetime, sl.actual_return_datetime, sl.status FROM student_leaves sl WHERE sl.student_id = ANY($1::text[]) AND sl.start_datetime < $3::timestam"
+[SLOW API] GET /api/attendance/students 304 1221.6ms

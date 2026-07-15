@@ -123,6 +123,108 @@ function dateKeysBetween(start, end) {
 function scheduleDateTime(dateKey, timeValue) {
     return new Date(`${dateKey}T${String(timeValue || '00:00:00').slice(0, 8)}+05:30`);
 }
+let hasStudentCurrentPresenceTable = null;
+async function canUseStudentCurrentPresence() {
+    if (hasStudentCurrentPresenceTable !== null)
+        return hasStudentCurrentPresenceTable;
+    try {
+        const result = await db_1.db.query(`SELECT to_regclass('public.student_current_presence') AS table_name`);
+        hasStudentCurrentPresenceTable = !!result.rows[0]?.table_name;
+        return hasStudentCurrentPresenceTable;
+    }
+    catch {
+        hasStudentCurrentPresenceTable = false;
+        return false;
+    }
+}
+/**
+ * Returns leave rows that make a student unavailable for any part of a class.
+ * `student_current_presence` is the operational source of truth for students
+ * currently outside; the leave interval covers historic and already-returned
+ * records without treating future leave as a current absence.
+ */
+async function getLeavesOverlappingSession(studentIds, dateKey, startTime, endTime) {
+    if (studentIds.length === 0)
+        return [];
+    const sessionStart = scheduleDateTime(dateKey, startTime || '00:00:00');
+    const sessionEnd = scheduleDateTime(dateKey, endTime || '23:59:59');
+    if (Number.isNaN(sessionStart.getTime()) || Number.isNaN(sessionEnd.getTime())) {
+        throw new Error('The timetable class has an invalid start or end time.');
+    }
+    if (sessionEnd <= sessionStart)
+        sessionEnd.setDate(sessionEnd.getDate() + 1);
+    const hasPresenceTable = await canUseStudentCurrentPresence();
+    const query = hasPresenceTable
+        ? `WITH outside_presence AS (
+            SELECT scp.student_id,
+                   sl.start_datetime,
+                   sl.end_datetime,
+                   sl.actual_return_datetime,
+                   COALESCE(sl.status, 'outside') AS status,
+                   0 AS source_priority
+            FROM student_current_presence scp
+            LEFT JOIN student_leaves sl ON sl.id = scp.active_leave_id
+            WHERE scp.student_id = ANY($1::text[])
+              AND scp.status = 'outside'
+        ),
+        leave_overlap AS (
+            SELECT sl.student_id,
+                   sl.start_datetime,
+                   sl.end_datetime,
+                   sl.actual_return_datetime,
+                   sl.status,
+                   1 AS source_priority
+            FROM student_leaves sl
+            WHERE sl.student_id = ANY($1::text[])
+              AND sl.start_datetime < $3::timestamptz
+              AND (
+                  sl.status = 'outside'
+                  OR (
+                      sl.status = 'approved'
+                      AND COALESCE(sl.end_datetime, 'infinity'::timestamptz) > $2::timestamptz
+                  )
+                  OR (
+                      sl.status IN ('returned', 'completed')
+                      AND COALESCE(sl.actual_return_datetime, sl.end_datetime) > $2::timestamptz
+                  )
+              )
+        )
+        SELECT DISTINCT ON (student_id)
+               student_id,
+               start_datetime,
+               end_datetime,
+               actual_return_datetime,
+               status
+        FROM (
+            SELECT * FROM outside_presence
+            UNION ALL
+            SELECT * FROM leave_overlap
+        ) unavailable
+        ORDER BY student_id, source_priority, start_datetime DESC NULLS LAST`
+        : `SELECT DISTINCT ON (sl.student_id)
+               sl.student_id,
+               sl.start_datetime,
+               sl.end_datetime,
+               sl.actual_return_datetime,
+               sl.status
+           FROM student_leaves sl
+           WHERE sl.student_id = ANY($1::text[])
+             AND sl.start_datetime < $3::timestamptz
+             AND (
+                 sl.status = 'outside'
+                 OR (
+                     sl.status = 'approved'
+                     AND COALESCE(sl.end_datetime, 'infinity'::timestamptz) > $2::timestamptz
+                 )
+                 OR (
+                     sl.status IN ('returned', 'completed')
+                     AND COALESCE(sl.actual_return_datetime, sl.end_datetime) > $2::timestamptz
+                 )
+             )
+           ORDER BY sl.student_id, sl.start_datetime DESC NULLS LAST`;
+    const result = await db_1.db.query(query, [studentIds, sessionStart.toISOString(), sessionEnd.toISOString()]);
+    return result.rows;
+}
 function cancellationMeta(row) {
     if (!row)
         return { cancelReason: null, cancelType: null };
@@ -248,9 +350,10 @@ const MENTOR_COL_MAP = {
 // Single-query helper: returns, for one mentor, how many active students of each
 // (class_type, standard) they own. Replaces the N+1 COUNT(*) loops that used to
 // fire one query per schedule.
-async function getMentorStudentCounts(mentorId, academicYearId) {
+async function loadMentorStudentCounts(mentorId, academicYearId) {
     if (academicYearId) {
-        const grouped = await db_1.db.query(`WITH configured AS (
+        try {
+            const grouped = await db_1.db.query(`WITH configured AS (
                 SELECT id, department, standard
                 FROM attendance_groups
                 WHERE academic_year_id = $2 AND mentor_id = $1
@@ -264,13 +367,25 @@ async function getMentorStudentCounts(mentorId, academicYearId) {
              SELECT EXISTS(SELECT 1 FROM configured) AS configured,
                     COALESCE(jsonb_agg(assigned) FILTER (WHERE assigned.student_id IS NOT NULL), '[]'::jsonb) AS assignments
              FROM assigned`, [mentorId, academicYearId]);
-        if (grouped.rows[0]?.configured) {
-            const counts = { hifz: {}, school: {}, madrasa: {} };
-            for (const row of grouped.rows[0].assignments || []) {
-                const department = row.department;
-                counts[department][row.standard] = (counts[department][row.standard] || 0) + 1;
+            if (grouped.rows[0]?.configured) {
+                const counts = { hifz: {}, school: {}, madrasa: {} };
+                const assignments = parseLinkedGroups(grouped.rows[0].assignments);
+                for (const row of assignments) {
+                    const departmentValue = String(row.department || '').toLowerCase();
+                    const department = departmentValue === 'school' ? 'school' :
+                        (departmentValue === 'madrasa' || departmentValue === 'madrassa') ? 'madrasa' :
+                            'hifz';
+                    const standard = normalizeScheduleStandard(String(row.standard || '').trim());
+                    if (!standard)
+                        continue;
+                    counts[department][standard] = (counts[department][standard] || 0) + 1;
+                }
+                return counts;
             }
-            return counts;
+        }
+        catch (error) {
+            // Keep attendance available while a legacy group row is corrected.
+            console.warn('[attendance] Falling back to mentor assignments:', error);
         }
     }
     const result = await db_1.db.query(`SELECT adm_no, standard, is_hifz, is_school, is_madrasa
@@ -328,6 +443,12 @@ async function getMentorStudentCounts(mentorId, academicYearId) {
     return counts;
 }
 // Sum students-per-standard for a schedule's normalised standards.
+async function getMentorStudentCounts(mentorId, academicYearId) {
+    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:mentor-student-counts', {
+        academic_year_id: academicYearId || 'legacy',
+        mentor_id: mentorId,
+    }), 60000, () => loadMentorStudentCounts(mentorId, academicYearId));
+}
 function countStudentsForSchedule(schedule, counts) {
     const classType = (schedule.class_type || '').toLowerCase();
     const mentorCol = MENTOR_COL_MAP[classType];
@@ -427,8 +548,10 @@ const getSchedules = async (req, res) => {
             return res.json({ success: true, data: filteredSchedules });
         }
         // For Admins/Principals, attach expected mentors to each schedule
-        const studentsRes = await db_1.db.query(`SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`);
-        const staffRes = await db_1.db.query(`SELECT id, name FROM staff`);
+        const [studentsRes, staffRes] = await Promise.all([
+            db_1.db.query(`SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`),
+            db_1.db.query(`SELECT id, name FROM staff`),
+        ]);
         const staffMap = new Map(staffRes.rows.map((s) => [s.id, s.name]));
         const schedulesWithMentors = schedules.map(schedule => {
             const classType = (schedule.class_type || '').toLowerCase();
@@ -476,6 +599,19 @@ const getSchedulesForDate = async (req, res) => {
         const targetDate = new Date(date);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
         const user = req.user;
+        const isMentor = MENTOR_ROLES.includes(user?.role);
+        const mentorId = isMentor ? await (0, staff_utils_1.getStaffId)(req) : null;
+        if (isMentor && !mentorId)
+            return res.json({ success: true, data: [] });
+        const cacheKey = (0, server_cache_1.makeCacheKey)('attendance:schedules-for-date', {
+            academic_year_id: effectiveAcademicYearId || 'legacy',
+            date: String(date),
+            role: user?.role || '',
+            staff: mentorId || 'all',
+        });
+        const cached = (0, server_cache_1.getCached)(cacheKey);
+        if (cached)
+            return res.json({ success: true, data: cached });
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
                             ${SCHEDULE_GROUPS_SELECT},
                             c.name as class_setup_name, c.standard as class_standard,
@@ -497,21 +633,21 @@ const getSchedulesForDate = async (req, res) => {
         query += ` ORDER BY a.start_time`;
         const result = await db_1.db.query(query, params);
         // ── For mentor roles: filter to only schedules where they have students ──
-        if (MENTOR_ROLES.includes(user?.role)) {
-            const mentorId = await (0, staff_utils_1.getStaffId)(req);
-            if (!mentorId)
-                return res.json({ success: true, data: [] });
+        if (isMentor) {
             // ONE query, then in-memory filter. See getMentorStudentCounts.
             const counts = await getMentorStudentCounts(mentorId, effectiveAcademicYearId);
             const filteredSchedules = (await Promise.all(result.rows.map(async (schedule) => ({
                 ...schedule,
                 student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, effectiveAcademicYearId || undefined, date),
             })))).filter((s) => s.student_count > 0);
+            (0, server_cache_1.setCached)(cacheKey, filteredSchedules, 60000);
             return res.json({ success: true, data: filteredSchedules });
         }
         // For Admins/Principals, attach expected mentors to each schedule
-        const studentsRes = await db_1.db.query(`SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`);
-        const staffRes = await db_1.db.query(`SELECT id, name FROM staff`);
+        const [studentsRes, staffRes] = await Promise.all([
+            db_1.db.query(`SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`),
+            db_1.db.query(`SELECT id, name FROM staff`),
+        ]);
         const staffMap = new Map(staffRes.rows.map((s) => [s.id, s.name]));
         const schedulesWithMentors = result.rows.map((schedule) => {
             const classType = (schedule.class_type || '').toLowerCase();
@@ -540,6 +676,7 @@ const getSchedulesForDate = async (req, res) => {
                 }))
             };
         });
+        (0, server_cache_1.setCached)(cacheKey, schedulesWithMentors, 60000);
         res.json({ success: true, data: schedulesWithMentors });
     }
     catch (err) {
@@ -691,6 +828,7 @@ const createSchedule = async (req, res) => {
         }
         await client.query('COMMIT');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         return res.status(201).json({
             success: true,
             data: {
@@ -858,6 +996,7 @@ const copyScheduleDay = async (req, res) => {
              FROM inserted`, [sourceIdsToCopy, targetDay, effective_from]);
         await client.query('COMMIT');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         return res.status(201).json({
             success: true,
             data: { ...copyResult.rows[0], skipped_count: skippedCount },
@@ -884,6 +1023,7 @@ const deleteSchedule = async (req, res) => {
              SET effective_until = $1, is_deleted = true 
              WHERE id = $2`, [today, id]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         res.json({ success: true, message: 'Schedule deactivated. Past attendance data preserved.' });
     }
     catch (err) {
@@ -1021,7 +1161,7 @@ const getMentorSchedules = async (req, res) => {
         const yearContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, academic_year_id);
         const effectiveAcademicYearId = yearContext.academicYearId;
         const user = req.user;
-        if (user.role === 'staff') {
+        if (user?.role === 'staff') {
             const resolvedId = await (0, staff_utils_1.getStaffId)(req);
             if (resolvedId)
                 mentor_id = resolvedId;
@@ -1048,10 +1188,20 @@ const getMentorSchedules = async (req, res) => {
         // ONE query for all per-(class_type, standard) counts; then a pure
         // in-memory filter. Replaces N COUNT(*) queries.
         const counts = await getMentorStudentCounts(mentor_id, effectiveAcademicYearId);
-        const relevantIds = (await Promise.all(allScheds.rows.map(async (sched) => ({
-            id: sched.id,
-            count: await countStudentsForScheduleWithRules(sched, counts, mentor_id, effectiveAcademicYearId || undefined),
-        }))))
+        // A malformed legacy schedule must not make the entire attendance dashboard unavailable.
+        // Use its direct roster count as a safe fallback while the schedule can still be corrected.
+        const relevantIds = (await Promise.all(allScheds.rows.map(async (sched) => {
+            try {
+                return {
+                    id: sched.id,
+                    count: await countStudentsForScheduleWithRules(sched, counts, mentor_id, effectiveAcademicYearId || undefined),
+                };
+            }
+            catch (error) {
+                console.warn(`[attendance] Could not evaluate mentor schedule ${sched.id}:`, error);
+                return { id: sched.id, count: countStudentsForSchedule(sched, counts) };
+            }
+        })))
             .filter((sched) => sched.count > 0)
             .map((sched) => sched.id);
         const linkedMentorStandards = allScheds.rows.flatMap((schedule) => parseLinkedGroups(schedule.attendance_groups)
@@ -1262,67 +1412,25 @@ const getStudentsForSchedule = async (req, res) => {
         let studentsWithLeave = students;
         if (students.length > 0 && date) {
             try {
-                const studentIds = students.map((s) => s.adm_no);
-                // Phase 3: leave overlap check. Fetch all leaves touching this date,
-                // then compare the leave interval against the specific class interval.
-                const leavesRes = await db_1.db.query(`SELECT student_id, start_datetime, end_datetime, actual_return_datetime, status
-                     FROM student_leaves
-                     WHERE student_id = ANY($1)
-                       AND (
-                         (status = 'approved'
-                            AND start_datetime <  ($2::date + 1)
-                            AND end_datetime   >= $2::date)
-                         OR
-                         (status = 'outside'
-                            AND start_datetime <  ($2::date + 1))
-                         OR
-                         (status IN ('returned', 'completed')
-                            AND start_datetime <  ($2::date + 1)
-                            AND COALESCE(actual_return_datetime, end_datetime) >= $2::date)
-                       )
-                     ORDER BY start_datetime DESC`, [studentIds, date]);
-                const leavesByStudent = new Map();
-                for (const r of leavesRes.rows) {
-                    const leaves = leavesByStudent.get(r.student_id) || [];
-                    leaves.push(r);
-                    leavesByStudent.set(r.student_id, leaves);
-                }
-                const sessionStartDateTimeObj = new Date(`${date}T${sessionStartStr || '00:00:00'}+05:30`);
-                const sessionEndDateTimeObj = new Date(`${date}T${sessionEndStr || '23:59:00'}+05:30`);
-                studentsWithLeave = students.map((s) => {
-                    const leaves = leavesByStudent.get(s.adm_no) || [];
-                    let isLockedOutside = false;
-                    let wentOutsideLater = false;
-                    let relevantLeave = null;
-                    for (const leave of leaves) {
-                        const leaveStartObj = new Date(leave.start_datetime);
-                        const leaveReturnObj = leave.actual_return_datetime || leave.end_datetime
-                            ? new Date(leave.actual_return_datetime || leave.end_datetime)
-                            : null;
-                        const overlapsSession = leaveStartObj < sessionEndDateTimeObj
-                            && (!leaveReturnObj || leaveReturnObj > sessionStartDateTimeObj);
-                        if (overlapsSession) {
-                            isLockedOutside = true;
-                            relevantLeave = leave;
-                            break;
-                        }
-                        if (leaveStartObj >= sessionEndDateTimeObj && !wentOutsideLater) {
-                            wentOutsideLater = true;
-                            relevantLeave = leave;
-                        }
-                    }
+                const studentIds = students.map((student) => student.adm_no);
+                const overlappingLeaves = await getLeavesOverlappingSession(studentIds, String(date), sessionStartStr, sessionEndStr);
+                const leaveByStudent = new Map(overlappingLeaves.map((leave) => [leave.student_id, leave]));
+                studentsWithLeave = students.map((student) => {
+                    const leave = leaveByStudent.get(student.adm_no);
+                    const isLockedOutside = !!leave;
                     return {
-                        ...s,
+                        ...student,
                         is_locked_outside: isLockedOutside,
-                        went_outside_later: wentOutsideLater,
-                        leave_start_time: relevantLeave?.start_datetime || null,
-                        is_on_leave: isLockedOutside, // backwards compat
-                        attendance_status: isLockedOutside ? 'outside' : 'pending' // backwards compat
+                        went_outside_later: false,
+                        leave_start_time: leave?.start_datetime || null,
+                        is_on_leave: isLockedOutside,
+                        attendance_status: isLockedOutside ? 'outside' : 'pending',
                     };
                 });
             }
             catch (leaveErr) {
-                console.warn('Leave check failed:', leaveErr.message);
+                // Never fail open: an unknown outside state must block attendance.
+                throw new Error('Could not verify student presence: ' + leaveErr.message);
             }
         }
         res.json({ success: true, students: studentsWithLeave });
@@ -1354,8 +1462,25 @@ const markAttendance = async (req, res) => {
                 error: "This attendance schedule belongs to a previous academic year. Please use the current academic year timetable.",
             });
         }
+        // Outside status is enforced on the server. This protects against stale
+        // attendance modals and removes any earlier mark saved before a leave was
+        // registered for the same class date.
+        const submittedMarks = Array.isArray(student_marks) ? student_marks : [];
+        const existingMarks = await db_1.db.query(`SELECT student_id
+             FROM student_attendance_marks
+             WHERE schedule_id = $1 AND date = $2`, [schedule_id, date]);
+        const leaveCandidateIds = Array.from(new Set([
+            ...submittedMarks.map((mark) => mark.student_id),
+            ...existingMarks.rows.map((mark) => mark.student_id),
+        ].filter(Boolean)));
+        const outsideLeaves = await getLeavesOverlappingSession(leaveCandidateIds, date, schedule.start_time, schedule.end_time);
+        const outsideStudentIds = new Set(outsideLeaves.map((leave) => leave.student_id));
+        const marksToPersist = submittedMarks.map((mark) => ({
+            ...mark,
+            status: outsideStudentIds.has(mark.student_id) ? 'Outside' : mark.status,
+        }));
         // ── Security Guard: mentor roles may only mark their own students ──
-        if (MENTOR_ROLES.includes(userRole) && student_marks?.length > 0) {
+        if (MENTOR_ROLES.includes(userRole) && marksToPersist.length > 0) {
             if (staffId) {
                 const classType = (schedule.class_type || '').toLowerCase();
                 const mentorColMap = {
@@ -1365,7 +1490,7 @@ const markAttendance = async (req, res) => {
                     madrassa: 'madrasa_mentor_id',
                 };
                 const mentorCol = mentorColMap[classType];
-                const submittedIds = student_marks.map((m) => m.student_id);
+                const submittedIds = marksToPersist.map((m) => m.student_id);
                 if (mentorCol) {
                     // Fetch permanently assigned students
                     const permRes = await db_1.db.query(`SELECT adm_no
@@ -1413,8 +1538,8 @@ const markAttendance = async (req, res) => {
         if (isFullCancellation(cancellation)) {
             return res.status(400).json({ success: false, error: "Cannot mark attendance for a cancelled class" });
         }
-        if (cancellation && student_marks?.length > 0) {
-            const submittedIds = student_marks.map((m) => m.student_id);
+        if (cancellation && marksToPersist.length > 0) {
+            const submittedIds = marksToPersist.map((m) => m.student_id);
             const submittedStudents = await db_1.db.query(`SELECT adm_no, standard
                  FROM students
                  WHERE adm_no = ANY($1::text[])`, [submittedIds]);
@@ -1449,9 +1574,9 @@ const markAttendance = async (req, res) => {
             await client.query('BEGIN');
             // Bulk-insert all student marks in ONE round trip via unnest()
             // (replaces the previous per-student loop = N round trips).
-            if (student_marks && Array.isArray(student_marks) && student_marks.length > 0) {
-                const studentIds = student_marks.map((m) => m.student_id);
-                const statuses = student_marks.map((m) => m.status);
+            if (marksToPersist.length > 0) {
+                const studentIds = marksToPersist.map((m) => m.student_id);
+                const statuses = marksToPersist.map((m) => m.status);
                 await client.query(`INSERT INTO student_attendance_marks
                          (schedule_id, student_id, date, status, marked_by)
                      SELECT $1::uuid, sid, $2::date, st, $3::uuid
@@ -1469,6 +1594,7 @@ const markAttendance = async (req, res) => {
                  ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`, [schedule_id, date, effectiveMarkedBy]);
             await client.query('COMMIT');
             (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+            (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
             (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
             (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
             res.json({ success: true, data: result.rows[0] });
@@ -1517,6 +1643,7 @@ const cancelSession = async (req, res) => {
                 cancelled_standards = EXCLUDED.cancelled_standards
              RETURNING *`, [schedule_id, date, reason, userId, cancelledStandards]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
@@ -1537,6 +1664,7 @@ const restoreSession = async (req, res) => {
         await db_1.db.query(`DELETE FROM attendance_cancellations
              WHERE schedule_id = $1 AND date = $2`, [schedule_id, date]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:monthly');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:mentors');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
@@ -1602,6 +1730,7 @@ const updateBreak = async (req, res) => {
         const { start_time, end_time } = req.body;
         const result = await db_1.db.query('UPDATE academic_breaks SET start_time = $1, end_time = $2 WHERE id = $3 RETURNING *', [start_time, end_time, id]);
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:management-');
         res.json({ success: true, data: result.rows[0] });
     }
     catch (err) {

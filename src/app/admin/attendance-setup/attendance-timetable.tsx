@@ -17,6 +17,7 @@ import {
     UsersRound,
 } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -156,12 +157,16 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         setLoadError("")
         try {
             const [groupResponse, scheduleResponse] = await Promise.all([
-                api.get("/academic-placements/attendance-groups", {
-                    params: { academic_year_id: academicYearId },
-                }),
-                api.get("/attendance/schedules", {
-                    params: { academic_year_id: academicYearId },
-                }),
+                cachedGet(
+                    "/academic-placements/attendance-groups",
+                    { academic_year_id: academicYearId },
+                    2 * 60_000,
+                ),
+                cachedGet(
+                    "/attendance/schedules",
+                    { academic_year_id: academicYearId },
+                    60_000,
+                ),
             ])
             setGroups(groupResponse.data?.data || [])
             setMentors(groupResponse.data?.mentors || [])
@@ -317,6 +322,7 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                 mentor_id: selectedMentorId,
                 group_ids: groupIds,
             })
+            invalidateCache("/attendance/schedules")
             setCreateOpen(false)
             await loadData()
             toast({
@@ -334,6 +340,7 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         if (!window.confirm("Deactivate " + (schedule.name || "this class") + "? Past attendance will be preserved.")) return
         try {
             await api.delete("/attendance/schedules/" + schedule.id)
+            invalidateCache("/attendance/schedules")
             await loadData()
             toast({ title: "Timetable class deactivated" })
         } catch (error) {
@@ -353,6 +360,7 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                 target_day: Number(copyTargetDay),
                 effective_from: copyEffectiveFrom,
             })
+            invalidateCache("/attendance/schedules")
             const copiedCount = Number(response.data?.data?.copied_count || 0)
             const skippedCount = Number(response.data?.data?.skipped_count || 0)
             setCopyOpen(false)

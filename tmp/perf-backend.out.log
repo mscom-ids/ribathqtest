@@ -1,0 +1,29 @@
+
+> backend@1.0.0 dev
+> nodemon --watch src --exec ts-node src/index.ts
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src\**\*[39m
+[33m[nodemon] watching extensions: ts,json[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[DB POOL] 2 connections ready in 4310ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 2 connections ready in 192ms
+[DB POOL] 2 connections ready in 2656ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[DB POOL] 8 connections ready in 2613ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 233ms
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m

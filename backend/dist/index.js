@@ -9,6 +9,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const path_1 = __importDefault(require("path"));
 const compression_1 = __importDefault(require("compression"));
+const db_1 = require("./config/db");
 // Load env BEFORE any module that reads process.env
 dotenv_1.default.config();
 // â”€â”€ Req 9: Startup environment validation â”€â”€
@@ -40,6 +41,7 @@ const access_control_routes_1 = __importDefault(require("./routes/access_control
 const academic_history_routes_1 = __importDefault(require("./routes/academic_history.routes"));
 const academic_placement_routes_1 = __importDefault(require("./routes/academic-placement.routes"));
 const yearly_report_routes_1 = __importDefault(require("./routes/yearly_report.routes"));
+const dashboard_routes_1 = __importDefault(require("./routes/dashboard.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
@@ -90,6 +92,8 @@ app.use('/public', express_1.default.static(path_1.default.join(__dirname, '../p
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/students', students_routes_1.default);
 app.use('/api/leaves', leaves_routes_1.default);
+app.use('/api/students', students_routes_1.default);
+app.use('/api/leaves', leaves_routes_1.default);
 app.use('/api/finance', finance_routes_1.default);
 app.use('/api/academics', academics_routes_1.default);
 app.use('/api/staff', staff_routes_1.default);
@@ -107,9 +111,22 @@ app.use('/api/access-control', access_control_routes_1.default);
 app.use('/api/academic-history', academic_history_routes_1.default);
 app.use('/api/academic-placements', academic_placement_routes_1.default);
 app.use('/api/yearly-report', yearly_report_routes_1.default);
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Backend is running' });
+app.use('/api/dashboard', dashboard_routes_1.default);
+app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', message: 'Backend is running', database_pool: db_1.db.getPoolStats() });
 });
-app.listen(PORT, () => {
-    console.log(`[STARTUP] Server is running on port ${PORT}`);
-});
+async function startServer() {
+    try {
+        await (0, db_1.warmDatabasePool)();
+    }
+    catch (error) {
+        // Keep the API available during a temporary database outage. The normal
+        // read retry path will reconnect when the database becomes reachable.
+        console.warn('[STARTUP] Database pool warm-up failed:', error?.message || error);
+    }
+    app.listen(PORT, () => {
+        (0, db_1.startDatabaseKeepAlive)();
+        console.log(`[STARTUP] Server is running on port ${PORT}`);
+    });
+}
+void startServer();

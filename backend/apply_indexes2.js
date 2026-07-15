@@ -1,44 +1,61 @@
 #!/usr/bin/env node
-// apply_indexes2.js — Phase 2 performance indexes
+// Phase 2 performance indexes.
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const url = process.env.POSTGRES_URL || process.env.DATABASE_URL;
-if (!url) { console.error('❌  POSTGRES_URL / DATABASE_URL not set'); process.exit(1); }
+if (!url) {
+    console.error('POSTGRES_URL / DATABASE_URL is not set');
+    process.exit(1);
+}
 
 const sql = fs.readFileSync(path.join(__dirname, 'src', 'add_performance_indexes2.sql'), 'utf8');
 const pool = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
 
+function splitStatements(source) {
+    // Remove full-line comments before splitting. The previous parser filtered
+    // every chunk beginning with a comment, which silently skipped most indexes.
+    return source
+        .replace(/^\s*--.*$/gm, '')
+        .split(';')
+        .map(statement => statement.trim())
+        .filter(Boolean);
+}
+
 async function run() {
     const client = await pool.connect();
+    let exitCode = 0;
     try {
-        console.log('⚡ Applying Phase 2 performance indexes…');
-        // Run each statement separately so one missing table doesn't block the rest
-        const statements = sql.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--'));
-        let ok = 0, skipped = 0;
-        for (const stmt of statements) {
+        const statements = splitStatements(sql);
+        console.log(`Applying Phase 2 performance indexes (${statements.length} statements)...`);
+        let applied = 0;
+        let skipped = 0;
+
+        for (const statement of statements) {
             try {
-                await client.query(stmt);
-                ok++;
-            } catch (err) {
-                if (err.message?.includes('does not exist')) {
-                    console.warn(`  ⚠️  Skipped (table not found): ${stmt.slice(0, 60)}…`);
+                await client.query(statement);
+                applied++;
+            } catch (error) {
+                if (['42P01', '42703', '42P07'].includes(error.code) || error.message?.includes('does not exist') || error.message?.includes('already exists')) {
+                    console.warn(`Skipped: ${statement.slice(0, 80)}...`);
                     skipped++;
-                } else {
-                    throw err;
+                    continue;
                 }
+                throw error;
             }
         }
-        console.log(`✅  Done. ${ok} statements applied, ${skipped} skipped.`);
-    } catch (err) {
-        console.error('❌  Error:', err.message);
-        process.exit(1);
+
+        console.log(`Done. ${applied} applied, ${skipped} skipped.`);
+    } catch (error) {
+        console.error('Index migration failed:', error.message);
+        exitCode = 1;
     } finally {
         client.release();
         await pool.end();
     }
+    process.exitCode = exitCode;
 }
 
-run();
+void run();

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import api from "@/lib/api"
+import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 
 export default function UnifiedReportView() {
@@ -28,9 +29,11 @@ export default function UnifiedReportView() {
     const [errorMsg, setErrorMsg] = useState("")
 
     useEffect(() => {
+        let mounted = true
         // Load students dropdown
-        api.get('/staff/me/students')
+        cachedGet('/staff/me/students')
            .then(res => {
+               if (!mounted) return
                if (res.data?.students) {
                    setStudents(res.data.students)
                    if (res.data.students.length === 1) { // Auto-select if only 1 student
@@ -41,6 +44,8 @@ export default function UnifiedReportView() {
                }
            })
            .catch(() => {})
+           
+        return () => { mounted = false }
     }, [])
 
     const handleTypeChange = (val: string) => {

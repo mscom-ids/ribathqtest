@@ -2,6 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteDisciplinaryRecord = exports.createDisciplinaryRecord = exports.getDisciplinaryRecords = exports.generateCalendarEntries = exports.bulkUpsertCalendarPolicies = exports.deleteCalendarPolicy = exports.upsertCalendarPolicy = exports.getAllCalendarPolicies = exports.deleteSession = exports.updateSession = exports.createSession = exports.upsertAttendance = exports.getAttendance = exports.getStudentsForAttendance = exports.getCalendarRange = exports.getCalendarByDate = exports.getAcademicSessions = void 0;
 const db_1 = require("../config/db");
+const server_cache_1 = require("../utils/server-cache");
+function invalidateSessionCaches() {
+    (0, server_cache_1.invalidateCacheByPrefix)('academics:sessions');
+    (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+}
+function invalidateCalendarCaches() {
+    (0, server_cache_1.invalidateCacheByPrefix)('academics:calendar');
+    (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+    (0, server_cache_1.invalidateCacheByPrefix)('reports:');
+}
 const getAcademicSessions = async (req, res) => {
     try {
         const { department } = req.query;
@@ -12,7 +22,7 @@ const getAcademicSessions = async (req, res) => {
             params.push(department);
         }
         query += ' ORDER BY start_time';
-        const result = await db_1.db.query(query, params);
+        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('academics:sessions', { department: String(department || '') }), 5 * 60000, () => db_1.db.query(query, params));
         res.json({ success: true, sessions: result.rows });
     }
     catch (err) {
@@ -24,7 +34,7 @@ exports.getAcademicSessions = getAcademicSessions;
 const getCalendarByDate = async (req, res) => {
     try {
         const { date } = req.params;
-        const result = await db_1.db.query('SELECT * FROM academic_calendar WHERE date = $1', [date]);
+        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('academics:calendar:date', { date }), 5 * 60000, () => db_1.db.query('SELECT * FROM academic_calendar WHERE date = $1', [date]));
         if (result.rows.length === 0) {
             return res.json({ success: true, calendar: null });
         }
@@ -41,7 +51,7 @@ const getCalendarRange = async (req, res) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date)
             return res.status(400).json({ success: false, error: 'Start and end dates required' });
-        const result = await db_1.db.query('SELECT * FROM academic_calendar WHERE date >= $1 AND date <= $2', [start_date, end_date]);
+        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('academics:calendar:range', { start_date, end_date }), 5 * 60000, () => db_1.db.query('SELECT * FROM academic_calendar WHERE date >= $1 AND date <= $2', [start_date, end_date]));
         res.json({ success: true, calendars: result.rows });
     }
     catch (err) {
@@ -192,6 +202,7 @@ const createSession = async (req, res) => {
         const { name, type, start_time, end_time, days_of_week, is_active, standards } = req.body;
         const result = await db_1.db.query(`INSERT INTO academic_sessions (name, type, start_time, end_time, days_of_week, is_active, standards)
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`, [name, type, start_time || null, end_time || null, days_of_week || null, is_active !== false, standards || null]);
+        invalidateSessionCaches();
         res.json({ success: true, session: result.rows[0] });
     }
     catch (err) {
@@ -208,6 +219,7 @@ const updateSession = async (req, res) => {
              WHERE id=$8 RETURNING *`, [name, type, start_time || null, end_time || null, days_of_week || null, is_active !== false, standards || null, id]);
         if (result.rows.length === 0)
             return res.status(404).json({ success: false, error: 'Not found' });
+        invalidateSessionCaches();
         res.json({ success: true, session: result.rows[0] });
     }
     catch (err) {
@@ -220,6 +232,7 @@ const deleteSession = async (req, res) => {
     try {
         const { id } = req.params;
         await db_1.db.query('DELETE FROM academic_sessions WHERE id = $1', [id]);
+        invalidateSessionCaches();
         res.json({ success: true });
     }
     catch (err) {
@@ -231,7 +244,7 @@ exports.deleteSession = deleteSession;
 // ==================== CALENDAR CRUD ====================
 const getAllCalendarPolicies = async (req, res) => {
     try {
-        const result = await db_1.db.query('SELECT * FROM academic_calendar ORDER BY date');
+        const result = await (0, server_cache_1.cachedResult)('academics:calendar:all', 5 * 60000, () => db_1.db.query('SELECT * FROM academic_calendar ORDER BY date'));
         res.json({ success: true, policies: result.rows });
     }
     catch (err) {
@@ -259,6 +272,7 @@ const upsertCalendarPolicy = async (req, res) => {
             p.cancelled_sessions ? JSON.stringify(p.cancelled_sessions) : '{}',
             p.leave_standards || '[]',
             p.cancellation_reason_type || null, p.cancellation_reason_text || null]);
+        invalidateCalendarCaches();
         res.json({ success: true, policy: result.rows[0] });
     }
     catch (err) {
@@ -271,6 +285,7 @@ const deleteCalendarPolicy = async (req, res) => {
     try {
         const { date } = req.params;
         await db_1.db.query('DELETE FROM academic_calendar WHERE date = $1', [date]);
+        invalidateCalendarCaches();
         res.json({ success: true });
     }
     catch (err) {
@@ -308,6 +323,7 @@ const bulkUpsertCalendarPolicies = async (req, res) => {
             }
         }
         await client.query('COMMIT');
+        invalidateCalendarCaches();
         res.json({ success: true, count: entries.length });
     }
     catch (err) {
@@ -347,6 +363,7 @@ const generateCalendarEntries = async (req, res) => {
             }
         }
         await client.query('COMMIT');
+        invalidateCalendarCaches();
         res.json({ success: true, inserted });
     }
     catch (err) {

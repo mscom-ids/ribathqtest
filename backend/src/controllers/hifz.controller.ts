@@ -10,7 +10,7 @@ import { getAcademicYearContext } from '../utils/academic-year';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 2;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 3;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -689,10 +689,15 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
         const [studentResult, logsResult] = await Promise.all([
             db.query(
-                `SELECT adm_no, standard AS attendance_standard, COALESCE(hifz_standard, standard, 'Common') AS standard
-                 FROM students
-                 WHERE adm_no = $1`,
-                [student_id]
+                `SELECT s.adm_no,
+                        COALESCE(sys.school_standard, s.standard) AS attendance_standard,
+                        COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard
+                 FROM students s
+                 LEFT JOIN student_year_snapshots sys
+                   ON sys.student_id = s.adm_no
+                  AND sys.academic_year_id = $2
+                 WHERE s.adm_no = $1`,
+                [student_id, academicContext.academicYearId]
             ),
             db.query(
                 `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
@@ -770,16 +775,24 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
             HIFZ_MONTHLY_TTL_MS,
             async () => {
                 const { startDate, endDate, reportMonth, isCurrentMonth } = period;
-                const mentorFilterClause = mentor_id ? ` AND s.hifz_mentor_id = $1` : '';
-                const studentQueryParams = mentor_id ? [mentor_id] : [];
+                const mentorFilterClause = mentor_id
+                    ? ` AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $2`
+                    : '';
+                const studentQueryParams = mentor_id
+                    ? [academicContext.academicYearId, mentor_id]
+                    : [academicContext.academicYearId];
 
                 const [studentsResult, logsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                     db.query(
-                        `SELECT s.adm_no, s.name, s.standard AS attendance_standard,
-                         COALESCE(s.hifz_standard, s.standard, 'Common') as standard,
+                        `SELECT s.adm_no, s.name,
+                         COALESCE(sys.school_standard, s.standard) AS attendance_standard,
+                         COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard,
                          st.name as usthad_name, st.phone as usthad_phone
                          FROM students s
-                         LEFT JOIN staff st ON s.hifz_mentor_id = st.id
+                         LEFT JOIN student_year_snapshots sys
+                           ON sys.student_id = s.adm_no
+                          AND sys.academic_year_id = $1
+                         LEFT JOIN staff st ON st.id = COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id)
                          WHERE s.status = 'active'
                          ${mentorFilterClause}
                          ORDER BY s.adm_no`,

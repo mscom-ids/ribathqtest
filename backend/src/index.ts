@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import compression from 'compression';
+import { db, startDatabaseKeepAlive, warmDatabasePool } from './config/db';
 
 // Load env BEFORE any module that reads process.env
 dotenv.config();
@@ -38,6 +39,7 @@ import accessControlRoutes from './routes/access_control.routes';
 import academicHistoryRoutes from './routes/academic_history.routes';
 import academicPlacementRoutes from './routes/academic-placement.routes';
 import yearlyReportRoutes from './routes/yearly_report.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
@@ -90,6 +92,8 @@ app.use('/public', express.static(path.join(__dirname, '../public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/leaves', leavesRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/leaves', leavesRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/academics', academicsRoutes);
 app.use('/api/staff', staffRoutes);
@@ -107,11 +111,25 @@ app.use('/api/access-control', accessControlRoutes);
 app.use('/api/academic-history', academicHistoryRoutes);
 app.use('/api/academic-placements', academicPlacementRoutes);
 app.use('/api/yearly-report', yearlyReportRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Backend is running' });
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', message: 'Backend is running', database_pool: db.getPoolStats() });
 });
 
-app.listen(PORT, () => {
-  console.log(`[STARTUP] Server is running on port ${PORT}`);
-});
+async function startServer() {
+  try {
+    await warmDatabasePool();
+  } catch (error: any) {
+    // Keep the API available during a temporary database outage. The normal
+    // read retry path will reconnect when the database becomes reachable.
+    console.warn('[STARTUP] Database pool warm-up failed:', error?.message || error);
+  }
+
+  app.listen(PORT, () => {
+    startDatabaseKeepAlive();
+    console.log(`[STARTUP] Server is running on port ${PORT}`);
+  });
+}
+
+void startServer();

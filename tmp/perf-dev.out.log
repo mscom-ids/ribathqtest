@@ -1,0 +1,4 @@
+
+> institution-os@0.1.0 dev
+> concurrently "npm run dev:frontend" "npm run dev:backend"
+

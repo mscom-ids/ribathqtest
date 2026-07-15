@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, CheckSquare2, Layers3, Loader2, Plus, Square, Trash2, UserRoundCheck, UserRoundX, Users } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -46,6 +47,10 @@ function departmentLabel(department: Department) {
 function divisionLabel(division: string) {
     return division === NO_DIVISION_ROSTER ? "No division" : division
 }
+function invalidateAttendanceSetupCache() {
+    invalidateCache("/academic-placements/attendance-groups")
+    invalidateCache("/attendance/schedules")
+}
 
 export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: Props) {
     const { toast } = useToast()
@@ -70,12 +75,16 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
         setLoadError("")
         try {
             const [groupsResponse, divisionsResponse] = await Promise.all([
-                api.get("/academic-placements/attendance-groups", {
-                    params: { academic_year_id: academicYearId },
-                }),
-                api.get("/academic-placements/divisions", {
-                    params: { academic_year_id: academicYearId },
-                }),
+                cachedGet(
+                    "/academic-placements/attendance-groups",
+                    { academic_year_id: academicYearId },
+                    2 * 60_000,
+                ),
+                cachedGet(
+                    "/academic-placements/divisions",
+                    { academic_year_id: academicYearId },
+                    5 * 60_000,
+                ),
             ])
             setGroups(groupsResponse.data?.data || [])
             setMentors(groupsResponse.data?.mentors || [])
@@ -176,6 +185,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                 division: division.trim(),
                 mentor_id: mentorId === "__none" ? null : mentorId,
             })
+            invalidateAttendanceSetupCache()
             setCreateOpen(false)
             await loadGroups()
             onGroupsChanged?.()
@@ -196,6 +206,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
                 division: group.division,
                 mentor_id: nextMentorId === "__none" ? null : nextMentorId,
             })
+            invalidateAttendanceSetupCache()
             await loadGroups()
             onGroupsChanged?.()
         } catch (error) {
@@ -210,6 +221,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
             await api.put("/academic-placements/attendance-groups/" + manageGroup.id + "/students", {
                 student_ids: selectedIds,
             })
+            invalidateAttendanceSetupCache()
             setManageGroup(null)
             await loadGroups()
             onGroupsChanged?.()
@@ -225,6 +237,7 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
         if (!window.confirm("Delete " + group.standard + " " + divisionLabel(group.division) + " from " + departmentLabel(group.department) + "?")) return
         try {
             await api.delete("/academic-placements/attendance-groups/" + group.id)
+            invalidateAttendanceSetupCache()
             await loadGroups()
             onGroupsChanged?.()
         } catch (error) {

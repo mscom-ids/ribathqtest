@@ -513,6 +513,14 @@ const getMentorReports = async (req, res) => {
             name: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
         };
         filtered.sort(sorters[sort] || sorters.lowest_percentage);
+        const filteredTotals = filtered.reduce((acc, mentor) => {
+            acc.planned_classes += Number(mentor.planned_classes || 0);
+            acc.cancelled_classes += Number(mentor.cancelled_classes || 0);
+            acc.required_classes += Number(mentor.required_classes || 0);
+            acc.marked_classes += Number(mentor.marked_classes || 0);
+            acc.not_marked_classes += Number(mentor.not_marked_classes || 0);
+            return acc;
+        }, { planned_classes: 0, cancelled_classes: 0, required_classes: 0, marked_classes: 0, not_marked_classes: 0 });
         const averageReportingRate = filtered.length
             ? Math.round((filtered.reduce((sum, mentor) => sum + Number(mentor.marking_percentage || 0), 0) / filtered.length) * 10) / 10
             : 0;
@@ -529,7 +537,7 @@ const getMentorReports = async (req, res) => {
         res.json({
             success: true,
             period: basePayload.period,
-            totals: basePayload.totals,
+            totals: filteredTotals,
             summary,
             pagination: { total, limit, offset, has_more: offset + limit < total },
             filters: { filter, sort, search },

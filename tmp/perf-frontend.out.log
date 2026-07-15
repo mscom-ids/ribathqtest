@@ -1,0 +1,12 @@
+
+> institution-os@0.1.0 dev:frontend
+> next dev --webpack
+
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.100.109:3001
+- Environments: .env.local
+
+✓ Starting...
+  Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+[?25h

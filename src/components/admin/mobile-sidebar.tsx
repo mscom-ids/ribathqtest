@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut } from "lucide-react"
+import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, FileText, BarChart3 } from "lucide-react"
 import { useEffect } from "react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -21,6 +21,9 @@ const navLinks = [
     { href: "/admin/academic/enrollments", label: "Student Placement", icon: Users },
     { href: "/admin/calendar", label: "Events", icon: Calendar },
     { href: "/admin/reports/students", label: "Yearly Reports", icon: Settings },
+    { href: "/admin/management-reports/attendance", label: "Attendance Report", icon: FileText },
+    { href: "/admin/management-reports/progress", label: "Progress Report", icon: BarChart3 },
+    { href: "/admin/management-reports/faculty", label: "Faculty Report", icon: FileText },
 ]
 
 interface MobileSidebarProps {

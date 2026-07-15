@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { CheckSquare2, Loader2, Plus, RefreshCw, Square } from "lucide-react"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -19,6 +20,12 @@ type Division = { id: string; standard: string; name: string }
 function errorMessage(error: unknown) {
     const candidate = error as { response?: { data?: { error?: string } }; message?: string } | undefined
     return candidate?.response?.data?.error || candidate?.message || "Something went wrong"
+}
+function invalidatePlacementCache() {
+    invalidateCache("/academic-placements")
+    invalidateCache("/academic-placements/divisions")
+    invalidateCache("/academic-placements/attendance-groups")
+    invalidateCache("/attendance/schedules")
 }
 
 export default function StudentPlacementPage() {
@@ -54,8 +61,8 @@ export default function StudentPlacementPage() {
         setLoading(true)
         try {
             const [placementsResponse, divisionsResponse] = await Promise.all([
-                api.get("/academic-placements", { params: { academic_year_id: activeYearId } }),
-                api.get("/academic-placements/divisions", { params: { academic_year_id: activeYearId } }),
+                cachedGet("/academic-placements", { academic_year_id: activeYearId }, 2 * 60_000),
+                cachedGet("/academic-placements/divisions", { academic_year_id: activeYearId }, 5 * 60_000),
             ])
             setStudents(placementsResponse.data?.data || [])
             setDivisions(divisionsResponse.data?.data || [])
@@ -70,7 +77,7 @@ export default function StudentPlacementPage() {
         let cancelled = false
         async function initialise() {
             try {
-                const response = await api.get("/academic-placements/academic-years")
+                const response = await cachedGet("/academic-placements/academic-years", undefined, 5 * 60_000)
                 const nextYears = response.data?.data || []
                 if (cancelled) return
                 setYears(nextYears)
@@ -126,6 +133,7 @@ export default function StudentPlacementPage() {
                 division: division === "__none" ? null : division,
             })
             toast({ title: "Placements updated", description: `${response.data?.updated || selectedIds.length} student placement${selectedIds.length === 1 ? "" : "s"} saved.` })
+            invalidatePlacementCache()
             setSelectedIds([])
             await load(yearId)
         } catch (error) {
@@ -140,6 +148,7 @@ export default function StudentPlacementPage() {
         setCreatingDivision(true)
         try {
             await api.post("/academic-placements/divisions", { academic_year_id: yearId, standard, name: newDivision.trim() })
+            invalidatePlacementCache()
             setDivision(newDivision.trim())
             setNewDivision("")
             setDivisionDialogOpen(false)
@@ -165,7 +174,7 @@ export default function StudentPlacementPage() {
                             <SelectTrigger className="w-[190px]"><SelectValue placeholder="Academic year" /></SelectTrigger>
                             <SelectContent>{years.map(year => <SelectItem key={year.id} value={year.id}>{year.name}</SelectItem>)}</SelectContent>
                         </Select>
-                        <Button variant="outline" onClick={() => void load(yearId)} disabled={loading || !yearId}>
+                        <Button variant="outline" onClick={() => { invalidatePlacementCache(); void load(yearId) }} disabled={loading || !yearId}>
                             <RefreshCw className={"mr-2 h-4 w-4 " + (loading ? "animate-spin" : "")} />Refresh
                         </Button>
                     </div>

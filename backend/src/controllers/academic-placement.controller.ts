@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
-import { invalidateCacheByPrefix } from '../utils/server-cache';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { TEACHING_STAFF_ROLES } from '../utils/staff.utils';
 
 export const BUILT_IN_STANDARDS = ['Non-class', '5th', '6th', '7th', '8th', '9th', '10th', 'Plus One', 'Plus Two'] as const;
@@ -25,12 +25,17 @@ function invalidatePlacementCaches() {
     invalidateCacheByPrefix('academic-placements:');
     invalidateCacheByPrefix('attendance:');
     invalidateCacheByPrefix('students:');
+    invalidateCacheByPrefix('staff:');
     invalidateCacheByPrefix('reports:');
 }
 
 export const getPlacementAcademicYears = async (_req: Request, res: Response) => {
     try {
-        const result = await db.query('SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC');
+        const result = await cachedResult(
+            'academic-placements:years',
+            10 * 60_000,
+            () => db.query('SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC'),
+        );
         return res.json({ success: true, data: result.rows, standards: BUILT_IN_STANDARDS });
     } catch (err: any) {
         return res.status(500).json({ success: false, error: err.message });
@@ -48,23 +53,27 @@ export const getAcademicPlacements = async (req: Request, res: Response) => {
             params.push(`%${search}%`);
             filter += ` AND (s.name ILIKE $${params.length} OR s.adm_no ILIKE $${params.length})`;
         }
-        const result = await db.query(
-            `SELECT s.adm_no, s.name, s.photo_url,
-                    COALESCE(p.standard, 'Non-class') AS standard,
-                    p.division,
-                    p.status AS placement_status
-             FROM students s
-             LEFT JOIN academic_student_placements p
-               ON p.student_id = s.adm_no
-              AND p.academic_year_id = $1
-              AND p.status = 'active'
-             WHERE ${filter}
-             ORDER BY CASE COALESCE(p.standard, 'Non-class')
-                        WHEN '5th' THEN 1 WHEN '6th' THEN 2 WHEN '7th' THEN 3
-                        WHEN '8th' THEN 4 WHEN '9th' THEN 5 WHEN '10th' THEN 6
-                        WHEN 'Plus One' THEN 7 WHEN 'Plus Two' THEN 8 ELSE 9 END,
-                      COALESCE(p.division, ''), s.name`,
-            params,
+        const result = await cachedResult(
+            makeCacheKey('academic-placements:list', { academic_year_id: academicYearId, search }),
+            2 * 60_000,
+            () => db.query(
+                `SELECT s.adm_no, s.name, s.photo_url,
+                        COALESCE(p.standard, 'Non-class') AS standard,
+                        p.division,
+                        p.status AS placement_status
+                 FROM students s
+                 LEFT JOIN academic_student_placements p
+                   ON p.student_id = s.adm_no
+                  AND p.academic_year_id = $1
+                  AND p.status = 'active'
+                 WHERE ${filter}
+                 ORDER BY CASE COALESCE(p.standard, 'Non-class')
+                            WHEN '5th' THEN 1 WHEN '6th' THEN 2 WHEN '7th' THEN 3
+                            WHEN '8th' THEN 4 WHEN '9th' THEN 5 WHEN '10th' THEN 6
+                            WHEN 'Plus One' THEN 7 WHEN 'Plus Two' THEN 8 ELSE 9 END,
+                          COALESCE(p.division, ''), s.name`,
+                params,
+            ),
         );
         return res.json({ success: true, data: result.rows, standards: BUILT_IN_STANDARDS });
     } catch (err: any) {
@@ -76,12 +85,16 @@ export const getStandardDivisions = async (req: Request, res: Response) => {
     try {
         const academicYearId = String(req.query.academic_year_id || '');
         if (!academicYearId) return res.status(400).json({ success: false, error: 'academic_year_id is required' });
-        const result = await db.query(
-            `SELECT id, standard, name, created_at
-             FROM academic_standard_divisions
-             WHERE academic_year_id = $1
-             ORDER BY standard, name`,
-            [academicYearId],
+        const result = await cachedResult(
+            makeCacheKey('academic-placements:divisions', { academic_year_id: academicYearId }),
+            5 * 60_000,
+            () => db.query(
+                `SELECT id, standard, name, created_at
+                 FROM academic_standard_divisions
+                 WHERE academic_year_id = $1
+                 ORDER BY standard, name`,
+                [academicYearId],
+            ),
         );
         return res.json({ success: true, data: result.rows });
     } catch (err: any) {
@@ -93,36 +106,49 @@ export const getAttendanceGroups = async (req: Request, res: Response) => {
     try {
         const academicYearId = String(req.query.academic_year_id || '');
         if (!academicYearId) return res.status(400).json({ success: false, error: 'academic_year_id is required' });
-        const [groups, mentors] = await Promise.all([
-            db.query(
-                `SELECT g.id, g.academic_year_id, g.department, g.standard, g.division,
-                        g.mentor_id, st.name AS mentor_name,
-                        COUNT(gs.student_id)::int AS student_count,
-                        COALESCE(array_agg(gs.student_id ORDER BY s.name)
-                            FILTER (WHERE gs.student_id IS NOT NULL), ARRAY[]::text[]) AS student_ids
-                 FROM attendance_groups g
-                 LEFT JOIN staff st ON st.id = g.mentor_id
-                 LEFT JOIN attendance_group_students gs ON gs.group_id = g.id
-                 LEFT JOIN students s ON s.adm_no = gs.student_id
-                 WHERE g.academic_year_id = $1
-                 GROUP BY g.id, st.name
-                 ORDER BY g.department, g.standard, g.division`,
-                [academicYearId],
-            ),
-            db.query(
-                `SELECT id, name, role
-                 FROM staff
-                 WHERE is_active = true AND lower(role) = ANY($1::text[])
-                 ORDER BY name`,
-                [TEACHING_STAFF_ROLES],
-            ),
-        ]);
-        return res.json({ success: true, data: groups.rows, mentors: mentors.rows, departments: ATTENDANCE_DEPARTMENTS });
+
+        const payload = await cachedResult(
+            makeCacheKey('academic-placements:attendance-groups', { academic_year_id: academicYearId }),
+            2 * 60_000,
+            async () => {
+                const [groups, mentors] = await Promise.all([
+                    db.query(
+                        `SELECT g.id, g.academic_year_id, g.department, g.standard, g.division,
+                                g.mentor_id, st.name AS mentor_name,
+                                COUNT(gs.student_id)::int AS student_count,
+                                COALESCE(array_agg(gs.student_id ORDER BY s.name)
+                                    FILTER (WHERE gs.student_id IS NOT NULL), ARRAY[]::text[]) AS student_ids
+                         FROM attendance_groups g
+                         LEFT JOIN staff st ON st.id = g.mentor_id
+                         LEFT JOIN attendance_group_students gs ON gs.group_id = g.id
+                         LEFT JOIN students s ON s.adm_no = gs.student_id
+                         WHERE g.academic_year_id = $1
+                         GROUP BY g.id, st.name
+                         ORDER BY g.department, g.standard, g.division`,
+                        [academicYearId],
+                    ),
+                    db.query(
+                        `SELECT id, name, role
+                         FROM staff
+                         WHERE is_active = true AND lower(role) = ANY($1::text[])
+                         ORDER BY name`,
+                        [TEACHING_STAFF_ROLES],
+                    ),
+                ]);
+                return { groups: groups.rows, mentors: mentors.rows };
+            },
+        );
+
+        return res.json({
+            success: true,
+            data: payload.groups,
+            mentors: payload.mentors,
+            departments: ATTENDANCE_DEPARTMENTS,
+        });
     } catch (err: any) {
         return res.status(500).json({ success: false, error: err.message });
     }
 };
-
 export const saveAttendanceGroup = async (req: Request, res: Response) => {
     const client = await db.getClient();
     try {

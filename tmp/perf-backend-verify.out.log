@@ -1,0 +1,22 @@
+
+> backend@1.0.0 dev
+> nodemon --watch src --exec ts-node src/index.ts
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src\**\*[39m
+[33m[nodemon] watching extensions: ts,json[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[DB POOL] 8 connections ready in 1421ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 195ms
+[DB POOL] 8 connections ready in 227ms
+[DB POOL] 8 connections ready in 247ms
+[DB POOL] 8 connections ready in 229ms
+[DB POOL] 8 connections ready in 233ms
+[DB POOL] 8 connections ready in 191ms

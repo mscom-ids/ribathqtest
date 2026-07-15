@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { AlertTriangle, ArrowRight, CalendarRange, RefreshCw, UsersRound } from "lucide-react"
-import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { AttendanceGroups } from "@/app/admin/academic/enrollments/attendance-groups"
 import { AttendanceTimetable } from "@/app/admin/attendance-setup/attendance-timetable"
 import { Button } from "@/components/ui/button"
@@ -32,9 +32,11 @@ export default function AttendanceSetupPage() {
             setStudents([])
             return
         }
-        const response = await api.get("/academic-placements", {
-            params: { academic_year_id: targetYearId },
-        })
+        const response = await cachedGet(
+            "/academic-placements",
+            { academic_year_id: targetYearId },
+            2 * 60_000,
+        )
         setStudents(response.data?.data || [])
     }, [])
 
@@ -42,7 +44,7 @@ export default function AttendanceSetupPage() {
         setLoading(true)
         setError("")
         try {
-            const response = await api.get("/academic-placements/academic-years")
+            const response = await cachedGet("/academic-placements/academic-years", undefined, 5 * 60_000)
             const nextYears: AcademicYear[] = response.data?.data || []
             const currentYearId = nextYears.find(year => year.is_current)?.id || nextYears[0]?.id || ""
             setYears(nextYears)
@@ -76,6 +78,10 @@ export default function AttendanceSetupPage() {
         setLoading(true)
         setError("")
         try {
+            invalidateCache("/academic-placements")
+            invalidateCache("/academic-placements/attendance-groups")
+            invalidateCache("/academic-placements/divisions")
+            invalidateCache("/attendance/schedules")
             await loadPlacements(yearId)
             setRefreshVersion(value => value + 1)
         } catch (loadError) {

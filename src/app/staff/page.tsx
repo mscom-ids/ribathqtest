@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
 import { HifzProgressModal } from "@/components/staff/HifzProgressModal"
@@ -166,6 +167,8 @@ export default function StaffDashboard() {
                 const newUrl = uploadRes.data.filePath
                 setStaffPhoto(newUrl)
                 await api.put(`/staff/${staffId}`, { photo_url: newUrl })
+                invalidateCache('/dashboard/staff')
+                invalidateCache('/staff/me')
                 window.location.reload()
             }
         } catch (error) {
@@ -173,53 +176,65 @@ export default function StaffDashboard() {
         }
     }
 
-    // Load my assigned students + sessions (only once todayStr is ready).
-    // All 3 calls fire in parallel — /staff/me/students and /attendance/schedules-for-date
-    // resolve the staff id from the JWT on the backend, so they don't need
-    // /staff/me to complete first.
+    // Load aggregated staff dashboard summary (profile, assigned students, sessions, top performers).
     useEffect(() => {
         if (!todayStr) return
         async function load() {
             setLoading(true)
+            setTopPerformersLoading(true)
             try {
-                const [profileResult, studResult, sessResult] = await Promise.allSettled([
-                    api.get("/staff/me"),
-                    api.get("/staff/me/students", { params: { date: todayStr } }),
-                    api.get("/attendance/schedules-for-date", { params: { date: todayStr } }),
-                ])
+                const res = await cachedGet("/dashboard/staff", { date: todayStr }, 30_000)
 
-                if (profileResult.status === "rejected") {
-                    if (profileResult.reason?.response?.status === 401) router.push("/login")
-                    else console.warn("[STAFF PAGE] Profile load failed:", profileResult.reason)
+                if (!res.data.success) {
                     setLoading(false)
+                    router.push("/login")
                     return
                 }
-                const profileRes = profileResult.value
-                if (!profileRes.data.success) { setLoading(false); router.push("/login"); return }
-                setStaffName(profileRes.data.staff.name || "")
-                setStaffId(profileRes.data.staff.id || "")
-                setStaffPhoto(profileRes.data.staff.photo_url || "")
 
-                if (studResult.status === "fulfilled" && studResult.value.data.success) {
-                    setMyStudents(studResult.value.data.students || [])
-                } else {
-                    console.warn("[STAFF PAGE] Students load failed:", studResult.status === "rejected" ? studResult.reason : studResult.value.data)
-                    setMyStudents([])
-                }
+                const summary = res.data.summary
+                const profile = summary.profile || {}
+                setStaffName(profile.name || "")
+                setStaffId(profile.id || "")
+                setStaffPhoto(profile.photo_url || "")
 
-                if (sessResult.status === "fulfilled" && sessResult.value.data.data) setSessions(sessResult.value.data.data.map((s: any) => ({
+                const students = summary.students || []
+                setMyStudents(students)
+
+                const rawSchedules = summary.schedules || []
+                setSessions(rawSchedules.map((s: any) => ({
                     ...s,
                     name: s.name || `${s.class_type} Class`,
                 })))
-                else {
-                    console.warn("[STAFF PAGE] Sessions load failed:", sessResult.status === "rejected" ? sessResult.reason : sessResult.value.data)
-                    setSessions([])
-                }
+
+                // Process Monthly Top Performers from summary
+                const reports = summary.monthly_report || []
+                const reportByAdmNo = new Map<string, MonthlyReportRow>(
+                    reports.map((r: any) => [r.adm_no, r])
+                )
+
+                const assignedPerformers = students.map((student: any) => {
+                    const report = reportByAdmNo.get(student.adm_no)
+                    return {
+                        adm_no: student.adm_no,
+                        name: student.name,
+                        standard: student.standard,
+                        totalPoints: Number(report?.totalPoints || 0),
+                    }
+                }).sort((a: any, b: any) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+
+                setMonthlyTopPerformers(assignedPerformers.length > 0 ? assignedPerformers : students.map((s: any) => ({
+                    adm_no: s.adm_no,
+                    name: s.name,
+                    standard: s.standard,
+                    totalPoints: 0
+                })))
+
             } catch (err: any) {
                 console.warn("[STAFF PAGE] Load error:", err)
                 if (err?.response?.status === 401) router.push("/login")
             }
             setLoading(false)
+            setTopPerformersLoading(false)
         }
         load()
     }, [router, todayStr])
@@ -230,76 +245,20 @@ export default function StaffDashboard() {
         async function loadAll() {
             try {
                 // scope=all tells the backend to skip the mentor-assignment filter
-                const res = await api.get("/students", {
-                    params: {
-                        scope: "all",
-                        light: "true",
-                        status: "active",
-                        limit: 500,
-                        count: "false",
-                        sort: "name",
-                    },
-                })
+                const res = await cachedGet("/students", {
+                    scope: "all",
+                    light: "true",
+                    status: "active",
+                    limit: 500,
+                    count: "false",
+                    sort: "name",
+                }, 60_000)
                 if (res.data.success) setAllStudents(res.data.students || [])
             } catch { /* non-blocking */ }
             setAllStudentsLoaded(true)
         }
         loadAll()
     }, [studentMode, allStudentsLoaded])
-
-    useEffect(() => {
-        if (!staffId || !todayStr) return
-        if (myStudents.length === 0) {
-            setMonthlyTopPerformers([])
-            return
-        }
-
-        let cancelled = false
-        const zeroPointPerformers = myStudents.map((student) => ({
-            adm_no: student.adm_no,
-            name: student.name,
-            standard: student.standard,
-            totalPoints: 0,
-        }))
-
-        async function loadMonthlyTopPerformers() {
-            setTopPerformersLoading(true)
-            try {
-                const reportMonth = todayStr.slice(0, 7)
-                const res = await api.get("/hifz/monthly-reports/calculate", {
-                    params: { month: reportMonth, mentor_id: staffId }
-                })
-
-                if (res.data.success && Array.isArray(res.data.reports)) {
-                    const reportByAdmNo = new Map<string, MonthlyReportRow>(
-                        (res.data.reports as MonthlyReportRow[]).map((student) => [student.adm_no, student])
-                    )
-                    const assignedPerformers = myStudents
-                        .map((student) => {
-                            const report = reportByAdmNo.get(student.adm_no)
-                            return {
-                                adm_no: student.adm_no,
-                                name: student.name,
-                                standard: student.standard,
-                                totalPoints: Number(report?.totalPoints || 0),
-                            }
-                        })
-                        .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
-                    if (!cancelled) setMonthlyTopPerformers(assignedPerformers)
-                } else if (!cancelled) {
-                    setMonthlyTopPerformers(zeroPointPerformers)
-                }
-            } catch (error) {
-                console.warn("[STAFF PAGE] Monthly top performers load failed:", error)
-                if (!cancelled) setMonthlyTopPerformers(zeroPointPerformers)
-            } finally {
-                if (!cancelled) setTopPerformersLoading(false)
-            }
-        }
-
-        loadMonthlyTopPerformers()
-        return () => { cancelled = true }
-    }, [staffId, todayStr, myStudents])
 
     // ── Derived ──────────────────────────────────────────────────
     const todaySessions = useMemo(() => {

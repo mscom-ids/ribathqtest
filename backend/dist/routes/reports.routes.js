@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const reports_controller_1 = require("../controllers/reports.controller");
+const management_reports_controller_1 = require("../controllers/management-reports.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 const REPORT_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'mentor', 'usthad', 'staff', 'teacher'];
@@ -11,4 +12,7 @@ router.use((0, auth_middleware_1.requireRole)(REPORT_ROLES));
 router.get('/students', reports_controller_1.getStudentReports);
 router.get('/mentors', reports_controller_1.getMentorReports);
 router.get('/student-progress', reports_controller_1.getUnifiedStudentProgressReport);
+router.get('/management/attendance', management_reports_controller_1.getManagementAttendanceReport);
+router.get('/management/progress', management_reports_controller_1.getManagementProgressReport);
+router.get('/management/faculty', reports_controller_1.getMentorReports);
 exports.default = router;

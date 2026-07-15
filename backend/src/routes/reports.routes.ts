@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getStudentReports, getMentorReports, getUnifiedStudentProgressReport } from '../controllers/reports.controller';
+import { getManagementAttendanceReport, getManagementProgressReport } from '../controllers/management-reports.controller';
 import { verifyToken, verifyDelegation, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -13,5 +14,8 @@ router.use(requireRole(REPORT_ROLES));
 router.get('/students', getStudentReports);
 router.get('/mentors', getMentorReports);
 router.get('/student-progress', getUnifiedStudentProgressReport);
+router.get('/management/attendance', getManagementAttendanceReport);
+router.get('/management/progress', getManagementProgressReport);
+router.get('/management/faculty', getMentorReports);
 
 export default router;

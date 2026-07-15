@@ -11,6 +11,12 @@ const SAFE_STAFF_COLUMNS = `
     phone_contacts, staff_id, is_active, created_at
 `;
 const STAFF_ROLES = [...staff_utils_1.TEACHING_STAFF_ROLES, ...staff_utils_1.LEADERSHIP_STAFF_ROLES, ...staff_utils_1.ADMINISTRATIVE_STAFF_ROLES];
+function invalidateStaffCaches() {
+    (0, server_cache_1.invalidateCacheByPrefix)('staff:');
+    (0, server_cache_1.invalidateCacheByPrefix)('auth:me');
+    (0, server_cache_1.invalidateCacheByPrefix)('academic-placements:attendance-groups');
+    (0, server_cache_1.invalidateCacheByPrefix)('attendance:schedules');
+}
 const getMyStaffProfile = async (req, res) => {
     try {
         const user = req.user;
@@ -21,7 +27,7 @@ const getMyStaffProfile = async (req, res) => {
         if (!staffId) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
-        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [staffId]);
+        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('staff:profile', { id: staffId }), 5 * 60000, () => db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [staffId]));
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff profile not found' });
         }
@@ -110,6 +116,7 @@ const assignStudentsToMentor = async (req, res) => {
         (0, server_cache_1.invalidateCacheByPrefix)('students:');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:');
+        (0, server_cache_1.invalidateCacheByPrefix)('staff:');
         res.json({ success: true });
     }
     catch (err) {
@@ -157,6 +164,7 @@ const unassignStudentFromMentor = async (req, res) => {
         (0, server_cache_1.invalidateCacheByPrefix)('students:');
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:');
+        (0, server_cache_1.invalidateCacheByPrefix)('staff:');
         res.json({ success: true });
     }
     catch (err) {
@@ -258,6 +266,7 @@ const archiveStaff = async (req, res) => {
             await client.query('UPDATE staff SET is_active = false, profile_id = NULL WHERE id = $1', [id]);
             // We should ideally delete the user from `users` but we can leave it or set status=inactive.
             await client.query('COMMIT');
+            invalidateStaffCaches();
             res.json({ success: true });
         }
         catch (err) {
@@ -277,6 +286,7 @@ const restoreStaff = async (req, res) => {
     try {
         const { id } = req.params;
         await db_1.db.query('UPDATE staff SET is_active = true WHERE id = $1', [id]);
+        invalidateStaffCaches();
         res.json({ success: true });
     }
     catch (err) {
@@ -284,77 +294,80 @@ const restoreStaff = async (req, res) => {
     }
 };
 exports.restoreStaff = restoreStaff;
-const getAllStaff = async (req, res) => {
+const getAllStaff = async (_req, res) => {
     try {
-        const result = await db_1.db.query(`WITH responsibility_counts AS (
-                SELECT mentor_id,
-                       COUNT(DISTINCT adm_no) AS assigned_students,
-                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students,
-                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'school') AS school_students,
-                       COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'madrasa') AS madrasa_students
-                FROM (
-                    SELECT hifz_mentor_id AS mentor_id, adm_no, 'hifz' AS responsibility
-                    FROM students
-                    WHERE status = 'active' AND hifz_mentor_id IS NOT NULL
-                    UNION ALL
-                    SELECT school_mentor_id AS mentor_id, adm_no, 'school' AS responsibility
-                    FROM students
-                    WHERE status = 'active' AND school_mentor_id IS NOT NULL
-                    UNION ALL
-                    SELECT madrasa_mentor_id AS mentor_id, adm_no, 'madrasa' AS responsibility
-                    FROM students
-                    WHERE status = 'active' AND madrasa_mentor_id IS NOT NULL
-                ) assigned
-                GROUP BY mentor_id
-            )
-            SELECT ${SAFE_STAFF_COLUMNS},
-                   COALESCE(rc.assigned_students, 0)::int AS assigned_students,
-                   COALESCE(rc.hifz_students, 0)::int AS hifz_students,
-                   COALESCE(rc.school_students, 0)::int AS school_students,
-                   COALESCE(rc.madrasa_students, 0)::int AS madrasa_students,
-                   NULL::timestamptz AS last_login
-            FROM staff
-            LEFT JOIN responsibility_counts rc ON rc.mentor_id = staff.id
-            ORDER BY name ASC`);
-        const staff = result.rows.map((member) => {
-            const responsibilities = [];
-            if (Number(member.hifz_students || 0) > 0)
-                responsibilities.push('Hifz Mentor');
-            if (Number(member.school_students || 0) > 0)
-                responsibilities.push('School Mentor');
-            if (Number(member.madrasa_students || 0) > 0)
-                responsibilities.push('Madrasa Mentor');
-            const staff_category = (0, staff_utils_1.staffDomainForRole)(member.role);
-            if (responsibilities.length === 0) {
-                if ((0, staff_utils_1.isLeadershipStaffRole)(member.role))
-                    responsibilities.push('Leadership Role');
-                else if ((0, staff_utils_1.isAdministrativeStaffRole)(member.role))
-                    responsibilities.push('System Administration');
+        const payload = await (0, server_cache_1.cachedResult)('staff:list', 2 * 60000, async () => {
+            const result = await db_1.db.query(`WITH responsibility_counts AS (
+                    SELECT mentor_id,
+                           COUNT(DISTINCT adm_no) AS assigned_students,
+                           COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students,
+                           COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'school') AS school_students,
+                           COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'madrasa') AS madrasa_students
+                    FROM (
+                        SELECT hifz_mentor_id AS mentor_id, adm_no, 'hifz' AS responsibility
+                        FROM students
+                        WHERE status = 'active' AND hifz_mentor_id IS NOT NULL
+                        UNION ALL
+                        SELECT school_mentor_id AS mentor_id, adm_no, 'school' AS responsibility
+                        FROM students
+                        WHERE status = 'active' AND school_mentor_id IS NOT NULL
+                        UNION ALL
+                        SELECT madrasa_mentor_id AS mentor_id, adm_no, 'madrasa' AS responsibility
+                        FROM students
+                        WHERE status = 'active' AND madrasa_mentor_id IS NOT NULL
+                    ) assigned
+                    GROUP BY mentor_id
+                )
+                SELECT ${SAFE_STAFF_COLUMNS},
+                       COALESCE(rc.assigned_students, 0)::int AS assigned_students,
+                       COALESCE(rc.hifz_students, 0)::int AS hifz_students,
+                       COALESCE(rc.school_students, 0)::int AS school_students,
+                       COALESCE(rc.madrasa_students, 0)::int AS madrasa_students,
+                       NULL::timestamptz AS last_login
+                FROM staff
+                LEFT JOIN responsibility_counts rc ON rc.mentor_id = staff.id
+                ORDER BY name ASC`);
+            const staff = result.rows.map((member) => {
+                const responsibilities = [];
+                if (Number(member.hifz_students || 0) > 0)
+                    responsibilities.push('Hifz Mentor');
+                if (Number(member.school_students || 0) > 0)
+                    responsibilities.push('School Mentor');
+                if (Number(member.madrasa_students || 0) > 0)
+                    responsibilities.push('Madrasa Mentor');
+                const staff_category = (0, staff_utils_1.staffDomainForRole)(member.role);
+                if (responsibilities.length === 0) {
+                    if ((0, staff_utils_1.isLeadershipStaffRole)(member.role))
+                        responsibilities.push('Leadership Role');
+                    else if ((0, staff_utils_1.isAdministrativeStaffRole)(member.role))
+                        responsibilities.push('System Administration');
+                    else
+                        responsibilities.push('General Mentor');
+                }
+                return {
+                    ...member,
+                    staff_category,
+                    role_label: (0, staff_utils_1.staffRoleLabel)(member.role),
+                    assigned_responsibilities: responsibilities,
+                };
+            });
+            const stats = staff.reduce((acc, member) => {
+                if (member.is_active === false) {
+                    acc.archived_staff += 1;
+                    return acc;
+                }
+                acc.total_staff += 1;
+                if (member.staff_category === 'teaching')
+                    acc.teaching_staff += 1;
                 else
-                    responsibilities.push('General Mentor');
-            }
-            return {
-                ...member,
-                staff_category,
-                role_label: (0, staff_utils_1.staffRoleLabel)(member.role),
-                assigned_responsibilities: responsibilities,
-            };
-        });
-        const stats = staff.reduce((acc, member) => {
-            if (member.is_active === false) {
-                acc.archived_staff += 1;
+                    acc.leadership_staff += 1;
+                if (member.staff_category === 'administrative')
+                    acc.admin_staff += 1;
                 return acc;
-            }
-            acc.total_staff += 1;
-            if (member.staff_category === 'teaching')
-                acc.teaching_staff += 1;
-            else
-                acc.leadership_staff += 1;
-            if (member.staff_category === 'administrative')
-                acc.admin_staff += 1;
-            return acc;
-        }, { total_staff: 0, teaching_staff: 0, leadership_staff: 0, admin_staff: 0, archived_staff: 0 });
-        res.json({ success: true, staff, stats });
+            }, { total_staff: 0, teaching_staff: 0, leadership_staff: 0, admin_staff: 0, archived_staff: 0 });
+            return { staff, stats };
+        });
+        res.json({ success: true, ...payload });
     }
     catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch staff' });
@@ -364,18 +377,23 @@ exports.getAllStaff = getAllStaff;
 const getStaffById = async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Staff not found' });
-        }
-        const studentCount = await db_1.db.query(`SELECT COUNT(*) FROM students
-             WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
-               AND status = 'active'`, [id]);
-        res.json({
-            success: true,
-            staff: result.rows[0],
-            student_count: parseInt(studentCount.rows[0].count, 10),
+        const payload = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('staff:detail', { id }), 2 * 60000, async () => {
+            const [staffResult, studentCount] = await Promise.all([
+                db_1.db.query(`SELECT ${SAFE_STAFF_COLUMNS} FROM staff WHERE id = $1 LIMIT 1`, [id]),
+                db_1.db.query(`SELECT COUNT(*) FROM students
+                         WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1)
+                           AND status = 'active'`, [id]),
+            ]);
+            if (staffResult.rows.length === 0)
+                return null;
+            return {
+                staff: staffResult.rows[0],
+                student_count: parseInt(studentCount.rows[0].count, 10),
+            };
         });
+        if (!payload)
+            return res.status(404).json({ success: false, error: 'Staff not found' });
+        res.json({ success: true, ...payload });
     }
     catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch staff member' });
@@ -408,6 +426,7 @@ const updateStaffProfile = async (req, res) => {
         }
         values.push(id);
         const result = await db_1.db.query(`UPDATE staff SET ${setClauses.join(', ')} WHERE id = $${paramCount} RETURNING ${SAFE_STAFF_COLUMNS}`, values);
+        invalidateStaffCaches();
         res.json({ success: true, staff: result.rows[0] });
     }
     catch (err) {
@@ -490,6 +509,7 @@ const createStaff = async (req, res) => {
             const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
             const staffInsert = await client.query(`INSERT INTO staff (${columns.join(', ')}) VALUES (${placeholders}) RETURNING ${SAFE_STAFF_COLUMNS}`, values);
             await client.query('COMMIT');
+            invalidateStaffCaches();
             res.json({ success: true, staffId: staffInsert.rows[0].id, staff: staffInsert.rows[0] });
         }
         catch (err) {
@@ -519,7 +539,7 @@ const getMyStudentsWithStats = async (req, res) => {
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         // Fetch assigned students
         let query = `
-            SELECT s.adm_no, s.name, s.photo_url, s.batch_year, s.standard, s.dob,
+            SELECT s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(sys.school_standard, s.standard) AS standard, s.dob,
             (SELECT name FROM staff WHERE id = sys.hifz_mentor_id) as hifz_mentor_name,
             (SELECT name FROM staff WHERE id = sys.school_mentor_id) as school_mentor_name,
             (SELECT name FROM staff WHERE id = sys.madrasa_mentor_id) as madrasa_mentor_name

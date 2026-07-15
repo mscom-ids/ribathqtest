@@ -24,7 +24,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table"
 import api from "@/lib/api"
-import { cachedGet } from "@/lib/api-cache"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 
 type SessionInfo = {
@@ -48,6 +48,22 @@ type Student = {
     standard: string
     is_temp?: boolean
     is_on_leave?: boolean
+    is_locked_outside?: boolean
+    attendance_status?: string
+    status?: string
+    went_outside_later?: boolean
+    leave_start_time?: string | null
+}
+
+type AttendanceStatus = "Present" | "Absent" | "Leave" | "Outside"
+
+function isOutsideStudent(student: Student) {
+    return Boolean(
+        student.is_locked_outside ||
+        student.is_on_leave ||
+        student.attendance_status?.toLowerCase() === "outside" ||
+        student.status?.toLowerCase() === "outside"
+    )
 }
 
 type CalendarPolicy = {
@@ -133,7 +149,7 @@ export default function StaffAttendancePage() {
     // Modal state
     const [modalOpen, setModalOpen] = useState(false)
     const [activeSession, setActiveSession] = useState<SessionInfo | null>(null)
-    const [attendanceMap, setAttendanceMap] = useState<Record<string, "Present" | "Absent" | "Leave">>({})
+    const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({})
     const [saving, setSaving] = useState(false)
     const [cancelling, setCancelling] = useState(false)
     const [lockedLeaves, setLockedLeaves] = useState<Record<string, string>>({})
@@ -166,8 +182,8 @@ export default function StaffAttendancePage() {
             try {
                 const [meRes, staffRes, policyRes] = await Promise.all([
                     cachedGet('/auth/me', undefined, 30_000),
-                    api.get('/staff/me'),
-                    api.get('/access-control/mentor-policies').catch(() => null),
+                    cachedGet('/staff/me', undefined, 5 * 60_000),
+                    cachedGet('/access-control/mentor-policies', undefined, 5 * 60_000).catch(() => null),
                 ])
 
                 const user = meRes.data?.user
@@ -206,11 +222,9 @@ export default function StaffAttendancePage() {
 
         try {
             const [calendarRes, schedulesRes, dashRes] = await Promise.all([
-                api.get(`/academics/calendar/${dateStr}`),
-                api.get('/attendance/schedules-for-date', { params: { date: dateStr } }),
-                api.get('/attendance/dashboard', {
-                    params: { start_date: dateStr, end_date: dateStr },
-                }),
+                cachedGet(`/academics/calendar/${dateStr}`, undefined, 5 * 60_000),
+                cachedGet('/attendance/schedules-for-date', { date: dateStr }, 60_000),
+                cachedGet('/attendance/dashboard', { start_date: dateStr, end_date: dateStr }, 15_000),
             ])
 
             const pol = (calendarRes.data?.calendar ?? null) as CalendarPolicy | null
@@ -321,9 +335,9 @@ export default function StaffAttendancePage() {
             // Build locks from computed flags returned by backend
             const locks: Record<string, string> = {}
             const futures: Record<string, string> = {}
-            scheduleStudents.forEach((s: any) => {
-                if (s.is_locked_outside) {
-                    locks[s.adm_no] = 'approved'
+            scheduleStudents.forEach((s: Student) => {
+                if (isOutsideStudent(s)) {
+                    locks[s.adm_no] = 'outside'
                 }
                 if (s.went_outside_later) {
                     const timeStr = s.leave_start_time ? new Date(s.leave_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later';
@@ -333,10 +347,10 @@ export default function StaffAttendancePage() {
             setLockedLeaves(locks)
             setFutureLeaves(futures)
 
-            // Build attendance map: default Present, Leave if on active leave
-            const map: Record<string, "Present" | "Absent" | "Leave"> = {}
+            // Outside is a persisted, immutable attendance status.
+            const map: Record<string, AttendanceStatus> = {}
             scheduleStudents.forEach((s: Student) => {
-                map[s.adm_no] = locks[s.adm_no] ? "Leave" : "Present"
+                map[s.adm_no] = locks[s.adm_no] ? "Outside" : "Present"
             })
 
             // Override with any existing saved marks (but not for leave-locked students).
@@ -344,8 +358,11 @@ export default function StaffAttendancePage() {
             const existingAtt = attRes.data?.data || []
             existingAtt.forEach((a: any) => {
                 if (map[a.student_id] !== undefined && !locks[a.student_id]) {
-                    if (a.status === "Leave") return
-                    map[a.student_id] = a.status
+                    const savedStatus = String(a.status || "").toLowerCase()
+                    if (savedStatus === "present") map[a.student_id] = "Present"
+                    else if (savedStatus === "absent") map[a.student_id] = "Absent"
+                    else if (savedStatus === "leave") map[a.student_id] = "Leave"
+                    else if (savedStatus === "outside") map[a.student_id] = "Outside"
                 }
             })
 
@@ -364,7 +381,7 @@ export default function StaffAttendancePage() {
         if (lockedLeaves[admNo]) return // Prevent toggling if locked by active leave
         setAttendanceMap(prev => {
             const current = prev[admNo]
-            let next: "Present" | "Absent" | "Leave" = "Present"
+            let next: AttendanceStatus = "Present"
             if (current === "Present") next = "Absent"
             else if (current === "Absent") {
                 next = futureLeaves[admNo] ? "Present" : "Leave"
@@ -381,7 +398,7 @@ export default function StaffAttendancePage() {
 
         const student_marks = sessionStudents.map(s => ({
             student_id: s.adm_no,
-            status: attendanceMap[s.adm_no] || "Present",
+            status: lockedLeaves[s.adm_no] ? "Outside" : (attendanceMap[s.adm_no] || "Present"),
         }))
 
         try {
@@ -393,6 +410,8 @@ export default function StaffAttendancePage() {
             if (!data.success) throw new Error(data.error);
             
             toast.success(`Attendance saved for ${student_marks.length} students`)
+            invalidateCache('/attendance/dashboard')
+            invalidateCache('/attendance/schedules-for-date')
             setModalOpen(false)
             loadDateSessions() // Refresh the table
         } catch (error: any) {
@@ -417,6 +436,8 @@ export default function StaffAttendancePage() {
             if (!res.data.success) throw new Error(res.data.error);
 
             toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
+            invalidateCache('/attendance/dashboard')
+            invalidateCache('/attendance/schedules-for-date')
             setModalOpen(false)
             loadDateSessions()
         } catch (error: any) {
@@ -428,10 +449,10 @@ export default function StaffAttendancePage() {
 
     // Mark all students with a status
     const markAll = (status: "Present" | "Absent" | "Leave") => {
-        const map: Record<string, "Present" | "Absent" | "Leave"> = {}
+        const map: Record<string, AttendanceStatus> = {}
         sessionStudents.forEach(s => { 
             if (lockedLeaves[s.adm_no]) {
-                map[s.adm_no] = "Leave"
+                map[s.adm_no] = "Outside"
             } else {
                 map[s.adm_no] = status 
             }
@@ -479,7 +500,7 @@ export default function StaffAttendancePage() {
     // Count stats
     const presentCount = Object.values(attendanceMap).filter(s => s === "Present").length
     const absentCount = Object.values(attendanceMap).filter(s => s === "Absent").length
-    const leaveCount = Object.values(attendanceMap).filter(s => s === "Leave").length
+    const leaveCount = Object.values(attendanceMap).filter(s => s === "Leave" || s === "Outside").length
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">

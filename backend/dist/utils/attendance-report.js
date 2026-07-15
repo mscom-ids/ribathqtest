@@ -53,6 +53,12 @@ function dateRange(startDate, endDate) {
     }
     return days;
 }
+function dayOfWeekFromDateKey(dateStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    if (!year || !month || !day)
+        return new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+    return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+}
 function normalizeScheduleStandard(label) {
     const l = label.trim();
     if (l === 'Hifz Only')
@@ -127,8 +133,7 @@ function institutionalLeaveCancellationForStudent(schedule, student, dateKey, le
     return null;
 }
 function scheduleAppliesToDate(schedule, dateStr) {
-    const date = new Date(`${dateStr}T00:00:00`);
-    if (schedule.day_of_week !== date.getDay())
+    if (Number(schedule.day_of_week) !== dayOfWeekFromDateKey(dateStr))
         return false;
     const effectiveFrom = toDateKey(schedule.effective_from);
     const effectiveUntil = toDateKey(schedule.effective_until);
@@ -140,6 +145,11 @@ function scheduleAppliesToDate(schedule, dateStr) {
 }
 function scheduleAppliesToStudent(schedule, student) {
     const studentStandard = normalizeScheduleStandard(String(student.attendance_standard || student.standard || '').trim());
+    const scheduleGroupIds = (schedule.group_ids || []).map(String).filter(Boolean);
+    const studentGroupIds = (student.group_ids || []).map(String).filter(Boolean);
+    if (scheduleGroupIds.length > 0) {
+        return studentGroupIds.some((groupId) => scheduleGroupIds.includes(groupId));
+    }
     const standards = parseStandards(schedule.standards).map(normalizeScheduleStandard);
     return standards.length === 0 || standards.includes(studentStandard);
 }
@@ -179,22 +189,30 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
     const params = [startDate, endDate];
     let typeClause = '';
     if (classType) {
-        params.push(classType.toLowerCase());
-        typeClause = `AND LOWER(class_type) = $${params.length}`;
+        params.push(classType.toLowerCase() === 'madrasa' ? ['madrasa', 'madrassa'] : [classType.toLowerCase()]);
+        typeClause = 'AND LOWER(a.class_type) = ANY($' + params.length + '::text[])';
     }
     let academicYearClause = '';
     if (academicYearId) {
         params.push(academicYearId);
-        academicYearClause = `AND academic_year_id = $${params.length}`;
+        academicYearClause = `AND a.academic_year_id = $${params.length}`;
     }
-    const [schedulesRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
-        db.query(`SELECT id, class_type, name, standards, day_of_week, start_time, end_time, effective_from, effective_until
-             FROM attendance_schedules
-             WHERE effective_from <= $2::date
-               AND (effective_until IS NULL OR effective_until >= $1::date)
-               AND (is_deleted = false OR is_deleted IS NULL)
+    const [schedulesRes, studentGroupsRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
+        db.query(`SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until,
+                    COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids
+             FROM attendance_schedules a
+             LEFT JOIN attendance_schedule_groups asg ON asg.schedule_id = a.id
+             WHERE a.effective_from <= $2::date
+               AND (a.effective_until IS NULL OR a.effective_until >= $1::date)
+               AND (a.is_deleted = false OR a.is_deleted IS NULL)
                ${typeClause}
-               ${academicYearClause}`, params),
+               ${academicYearClause}
+             GROUP BY a.id`, params),
+        db.query(`SELECT gs.student_id, gs.group_id
+             FROM attendance_group_students gs
+             JOIN attendance_groups g ON g.id = gs.group_id
+             WHERE gs.student_id = ANY($1::text[])
+               AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)`, [students.map(student => student.adm_no), academicYearId || null]),
         db.query(`SELECT schedule_id, date, cancelled_standards
              FROM attendance_cancellations
              WHERE date >= $1::date AND date <= $2::date`, [startDate, endDate]),
@@ -221,11 +239,20 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
     marksRes.rows.forEach(mark => {
         marksByStudentScheduleDate.set(`${mark.student_id}|${mark.schedule_id}|${toDateKey(mark.date)}`, mark);
     });
-    const studentById = new Map(students.map(student => [student.adm_no, student]));
+    const groupIdsByStudent = new Map();
+    studentGroupsRes.rows.forEach((row) => {
+        const current = groupIdsByStudent.get(row.student_id) || [];
+        current.push(String(row.group_id));
+        groupIdsByStudent.set(row.student_id, current);
+    });
+    const studentById = new Map(students.map(student => [
+        student.adm_no,
+        { ...student, group_ids: student.group_ids || groupIdsByStudent.get(student.adm_no) || [] },
+    ]));
     const effectiveSessionsByStudentDate = new Map();
     const sessionByStudentSchedule = new Map();
     for (const dateStr of dateRange(startDate, endDate)) {
-        const day = new Date(`${dateStr}T00:00:00`).getDay();
+        const day = dayOfWeekFromDateKey(dateStr);
         const schedulesForDay = schedulesByDay.get(day) || [];
         for (const schedule of schedulesForDay) {
             if (!scheduleAppliesToDate(schedule, dateStr))
@@ -291,13 +318,13 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
                     session.late += 1;
                     session.attended += 1;
                 }
-                else if (status === 'absent') {
+                else if (status === 'absent' || status === 'outside') {
                     summary.absentClasses += 1;
                     summary.notAttendedClasses += 1;
                     session.absent += 1;
                     session.not_attended += 1;
                 }
-                else if (status === 'leave' || status === 'outside') {
+                else if (status === 'leave') {
                     summary.leaveClasses += 1;
                     summary.notAttendedClasses += 1;
                     session.leave += 1;
@@ -329,7 +356,7 @@ async function computeStudentAttendanceSummaries(db, students, startDate, endDat
 async function getStudentAttendanceSummaries(db, students, startDate, endDate, classType, academicYearId) {
     if (students.length === 0)
         return new Map();
-    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:student-summaries', {
+    return (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('attendance:student-summaries:v2', {
         startDate,
         endDate,
         classType: classType || 'all',

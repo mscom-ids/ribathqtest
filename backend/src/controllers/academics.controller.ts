@@ -1,5 +1,17 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
+
+function invalidateSessionCaches() {
+    invalidateCacheByPrefix('academics:sessions');
+    invalidateCacheByPrefix('attendance:');
+}
+
+function invalidateCalendarCaches() {
+    invalidateCacheByPrefix('academics:calendar');
+    invalidateCacheByPrefix('attendance:');
+    invalidateCacheByPrefix('reports:');
+}
 
 export const getAcademicSessions = async (req: Request, res: Response) => {
     try {
@@ -13,7 +25,11 @@ export const getAcademicSessions = async (req: Request, res: Response) => {
         }
         
         query += ' ORDER BY start_time';
-        const result = await db.query(query, params);
+        const result = await cachedResult(
+            makeCacheKey('academics:sessions', { department: String(department || '') }),
+            5 * 60_000,
+            () => db.query(query, params),
+        );
         
         res.json({ success: true, sessions: result.rows });
     } catch (err) {
@@ -25,7 +41,11 @@ export const getAcademicSessions = async (req: Request, res: Response) => {
 export const getCalendarByDate = async (req: Request, res: Response) => {
     try {
         const { date } = req.params;
-        const result = await db.query('SELECT * FROM academic_calendar WHERE date = $1', [date]);
+        const result = await cachedResult(
+            makeCacheKey('academics:calendar:date', { date }),
+            5 * 60_000,
+            () => db.query('SELECT * FROM academic_calendar WHERE date = $1', [date]),
+        );
         
         if (result.rows.length === 0) {
             return res.json({ success: true, calendar: null });
@@ -43,7 +63,11 @@ export const getCalendarRange = async (req: Request, res: Response) => {
         const { start_date, end_date } = req.query;
         if (!start_date || !end_date) return res.status(400).json({ success: false, error: 'Start and end dates required' });
 
-        const result = await db.query('SELECT * FROM academic_calendar WHERE date >= $1 AND date <= $2', [start_date, end_date]);
+        const result = await cachedResult(
+            makeCacheKey('academics:calendar:range', { start_date, end_date }),
+            5 * 60_000,
+            () => db.query('SELECT * FROM academic_calendar WHERE date >= $1 AND date <= $2', [start_date, end_date]),
+        );
         res.json({ success: true, calendars: result.rows });
     } catch (err) {
         console.error('Error fetching calendar range:', err);
@@ -209,6 +233,7 @@ export const createSession = async (req: Request, res: Response) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
             [name, type, start_time || null, end_time || null, days_of_week || null, is_active !== false, standards || null]
         );
+        invalidateSessionCaches();
         res.json({ success: true, session: result.rows[0] });
     } catch (err) {
         console.error('Error creating session:', err);
@@ -226,6 +251,7 @@ export const updateSession = async (req: Request, res: Response) => {
             [name, type, start_time || null, end_time || null, days_of_week || null, is_active !== false, standards || null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Not found' });
+        invalidateSessionCaches();
         res.json({ success: true, session: result.rows[0] });
     } catch (err) {
         console.error('Error updating session:', err);
@@ -237,6 +263,7 @@ export const deleteSession = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         await db.query('DELETE FROM academic_sessions WHERE id = $1', [id]);
+        invalidateSessionCaches();
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting session:', err);
@@ -247,7 +274,11 @@ export const deleteSession = async (req: Request, res: Response) => {
 // ==================== CALENDAR CRUD ====================
 export const getAllCalendarPolicies = async (req: Request, res: Response) => {
     try {
-        const result = await db.query('SELECT * FROM academic_calendar ORDER BY date');
+        const result = await cachedResult(
+            'academics:calendar:all',
+            5 * 60_000,
+            () => db.query('SELECT * FROM academic_calendar ORDER BY date'),
+        );
         res.json({ success: true, policies: result.rows });
     } catch (err) {
         console.error('Error fetching all calendar policies:', err);
@@ -277,6 +308,7 @@ export const upsertCalendarPolicy = async (req: Request, res: Response) => {
              p.leave_standards || '[]',
              p.cancellation_reason_type || null, p.cancellation_reason_text || null]
         );
+        invalidateCalendarCaches();
         res.json({ success: true, policy: result.rows[0] });
     } catch (err) {
         console.error('Error upserting calendar policy:', err);
@@ -288,6 +320,7 @@ export const deleteCalendarPolicy = async (req: Request, res: Response) => {
     try {
         const { date } = req.params;
         await db.query('DELETE FROM academic_calendar WHERE date = $1', [date]);
+        invalidateCalendarCaches();
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting calendar policy:', err);
@@ -328,6 +361,7 @@ export const bulkUpsertCalendarPolicies = async (req: Request, res: Response) =>
             }
         }
         await client.query('COMMIT');
+        invalidateCalendarCaches();
         res.json({ success: true, count: entries.length });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -369,6 +403,7 @@ export const generateCalendarEntries = async (req: Request, res: Response) => {
             }
         }
         await client.query('COMMIT');
+        invalidateCalendarCaches();
         res.json({ success: true, inserted });
     } catch (err) {
         await client.query('ROLLBACK');

@@ -87,16 +87,16 @@ const academicLinks: NavEntry[] = [
 
 const managementLinks: NavEntry[] = [
     { href: "/admin/finance/dashboard", label: "Finance", icon: Landmark, group: ["/admin/finance"] },
-    { href: "/admin/leaves",            label: "Leaves",  icon: DoorOpen },
+    { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
     {
-        label: "Report", icon: FileText, group: ["/admin/reports"],
+        label: "Report", icon: FileText, group: ["/admin/management-reports"],
         children: [
-            { href: "/admin/reports/students", label: "Students" },
-            { href: "/admin/reports/mentors",  label: "Mentors" },
+            { href: "/admin/management-reports/attendance", label: "Attendance Report" },
+            { href: "/admin/management-reports/progress", label: "Progress Report" },
+            { href: "/admin/management-reports/faculty", label: "Faculty Report" },
         ],
     },
 ]
-
 const generalLinks: SimpleItem[] = [
     { href: "/admin/mentor-access", label: "Settings", icon: Settings },
     { href: "#help",                       label: "Help",     icon: HelpCircle },
@@ -153,14 +153,14 @@ const principalAcademicLinks: NavEntry[] = [
 const principalManagementLinks: NavEntry[] = [
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
     {
-        label: "Reports", icon: FileText, group: ["/admin/reports"],
+        label: "Reports", icon: FileText, group: ["/admin/management-reports"],
         children: [
-            { href: "/admin/reports/students", label: "Student Reports" },
-            { href: "/admin/reports/mentors", label: "Mentor Reports" },
+            { href: "/admin/management-reports/attendance", label: "Attendance Report" },
+            { href: "/admin/management-reports/progress", label: "Progress Report" },
+            { href: "/admin/management-reports/faculty", label: "Faculty Report" },
         ],
     },
 ]
-
 const principalGeneralLinks: SimpleItem[] = [
     { href: "#help", label: "Help", icon: HelpCircle },
 ]

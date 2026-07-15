@@ -199,41 +199,35 @@ export default function AdminDashboardPage() {
     const load = useCallback(async () => {
         setLoading(true)
         try {
-            // Was fetching the entire /students payload (with comprehensive_details
-            // JSON blob) just to count rows. Now uses a tiny aggregation endpoint.
-            // /leaves/outside-students is no longer needed — counts include it.
-            const requests = [
-                cachedGet("/students/counts", undefined, 60_000),
-                cachedGet("/staff", undefined, 60_000),
-                DASHBOARD_EVENTS_ENABLED
-                    ? cachedGet("/events", undefined, 60_000)
-                    : Promise.resolve({ data: { success: true, events: [] } }),
-                DASHBOARD_DELEGATIONS_ENABLED
-                    ? api.get("/delegations/admin/all", { params: { count_only: 'true' } })
-                    : Promise.resolve({ data: { success: true, pending_count: 0 } }),
-            ] as const
-
-            const [countsResult, staffResult, evtResult, delResult] = await Promise.allSettled(requests)
-            const countsRes = countsResult.status === "fulfilled" ? countsResult.value : null
-            const staffRes = staffResult.status === "fulfilled" ? staffResult.value : null
-            const evtRes = evtResult.status === "fulfilled" ? evtResult.value : null
-            const delRes = delResult.status === "fulfilled" ? delResult.value : null
-
-            if (evtRes?.data?.success) setEvents(evtRes.data.events || [])
-            if (delRes?.data?.success) setPendingDelegationsCount(delRes.data.pending_count || 0)
-
-            if (countsRes?.data.success) {
-                const c = countsRes.data.counts
-                setStudents({ total: c.active, onCampus: c.on_campus, outCampus: c.out_campus })
-                setAlumni({ total: c.alumni, completed: c.completed, dropout: c.dropout })
+            const res = await cachedGet("/dashboard/admin", undefined, 60_000)
+            if (res.data?.success) {
+                const summary = res.data.summary;
+                if (summary.students) {
+                    setStudents({ 
+                        total: summary.students.active, 
+                        onCampus: summary.students.on_campus, 
+                        outCampus: summary.students.out_campus 
+                    })
+                    setAlumni({ 
+                        total: summary.students.alumni, 
+                        completed: summary.students.completed, 
+                        dropout: summary.students.dropout 
+                    })
+                }
+                if (summary.staff) {
+                    setStaff({ 
+                        total: summary.staff.total, 
+                        active: summary.staff.active, 
+                        inactive: summary.staff.inactive 
+                    })
+                }
+                
+                setEvents(summary.events || [])
+                setPendingDelegationsCount(summary.pending_delegations || 0)
             }
-
-            if (staffRes?.data.success) {
-                const d: any[] = staffRes.data.staff || []
-                const active = d.filter((s: any) => s.is_active !== false).length
-                setStaff({ total: d.length, active, inactive: d.length - active })
-            }
-        } catch {}
+        } catch (err) {
+            console.error("Failed to load admin summary", err)
+        }
         setLoading(false)
     }, [])
 
