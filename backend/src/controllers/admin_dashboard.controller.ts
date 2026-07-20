@@ -13,7 +13,7 @@ export const getAdminSummary = async (req: Request, res: Response) => {
       
       const eventsPromise = db.query(`SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50`);
 
-      const delegationsPromise = db.query(`SELECT COUNT(*)::integer as count FROM staff_delegations WHERE status = 'pending'`);
+      const delegationsPromise = db.query(`SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'`);
 
       const studentsPromise = db.query(
           `SELECT

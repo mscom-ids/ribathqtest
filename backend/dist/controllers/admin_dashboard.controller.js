@@ -12,7 +12,7 @@ const getAdminSummary = async (req, res) => {
           COUNT(*) as total
         FROM staff`);
             const eventsPromise = db_1.db.query(`SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50`);
-            const delegationsPromise = db_1.db.query(`SELECT COUNT(*)::integer as count FROM staff_delegations WHERE status = 'pending'`);
+            const delegationsPromise = db_1.db.query(`SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'`);
             const studentsPromise = db_1.db.query(`SELECT
               COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active,
               COUNT(*) FILTER (WHERE status = 'completed') AS completed,
