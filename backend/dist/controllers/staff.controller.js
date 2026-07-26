@@ -6,6 +6,7 @@ const staff_utils_1 = require("../utils/staff.utils");
 const supabase_1 = require("../config/supabase");
 const academic_year_1 = require("../utils/academic-year");
 const server_cache_1 = require("../utils/server-cache");
+const mentor_students_service_1 = require("../services/mentor-students.service");
 const SAFE_STAFF_COLUMNS = `
     id, profile_id, name, role, phone, email, photo_url, address, place,
     phone_contacts, staff_id, is_active, created_at
@@ -16,6 +17,8 @@ function invalidateStaffCaches() {
     (0, server_cache_1.invalidateCacheByPrefix)('auth:me');
     (0, server_cache_1.invalidateCacheByPrefix)('academic-placements:attendance-groups');
     (0, server_cache_1.invalidateCacheByPrefix)('attendance:schedules');
+    (0, server_cache_1.invalidateCacheByPrefix)('mentor-students:');
+    (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
 }
 const getMyStaffProfile = async (req, res) => {
     try {
@@ -50,18 +53,39 @@ const getStaffStudents = async (req, res) => {
         if (staffResult.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Staff not found' });
         }
-        const result = await db_1.db.query(`SELECT adm_no AS id, adm_no, name, photo_url, standard, batch_year,
-                    (sys.hifz_mentor_id = $1)    AS is_hifz,
-                    (sys.school_mentor_id = $1)  AS is_school,
-                    (sys.madrasa_mentor_id = $1) AS is_madrasa
-             FROM students
-             JOIN student_year_snapshots sys
-               ON sys.student_id = students.adm_no
-              AND sys.academic_year_id = $2
-             WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
-               AND students.status = $3
-             ORDER BY name`, [staffId, academicContext.academicYearId, 'active']);
-        res.json({ success: true, students: result.rows });
+        const [hifzStudents, otherAssignments] = await Promise.all([
+            (0, mentor_students_service_1.getActiveMentorStudents)(db_1.db, String(staffId), {
+                academicYearId: academicContext.academicYearId,
+            }),
+            db_1.db.query(`SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.standard, s.batch_year,
+                        false AS is_hifz,
+                        (sys.school_mentor_id = $1) AS is_school,
+                        (sys.madrasa_mentor_id = $1) AS is_madrasa
+                 FROM students s
+                 JOIN student_year_snapshots sys
+                   ON sys.student_id = s.adm_no
+                  AND sys.academic_year_id = $2
+                 WHERE (sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
+                   AND LOWER(COALESCE(s.status, 'active')) = 'active'
+                 ORDER BY s.name`, [staffId, academicContext.academicYearId]),
+        ]);
+        const merged = new Map();
+        for (const student of otherAssignments.rows)
+            merged.set(student.adm_no, student);
+        for (const student of hifzStudents) {
+            const existing = merged.get(student.adm_no) || {};
+            merged.set(student.adm_no, {
+                ...existing,
+                ...student,
+                is_hifz: true,
+                is_school: Boolean(existing.is_school),
+                is_madrasa: Boolean(existing.is_madrasa),
+            });
+        }
+        res.json({
+            success: true,
+            students: Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        });
     }
     catch (err) {
         console.error('Error fetching assigned students:', err);
@@ -104,6 +128,30 @@ const assignStudentsToMentor = async (req, res) => {
             if (academicContext.mode === 'current') {
                 await client.query(`UPDATE students SET ${field} = $1 WHERE adm_no = ANY($2::text[])`, [id, student_ids]);
             }
+            if (section === 'hifz') {
+                await client.query(`UPDATE hifz_mentor_history
+                     SET assigned_until = CURRENT_DATE
+                     WHERE student_id = ANY($1::text[])
+                       AND assigned_until IS NULL
+                       AND mentor_id IS DISTINCT FROM $2::uuid`, [student_ids, id]);
+                await client.query(`INSERT INTO hifz_mentor_history (student_id, mentor_id, assigned_from)
+                     SELECT sid, $2::uuid, CURRENT_DATE
+                     FROM unnest($1::text[]) AS sid
+                     WHERE NOT EXISTS (
+                         SELECT 1
+                         FROM hifz_mentor_history history
+                         WHERE history.student_id = sid
+                           AND history.mentor_id = $2::uuid
+                           AND history.assigned_until IS NULL
+                     )`, [student_ids, id]);
+                await client.query(`INSERT INTO student_hifz_profiles (student_id, mentor_id, active, started_on, updated_at)
+                     SELECT sid, $2::uuid, true, CURRENT_DATE, now()
+                     FROM unnest($1::text[]) AS sid
+                     ON CONFLICT (student_id) DO UPDATE SET
+                        mentor_id = EXCLUDED.mentor_id,
+                        active = true,
+                        updated_at = now()`, [student_ids, id]);
+            }
             await client.query('COMMIT');
         }
         catch (txErr) {
@@ -117,6 +165,8 @@ const assignStudentsToMentor = async (req, res) => {
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:');
         (0, server_cache_1.invalidateCacheByPrefix)('staff:');
+        (0, server_cache_1.invalidateCacheByPrefix)('mentor-students:');
+        (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
         res.json({ success: true });
     }
     catch (err) {
@@ -152,6 +202,16 @@ const unassignStudentFromMentor = async (req, res) => {
             if (academicContext.mode === 'current') {
                 await client.query(`UPDATE students SET ${field} = NULL WHERE adm_no = $1 AND ${field} = $2`, [student_id, id]);
             }
+            if (section === 'hifz') {
+                await client.query(`UPDATE hifz_mentor_history
+                     SET assigned_until = CURRENT_DATE
+                     WHERE student_id = $1
+                       AND mentor_id = $2
+                       AND assigned_until IS NULL`, [student_id, id]);
+                await client.query(`UPDATE student_hifz_profiles
+                     SET mentor_id = NULL, active = false, updated_at = now()
+                     WHERE student_id = $1 AND mentor_id = $2`, [student_id, id]);
+            }
             await client.query('COMMIT');
         }
         catch (txErr) {
@@ -165,6 +225,8 @@ const unassignStudentFromMentor = async (req, res) => {
         (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:');
         (0, server_cache_1.invalidateCacheByPrefix)('staff:');
+        (0, server_cache_1.invalidateCacheByPrefix)('mentor-students:');
+        (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
         res.json({ success: true });
     }
     catch (err) {
@@ -179,15 +241,10 @@ const getMyAssignedStudents = async (req, res) => {
         if (!staff_id)
             return res.status(400).json({ success: false, error: 'staff_id required' });
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
-        const result = await db_1.db.query(`SELECT s.adm_no, s.name, s.photo_url, s.standard
-             FROM students s
-             JOIN student_year_snapshots sys
-               ON sys.student_id = s.adm_no
-              AND sys.academic_year_id = $2
-             WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
-               AND s.status = $3
-             ORDER BY s.name`, [staff_id, academicContext.academicYearId, 'active']);
-        res.json({ success: true, students: result.rows });
+        const students = await (0, mentor_students_service_1.getActiveMentorStudents)(db_1.db, String(staff_id), {
+            academicYearId: academicContext.academicYearId,
+        });
+        res.json({ success: true, students });
     }
     catch (err) {
         console.error('Error fetching assigned students:', err);
@@ -236,6 +293,7 @@ const createStaffLogin = async (req, res) => {
             // Update the staff record with the new password
             await client.query('UPDATE staff SET password_hash = $1 WHERE id = $2', [hashedPassword, id]);
             await client.query('COMMIT');
+            invalidateStaffCaches();
             res.json({ success: true });
         }
         catch (err) {
@@ -319,6 +377,7 @@ const getAllStaff = async (_req, res) => {
                     GROUP BY mentor_id
                 )
                 SELECT ${SAFE_STAFF_COLUMNS},
+                       (password_hash IS NOT NULL OR profile_id IS NOT NULL) AS has_login,
                        COALESCE(rc.assigned_students, 0)::int AS assigned_students,
                        COALESCE(rc.hifz_students, 0)::int AS hifz_students,
                        COALESCE(rc.school_students, 0)::int AS school_students,
@@ -537,27 +596,10 @@ const getMyStudentsWithStats = async (req, res) => {
         const staffId = ctx.staffId;
         const actingStudentId = ctx.studentId;
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
-        // Fetch assigned students
-        let query = `
-            SELECT s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(sys.school_standard, s.standard) AS standard, s.dob,
-            (SELECT name FROM staff WHERE id = sys.hifz_mentor_id) as hifz_mentor_name,
-            (SELECT name FROM staff WHERE id = sys.school_mentor_id) as school_mentor_name,
-            (SELECT name FROM staff WHERE id = sys.madrasa_mentor_id) as madrasa_mentor_name
-            FROM students s
-            JOIN student_year_snapshots sys
-              ON sys.student_id = s.adm_no
-             AND sys.academic_year_id = $2
-            WHERE (sys.hifz_mentor_id = $1 OR sys.school_mentor_id = $1 OR sys.madrasa_mentor_id = $1)
-              AND s.status = 'active'
-        `;
-        const params = [staffId, academicContext.academicYearId];
-        if (actingStudentId) {
-            query += ` AND s.adm_no = $3`;
-            params.push(actingStudentId);
-        }
-        query += ` ORDER BY name`;
-        const studentsResult = await db_1.db.query(query, params);
-        const students = studentsResult.rows;
+        const students = await (0, mentor_students_service_1.getActiveMentorStudents)(db_1.db, staffId, {
+            academicYearId: academicContext.academicYearId,
+            studentId: actingStudentId,
+        });
         if (students.length === 0) {
             return res.json({ success: true, students: [] });
         }
@@ -578,7 +620,7 @@ const getMyStudentsWithStats = async (req, res) => {
                    AND leave_type <> 'outdoor'
                  ORDER BY created_at DESC`, [studentIds])),
             safeRows('today hifz logs lookup', db_1.db.query(`SELECT student_id, mode, start_page, end_page, juz_portion, entry_date
-                 FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2`, [studentIds, todayDate])),
+                 FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2 AND deleted_at IS NULL`, [studentIds, todayDate])),
             safeRows('attendance marks lookup', db_1.db.query(`SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2`, [studentIds, todayDate])),
             safeRows('outgoing delegations lookup', db_1.db.query(`SELECT d.student_id, s.name as receiver_name
                  FROM mentor_delegations d
@@ -586,7 +628,7 @@ const getMyStudentsWithStats = async (req, res) => {
                  WHERE d.from_staff_id = $1 AND d.status = 'approved'`, [staffId])),
             safeRows('last hifz lookup', db_1.db.query(`SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date
                  FROM hifz_logs
-                 WHERE student_id = ANY($1) AND mode = 'New Verses'
+                 WHERE student_id = ANY($1) AND mode = 'New Verses' AND deleted_at IS NULL
                  ORDER BY student_id, entry_date DESC, created_at DESC`, [studentIds])),
         ]);
         // Build a map: student_id -> leave info

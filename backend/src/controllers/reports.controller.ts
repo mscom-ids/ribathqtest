@@ -240,6 +240,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
          FROM hifz_logs
          WHERE entry_date >= $1::date
            AND entry_date <= $2::date
+           AND deleted_at IS NULL
          ORDER BY student_id, entry_date DESC, created_at DESC`,
         [startDate, endDate]
       ),
@@ -690,6 +691,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                         start_v, end_v, start_page, end_page, juz_number, juz_portion
                  FROM hifz_logs
                  WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
+                   AND deleted_at IS NULL
                  ORDER BY entry_date DESC, created_at DESC`,
                  [student_id, start_date, end_date]
             ),
@@ -698,6 +700,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                         start_v, end_v, start_page, end_page, juz_number
                  FROM hifz_logs
                  WHERE student_id = $1 AND mode = 'New Verses'
+                   AND deleted_at IS NULL
                  ORDER BY entry_date DESC, created_at DESC`,
                  [student_id]
             ),
@@ -792,6 +795,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             success: true,
             data: {
                 student: { ...effectiveStudentRows[0], academic_year_mode: academicContext.mode },
+                academic_year: academicContext.name || '2025-2026',
                 report_window: reportWindow,
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,

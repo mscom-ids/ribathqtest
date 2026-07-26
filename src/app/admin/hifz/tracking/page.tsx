@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon, Search, BookOpen, Download, FileText } from "lucide-react"
-import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,6 +25,7 @@ import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { formatHifzLogLabel } from "@/lib/hifz-progress"
 import { formatCompactHifzEntries } from "@/lib/hifz-entry-summary"
+import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 
 interface Student {
     adm_no: string
@@ -105,49 +105,46 @@ export default function HifzTrackingPage() {
     const [hifzLogs, setHifzLogs] = useState<Record<string, HifzLog[]>>({})
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
+    const [registerStudent, setRegisterStudent] = useState<Student | null>(null)
     const dateKey = format(date, "yyyy-MM-dd")
     const dateLabel = format(date, "PPP")
 
     // Load students and hifz logs when date changes
-    useEffect(() => {
-        async function loadData() {
-            setLoading(true)
+    const loadData = useCallback(async (showSpinner = true) => {
+        if (showSpinner) setLoading(true)
 
-            try {
-                // Load all active students enrolled in Hifz
-                const { data: { students: studentsData } } = await api.get('/hifz/students');
+        try {
+            // Fetch the Hifz roster and this date's logs in parallel.
+            const [studentsRes, logsRes] = await Promise.all([
+                api.get('/hifz/students'),
+                api.get('/hifz/logs', { params: { date: dateKey } }),
+            ])
 
-                if (studentsData) {
-                    setStudents(studentsData)
+            const studentsData = studentsRes.data?.students
+            if (studentsData) setStudents(studentsData)
+
+            const logsData = logsRes.data?.logs as HifzLog[] | undefined
+            if (logsData) {
+                // Group logs by student_id - each student can have multiple logs (one per mode)
+                const logsMap: Record<string, HifzLog[]> = {}
+                for (const log of logsData) {
+                    (logsMap[log.student_id] ??= []).push(log)
                 }
-
-                // Load existing hifz logs for this date.
-                const { data: { logs: logsData } } = await api.get('/hifz/logs', {
-                    params: { date: dateKey }
-                });
-
-                if (logsData) {
-                    // Group logs by student_id - each student can have multiple logs (one per mode)
-                    const logsMap: Record<string, HifzLog[]> = {}
-                    logsData.forEach((log: HifzLog) => {
-                        if (!logsMap[log.student_id]) {
-                            logsMap[log.student_id] = []
-                        }
-                        logsMap[log.student_id].push(log)
-                    })
-                    setHifzLogs(logsMap)
-                } else {
-                    setHifzLogs({})
-                }
-            } catch (err) {
-                console.error("Failed to load hifz tracking data", err);
+                setHifzLogs(logsMap)
+            } else {
                 setHifzLogs({})
             }
-
+        } catch (err) {
+            console.error("Failed to load hifz tracking data", err);
+            setHifzLogs({})
+        } finally {
             setLoading(false)
         }
-        loadData()
     }, [dateKey])
+
+    useEffect(() => {
+        void loadData()
+    }, [loadData])
 
     const filteredStudents = students.filter(s =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -446,14 +443,14 @@ export default function HifzTrackingPage() {
 
                                                             const renderLogBadge = (label: string, mode: HifzMode, index: number) => (
                                                                 <div key={`${mode}-${index}-${label}`} className="bg-slate-50 dark:bg-slate-900 border rounded shadow-sm w-fit">
-                                                                    <Link href={`/staff/entry/${student.adm_no}?date=${dateKey}&returnTo=/admin/hifz/tracking`} className="flex items-center gap-1 px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors">
+                                                                    <button type="button" onClick={() => setRegisterStudent(student)} className="flex items-center gap-1 px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors">
                                                                         <span className={cn("px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold uppercase tracking-wider", getModeColor(mode))}>
                                                                             {mode === "New Verses" ? "New" : mode === "Recent Revision" ? "Recent" : "Juz"}
                                                                         </span>
                                                                         <span className="text-xs text-muted-foreground font-medium pr-1 hover:text-foreground hover:underline decoration-dotted underline-offset-2">
                                                                             {label}
                                                                         </span>
-                                                                    </Link>
+                                                                    </button>
                                                                 </div>
                                                             );
 
@@ -481,11 +478,9 @@ export default function HifzTrackingPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <Link href={`/staff/entry/${student.adm_no}?date=${dateKey}&returnTo=/admin/hifz/tracking`}>
-                                                            <Button variant="outline" size="sm" className={logs.length >= 3 ? "" : "bg-emerald-600 text-white hover:bg-emerald-700"}>
-                                                                {logs.length >= 3 ? "Edit" : logs.length > 0 ? `Add (${3 - logs.length} left)` : "Record"}
-                                                            </Button>
-                                                        </Link>
+                                                        <Button variant="outline" size="sm" onClick={() => setRegisterStudent(student)} className={logs.length >= 3 ? "" : "bg-emerald-600 text-white hover:bg-emerald-700"}>
+                                                            {logs.length >= 3 ? "Edit" : logs.length > 0 ? `Add (${3 - logs.length} left)` : "Record"}
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             )
@@ -535,6 +530,17 @@ export default function HifzTrackingPage() {
                     )}
                 </CardContent>
             </Card>
+
+            <HifzMonthlyRegister
+                open={!!registerStudent}
+                onClose={() => setRegisterStudent(null)}
+                student={registerStudent ? {
+                    adm_no: registerStudent.adm_no,
+                    name: registerStudent.name,
+                    standard: registerStudent.hifz_standard ?? null,
+                } : null}
+                onChange={() => loadData(false)}
+            />
         </div>
     )
 }

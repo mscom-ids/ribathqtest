@@ -146,24 +146,20 @@ function StatCard({
 function QuickLink({ href, label, icon: Icon, bg, iconBg, onClick }: {
     href?: string; label: string; icon: React.ElementType; bg: string; iconBg: string; onClick?: () => void;
 }) {
-    if (onClick) {
-        return (
-            <button onClick={onClick} className={`flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg hover:scale-105 flex-1 min-w-[30%] transition-all duration-200`}>
-                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform`}>
-                    <Icon className="h-5 w-5" />
-                </div>
-                <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900">{label}</span>
-            </button>
-        )
-    }
-    return (
-        <Link href={href!} className={`flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg hover:scale-105 flex-1 min-w-[30%] transition-all duration-200`}>
-            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3`}>
+    const inner = (
+        <>
+            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform group-hover:scale-110`}>
                 <Icon className="h-5 w-5" />
             </div>
-            <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900">{label}</span>
-        </Link>
+            <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900 text-center">{label}</span>
+        </>
     )
+    const cls = `group flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg transition-all duration-200`
+    if (onClick) {
+        return <button onClick={onClick} className={cls}>{inner}</button>
+    }
+    return <Link href={href!} className={cls}>{inner}</Link>
+
 }
 
 
@@ -399,7 +395,7 @@ export default function AdminDashboardPage() {
             </div>
 
             {/* Main Content Grid (3 Columns) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
                 {/* Left Column */}
                 <div className="space-y-6">
@@ -542,25 +538,24 @@ export default function AdminDashboardPage() {
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
                         <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white mb-5">Quick Links</h3>
                         
-                        <div className="flex flex-wrap gap-4">
+                        <div className="grid grid-cols-2 gap-4">
                             <QuickLink href="/admin/calendar"           label="Calendar"    icon={CalendarDays} bg="bg-[#E8F8F0]" iconBg="bg-[#22C55E]" />
                             <QuickLink label="Exam Result"              onClick={() => setExamPopupOpen(true)} icon={BarChart2}    bg="bg-[#EBF2FF]" iconBg="bg-[#3B82F6]" />
                             <QuickLink href="/admin/student-attendance" label="Attendance"  icon={UserCheck}    bg="bg-[#FFF8E1]" iconBg="bg-[#F59E0B]" />
-                            
                             <QuickLink href="/admin/finance/dashboard"  label="Fees"        icon={DollarSign}   bg="bg-[#E0F7FA]" iconBg="bg-[#06B6D4]" />
                             <QuickLink label="Reports"                 onClick={() => setReportsPopupOpen(true)} icon={FileText}     bg="bg-[#E0F2FE]" iconBg="bg-[#0EA5E9]" />
                             <QuickLink href="/admin/mentor-access"      label="Mentor Locks" icon={ShieldCheck}  bg="bg-[#EEF2FF]" iconBg="bg-[#6366F1]" />
-                            
-                            <Link href="/admin/delegations" className="flex flex-col items-center justify-center py-5 rounded-xl bg-purple-50 hover:shadow flex-1 min-w-[30%] transition-all relative">
+
+                            <Link href="/admin/delegations" className="group flex flex-col items-center justify-center py-5 rounded-xl bg-purple-50 hover:shadow-lg transition-all duration-200 relative">
                                 {pendingDelegationsCount > 0 && (
                                     <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
                                         {pendingDelegationsCount}
                                     </span>
                                 )}
-                                <div className="h-[42px] w-[42px] rounded-full flex items-center justify-center bg-purple-600 text-white shadow-sm mb-3 transition-transform hover:scale-110">
+                                <div className="h-[42px] w-[42px] rounded-full flex items-center justify-center bg-purple-600 text-white shadow-sm mb-3 transition-transform group-hover:scale-110">
                                     <Bell className="h-5 w-5" />
                                 </div>
-                                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Requests</span>
+                                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 text-center">Requests</span>
                             </Link>
                         </div>
                     </div>

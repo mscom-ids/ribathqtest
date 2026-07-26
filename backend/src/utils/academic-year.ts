@@ -7,6 +7,7 @@ type Queryable = {
 export type AcademicYearContext = {
   academicYearId: string | null;
   currentAcademicYearId: string | null;
+  name: string;
   mode: 'current' | 'historical' | 'legacy';
 };
 
@@ -25,29 +26,38 @@ export async function getAcademicYearContext(
 ): Promise<AcademicYearContext> {
   const requested = getAcademicYearParam(requestedAcademicYearId);
 
-  const currentAcademicYearId = await cachedResult(
-    'academic-year:current',
+  const currentYearRow = await cachedResult(
+    'academic-year:current-row-v2',
     30 * 60_000,   // 30 min — academic year changes at most once a year
     async () => {
       const currentRes = await db.query(
-        `SELECT id
+        `SELECT id, name
          FROM academic_years
          WHERE is_current = true
          ORDER BY start_date DESC
          LIMIT 1`
       );
-      return currentRes.rows[0]?.id || null;
+      return currentRes.rows[0] || null;
     }
   );
+
+  const currentAcademicYearId = currentYearRow?.id || null;
   const academicYearId = requested || currentAcademicYearId;
 
   if (!academicYearId) {
-    return { academicYearId: null, currentAcademicYearId: null, mode: 'legacy' };
+    return { academicYearId: null, currentAcademicYearId: null, name: '2025-2026', mode: 'legacy' };
+  }
+
+  let yearName = currentAcademicYearId && academicYearId === currentAcademicYearId ? currentYearRow?.name : null;
+  if (!yearName && academicYearId) {
+    const yrRes = await db.query(`SELECT name FROM academic_years WHERE id = $1`, [academicYearId]);
+    yearName = yrRes.rows[0]?.name || null;
   }
 
   return {
     academicYearId,
     currentAcademicYearId,
+    name: yearName || '2025-2026',
     mode: currentAcademicYearId && academicYearId !== currentAcademicYearId ? 'historical' : 'current',
   };
 }

@@ -11,6 +11,7 @@ router.use(auth_middleware_1.verifyDelegation);
 router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal', 'staff', 'usthad', 'mentor', 'controller']));
 // Dashboard & Schedule Setup
 router.get('/daily-stats', attendance_dashboard_controller_1.getDailyAttendanceStats);
+router.get('/subjects', attendance_dashboard_controller_1.getSubjects);
 router.get('/schedules', attendance_dashboard_controller_1.getSchedules);
 router.get('/schedules-for-date', attendance_dashboard_controller_1.getSchedulesForDate);
 router.post('/schedules', (0, auth_middleware_1.requireRole)(['admin', 'principal']), attendance_dashboard_controller_1.createSchedule);

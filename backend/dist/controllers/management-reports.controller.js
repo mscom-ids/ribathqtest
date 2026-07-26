@@ -122,6 +122,16 @@ function dayCode(values) {
         return 'L';
     return 'P';
 }
+function normalizeSubjectName(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+const ALL_SUBJECT_ID = '__all__';
+function subjectGroupKey(options, _schedule, subjectName) {
+    return [options.academicYearId, options.department, normalizeSubjectName(subjectName)].join('::');
+}
+function sortSubjectGroups(a, b) {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+}
 function cacheParts(options) {
     return {
         academic_year_id: options.academicYearId,
@@ -131,6 +141,7 @@ function cacheParts(options) {
         standard: options.standard,
         division: options.division,
         search: options.search,
+        subject_id: options.subjectId,
         limit: options.limit,
         offset: options.offset,
     };
@@ -174,6 +185,7 @@ async function resolveOptions(req) {
         standard: String(req.query.standard || '').trim(),
         division: String(req.query.division || '').trim(),
         search: String(req.query.search || '').trim(),
+        subjectId: String(req.query.subject_id || '').trim(),
         limit: boundedInt(req.query.limit, 50, 100),
         offset: boundedInt(req.query.offset, 0, 100000),
     };
@@ -281,8 +293,21 @@ function pageInfo(students, options) {
 const getManagementAttendanceReport = async (req, res) => {
     try {
         const options = await resolveOptions(req);
-        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('reports:management-attendance:v3', cacheParts(options)), 120000, async () => {
-            const scheduleSql = "SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids FROM attendance_schedules a LEFT JOIN attendance_schedule_groups asg ON asg.schedule_id = a.id WHERE a.academic_year_id = $1 AND (CASE WHEN LOWER(a.class_type) = 'madrassa' THEN 'madrasa' ELSE LOWER(a.class_type) END) = $2 AND a.effective_from <= $4::date AND (a.effective_until IS NULL OR a.effective_until >= $3::date) AND (a.is_deleted = false OR a.is_deleted IS NULL) GROUP BY a.id";
+        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('reports:management-attendance:v6', cacheParts(options)), 120000, async () => {
+            const scheduleSql = `
+                SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, 
+                       a.mentor_id, sub.id AS subject_id, sub.name AS subject_name, sub.mentor_id AS subject_mentor_id,
+                       COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids 
+                FROM attendance_schedules a 
+                LEFT JOIN attendance_subjects sub ON sub.id = a.subject_id
+                LEFT JOIN attendance_schedule_groups asg ON asg.schedule_id = a.id 
+                WHERE a.academic_year_id = $1 
+                  AND (CASE WHEN LOWER(a.class_type) = 'madrassa' THEN 'madrasa' ELSE LOWER(a.class_type) END) = $2 
+                  AND a.effective_from <= $4::date 
+                  AND (a.effective_until IS NULL OR a.effective_until >= $3::date) 
+                  AND (a.is_deleted = false OR a.is_deleted IS NULL)
+                GROUP BY a.id, sub.id, sub.name, sub.mentor_id
+            `;
             const [filters, rosterResult, schedulesResult, cancellationsResult, leavesResult, classMarksResult, studentLeavesResult] = await Promise.all([
                 loadFilters(options.academicYearId),
                 loadRoster(options),
@@ -312,79 +337,158 @@ const getManagementAttendanceReport = async (req, res) => {
             const scopedStandards = [...new Set(scopedGroups.map((group) => normalizeStandard(group.standard)).filter(Boolean))];
             if (!scopedStandards.length && options.standard)
                 scopedStandards.push(normalizeStandard(options.standard));
-            // Group by schedule
-            const schedulesData = [];
+            // Group schedules by logical subject, not by schedule/batch/division rows.
+            const subjectsMap = new Map();
             for (const schedule of schedulesResult.rows) {
-                const applicableStandards = scheduleStandardsForScope(schedule, scopedGroups, scopedStandards);
-                if (!applicableStandards.length)
-                    continue;
-                const summary = { total_classes: 0, completed: 0, pending: 0, cancelled: 0, present: 0, absent: 0, leave: 0 };
-                const scheduleDates = dates.filter(day => scheduleApplies(schedule, day));
-                if (!scheduleDates.length)
-                    continue;
-                for (const day of scheduleDates) {
-                    summary.total_classes += 1;
-                    const cancellation = cancellations.get(schedule.id + '|' + day);
-                    const fullyCancelled = applicableStandards.every(standard => cancellationApplies(cancellation, standard)
-                        || leavesResult.rows.some((leave) => leaveApplies(leave, schedule, day, standard)));
-                    if (fullyCancelled)
-                        summary.cancelled += 1;
-                    else if (classMarks.has(schedule.id + '|' + day))
-                        summary.completed += 1;
-                    else
-                        summary.pending += 1;
+                const subjectName = String(schedule.subject_name || schedule.name || 'Unnamed Subject').trim();
+                const key = subjectGroupKey(options, schedule, subjectName);
+                if (!subjectsMap.has(key)) {
+                    subjectsMap.set(key, {
+                        id: key,
+                        name: subjectName,
+                        schedules: [],
+                        sourceIds: new Set(),
+                    });
                 }
-                const rows = students.filter((student) => studentMatchesSchedule(student, schedule)).map((student) => {
-                    const totals = { present: 0, absent: 0, leave: 0, pending: 0, cancelled: 0, total: 0 };
-                    const cells = {};
-                    for (const day of scheduleDates) {
-                        const cancelled = cancellationApplies(cancellations.get(schedule.id + '|' + day), student.standard)
-                            || leavesResult.rows.some((leave) => leaveApplies(leave, schedule, day, student.standard));
-                        if (cancelled) {
-                            cells[day] = 'C';
-                            totals.cancelled += 1;
+                const subject = subjectsMap.get(key);
+                subject.schedules.push(schedule);
+                if (schedule.subject_id)
+                    subject.sourceIds.add(String(schedule.subject_id));
+                subject.sourceIds.add(String(schedule.id));
+            }
+            const activeSubjectGroups = Array.from(subjectsMap.values())
+                .filter(subject => students.some((student) => subject.schedules.some((schedule) => studentMatchesSchedule(student, schedule))))
+                .sort(sortSubjectGroups);
+            if (activeSubjectGroups.length > 1) {
+                const allSchedules = activeSubjectGroups.flatMap(subject => subject.schedules);
+                const allSourceIds = new Set();
+                for (const subject of activeSubjectGroups) {
+                    for (const sourceId of subject.sourceIds)
+                        allSourceIds.add(sourceId);
+                }
+                subjectsMap.set(ALL_SUBJECT_ID, {
+                    id: ALL_SUBJECT_ID,
+                    name: 'All subjects',
+                    schedules: allSchedules,
+                    sourceIds: allSourceIds,
+                    isAll: true,
+                });
+            }
+            const activeSubjects = [
+                ...(activeSubjectGroups.length > 1 ? [{ id: ALL_SUBJECT_ID, name: 'All subjects' }] : []),
+                ...activeSubjectGroups.map(subject => ({ id: subject.id, name: subject.name })),
+            ];
+            let selectedSubId = options.subjectId;
+            if (selectedSubId && !subjectsMap.has(selectedSubId)) {
+                const legacyMatch = activeSubjectGroups.find(subject => subject.sourceIds.has(selectedSubId));
+                selectedSubId = legacyMatch?.id || '';
+            }
+            if (!selectedSubId || !subjectsMap.has(selectedSubId)) {
+                selectedSubId = activeSubjects[0]?.id || '';
+            }
+            const subjectsData = [];
+            if (selectedSubId && subjectsMap.has(selectedSubId)) {
+                const subject = subjectsMap.get(selectedSubId);
+                const summary = { total_classes: 0, completed: 0, pending: 0, cancelled: 0, present: 0, absent: 0, leave: 0 };
+                // Get all dates where this subject is scheduled
+                const subjectDatesSet = new Set();
+                for (const schedule of subject.schedules) {
+                    const scheduleDates = dates.filter(day => scheduleApplies(schedule, day));
+                    for (const d of scheduleDates) {
+                        subjectDatesSet.add(d);
+                    }
+                }
+                const subjectDates = Array.from(subjectDatesSet).sort();
+                if (subjectDates.length > 0) {
+                    // Calculate summary totals across all schedules/sessions in this subject
+                    for (const schedule of subject.schedules) {
+                        const applicableStandards = scheduleStandardsForScope(schedule, scopedGroups, scopedStandards);
+                        if (!applicableStandards.length)
                             continue;
-                        }
-                        let code = statusCode(marks.get(student.adm_no + '|' + schedule.id + '|' + day)?.status);
-                        // If no mark was submitted, check if student was OUTSIDE on this day
-                        if (code === 'N' && wasOutside(student.adm_no, day)) {
-                            code = 'A';
-                        }
-                        cells[day] = code;
-                        totals.total += 1;
-                        if (code === 'N')
-                            totals.pending += 1;
-                        if (code === 'P') {
-                            totals.present += 1;
-                            summary.present += 1;
-                        }
-                        if (code === 'A') {
-                            totals.absent += 1;
-                            summary.absent += 1;
-                        }
-                        if (code === 'L') {
-                            totals.leave += 1;
-                            summary.leave += 1;
+                        const scheduleDates = dates.filter(day => scheduleApplies(schedule, day));
+                        for (const day of scheduleDates) {
+                            summary.total_classes += 1;
+                            const cancellation = cancellations.get(schedule.id + '|' + day);
+                            const fullyCancelled = applicableStandards.every(standard => cancellationApplies(cancellation, standard)
+                                || leavesResult.rows.some((leave) => leaveApplies(leave, schedule, day, standard)));
+                            if (fullyCancelled)
+                                summary.cancelled += 1;
+                            else if (classMarks.has(schedule.id + '|' + day))
+                                summary.completed += 1;
+                            else
+                                summary.pending += 1;
                         }
                     }
-                    const denominator = totals.present + totals.absent;
-                    return {
-                        adm_no: student.adm_no, name: student.name, photo_url: student.photo_url,
-                        standard: student.standard, division: student.division, cells, ...totals,
-                        percentage: denominator ? Math.round(totals.present / denominator * 1000) / 10 : 0,
-                    };
-                });
-                schedulesData.push({
-                    id: schedule.id,
-                    name: schedule.name,
-                    summary,
-                    data: rows
-                });
+                    // Process student rows
+                    const rows = students.filter((student) => subject.schedules.some((schedule) => studentMatchesSchedule(student, schedule))).map((student) => {
+                        const totals = { present: 0, absent: 0, leave: 0, pending: 0, cancelled: 0, total: 0 };
+                        const cells = {};
+                        for (const day of subjectDates) {
+                            // Find all schedules of this subject that apply to this student on this day
+                            const studentSchedules = subject.schedules.filter((schedule) => scheduleApplies(schedule, day) && studentMatchesSchedule(student, schedule));
+                            if (studentSchedules.length === 0) {
+                                continue;
+                            }
+                            const dayCodes = [];
+                            for (const schedule of studentSchedules) {
+                                const cancelled = cancellationApplies(cancellations.get(schedule.id + '|' + day), student.standard)
+                                    || leavesResult.rows.some((leave) => leaveApplies(leave, schedule, day, student.standard));
+                                if (cancelled) {
+                                    dayCodes.push('C');
+                                    continue;
+                                }
+                                let code = statusCode(marks.get(student.adm_no + '|' + schedule.id + '|' + day)?.status);
+                                if (code === 'N' && wasOutside(student.adm_no, day)) {
+                                    code = 'A';
+                                }
+                                dayCodes.push(code);
+                            }
+                            const resolvedCode = dayCode(dayCodes);
+                            cells[day] = resolvedCode;
+                            const totalCodes = subject.isAll ? dayCodes : [resolvedCode];
+                            for (const totalCode of totalCodes) {
+                                if (totalCode === 'C') {
+                                    totals.cancelled += 1;
+                                }
+                                else {
+                                    totals.total += 1;
+                                    if (totalCode === 'N')
+                                        totals.pending += 1;
+                                    if (totalCode === 'P') {
+                                        totals.present += 1;
+                                        summary.present += 1;
+                                    }
+                                    if (totalCode === 'A') {
+                                        totals.absent += 1;
+                                        summary.absent += 1;
+                                    }
+                                    if (totalCode === 'L') {
+                                        totals.leave += 1;
+                                        summary.leave += 1;
+                                    }
+                                }
+                            }
+                        }
+                        const denominator = totals.present + totals.absent;
+                        return {
+                            adm_no: student.adm_no, name: student.name, photo_url: student.photo_url,
+                            standard: student.standard, division: student.division, cells, ...totals,
+                            percentage: denominator ? Math.round(totals.present / denominator * 1000) / 10 : 0,
+                        };
+                    });
+                    subjectsData.push({
+                        id: subject.id,
+                        name: subject.name,
+                        dates: subjectDates,
+                        summary,
+                        data: rows
+                    });
+                }
             }
             return {
                 academic_year: options.year,
                 period: { start_date: options.startDate, end_date: options.endDate },
-                filters, dates, pagination: pageInfo(students, options), schedules: schedulesData,
+                filters, dates, pagination: pageInfo(students, options), subjects: activeSubjects, schedules: subjectsData,
             };
         });
         return res.json({ success: true, ...result });
@@ -404,7 +508,7 @@ const getManagementProgressReport = async (req, res) => {
                 ...student, attendance_standard: student.standard,
                 report_start_date: options.startDate, report_end_date: options.endDate,
             }));
-            const hifzSql = "SELECT student_id, COUNT(DISTINCT entry_date)::int AS recited_days, COUNT(*) FILTER (WHERE mode = 'New Verses')::int AS new_entries, COUNT(*) FILTER (WHERE mode = 'Recent Revision')::int AS recent_entries, COUNT(*) FILTER (WHERE mode IN ('Juz Revision', 'Juz Revision New', 'Juz Revision Old'))::int AS juz_entries FROM hifz_logs WHERE student_id = ANY($1::text[]) AND entry_date BETWEEN $2::date AND $3::date GROUP BY student_id";
+            const hifzSql = "SELECT student_id, COUNT(DISTINCT entry_date)::int AS recited_days, COUNT(*) FILTER (WHERE mode = 'New Verses')::int AS new_entries, COUNT(*) FILTER (WHERE mode = 'Recent Revision')::int AS recent_entries, COUNT(*) FILTER (WHERE mode IN ('Juz Revision', 'Juz Revision New', 'Juz Revision Old'))::int AS juz_entries FROM hifz_logs WHERE student_id = ANY($1::text[]) AND entry_date BETWEEN $2::date AND $3::date AND deleted_at IS NULL GROUP BY student_id";
             const [attendance, hifzResult] = await Promise.all([
                 (0, attendance_report_1.getStudentAttendanceSummaries)(db_1.db, students, options.startDate, options.endDate, options.department, options.academicYearId),
                 students.length ? db_1.db.query(hifzSql, [students.map((student) => student.adm_no), options.startDate, options.endDate]) : Promise.resolve({ rows: [] }),

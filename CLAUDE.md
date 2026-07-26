@@ -84,6 +84,12 @@ A parent can grant a staff member delegation access. Delegation tokens are issue
 
 Each domain: `routes/*.routes.ts` wires routes → `controllers/*.controller.ts`. All DB queries are raw SQL via `db.query(sql, params)` — no ORM.
 
+**Shared services layer** (`backend/src/services/`) — extract logic here when multiple controllers need the same query/computation, instead of duplicating SQL:
+- `mentor-students.service.ts` — canonical "active students for a mentor" roster query (used by attendance, hifz, and staff controllers). Accepts any `Queryable` (pool or transaction client) and supports an opt-in server-side cache.
+- `hifz-monthly-register.service.ts` — Hifz monthly register computation (per-student stage MEMORIZING/HAFIZ_REVISION, session eligibility, covered pages).
+
+`backend/src/utils/server-cache.ts` provides `cachedResult(key, ttl, fn)` / `makeCacheKey()` — a small in-process TTL cache for hot read paths on the backend (analogous to the frontend `@/lib/api-cache`). Invalidate or skip the cache on write paths.
+
 Route prefixes: `/api/auth`, `/api/students`, `/api/staff`, `/api/attendance`, `/api/hifz`, `/api/leaves`, `/api/finance`, `/api/exams`, `/api/classes`, `/api/academics`, `/api/reports`, `/api/delegations`, `/api/parent`, `/api/chat`, `/api/upload`, `/api/events`
 
 ## Key Domain Concepts
@@ -124,6 +130,7 @@ OR (status = 'outside')
 - A Juz is only "complete" when its final verse is recorded in **New Verses** mode
 - Study modes: (1) New Verses — Surah + verse range; (2) Recent Revision — last 5–10 pages; (3) Juz Revision — by Juz with portion (Full / Half / Q1/Q2/Q3/Q4)
 - Sessions: **Subh / Breakfast / Lunch** (3 daily)
+- Students have a Hifz stage: `MEMORIZING` or `HAFIZ_REVISION` (post-completion revision) — the monthly register (`hifz-monthly-register.service.ts`, migration `20260716010000_hifz_monthly_register.sql`) treats them differently
 
 ### Mentor–Student Assignment
 

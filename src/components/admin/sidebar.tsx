@@ -7,7 +7,7 @@ import {
     LayoutDashboard, Users, Calendar, UserCog,
     Settings, HelpCircle, LogOut, DoorOpen, BookOpen,
     Landmark, BookMarked, School, GraduationCap,
-    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText, ListChecks
+    ChevronDown, ChevronRight, Menu, MessageCircle, ClipboardCheck, FileText, ListChecks, ShieldAlert
 } from "lucide-react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -88,6 +88,7 @@ const academicLinks: NavEntry[] = [
 const managementLinks: NavEntry[] = [
     { href: "/admin/finance/dashboard", label: "Finance", icon: Landmark, group: ["/admin/finance"] },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/disciplinary", label: "Disciplinary", icon: ShieldAlert, group: ["/admin/disciplinary"] },
     {
         label: "Report", icon: FileText, group: ["/admin/management-reports"],
         children: [
@@ -152,6 +153,7 @@ const principalAcademicLinks: NavEntry[] = [
 
 const principalManagementLinks: NavEntry[] = [
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/disciplinary", label: "Disciplinary", icon: ShieldAlert, group: ["/admin/disciplinary"] },
     {
         label: "Reports", icon: FileText, group: ["/admin/management-reports"],
         children: [

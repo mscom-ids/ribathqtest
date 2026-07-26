@@ -27,11 +27,14 @@ type FacultyRow = {
     cancelled_classes: number; required_classes: number; marked_classes: number; not_marked_classes: number
     marking_percentage: number
 }
+type ReportSubject = { id: string; name: string }
+
 type ReportResponse = {
     success: boolean; data?: StudentRow[] | FacultyRow[]; dates?: string[]; filters?: Filters
     pagination?: Pagination; summary?: Record<string, any>; totals?: Record<string, number>
     academic_year?: AcademicYear; period?: { start_date: string; end_date: string }
-    schedules?: { id: string; name: string; summary: Record<string, number>; data: StudentRow[] }[]
+    subjects?: ReportSubject[]
+    schedules?: { id: string; name: string; dates?: string[]; summary: Record<string, number>; data: StudentRow[] }[]
 }
 
 const tabs = [
@@ -39,6 +42,23 @@ const tabs = [
     { kind: "progress", label: "Progress Report", icon: BarChart3 },
     { kind: "faculty", label: "Faculty Report", icon: Users },
 ] as const
+
+const ALL_SUBJECT_ID = "__all__"
+
+function normalizeSubjectLabel(value: string) {
+    return value.trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+function dedupeReportSubjects(subjects: ReportSubject[] = []) {
+    const seen = new Set<string>()
+    return subjects.filter(subject => {
+        const labelKey = normalizeSubjectLabel(subject.name || "")
+        const key = subject.id === ALL_SUBJECT_ID ? ALL_SUBJECT_ID : (labelKey || subject.id)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+    })
+}
 
 function localDate(date: Date) {
     const year = date.getFullYear()
@@ -157,18 +177,28 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                         academic_year_id: kind === "attendance" ? undefined : (academicYearId || undefined),
                         department, standard: standard || undefined, division: division || undefined,
                         search: deferredSearch || undefined, limit: 50, offset: (page - 1) * 50,
+                        subject_id: kind === "attendance" ? (selectedSchedule || undefined) : undefined,
                     }
                 
                 const result = await cachedGet(endpoint, params, 60000)
                 if (!active) return
 
                 if (!result.data?.success) throw new Error(result.data?.error || "Report request failed")
-                setResponse(result.data)
+                const normalizedData = {
+                    ...result.data,
+                    subjects: dedupeReportSubjects(result.data.subjects || []),
+                }
+                setResponse(normalizedData)
 
-                if (result.data.schedules?.length) {
+                if (normalizedData.subjects?.length) {
                     setSelectedSchedule(prev => {
-                        const exists = result.data.schedules.some((s: any) => s.id === prev)
-                        return exists ? prev : result.data.schedules[0].id
+                        const exists = normalizedData.subjects.some((s: ReportSubject) => s.id === prev)
+                        return exists ? prev : normalizedData.subjects[0].id
+                    })
+                } else if (normalizedData.schedules?.length) {
+                    setSelectedSchedule(prev => {
+                        const exists = normalizedData.schedules.some((s: any) => s.id === prev)
+                        return exists ? prev : normalizedData.schedules[0].id
                     })
                 }
 
@@ -188,7 +218,7 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
         return () => {
             active = false
         }
-    }, [kind, startDate, endDate, academicYearId, department, standard, division, deferredSearch, page, endpoint])
+    }, [kind, startDate, endDate, academicYearId, department, standard, division, deferredSearch, page, endpoint, selectedSchedule])
 
     const filters = response?.filters || {}
     const years = filters.academic_years || []
@@ -226,8 +256,8 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
     const exportReport = () => {
         if (!response?.data?.length && !response?.schedules?.length) return
         if (kind === "attendance") {
-            const dates = response.dates || []
             const sched = response.schedules?.find(s => s.id === selectedSchedule) || response.schedules?.[0]
+            const dates = sched?.dates || response.dates || []
             const rows = (sched?.data || []) as StudentRow[]
             downloadCsv(
                 "attendance-report-" + (sched?.name || "all") + "-" + startDate + "-to-" + endDate + ".csv",
@@ -371,7 +401,7 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                         <span className="text-[11px] font-bold uppercase text-slate-500">Batch / Class</span>
                         <div className="flex flex-wrap gap-2 mt-1">
                             <button
-                                onClick={() => { setStandard(""); setDivision(""); setPage(1); }}
+                                onClick={() => { setStandard(""); setDivision(""); setSelectedSchedule(""); setPage(1); }}
                                 className={"px-4 py-1.5 text-sm font-semibold rounded-full border transition-all " + (!standard ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                             >
                                 All Batches
@@ -379,7 +409,7 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                             {standards.map(value => (
                                 <button
                                     key={value}
-                                    onClick={() => { setStandard(value); setDivision(""); setPage(1); }}
+                                    onClick={() => { setStandard(value); setDivision(""); setSelectedSchedule(""); setPage(1); }}
                                     className={"px-4 py-1.5 text-sm font-semibold rounded-full border transition-all " + (standard === value ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                 >
                                     {getStandardLabel(value, department)}
@@ -395,7 +425,7 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                         <span className="text-[11px] font-bold uppercase text-slate-500">Division</span>
                         <div className="flex flex-wrap gap-2 mt-1">
                             <button
-                                onClick={() => { setDivision(""); setPage(1); }}
+                                onClick={() => { setDivision(""); setSelectedSchedule(""); setPage(1); }}
                                 className={"px-4 py-1.5 text-sm font-semibold rounded border transition-all " + (!division ? "bg-emerald-500 text-white border-emerald-500" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                             >
                                 All
@@ -403,7 +433,7 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                             {divisions.map(value => (
                                 <button
                                     key={value}
-                                    onClick={() => { setDivision(value); setPage(1); }}
+                                    onClick={() => { setDivision(value); setSelectedSchedule(""); setPage(1); }}
                                     className={"px-4 py-1.5 text-sm font-semibold rounded border transition-all " + (division === value ? "bg-emerald-500 text-white border-emerald-500" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                 >
                                     {value}
@@ -429,16 +459,16 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
                     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                         {kind === "attendance" && (
                             <>
-                                {response?.schedules && response.schedules.length > 0 ? (
+                                {response?.subjects && response.subjects.length > 0 ? (
                                     <>
                                         <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2">
-                                            {response.schedules.map(sched => (
+                                            {response.subjects.map(subj => (
                                                 <button
-                                                    key={sched.id}
-                                                    onClick={() => setSelectedSchedule(sched.id)}
-                                                    className={"px-4 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap " + (selectedSchedule === sched.id ? "bg-white text-blue-600 shadow-sm border border-slate-200" : "text-slate-600 hover:bg-slate-200")}
+                                                    key={subj.id}
+                                                    onClick={() => setSelectedSchedule(subj.id)}
+                                                    className={"px-4 py-1.5 text-sm font-semibold rounded-md whitespace-nowrap " + (selectedSchedule === subj.id ? "bg-white text-blue-600 shadow-sm border border-slate-200" : "text-slate-600 hover:bg-slate-200")}
                                                 >
-                                                    {sched.name}
+                                                    {subj.name}
                                                 </button>
                                             ))}
                                         </div>
@@ -543,7 +573,7 @@ function EmptyRows({ columns }: { columns: number }) {
 
 function AttendanceTable({ response, selectedSchedule }: { response: ReportResponse | null; selectedSchedule: string }) {
     const schedule = response?.schedules?.find(s => s.id === selectedSchedule) || response?.schedules?.[0]
-    const dates = response?.dates || []
+    const dates = schedule?.dates || response?.dates || []
     const rows = (schedule?.data || []) as StudentRow[]
     
     return (

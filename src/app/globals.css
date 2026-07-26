@@ -1015,3 +1015,72 @@ html.dark .group:hover .group-hover\:bg-white {
     display: none !important;
   }
 }
+
+/* ── Print / PDF: isolate the report card, strip app chrome & browser header/footer ── */
+@media print {
+  /* margin:0 removes Chrome's auto URL/date/title/page-number header & footer */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  /* Hide app chrome and any explicitly print-hidden UI */
+  header,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+  .print\:flex {
+    display: flex !important;
+  }
+  .print\:grid {
+    display: grid !important;
+  }
+
+  /* Collapse every wrapper that contains the report so the report flows from
+     the top of the page in NORMAL flow. Normal flow is what lets the browser
+     paginate across multiple sheets — position:absolute would clip to one page. */
+  body:has(.report-print-area) :has(.report-print-area) {
+    display: contents !important;
+  }
+
+  /* The report itself: full width, our own page padding (compensates @page margin:0) */
+  .report-print-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 12mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Keep background colours / badges as designed */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Keep cards, sections & grid rows from splitting across page breaks */
+  .report-print-area section,
+  .report-print-area .grid > div,
+  .report-print-area .rounded-lg,
+  .report-print-area .rounded-xl {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Keep each section heading with the content that follows it */
+  .report-print-area h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+}

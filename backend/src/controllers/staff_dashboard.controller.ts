@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getMyStaffProfile, getMyStudentsWithStats } from './staff.controller';
 import { getSchedulesForDate } from './attendance_dashboard.controller';
 import { calculateBulkMonthlyReport } from './hifz.controller';
+import { getStaffId } from '../utils/staff.utils';
 
 export const getStaffSummary = async (req: Request, res: Response) => {
     try {
@@ -20,6 +21,14 @@ export const getStaffSummary = async (req: Request, res: Response) => {
             return { mockRes, promise };
         };
 
+        const invoke = (handler: any, request: Request, response: any) =>
+            Promise.resolve()
+                .then(() => handler(request, response))
+                .catch((error: any) => {
+                    console.error('Staff dashboard section failed:', error);
+                    response.status(500).json({ success: false, error: error?.message || 'Section unavailable' });
+                });
+
         const { mockRes: profileRes, promise: profilePromise } = createMockRes();
         const { mockRes: studentsRes, promise: studentsPromise } = createMockRes();
         const { mockRes: schedulesRes, promise: schedulesPromise } = createMockRes();
@@ -27,20 +36,25 @@ export const getStaffSummary = async (req: Request, res: Response) => {
 
         const todayStr = req.query.date as string || new Date().toISOString().slice(0, 10);
         const reportMonth = todayStr.slice(0, 7);
-        const staffId = (req as any).user?.staffId || (req as any).user?.id || (req as any).user?.userId;
+        const staffId = await getStaffId(req);
 
         const reqProfile = { ...req, query: { ...req.query } } as unknown as Request;
         const reqStudents = { ...req, query: { ...req.query, date: todayStr } } as unknown as Request;
         const reqSchedules = { ...req, query: { ...req.query, date: todayStr } } as unknown as Request;
         const reqReport = { ...req, query: { ...req.query, month: reportMonth, mentor_id: staffId } } as unknown as Request;
 
-        getMyStaffProfile(reqProfile, profileRes);
-        getMyStudentsWithStats(reqStudents, studentsRes);
-        getSchedulesForDate(reqSchedules, schedulesRes);
-        calculateBulkMonthlyReport(reqReport, reportRes);
+        const sectionPromises = [
+            invoke(getMyStaffProfile, reqProfile, profileRes),
+            invoke(getMyStudentsWithStats, reqStudents, studentsRes),
+            invoke(getSchedulesForDate, reqSchedules, schedulesRes),
+            invoke(calculateBulkMonthlyReport, reqReport, reportRes),
+        ];
 
         const [profileData, studentsData, schedulesData, reportData] = await Promise.all([
-            profilePromise, studentsPromise, schedulesPromise, reportPromise
+            Promise.all([profilePromise, sectionPromises[0]]).then(([data]) => data),
+            Promise.all([studentsPromise, sectionPromises[1]]).then(([data]) => data),
+            Promise.all([schedulesPromise, sectionPromises[2]]).then(([data]) => data),
+            Promise.all([reportPromise, sectionPromises[3]]).then(([data]) => data),
         ]);
 
         res.json({

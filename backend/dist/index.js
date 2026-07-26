@@ -42,6 +42,7 @@ const academic_history_routes_1 = __importDefault(require("./routes/academic_his
 const academic_placement_routes_1 = __importDefault(require("./routes/academic-placement.routes"));
 const yearly_report_routes_1 = __importDefault(require("./routes/yearly_report.routes"));
 const dashboard_routes_1 = __importDefault(require("./routes/dashboard.routes"));
+const discipline_routes_1 = __importDefault(require("./modules/discipline/discipline.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
@@ -112,6 +113,7 @@ app.use('/api/academic-history', academic_history_routes_1.default);
 app.use('/api/academic-placements', academic_placement_routes_1.default);
 app.use('/api/yearly-report', yearly_report_routes_1.default);
 app.use('/api/dashboard', dashboard_routes_1.default);
+app.use('/api/discipline', discipline_routes_1.default);
 app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', message: 'Backend is running', database_pool: db_1.db.getPoolStats() });
 });

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, FileText, BarChart3 } from "lucide-react"
+import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, FileText, BarChart3, ShieldAlert } from "lucide-react"
 import { useEffect } from "react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -17,6 +17,7 @@ const navLinks = [
     { href: "/admin/hifz/tracking", label: "Hifz", icon: BookOpen },
     { href: "/admin/staff", label: "Staff", icon: UserCog },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/disciplinary", label: "Disciplinary", icon: ShieldAlert },
     { href: "/admin/academic", label: "Academic Year", icon: School },
     { href: "/admin/academic/enrollments", label: "Student Placement", icon: Users },
     { href: "/admin/calendar", label: "Events", icon: Calendar },

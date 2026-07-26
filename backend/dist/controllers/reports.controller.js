@@ -212,6 +212,7 @@ const getStudentReports = async (req, res) => {
          FROM hifz_logs
          WHERE entry_date >= $1::date
            AND entry_date <= $2::date
+           AND deleted_at IS NULL
          ORDER BY student_id, entry_date DESC, created_at DESC`, [startDate, endDate]),
             ]);
             const snapshotMap = shouldApplyAcademicSnapshot
@@ -599,11 +600,13 @@ const getUnifiedStudentProgressReport = async (req, res) => {
                         start_v, end_v, start_page, end_page, juz_number, juz_portion
                  FROM hifz_logs
                  WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
+                   AND deleted_at IS NULL
                  ORDER BY entry_date DESC, created_at DESC`, [student_id, start_date, end_date]),
             db_1.db.query(`SELECT id, student_id, mode, entry_date, surah_name,
                         start_v, end_v, start_page, end_page, juz_number
                  FROM hifz_logs
                  WHERE student_id = $1 AND mode = 'New Verses'
+                   AND deleted_at IS NULL
                  ORDER BY entry_date DESC, created_at DESC`, [student_id]),
             type === 'Monthly'
                 ? db_1.db.query(`SELECT expected_class_days
@@ -676,6 +679,7 @@ const getUnifiedStudentProgressReport = async (req, res) => {
             success: true,
             data: {
                 student: { ...effectiveStudentRows[0], academic_year_mode: academicContext.mode },
+                academic_year: academicContext.name || '2025-2026',
                 report_window: reportWindow,
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,

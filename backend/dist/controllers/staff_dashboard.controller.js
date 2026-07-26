@@ -4,6 +4,7 @@ exports.getStaffSummary = void 0;
 const staff_controller_1 = require("./staff.controller");
 const attendance_dashboard_controller_1 = require("./attendance_dashboard.controller");
 const hifz_controller_1 = require("./hifz.controller");
+const staff_utils_1 = require("../utils/staff.utils");
 const getStaffSummary = async (req, res) => {
     try {
         const createMockRes = () => {
@@ -20,23 +21,34 @@ const getStaffSummary = async (req, res) => {
             };
             return { mockRes, promise };
         };
+        const invoke = (handler, request, response) => Promise.resolve()
+            .then(() => handler(request, response))
+            .catch((error) => {
+            console.error('Staff dashboard section failed:', error);
+            response.status(500).json({ success: false, error: error?.message || 'Section unavailable' });
+        });
         const { mockRes: profileRes, promise: profilePromise } = createMockRes();
         const { mockRes: studentsRes, promise: studentsPromise } = createMockRes();
         const { mockRes: schedulesRes, promise: schedulesPromise } = createMockRes();
         const { mockRes: reportRes, promise: reportPromise } = createMockRes();
         const todayStr = req.query.date || new Date().toISOString().slice(0, 10);
         const reportMonth = todayStr.slice(0, 7);
-        const staffId = req.user?.staffId || req.user?.id || req.user?.userId;
+        const staffId = await (0, staff_utils_1.getStaffId)(req);
         const reqProfile = { ...req, query: { ...req.query } };
         const reqStudents = { ...req, query: { ...req.query, date: todayStr } };
         const reqSchedules = { ...req, query: { ...req.query, date: todayStr } };
         const reqReport = { ...req, query: { ...req.query, month: reportMonth, mentor_id: staffId } };
-        (0, staff_controller_1.getMyStaffProfile)(reqProfile, profileRes);
-        (0, staff_controller_1.getMyStudentsWithStats)(reqStudents, studentsRes);
-        (0, attendance_dashboard_controller_1.getSchedulesForDate)(reqSchedules, schedulesRes);
-        (0, hifz_controller_1.calculateBulkMonthlyReport)(reqReport, reportRes);
+        const sectionPromises = [
+            invoke(staff_controller_1.getMyStaffProfile, reqProfile, profileRes),
+            invoke(staff_controller_1.getMyStudentsWithStats, reqStudents, studentsRes),
+            invoke(attendance_dashboard_controller_1.getSchedulesForDate, reqSchedules, schedulesRes),
+            invoke(hifz_controller_1.calculateBulkMonthlyReport, reqReport, reportRes),
+        ];
         const [profileData, studentsData, schedulesData, reportData] = await Promise.all([
-            profilePromise, studentsPromise, schedulesPromise, reportPromise
+            Promise.all([profilePromise, sectionPromises[0]]).then(([data]) => data),
+            Promise.all([studentsPromise, sectionPromises[1]]).then(([data]) => data),
+            Promise.all([schedulesPromise, sectionPromises[2]]).then(([data]) => data),
+            Promise.all([reportPromise, sectionPromises[3]]).then(([data]) => data),
         ]);
         res.json({
             success: true,

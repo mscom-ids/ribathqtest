@@ -38,3 +38,893 @@
 [SLOW DB] 339ms params=3 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND entry_date >= $1 AND entry_date <= $2 AND student_id = $3 ORDER BY entry_date DESC"
 [SLOW DB] 427ms params=2 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND student_id = $1 AND mode = $2 ORDER BY entry_date DESC"
 [SLOW DB] 331ms params=2 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND student_id = $1 AND mode = $2 ORDER BY entry_date DESC"
+[SLOW DB] 336ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 362ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 304 868.8ms
+[SLOW API] GET /api/leaves/outside-students 200 668.1ms
+[SLOW DB] 255ms params=1 sql="SELECT * FROM institutional_leaves WHERE id = $1"
+[SLOW DB] 310ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(s.standard, s.school_standard, s.hifz_standard, s.madrassa_standard, 'Common') as standard, EXISTS ( SELECT 1 FROM student_leaves sl WHERE sl.student_id = s.adm_no AND sl.status = 'outsi"
+[SLOW API] GET /api/leaves/institutional/f247fb3c-d081-4ba5-b376-6a42494b32fd/eligible-students 200 574.9ms
+[SLOW API] POST /api/leaves/record-return 403 1016.3ms
+[SLOW DB] 258ms params=1 sql="SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND mode = 'New Verses' ORDER BY student_id, entry_date DESC, created_at "
+[SLOW DB] 257ms params=3 sql="SELECT s.adm_no, s.name, s.batch_year, s.standard, s.status, s.photo_url, s.admission_date, COALESCE(s.phone_number, s.phone) AS parent_phone, (SELECT name FROM staff WHERE id = s.hifz_mentor_id) as hifz_mentor, (SELECT "
+[SLOW API] GET /api/reports/student-progress 200 736.0ms
+[SLOW DB] 616ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW DB] 825ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 302ms params=2 sql="SELECT gs.student_id, gs.group_id FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)"
+[SLOW DB] 302ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[SLOW DB] 302ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[SLOW DB] 303ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 317ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/dashboard/staff 304 1237.9ms
+[SLOW DB] 351ms params=1 sql="SELECT * FROM mentor_access_policies WHERE feature = ANY($1::text[]) ORDER BY feature"
+[SLOW DB] 662ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[SLOW API] GET /api/auth/me 304 667.2ms
+[SLOW DB] 489ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[SLOW DB] 345ms params=2 sql="SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1"
+[SLOW DB] 345ms params=0 sql="WITH leave_counts AS ( SELECT institutional_leave_id, COUNT(*) as total_students, COUNT(*) FILTER (WHERE status = 'returned') as returned_students FROM student_leaves WHERE institutional_leave_id IS NOT NULL GROUP BY ins"
+[SLOW DB] 357ms params=2 sql="SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.reason_category, sl.remarks, sl.companion_name, sl.companion_relationship, sl.start_datetime, sl.end_datetime, sl.group_type, sl.group_value, sl.institutional_le"
+[SLOW DB] 311ms params=0 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.leave_type IN ('on-campus', 'internal') ORDER BY sl.created_at DESC"
+[SLOW DB] 1234ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[SLOW API] GET /api/staff/me/leaves 304 1581.5ms
+[SLOW DB] 425ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[SLOW API] GET /api/staff/me/leaves 304 622.2ms
+[SLOW API] GET /api/attendance/students 304 776.8ms
+[SLOW API] GET /api/attendance/students 304 608.0ms
+[SLOW DB] 308ms params=2 sql="SELECT adm_no FROM students WHERE adm_no = ANY($1) AND hifz_mentor_id = $2 AND NOT EXISTS ( SELECT 1 FROM mentor_delegations d WHERE d.from_staff_id = $2 AND d.status = 'approved' AND (d.student_id IS NULL OR d.student_i"
+[SLOW API] POST /api/attendance/mark 200 2573.2ms
+[SLOW DB] 285ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 285ms params=3 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3"
+[SLOW DB] 285ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[SLOW DB] 493ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[SLOW DB] 496ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/attendance/schedules-for-date 304 697.4ms
+[SLOW API] GET /api/attendance/students 304 514.7ms
+[SLOW DB] 256ms params=2 sql="SELECT student_id FROM student_attendance_marks WHERE schedule_id = $1 AND date = $2"
+[SLOW API] POST /api/attendance/mark 200 2594.0ms
+[SLOW DB] 305ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 305ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[SLOW DB] 305ms params=3 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3"
+[SLOW DB] 507ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[SLOW API] GET /api/attendance/dashboard 200 510.9ms
+[SLOW DB] 524ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW DB] 388ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[SLOW API] GET /api/attendance/schedules-for-date 304 913.3ms
+[SLOW DB] 321ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[SLOW DB] 256ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[SLOW DB] 257ms params=1 sql="SELECT id, standard, name, created_at FROM academic_standard_divisions WHERE academic_year_id = $1 ORDER BY standard, name"
+[SLOW DB] 260ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[SLOW DB] 2884ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/attendance/schedules 304 3074.9ms
+[SLOW DB] 536ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[SLOW API] GET /api/academic-placements 304 538.0ms
+[SLOW DB] 270ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[SLOW DB] 826ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/attendance/schedules 304 1034.4ms
+[SLOW DB] 385ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 259ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 278ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 327ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 345ms params=1 sql="SELECT g.id AS group_id, g.department, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND EXISTS ( SELECT 1 FROM attendance_schedules a LEFT JOIN attendance_schedu"
+[SLOW DB] 359ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 489ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 1085ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 304 2164.4ms
+[SLOW DB] 253ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 738ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 200 961.3ms
+[SLOW DB] 536ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 200 740.5ms
+[SLOW DB] 433ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 200 657.4ms
+[SLOW DB] 858ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 304 1103.7ms
+D:\NewRQP\backend\node_modules\pg\lib\client.js:180
+      const error = this._ending ? new Error('Connection terminated') : new Error('Connection terminated unexpectedly')
+                                                                        ^
+Error: Connection terminated unexpectedly
+    at Connection.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\client.js:180:73)
+    at Object.onceWrapper (node:events:632:28)
+    at Connection.emit (node:events:518:28)
+    at Connection.emit (node:domain:488:12)
+    at Socket.<anonymous> (D:\NewRQP\backend\node_modules\pg\lib\connection.js:61:12)
+    at Socket.emit (node:events:530:35)
+    at Socket.emit (node:domain:488:12)
+    at TCP.<anonymous> (node:net:337:12)
+Error: read ECONNRESET
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:217:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+[SLOW DB] 252ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[SLOW DB] 337ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 348ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[SLOW DB] 370ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[SLOW DB] 401ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[SLOW DB] 304ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[SLOW API] GET /api/students/counts 200 567.6ms
+[SLOW API] GET /api/students 304 760.1ms
+[SLOW DB] 303ms params=2 sql="SELECT * FROM attendance_subjects WHERE academic_year_id = $1 AND department = $2 ORDER BY name ASC"
+[SLOW DB] 301ms params=1 sql="SELECT id, standard, name, created_at FROM academic_standard_divisions WHERE academic_year_id = $1 ORDER BY standard, name"
+[SLOW DB] 308ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[SLOW DB] 313ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[SLOW DB] 872ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/attendance/schedules 304 1103.3ms
+[SLOW DB] 266ms params=1 sql="SELECT id, name, start_date, end_date FROM academic_years WHERE id = $1 LIMIT 1"
+[SLOW DB] 259ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 259ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 260ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 261ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 267ms params=0 sql="SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC"
+[SLOW DB] 320ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 320ms params=1 sql="SELECT g.id AS group_id, g.department, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND EXISTS ( SELECT 1 FROM attendance_schedules a LEFT JOIN attendance_schedu"
+[SLOW DB] 680ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 1354.9ms
+[SLOW DB] 622ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 847.7ms
+[SLOW DB] 571ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 799.4ms
+[SLOW DB] 626ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 879.3ms
+[SLOW DB] 646ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 877.7ms
+[SLOW DB] 623ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 866.2ms
+[SLOW DB] 598ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 831.6ms
+[SLOW DB] 252ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 253ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 253ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 253ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 253ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 662ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 901.1ms
+[SLOW DB] 277ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 278ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 278ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 283ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 284ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 699ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW DB] 295ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date BETWEEN $1::date AND $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/reports/management/attendance 200 1027.7ms
+[SLOW DB] 661ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW DB] 261ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date BETWEEN $1::date AND $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/reports/management/attendance 200 956.2ms
+[SLOW DB] 594ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 848.1ms
+[SLOW DB] 326ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 326ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 345ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 345ms params=7 sql="WITH selected_groups AS ( SELECT g.id, g.standard, COALESCE(g.division, '') AS division FROM attendance_groups g WHERE g.academic_year_id = $1 AND (CASE WHEN LOWER(g.department) = 'madrassa' THEN 'madrasa' ELSE LOWER(g.d"
+[SLOW DB] 345ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 742ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 975.5ms
+[SLOW DB] 542ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 774.1ms
+[SLOW DB] 572ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 812.4ms
+[SLOW DB] 545ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 200 779.2ms
+[SLOW DB] 566ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 304 789.5ms
+[SLOW DB] 585ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, sub.id AS subject_id, sub.name AS subject_name, COALESCE(array_agg(DISTINCT asg.group_id) FILT"
+[SLOW API] GET /api/reports/management/attendance 304 810.5ms
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/management-reports.controller.ts(352,49): error TS2304: Cannot find name 'SubjectGroup'.
+src/controllers/management-reports.controller.ts(355,29): error TS2304: Cannot find name 'subjectGroupKey'.
+src/controllers/management-reports.controller.ts(374,23): error TS2304: Cannot find name 'sortSubjectGroups'.
+src/controllers/management-reports.controller.ts(382,33): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+src/controllers/management-reports.controller.ts(383,25): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+src/controllers/management-reports.controller.ts(392,61): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2304, 2304, 2304, 2304, 2304, 2304 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/management-reports.controller.ts(435,40): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(445,44): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(465,25): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(472,54): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(499,48): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(522,29): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(523,31): error TS18048: 'subject' is possibly 'undefined'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    18048, 18048,
+    18048, 18048,
+    18048, 18048,
+    18048
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+(node:12588) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 exit listeners added to [Bus]. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+[SLOW DB] 1042ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 1092ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[SLOW API] GET /api/auth/me 304 1115.2ms
+[SLOW DB] 2388ms params=0 sql="SELECT s.adm_no, s.name, s.standard, s.hifz_standard, nv.surah_name AS current_surah, jr.juz_number AS current_juz, st.name AS usthad_name, st.phone AS usthad_phone FROM students s LEFT JOIN staff st ON s.hifz_mentor_id "
+[SLOW API] GET /api/hifz/students 304 3435.9ms
+[SLOW DB] 396ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[SLOW DB] 630ms params=1 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND entry_date = $1 ORDER BY entry_date DESC"
+[SLOW API] GET /api/hifz/logs 304 635.7ms
+[SLOW DB] 642ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[SLOW API] GET /api/staff/me 304 1043.8ms
+[SLOW DB] 534ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[SLOW DB] 564ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW DB] 627ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[SLOW DB] 654ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[SLOW DB] 678ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 679ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW DB] 518ms params=2 sql="SELECT student_id, mode, start_page, end_page, juz_portion, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2"
+[SLOW DB] 525ms params=1 sql="SELECT student_id, leave_type, reason_category, remarks, end_datetime FROM student_leaves WHERE student_id = ANY($1) AND status = 'outside' AND leave_type <> 'outdoor' ORDER BY created_at DESC"
+[SLOW DB] 525ms params=2 sql="SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2"
+[SLOW DB] 561ms params=1 sql="SELECT d.student_id, s.name as receiver_name FROM mentor_delegations d JOIN staff s ON d.to_staff_id = s.id WHERE d.from_staff_id = $1 AND d.status = 'approved'"
+[SLOW DB] 597ms params=1 sql="SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND mode = 'New Verses' ORDER BY student_id, entry_date DESC, created_at "
+[SLOW DB] 1178ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 563ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[SLOW DB] 432ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[SLOW DB] 433ms params=2 sql="SELECT gs.student_id, gs.group_id FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)"
+[SLOW DB] 508ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 509ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW DB] 512ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/dashboard/staff 304 2276.9ms
+[SLOW DB] 698ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[SLOW API] GET /api/classes/academic-years 304 704.6ms
+[SLOW DB] 691ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 712ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[SLOW DB] 721ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[SLOW DB] 680ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1397.3ms
+[SLOW DB] 709ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[SLOW API] GET /api/students/counts 304 1438.6ms
+[SLOW DB] 739ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 798ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1543.5ms
+[SLOW DB] 646ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 784ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1433.5ms
+[SLOW DB] 900ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 914ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1818.4ms
+[SLOW DB] 980ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 865ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1859.3ms
+[SLOW DB] 539ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 483ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1024.1ms
+[SLOW DB] 872ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[SLOW DB] 884ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 903ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[SLOW API] GET /api/students/counts 304 904.5ms
+[SLOW DB] 823ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1711.8ms
+[SLOW DB] 738ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 897ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW DB] 912ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[SLOW DB] 740ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[SLOW API] GET /api/staff/me 304 1658.9ms
+[SLOW DB] 734ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[SLOW DB] 787ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 790ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW DB] 791ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[SLOW DB] 792ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[SLOW DB] 1199ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW DB] 1303ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[SLOW API] GET /api/auth/me 304 1305.6ms
+[SLOW DB] 1133ms params=0 sql="SELECT * FROM academic_years ORDER BY start_date DESC"
+[SLOW API] GET /api/classes/academic-years 304 1135.4ms
+[SLOW DB] 1551ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 771ms params=2 sql="SELECT student_id, mode, start_page, end_page, juz_portion, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2"
+[SLOW DB] 772ms params=1 sql="SELECT student_id, leave_type, reason_category, remarks, end_datetime FROM student_leaves WHERE student_id = ANY($1) AND status = 'outside' AND leave_type <> 'outdoor' ORDER BY created_at DESC"
+[SLOW DB] 773ms params=2 sql="SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2"
+[SLOW DB] 774ms params=1 sql="SELECT d.student_id, s.name as receiver_name FROM mentor_delegations d JOIN staff s ON d.to_staff_id = s.id WHERE d.from_staff_id = $1 AND d.status = 'approved'"
+[SLOW DB] 1078ms params=1 sql="SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND mode = 'New Verses' ORDER BY student_id, entry_date DESC, created_at "
+[SLOW DB] 837ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[SLOW DB] 488ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[SLOW DB] 488ms params=2 sql="SELECT gs.student_id, gs.group_id FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)"
+[SLOW DB] 489ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 666ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW DB] 679ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/dashboard/staff 304 3299.0ms
+[SLOW DB] 285ms params=3 sql="SELECT student_id, session_id, class_event_id, status, date, department FROM attendance WHERE 1=1 AND date >= $1 AND date <= $2 AND department = $3"
+[SLOW DB] 288ms params=2 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND student_id = $1 AND mode = $2 ORDER BY entry_date DESC"
+[SLOW DB] 283ms params=3 sql="SELECT hl.*, st.name as recorded_by_name FROM hifz_logs hl LEFT JOIN staff st ON hl.usthad_id = st.id WHERE 1=1 AND entry_date >= $1 AND entry_date <= $2 AND student_id = $3 ORDER BY entry_date DESC"
+[SLOW DB] 618ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[SLOW DB] 619ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[SLOW DB] 643ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 628ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus, 0::integer AS on_campus_leave FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[SLOW API] GET /api/students/counts 304 1270.0ms
+[SLOW DB] 666ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 640ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1965.3ms
+[SLOW DB] 605ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[SLOW DB] 593ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students 304 1200.2ms
+[SLOW DB] 534ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[SLOW API] GET /api/staff 304 536.8ms
+[SLOW DB] 539ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[SLOW DB] 539ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[SLOW DB] 624ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[SLOW API] GET /api/students/R263 304 1164.8ms
+[SLOW DB] 598ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[SLOW DB] 609ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[SLOW API] GET /api/students/R263 304 609.7ms
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304,
+    2304, 1135, 1128,
+    1128, 1005, 1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(472,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(477,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(484,13): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(484,46): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(487,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(487,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(490,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(460,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(483,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(488,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(488,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(496,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304, 2304,
+    2322, 2695, 2304, 2304,
+    2304, 2304, 2304, 1135,
+    1128, 1128, 1005, 1128,
+    1135, 1128, 1128, 1005,
+    1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(471,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(476,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(486,13): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(486,46): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(489,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(489,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(492,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(485,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(490,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(490,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(498,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304, 2304,
+    2322, 2695, 2304, 2304,
+    2304, 2304, 2304, 1135,
+    1128, 1128, 1005, 1128,
+    1128, 1128, 1005, 1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(471,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304,
+    2304, 2322, 1135,
+    1128, 1128, 1005,
+    1128
+  ]
+}
+(node:12588) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 exit listeners added to [Bus]. Use emitter.setMaxListeners() to increase limit
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(475,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(441,41): error TS1005: ',' expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2322, 1005 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(477,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2322 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+Error: read ECONNRESET
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:217:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}

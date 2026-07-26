@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import {
-    getAcademicSessions, getCalendarByDate, getCalendarRange,
+    getAcademicSessions, getCalendarByDate,
     getStudentsForAttendance, getAttendance, upsertAttendance,
     createSession, updateSession, deleteSession,
     getAllCalendarPolicies, upsertCalendarPolicy, deleteCalendarPolicy,
-    bulkUpsertCalendarPolicies, generateCalendarEntries,
-    getDisciplinaryRecords, createDisciplinaryRecord, deleteDisciplinaryRecord
+    bulkUpsertCalendarPolicies, generateCalendarEntries
 } from '../controllers/academics.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
@@ -25,7 +24,6 @@ router.delete('/sessions/:id', requireRole(['admin', 'principal', 'vice_principa
 
 // ---- Calendar ----
 router.get('/calendar', getAllCalendarPolicies);
-router.get('/calendar-range', getCalendarRange);
 router.get('/calendar/:date', getCalendarByDate);
 router.put('/calendar', requireRole(['admin', 'principal', 'vice_principal']), upsertCalendarPolicy);
 router.delete('/calendar/:date', requireRole(['admin', 'principal', 'vice_principal']), deleteCalendarPolicy);
@@ -37,10 +35,5 @@ router.post('/attendance/students', requireRole(ACADEMIC_MANAGE_ROLES), getStude
 // Allow staff/mentor to READ attendance (needed for Hifz progress modal)
 router.get('/attendance', getAttendance);
 router.post('/attendance', requireRole(ACADEMIC_MANAGE_ROLES), upsertAttendance);
-
-// ---- Disciplinary Records (via students route prefix to match frontend) ----
-router.get('/disciplinary', requireRole(ACADEMIC_MANAGE_ROLES), getDisciplinaryRecords);
-router.post('/disciplinary', requireRole(ACADEMIC_MANAGE_ROLES), createDisciplinaryRecord);
-router.delete('/disciplinary/:id', requireRole(ACADEMIC_MANAGE_ROLES), deleteDisciplinaryRecord);
 
 export default router;

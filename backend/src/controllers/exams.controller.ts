@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { getAcademicYearContext } from '../utils/academic-year';
 
 // --- Global Exams ---
 
@@ -178,26 +179,41 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
 export const getStudentsForExamMarks = async (req: Request, res: Response) => {
     try {
         const { department, standard } = req.query;
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+        
         let stdColumn = 'standard';
         if (department === 'school') stdColumn = 'school_standard';
         else if (department === 'hifz') stdColumn = 'hifz_standard';
         else if (department === 'madrassa') stdColumn = 'madrassa_standard';
         
-        // This simulates the frontend query: supabase.from("students").select(`adm_no, name, ${stdColumn}`).order("name")
-        let query = `SELECT adm_no, name, ${stdColumn} FROM students WHERE status = 'active'`;
-        const params: any[] = [];
-        let paramCount = 1;
+        // Fetch active students based on active year standard placements
+        let query = `
+            SELECT s.adm_no, s.name, p.standard
+            FROM academic_student_placements p
+            JOIN students s ON s.adm_no = p.student_id AND s.status = 'active'
+            WHERE p.academic_year_id = $1 AND p.status = 'active'
+        `;
+        const params: any[] = [academicContext.academicYearId];
+        let paramCount = 2;
         
         if (standard && standard !== 'all') {
-            query += ` AND ${stdColumn} = $${paramCount}`;
+            query += ` AND p.standard = $${paramCount}`;
             params.push(standard);
             paramCount++;
         }
         
-        query += ' ORDER BY name';
+        query += ' ORDER BY s.name';
         
         const result = await db.query(query, params);
-        res.json({ success: true, students: result.rows });
+        
+        // Map the placement standard back to the requested stdColumn for frontend compatibility
+        const mappedStudents = result.rows.map(row => ({
+            adm_no: row.adm_no,
+            name: row.name,
+            [stdColumn]: row.standard
+        }));
+        
+        res.json({ success: true, students: mappedStudents });
     } catch (err) {
         console.error('Error fetching students for exams:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch students' });

@@ -16,7 +16,6 @@ router.put('/sessions/:id', (0, auth_middleware_1.requireRole)(['admin', 'princi
 router.delete('/sessions/:id', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), academics_controller_1.deleteSession);
 // ---- Calendar ----
 router.get('/calendar', academics_controller_1.getAllCalendarPolicies);
-router.get('/calendar-range', academics_controller_1.getCalendarRange);
 router.get('/calendar/:date', academics_controller_1.getCalendarByDate);
 router.put('/calendar', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), academics_controller_1.upsertCalendarPolicy);
 router.delete('/calendar/:date', (0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_principal']), academics_controller_1.deleteCalendarPolicy);
@@ -27,8 +26,4 @@ router.post('/attendance/students', (0, auth_middleware_1.requireRole)(ACADEMIC_
 // Allow staff/mentor to READ attendance (needed for Hifz progress modal)
 router.get('/attendance', academics_controller_1.getAttendance);
 router.post('/attendance', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.upsertAttendance);
-// ---- Disciplinary Records (via students route prefix to match frontend) ----
-router.get('/disciplinary', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.getDisciplinaryRecords);
-router.post('/disciplinary', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.createDisciplinaryRecord);
-router.delete('/disciplinary/:id', (0, auth_middleware_1.requireRole)(ACADEMIC_MANAGE_ROLES), academics_controller_1.deleteDisciplinaryRecord);
 exports.default = router;

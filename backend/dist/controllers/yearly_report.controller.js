@@ -106,6 +106,7 @@ async function fetchStudentYearlyData(studentId, reportStart, reportEnd) {
               juz_number, juz_portion, created_at
        FROM hifz_logs
        WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
+         AND deleted_at IS NULL
        ORDER BY entry_date ASC, created_at ASC`, [studentId, reportStart, reportEnd]),
         // Leaves in window
         db_1.db.query(`SELECT id, leave_type, reason, status,
@@ -612,7 +613,7 @@ const getClassYearlyReport = async (req, res) => {
            JOIN attendance_schedules sch ON sch.id = sam.schedule_id
            WHERE sam.student_id = $1 AND sam.date >= $2 AND sam.date <= $3`, [student.adm_no, effStart, effEnd]);
             const hifzLogs = type === 'hifz'
-                ? await db_1.db.query(`SELECT COUNT(*)::integer AS cnt FROM hifz_logs WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`, [student.adm_no, effStart, effEnd])
+                ? await db_1.db.query(`SELECT COUNT(*)::integer AS cnt FROM hifz_logs WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3 AND deleted_at IS NULL`, [student.adm_no, effStart, effEnd])
                 : null;
             const typeFilter = type === 'madrasa' ? ['madrasa', 'madrassa'] : [type];
             const relevant = marksRes.rows.filter((m) => typeFilter.includes(String(m.class_type || '').toLowerCase()));

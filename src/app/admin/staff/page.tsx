@@ -66,6 +66,7 @@ type Staff = {
     phone_contacts: PhoneContact[]
     profile_id: string | null
     password_hash?: string | null
+    has_login?: boolean
     is_active?: boolean
     staff_category?: "teaching" | "leadership" | "administrative"
     role_label?: string
@@ -373,11 +374,13 @@ export default function StaffPage() {
             if (s.is_active === false) {
                 archived.push(s)
             } else {
-                active.push(s)
                 if (staffCategory(s) === "teaching") {
+                    active.push(s)
                     teaching++
                     mentors++
                 } else {
+                    // Admins/principals are not mentors — they live only in the
+                    // Leadership Staff card, never in the mentors table.
                     leadership.push(s)
                     leadershipTotal++
                     if (LEADERSHIP_ROLES.includes(s.role)) admins++
@@ -441,7 +444,7 @@ export default function StaffPage() {
                                 <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                             </div>
                             <div>
-                                <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-none">{loading ? "..." : activeStaffList.length}</p>
+                                <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-none">{loading ? "..." : activeStaffList.length + leadershipCount}</p>
                                 <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">Total</p>
                             </div>
                         </div>
@@ -656,7 +659,7 @@ export default function StaffPage() {
                                         <TableCell>
                                             <div>
                                                 <span className="font-medium text-slate-900 dark:text-white block">{s.name}</span>
-                                                {activeTab === "active" && !s.password_hash && (
+                                                {activeTab === "active" && !s.has_login && (
                                                     <Badge variant="outline" className="text-[10px] bg-red-50 text-red-600 border-red-200 mt-1">
                                                         No Login
                                                     </Badge>
@@ -706,7 +709,7 @@ export default function StaffPage() {
                                                 </Link>
                                                 {!isPrincipalPortal && activeTab === "active" ? (
                                                     <>
-                                                        {!s.password_hash && (
+                                                        {!s.has_login && (
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"

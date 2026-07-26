@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Trash2 } from "lucide-react"
 import api from "@/lib/api"
 
-export default function ReligiousEducationTab({ studentId, initialData }: { studentId: string, initialData?: any[] }) {
+export default function ReligiousEducationTab({ studentId, initialData, canEdit = true }: { studentId: string, initialData?: any[], canEdit?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<any[]>(initialData || [{
     name: "إعدادية (UP Level)",
@@ -20,7 +20,7 @@ export default function ReligiousEducationTab({ studentId, initialData }: { stud
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Religious Education</CardTitle>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Add</Button>
+        {canEdit && <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Add</Button>}
       </CardHeader>
       <CardContent className="space-y-4">
         {logs.map((log, idx) => (
@@ -31,9 +31,11 @@ export default function ReligiousEducationTab({ studentId, initialData }: { stud
               <div><span className="text-muted-foreground mr-2">Status:</span> {log.status}</div>
             </div>
             <div className="absolute top-4 right-4 md:static md:ml-4">
+              {canEdit && (
               <Button variant="outline" size="sm" className="text-red-500 border-red-200 hover:bg-red-50">
                 Delete
               </Button>
+              )}
             </div>
             <div className="absolute top-4 left-4 md:top-auto md:left-auto md:hidden font-medium">
               {log.name}

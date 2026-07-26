@@ -27,3 +27,591 @@
 [STARTUP] Server is running on port 5000
 [DB POOL] 8 connections ready in 233ms
 [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[DB POOL] 8 connections ready in 1622ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 171ms
+[DB POOL] 8 connections ready in 179ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[DB POOL] 8 connections ready in 2050ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 171ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[DB POOL] 8 connections ready in 1411ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 197ms
+[DB POOL] 8 connections ready in 310ms
+[DB POOL] 8 connections ready in 240ms
+[DB POOL] 8 connections ready in 202ms
+[DB POOL] 8 connections ready in 187ms
+[DB POOL] 8 connections ready in 185ms
+[DB POOL] 8 connections ready in 199ms
+[DB POOL] 8 connections ready in 229ms
+[DB POOL] 8 connections ready in 210ms
+[DB POOL] 8 connections ready in 191ms
+[DB POOL] 8 connections ready in 266ms
+[DB POOL] 8 connections ready in 278ms
+[DB POOL] 8 connections ready in 184ms
+[DB POOL] 8 connections ready in 197ms
+[DB POOL] 8 connections ready in 214ms
+[DB POOL] 8 connections ready in 245ms
+[DB POOL] 8 connections ready in 174ms
+[DB POOL] 8 connections ready in 251ms
+[DB POOL] 8 connections ready in 235ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[DB POOL] 8 connections ready in 1279ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[DB POOL] 8 connections ready in 1272ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[DB POOL] 8 connections ready in 1825ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 213ms
+[DB POOL] 8 connections ready in 230ms
+[DB POOL] 8 connections ready in 209ms
+[DB POOL] 8 connections ready in 224ms
+[DB POOL] 8 connections ready in 241ms
+[DB POOL] 8 connections ready in 191ms
+[DB POOL] 8 connections ready in 316ms
+[DB POOL] 8 connections ready in 172ms
+[DB POOL] 8 connections ready in 185ms
+[DB POOL] 8 connections ready in 181ms
+[DB POOL] 8 connections ready in 190ms
+[DB POOL] 8 connections ready in 197ms
+[DB POOL] 8 connections ready in 210ms
+[DB POOL] 8 connections ready in 172ms
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[DB POOL] 8 connections ready in 1858ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[DB POOL] 8 connections ready in 1622ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 212ms
+[DB POOL] 8 connections ready in 183ms
+[DB POOL] 8 connections ready in 186ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[DB POOL] 8 connections ready in 1610ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[DB POOL] 8 connections ready in 1352ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[DB POOL] 8 connections ready in 1434ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 250ms
+[DB POOL] 8 connections ready in 187ms
+[DB POOL] 8 connections ready in 191ms
+[DB POOL] 8 connections ready in 189ms
+[DB POOL] 8 connections ready in 183ms
+[DB POOL] 8 connections ready in 206ms
+[DB POOL] 8 connections ready in 224ms
+[DB POOL] 8 connections ready in 239ms
+[DB POOL] 8 connections ready in 202ms
+[DB POOL] 8 connections ready in 198ms
+[DB POOL] 8 connections ready in 176ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[DB POOL] 8 connections ready in 1480ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 181ms
+[DB POOL] 8 connections ready in 237ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[DB POOL] 8 connections ready in 3934ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[DB POOL] 8 connections ready in 1755ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[DB POOL] 8 connections ready in 7663ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 289ms
+[DB POOL] 8 connections ready in 253ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[DB POOL] 8 connections ready in 1585ms
+[STARTUP] Server is running on port 5000
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[DB POOL] 8 connections ready in 2315ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 829ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[DB POOL] 8 connections ready in 3394ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 294ms
+[DB POOL] 8 connections ready in 293ms
+[DB POOL] 8 connections ready in 469ms
+[DB POOL] 8 connections ready in 347ms
+[DB POOL] 8 connections ready in 244ms
+[DB POOL] 8 connections ready in 350ms
+[DB POOL] 8 connections ready in 217ms
+[DB POOL] 8 connections ready in 232ms
+[DB POOL] 8 connections ready in 198ms
+[DB POOL] 8 connections ready in 224ms
+[DB POOL] 8 connections ready in 220ms
+[DB POOL] 8 connections ready in 217ms
+[DB POOL] 8 connections ready in 334ms
+[DB POOL] 8 connections ready in 249ms
+[DB POOL] 8 connections ready in 201ms
+[DB POOL] 8 connections ready in 234ms
+[DB POOL] 8 connections ready in 311ms
+[DB POOL] 8 connections ready in 248ms
+[DB POOL] 8 connections ready in 344ms
+[DB POOL] 8 connections ready in 210ms
+[DB POOL] 8 connections ready in 264ms
+[DB POOL] 8 connections ready in 323ms
+[DB POOL] 8 connections ready in 224ms
+[DB POOL] 8 connections ready in 571ms
+[DB POOL] 8 connections ready in 237ms
+[DB POOL] 8 connections ready in 374ms
+[DB POOL] 8 connections ready in 231ms
+[DB POOL] 8 connections ready in 308ms
+[DB POOL] 8 connections ready in 205ms
+[DB POOL] 8 connections ready in 265ms
+[DB POOL] 8 connections ready in 377ms
+[DB POOL] 8 connections ready in 256ms
+[DB POOL] 8 connections ready in 320ms
+[DB POOL] 8 connections ready in 194ms
+[DB POOL] 8 connections ready in 272ms
+[DB POOL] 8 connections ready in 258ms
+[DB POOL] 8 connections ready in 259ms
+[DB POOL] 8 connections ready in 414ms
+[DB POOL] 8 connections ready in 218ms
+[DB POOL] 8 connections ready in 337ms
+[DB POOL] 8 connections ready in 265ms
+[DB POOL] 8 connections ready in 846ms
+[DB POOL] 8 connections ready in 309ms
+[DB POOL] 8 connections ready in 306ms
+[DB POOL] 8 connections ready in 291ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[DB POOL] 8 connections ready in 2366ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 262ms
+[DB POOL] 8 connections ready in 276ms
+[DB POOL] 8 connections ready in 314ms
+[DB POOL] 8 connections ready in 227ms
+[DB POOL] 8 connections ready in 312ms
+[DB POOL] 8 connections ready in 346ms
+[DB POOL] 8 connections ready in 353ms
+[DB POOL] 8 connections ready in 324ms
+[DB POOL] 8 connections ready in 218ms
+[DB POOL] 8 connections ready in 204ms
+[DB POOL] 8 connections ready in 917ms
+[DB POOL] 8 connections ready in 188ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[DB POOL] 8 connections ready in 4902ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 210ms
+[DB POOL] 8 connections ready in 238ms
+[DB POOL] 8 connections ready in 767ms
+[DB POOL] 8 connections ready in 939ms
+[DB POOL] 8 connections ready in 260ms
+[DB POOL] 8 connections ready in 308ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[DB POOL] 8 connections ready in 4993ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 539ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🤖 agentic secret storage: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[DB POOL] 8 connections ready in 5006ms
+[STARTUP] Server is running on port 5000
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (3) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[DB POOL] 8 connections ready in 2910ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 302ms
+[DB POOL] 8 connections ready in 262ms
+[DB POOL] 8 connections ready in 880ms
+[DB POOL] 8 connections ready in 293ms
+[DB POOL] 8 connections ready in 203ms
+[DB POOL] 8 connections ready in 261ms
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[dotenv@17.3.1] injecting env (2) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[DB POOL] 8 connections ready in 4902ms
+[STARTUP] Server is running on port 5000
+[DB POOL] 8 connections ready in 328ms
+[DB POOL] 8 connections ready in 5436ms
+[DB POOL] 8 connections ready in 211ms
+[DB POOL] 8 connections ready in 3276ms
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m

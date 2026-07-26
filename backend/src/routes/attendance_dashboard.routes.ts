@@ -15,7 +15,8 @@ import {
     updateBreak,
     getStudentsForSchedule,
     getStudentMarksForSchedule,
-    getDailyAttendanceStats
+    getDailyAttendanceStats,
+    getSubjects
 } from '../controllers/attendance_dashboard.controller';
 
 const router = Router();
@@ -28,6 +29,7 @@ router.use(requireRole(['admin', 'principal', 'vice_principal', 'staff', 'usthad
 
 // Dashboard & Schedule Setup
 router.get('/daily-stats', getDailyAttendanceStats);
+router.get('/subjects', getSubjects);
 router.get('/schedules', getSchedules);
 router.get('/schedules-for-date', getSchedulesForDate);
 router.post('/schedules', requireRole(['admin', 'principal']), createSchedule);

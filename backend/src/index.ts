@@ -40,6 +40,7 @@ import academicHistoryRoutes from './routes/academic_history.routes';
 import academicPlacementRoutes from './routes/academic-placement.routes';
 import yearlyReportRoutes from './routes/yearly_report.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import disciplineRoutes from './modules/discipline/discipline.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
@@ -112,6 +113,7 @@ app.use('/api/academic-history', academicHistoryRoutes);
 app.use('/api/academic-placements', academicPlacementRoutes);
 app.use('/api/yearly-report', yearlyReportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/discipline', disciplineRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Backend is running', database_pool: db.getPoolStats() });

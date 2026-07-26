@@ -7,6 +7,9 @@ import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
 import { getStudentAttendanceSummaries } from '../utils/attendance-report';
 import { getMentorAccessDecision, isMentorAccessRole } from '../utils/mentor-access-policy';
 import { getAcademicYearContext } from '../utils/academic-year';
+import { getHifzStudentMonthRegister, resolveHifzEntryEligibility } from '../services/hifz-monthly-register.service';
+import { getStaffId } from '../utils/staff.utils';
+import { getActiveMentorStudentIds } from '../services/mentor-students.service';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
@@ -53,6 +56,32 @@ const enforceHifzRecordingAccess = async (req: Request, entryDate: string) => {
     }
 };
 
+const enforceHifzStudentAccess = async (req: Request, studentIds: string[]) => {
+    const user = (req as any).user;
+    const role = String(user?.role || '').toLowerCase();
+    if (!['staff', 'usthad', 'mentor'].includes(role)) return;
+
+    const staffId = await getStaffId(req);
+    if (!staffId) {
+        const err: any = new Error('Mentor staff profile not found.');
+        err.statusCode = 403;
+        throw err;
+    }
+
+    const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+    const mentorStudentIds = await getActiveMentorStudentIds(db, staffId, {
+        academicYearId: academicContext.academicYearId,
+    });
+
+    for (const studentId of studentIds) {
+        if (!mentorStudentIds.has(studentId)) {
+            const err: any = new Error(`Access denied for student ${studentId}.`);
+            err.statusCode = 403;
+            throw err;
+        }
+    }
+};
+
 const getDetectedClassDays = async (startDate: string, endDate: string) => {
     const result = await db.query(
         `SELECT COUNT(DISTINCT date) AS class_days
@@ -72,7 +101,8 @@ const getDetectedLogDays = async (startDate: string, endDate: string) => {
         `SELECT COUNT(DISTINCT entry_date::date) AS log_days
          FROM hifz_logs
          WHERE entry_date >= $1::date
-           AND entry_date <= $2::date`,
+           AND entry_date <= $2::date
+           AND deleted_at IS NULL`,
         [startDate, endDate]
     );
 
@@ -94,11 +124,22 @@ function hifzValidationError(message: string) {
     return err;
 }
 
+const toDateKey = (value: any): string => {
+    if (!value) return '';
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const parts = fmt.formatToParts(date);
+    const get = (t: string) => parts.find(p => p.type === t)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+};
+
 function normalizeHifzLogInput(log: any, index = 0) {
     const label = `Log ${index + 1}`;
     const mode = String(log?.mode || '').trim();
     const studentId = String(log?.student_id || '').trim();
-    const entryDate = String(log?.entry_date || '').slice(0, 10);
+    const entryDate = toDateKey(log?.entry_date);
     const juzNumber = toNullableNumber(log?.juz_number);
     const startVerse = toNullableNumber(log?.start_v);
     const endVerse = toNullableNumber(log?.end_v);
@@ -138,6 +179,8 @@ function normalizeHifzLogInput(log: any, index = 0) {
         end_page: Number.isNaN(endPage) ? null : endPage,
         juz_number: Number.isNaN(juzNumber) ? null : juzNumber,
         juz_portion: juzPortion,
+        session_id: log?.session_id || null,
+        notes: log?.notes || null,
     };
 }
 
@@ -237,12 +280,14 @@ export const getHifzStudents = async (req: Request, res: Response) => {
                      LEFT JOIN LATERAL (
                          SELECT surah_name FROM hifz_logs
                          WHERE student_id = s.adm_no AND mode = 'New Verses'
+                           AND deleted_at IS NULL
                          ORDER BY entry_date DESC
                          LIMIT 1
                      ) nv ON TRUE
                      LEFT JOIN LATERAL (
                          SELECT juz_number FROM hifz_logs
                          WHERE student_id = s.adm_no AND mode = 'Juz Revision'
+                           AND deleted_at IS NULL
                          ORDER BY entry_date DESC
                          LIMIT 1
                      ) jr ON TRUE
@@ -265,10 +310,10 @@ export const getHifzLogsList = async (req: Request, res: Response) => {
         const { date, start_date, end_date, student_id, mode, limit } = req.query;
 
         let query = `
-            SELECT hl.*, st.name as recorded_by_name 
+            SELECT hl.*, st.name as recorded_by_name
             FROM hifz_logs hl
             LEFT JOIN staff st ON hl.usthad_id = st.id
-            WHERE 1=1
+            WHERE hl.deleted_at IS NULL
         `;
         const params: any[] = [];
         let paramCount = 1;
@@ -313,7 +358,7 @@ export const getHifzLogsList = async (req: Request, res: Response) => {
 export const getHifzLog = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const result = await db.query('SELECT * FROM hifz_logs WHERE id = $1', [id]);
+        const result = await db.query('SELECT * FROM hifz_logs WHERE id = $1 AND deleted_at IS NULL', [id]);
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Log not found' });
         res.json({ success: true, log: result.rows[0] });
     } catch (err) {
@@ -325,7 +370,7 @@ export const getHifzLog = async (req: Request, res: Response) => {
 export const getMaxJuzForStudent = async (req: Request, res: Response) => {
     try {
         const { student_id } = req.params;
-        const result = await db.query('SELECT juz_number FROM hifz_logs WHERE student_id = $1 ORDER BY juz_number DESC LIMIT 1', [student_id]);
+        const result = await db.query('SELECT juz_number FROM hifz_logs WHERE student_id = $1 AND deleted_at IS NULL ORDER BY juz_number DESC LIMIT 1', [student_id]);
         res.json({ success: true, max_juz: result.rows.length > 0 ? result.rows[0].juz_number : 0 });
     } catch (err) {
         console.error('Error fetching max juz:', err);
@@ -337,6 +382,7 @@ export const createHifzLog = async (req: Request, res: Response) => {
     try {
         const log = normalizeHifzLogInput(req.body);
         await enforceHifzRecordingAccess(req, log.entry_date);
+        await enforceHifzStudentAccess(req, [log.student_id]);
         const result = await db.query(
             `INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
@@ -368,6 +414,7 @@ export const updateHifzLog = async (req: Request, res: Response) => {
         if (entry_date) {
             await enforceHifzRecordingAccess(req, entry_date);
         }
+        await enforceHifzStudentAccess(req, [student_id]);
         const result = await db.query(
             `UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, mode=$4,
              surah_name=$5, start_v=$6, end_v=$7, start_page=$8, end_page=$9,
@@ -404,6 +451,10 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
         for (const entryDate of uniqueEntryDates) {
             await enforceHifzRecordingAccess(req, entryDate);
         }
+        await enforceHifzStudentAccess(
+            req,
+            Array.from(new Set(logs.map((log: any) => String(log.student_id)))),
+        );
 
         // ── Step 1: bulk-fetch existing verse-range rows that could collide
         // with any candidate, in a SINGLE query. Replaces the per-row SELECT
@@ -413,12 +464,12 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
         );
 
         const dupKey = (l: any) =>
-            `${l.student_id}|${String(l.entry_date).slice(0, 10)}|${l.mode}|${l.surah_name}|${l.start_v}|${l.end_v}`;
+            `${l.student_id}|${toDateKey(l.entry_date)}|${l.mode}|${l.surah_name}|${l.start_v}|${l.end_v}`;
 
         const existingKeys = new Set<string>();
         if (dedupCandidates.length > 0) {
             const studentIds = [...new Set(dedupCandidates.map((l: any) => l.student_id))];
-            const dates      = [...new Set(dedupCandidates.map((l: any) => String(l.entry_date).slice(0, 10)))];
+            const dates      = [...new Set(dedupCandidates.map((l: any) => toDateKey(l.entry_date)))];
 
             const existing = await db.query(
                 `SELECT student_id,
@@ -427,7 +478,8 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
                  FROM hifz_logs
                  WHERE mode = ANY($3::text[])
                    AND student_id = ANY($1::text[])
-                   AND entry_date = ANY($2::date[])`,
+                   AND entry_date = ANY($2::date[])
+                   AND deleted_at IS NULL`,
                 [studentIds, dates, ['New Verses', 'Recent Revision']]
             );
             existing.rows.forEach((r: any) => existingKeys.add(dupKey(r)));
@@ -486,11 +538,22 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
 export const deleteHifzLog = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const existing = await db.query('SELECT entry_date FROM hifz_logs WHERE id = $1', [id]);
-        if (existing.rows[0]?.entry_date) {
-            await enforceHifzRecordingAccess(req, existing.rows[0].entry_date);
+        const existing = await db.query(
+            'SELECT student_id, entry_date, mode FROM hifz_logs WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+        if (existing.rows[0]) {
+            const { student_id, entry_date, mode } = existing.rows[0];
+            await enforceHifzRecordingAccess(req, entry_date);
+            await enforceHifzStudentAccess(req, [student_id]);
+            await db.query(
+                `DELETE FROM hifz_logs
+                 WHERE student_id = $1
+                   AND entry_date = $2
+                   AND mode = $3`,
+                [student_id, entry_date, mode]
+            );
         }
-        await db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
         invalidateCacheByPrefix('hifz:');
         invalidateCacheByPrefix('reports:students');
         res.json({ success: true });
@@ -652,7 +715,8 @@ export const getProgressSummary = async (req: Request, res: Response) => {
                     `SELECT hl.student_id, hl.surah_name, hl.start_v, hl.end_v
                      FROM hifz_logs hl
                      JOIN students s ON hl.student_id = s.adm_no
-                     ${where}`,
+                     ${where}
+                       AND hl.deleted_at IS NULL`,
                     params
                 );
 
@@ -700,9 +764,10 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
                 [student_id, academicContext.academicYearId]
             ),
             db.query(
-                `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion 
-                 FROM hifz_logs 
-                 WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`,
+                `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion
+                 FROM hifz_logs
+                 WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
+                   AND deleted_at IS NULL`,
                 [student_id, startDate, endDate]
             ),
         ]);
@@ -802,7 +867,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
                          start_page, end_page, juz_number, juz_portion
                          FROM hifz_logs
-                         WHERE entry_date >= $1::date AND entry_date <= $2::date`,
+                         WHERE entry_date >= $1::date AND entry_date <= $2::date
+                           AND deleted_at IS NULL`,
                         [startDate, endDate]
                     ),
                     db.query(
@@ -992,5 +1058,172 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
     } catch (err: any) {
         console.error('Error calculating bulk monthly report:', err);
         res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+const monthlyRegisterError = (message: string, statusCode = 400) => {
+    const error = new Error(message) as any;
+    error.statusCode = statusCode;
+    return error;
+};
+
+const getMonthlyRegister = async (req: Request, studentId: string, month: string) => {
+    const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+    return getHifzStudentMonthRegister({
+        db,
+        studentId,
+        month,
+        academicYearId: academicContext.academicYearId,
+    });
+};
+
+const getRegisterMonth = (entryDate: any) => toDateKey(entryDate).slice(0, 7);
+
+export const getHifzStudentMonth = async (req: Request, res: Response) => {
+    try {
+        const studentId = String(req.params.studentId || '').trim();
+        const month = String(req.query.month || '').trim();
+        if (!studentId || !/^\d{4}-\d{2}$/.test(month)) {
+            throw monthlyRegisterError('studentId and month (YYYY-MM) are required.');
+        }
+        // Viewing is open to all mentor roles (the dashboard exposes an "All Students"
+        // list); writes stay locked down — eligibility rejects non-assigned mentors and
+        // the entry endpoints still call enforceHifzStudentAccess.
+        const register = await getMonthlyRegister(req, studentId, month);
+        const role = String((req as any).user?.role || '').toLowerCase();
+        if (['staff', 'usthad', 'mentor'].includes(role)) {
+            const staffId = await getStaffId(req);
+            if (staffId !== (register.student as any).mentorId) {
+                for (const day of register.days as any[]) {
+                    day.eligibility = {
+                        ...day.eligibility,
+                        allowed: false,
+                        reason: 'View only — this student is assigned to another mentor.',
+                    };
+                }
+            }
+        }
+        res.json({ success: true, ...register });
+    } catch (error: any) {
+        res.status(error.statusCode || 500).json({ success: false, error: error.message || 'Failed to load Hifz month.' });
+    }
+};
+
+const saveMonthlyHifzEntry = async (req: Request, res: Response, existingId?: string) => {
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
+        const existingResult = existingId
+            ? await client.query('SELECT * FROM hifz_logs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE', [existingId])
+            : { rows: [] as any[] };
+        const existing = existingResult.rows[0] || null;
+        if (existingId && !existing) throw monthlyRegisterError('Hifz entry not found.', 404);
+
+        const log = normalizeHifzLogInput({ ...req.body, student_id: req.body.student_id || existing?.student_id });
+        if (existing && existing.student_id !== log.student_id) {
+            throw monthlyRegisterError('A Hifz entry cannot be moved to another student.');
+        }
+        await enforceHifzRecordingAccess(req, log.entry_date);
+        await enforceHifzStudentAccess(req, [log.student_id]);
+
+        const staffId = await getStaffId(req);
+        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+        const eligibility = await resolveHifzEntryEligibility({
+            db: client,
+            studentId: log.student_id,
+            mentorId: staffId || log.usthad_id || existing?.usthad_id || null,
+            entryDate: log.entry_date,
+            academicYearId: academicContext.academicYearId,
+            requestedSessionId: log.session_id || null,
+            existingRecordId: existingId || null,
+        });
+        if (!eligibility.allowed || !eligibility.sessionId) {
+            throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409);
+        }
+
+        const result = existing
+            ? await client.query(
+                `UPDATE hifz_logs
+                 SET entry_date = $1, mode = $2, surah_name = $3, start_v = $4, end_v = $5,
+                     start_page = $6, end_page = $7, juz_number = $8, juz_portion = $9,
+                     session_id = $10, attendance_record_id = (
+                         SELECT id FROM student_attendance_marks
+                         WHERE student_id = $11 AND schedule_id = $10 AND date = $1::date LIMIT 1
+                     ), notes = $12, updated_at = NOW()
+                 WHERE id = $13
+                 RETURNING *`,
+                [
+                    log.entry_date, log.mode, log.surah_name, log.start_v, log.end_v,
+                    log.start_page, log.end_page, log.juz_number, log.juz_portion,
+                    eligibility.sessionId, log.student_id, log.notes, existingId,
+                ],
+            )
+            : await client.query(
+                `INSERT INTO hifz_logs (
+                    student_id, usthad_id, entry_date, mode, surah_name, start_v, end_v,
+                    start_page, end_page, juz_number, juz_portion, session_id,
+                    attendance_record_id, created_by, notes
+                 ) VALUES (
+                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                    (SELECT id FROM student_attendance_marks WHERE student_id = $1 AND schedule_id = $12 AND date = $3::date LIMIT 1),
+                    $13,$14
+                 ) RETURNING *`,
+                [
+                    log.student_id, staffId || log.usthad_id || null, log.entry_date, log.mode,
+                    log.surah_name, log.start_v, log.end_v, log.start_page, log.end_page,
+                    log.juz_number, log.juz_portion, eligibility.sessionId, staffId || null, log.notes,
+                ],
+            );
+        await client.query('COMMIT');
+
+        invalidateCacheByPrefix('hifz:');
+        invalidateCacheByPrefix('reports:students');
+        const month = getRegisterMonth(log.entry_date);
+        const monthRegister = await getMonthlyRegister(req, log.student_id, month);
+        res.json({
+            success: true,
+            entry: result.rows[0],
+            day: monthRegister.days.find((day: any) => day.date === toDateKey(log.entry_date)) || null,
+            summary: monthRegister.summary,
+            monthRegister,
+        });
+    } catch (error: any) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        res.status(error.statusCode || 500).json({ success: false, error: error.message || 'Failed to save Hifz entry.' });
+    } finally {
+        client.release();
+    }
+};
+
+export const createMonthlyHifzEntry = async (req: Request, res: Response) => {
+    await saveMonthlyHifzEntry(req, res);
+};
+
+export const updateMonthlyHifzEntry = async (req: Request, res: Response) => {
+    await saveMonthlyHifzEntry(req, res, String(req.params.id || ''));
+};
+
+export const deleteMonthlyHifzEntry = async (req: Request, res: Response) => {
+    try {
+        const id = String(req.params.id || '');
+        const existing = await db.query(
+            'SELECT id, student_id, entry_date FROM hifz_logs WHERE id = $1 AND deleted_at IS NULL',
+            [id],
+        );
+        const log = existing.rows[0];
+        if (!log) throw monthlyRegisterError('Hifz entry not found.', 404);
+        await enforceHifzStudentAccess(req, [log.student_id]);
+        await db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
+        invalidateCacheByPrefix('hifz:');
+        invalidateCacheByPrefix('reports:students');
+        const monthRegister = await getMonthlyRegister(req, log.student_id, getRegisterMonth(log.entry_date));
+        res.json({
+            success: true,
+            day: monthRegister.days.find((day: any) => day.date === toDateKey(log.entry_date)) || null,
+            summary: monthRegister.summary,
+            monthRegister,
+        });
+    } catch (error: any) {
+        res.status(error.statusCode || 500).json({ success: false, error: error.message || 'Failed to delete Hifz entry.' });
     }
 };

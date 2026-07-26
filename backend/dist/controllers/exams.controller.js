@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getStudentsForExamMarks = exports.upsertExamMarks = exports.getExamMarks = exports.deleteSubject = exports.addSubject = exports.updateExamStatus = exports.getExamDetails = exports.createExam = exports.getExams = void 0;
 const db_1 = require("../config/db");
+const academic_year_1 = require("../utils/academic-year");
 // --- Global Exams ---
 const getExams = async (req, res) => {
     try {
@@ -153,6 +154,7 @@ exports.upsertExamMarks = upsertExamMarks;
 const getStudentsForExamMarks = async (req, res) => {
     try {
         const { department, standard } = req.query;
+        const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         let stdColumn = 'standard';
         if (department === 'school')
             stdColumn = 'school_standard';
@@ -160,18 +162,29 @@ const getStudentsForExamMarks = async (req, res) => {
             stdColumn = 'hifz_standard';
         else if (department === 'madrassa')
             stdColumn = 'madrassa_standard';
-        // This simulates the frontend query: supabase.from("students").select(`adm_no, name, ${stdColumn}`).order("name")
-        let query = `SELECT adm_no, name, ${stdColumn} FROM students WHERE status = 'active'`;
-        const params = [];
-        let paramCount = 1;
+        // Fetch active students based on active year standard placements
+        let query = `
+            SELECT s.adm_no, s.name, p.standard
+            FROM academic_student_placements p
+            JOIN students s ON s.adm_no = p.student_id AND s.status = 'active'
+            WHERE p.academic_year_id = $1 AND p.status = 'active'
+        `;
+        const params = [academicContext.academicYearId];
+        let paramCount = 2;
         if (standard && standard !== 'all') {
-            query += ` AND ${stdColumn} = $${paramCount}`;
+            query += ` AND p.standard = $${paramCount}`;
             params.push(standard);
             paramCount++;
         }
-        query += ' ORDER BY name';
+        query += ' ORDER BY s.name';
         const result = await db_1.db.query(query, params);
-        res.json({ success: true, students: result.rows });
+        // Map the placement standard back to the requested stdColumn for frontend compatibility
+        const mappedStudents = result.rows.map(row => ({
+            adm_no: row.adm_no,
+            name: row.name,
+            [stdColumn]: row.standard
+        }));
+        res.json({ success: true, students: mappedStudents });
     }
     catch (err) {
         console.error('Error fetching students for exams:', err);

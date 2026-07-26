@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const students_controller_1 = require("../controllers/students.controller");
 const students_helpers_1 = require("../controllers/students.helpers");
-const academics_controller_1 = require("../controllers/academics.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 const STUDENT_VIEW_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
@@ -25,10 +24,6 @@ router.get('/download-excel', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_
 router.get('/inside-outside-summary', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), students_controller_1.getStudentInsideOutsideSummary);
 // GET /api/students
 router.get('/', (0, auth_middleware_1.requireRole)(STUDENT_VIEW_ROLES), students_controller_1.getAllStudents);
-// Disciplinary Records
-router.get('/disciplinary', (0, auth_middleware_1.requireRole)(STUDENT_VIEW_ROLES), academics_controller_1.getDisciplinaryRecords);
-router.post('/disciplinary', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), academics_controller_1.createDisciplinaryRecord);
-router.delete('/disciplinary/:id', (0, auth_middleware_1.requireRole)(STUDENT_MANAGE_ROLES), academics_controller_1.deleteDisciplinaryRecord);
 // GET /api/students/:id
 router.get('/:id', (0, auth_middleware_1.requireRole)(STUDENT_VIEW_ROLES), students_controller_1.getStudentById);
 // POST /api/students (Only Admins/Principals)

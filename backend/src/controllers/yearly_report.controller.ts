@@ -128,6 +128,7 @@ async function fetchStudentYearlyData(
               juz_number, juz_portion, created_at
        FROM hifz_logs
        WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
+         AND deleted_at IS NULL
        ORDER BY entry_date ASC, created_at ASC`,
       [studentId, reportStart, reportEnd]
     ),
@@ -721,7 +722,7 @@ export const getClassYearlyReport = async (req: Request, res: Response) => {
 
         const hifzLogs = type === 'hifz'
           ? await db.query(
-              `SELECT COUNT(*)::integer AS cnt FROM hifz_logs WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3`,
+              `SELECT COUNT(*)::integer AS cnt FROM hifz_logs WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3 AND deleted_at IS NULL`,
               [student.adm_no, effStart, effEnd]
             )
           : null;

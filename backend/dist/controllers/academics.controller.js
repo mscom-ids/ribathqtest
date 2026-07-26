@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteDisciplinaryRecord = exports.createDisciplinaryRecord = exports.getDisciplinaryRecords = exports.generateCalendarEntries = exports.bulkUpsertCalendarPolicies = exports.deleteCalendarPolicy = exports.upsertCalendarPolicy = exports.getAllCalendarPolicies = exports.deleteSession = exports.updateSession = exports.createSession = exports.upsertAttendance = exports.getAttendance = exports.getStudentsForAttendance = exports.getCalendarRange = exports.getCalendarByDate = exports.getAcademicSessions = void 0;
+exports.generateCalendarEntries = exports.bulkUpsertCalendarPolicies = exports.deleteCalendarPolicy = exports.upsertCalendarPolicy = exports.getAllCalendarPolicies = exports.deleteSession = exports.updateSession = exports.createSession = exports.upsertAttendance = exports.getAttendance = exports.getStudentsForAttendance = exports.getCalendarByDate = exports.getAcademicSessions = void 0;
 const db_1 = require("../config/db");
 const server_cache_1 = require("../utils/server-cache");
 function invalidateSessionCaches() {
@@ -46,20 +46,6 @@ const getCalendarByDate = async (req, res) => {
     }
 };
 exports.getCalendarByDate = getCalendarByDate;
-const getCalendarRange = async (req, res) => {
-    try {
-        const { start_date, end_date } = req.query;
-        if (!start_date || !end_date)
-            return res.status(400).json({ success: false, error: 'Start and end dates required' });
-        const result = await (0, server_cache_1.cachedResult)((0, server_cache_1.makeCacheKey)('academics:calendar:range', { start_date, end_date }), 5 * 60000, () => db_1.db.query('SELECT * FROM academic_calendar WHERE date >= $1 AND date <= $2', [start_date, end_date]));
-        res.json({ success: true, calendars: result.rows });
-    }
-    catch (err) {
-        console.error('Error fetching calendar range:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
-    }
-};
-exports.getCalendarRange = getCalendarRange;
 const getStudentsForAttendance = async (req, res) => {
     let query = '';
     try {
@@ -377,48 +363,3 @@ const generateCalendarEntries = async (req, res) => {
 };
 exports.generateCalendarEntries = generateCalendarEntries;
 // ==================== DISCIPLINARY RECORDS ====================
-const getDisciplinaryRecords = async (req, res) => {
-    try {
-        const { student_id } = req.query;
-        let query = 'SELECT * FROM disciplinary_records WHERE 1=1';
-        const params = [];
-        if (student_id) {
-            query += ' AND student_id = $1';
-            params.push(student_id);
-        }
-        query += ' ORDER BY action_date DESC';
-        const result = await db_1.db.query(query, params);
-        res.json({ success: true, records: result.rows });
-    }
-    catch (err) {
-        console.error('Error fetching disciplinary records:', err);
-        res.status(500).json({ success: false, error: 'Failed' });
-    }
-};
-exports.getDisciplinaryRecords = getDisciplinaryRecords;
-const createDisciplinaryRecord = async (req, res) => {
-    try {
-        const { student_id, title, description, severity, points, action_date, status } = req.body;
-        const user = req.user;
-        const result = await db_1.db.query(`INSERT INTO disciplinary_records (student_id, title, description, severity, points, action_date, status, recorded_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [student_id, title, description || null, severity || 'Low', points || 0, action_date, status || 'Pending', user?.id || null]);
-        res.json({ success: true, record: result.rows[0] });
-    }
-    catch (err) {
-        console.error('Error creating disciplinary record:', err);
-        res.status(500).json({ success: false, error: 'Failed to create disciplinary record' });
-    }
-};
-exports.createDisciplinaryRecord = createDisciplinaryRecord;
-const deleteDisciplinaryRecord = async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db_1.db.query('DELETE FROM disciplinary_records WHERE id = $1', [id]);
-        res.json({ success: true });
-    }
-    catch (err) {
-        console.error('Error deleting disciplinary record:', err);
-        res.status(500).json({ success: false, error: 'Failed to delete disciplinary record' });
-    }
-};
-exports.deleteDisciplinaryRecord = deleteDisciplinaryRecord;

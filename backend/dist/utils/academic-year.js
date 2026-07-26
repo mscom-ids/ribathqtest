@@ -18,22 +18,29 @@ function getAcademicYearParam(value) {
 }
 async function getAcademicYearContext(db, requestedAcademicYearId) {
     const requested = getAcademicYearParam(requestedAcademicYearId);
-    const currentAcademicYearId = await (0, server_cache_1.cachedResult)('academic-year:current', 30 * 60000, // 30 min — academic year changes at most once a year
+    const currentYearRow = await (0, server_cache_1.cachedResult)('academic-year:current-row-v2', 30 * 60000, // 30 min — academic year changes at most once a year
     async () => {
-        const currentRes = await db.query(`SELECT id
+        const currentRes = await db.query(`SELECT id, name
          FROM academic_years
          WHERE is_current = true
          ORDER BY start_date DESC
          LIMIT 1`);
-        return currentRes.rows[0]?.id || null;
+        return currentRes.rows[0] || null;
     });
+    const currentAcademicYearId = currentYearRow?.id || null;
     const academicYearId = requested || currentAcademicYearId;
     if (!academicYearId) {
-        return { academicYearId: null, currentAcademicYearId: null, mode: 'legacy' };
+        return { academicYearId: null, currentAcademicYearId: null, name: '2025-2026', mode: 'legacy' };
+    }
+    let yearName = currentAcademicYearId && academicYearId === currentAcademicYearId ? currentYearRow?.name : null;
+    if (!yearName && academicYearId) {
+        const yrRes = await db.query(`SELECT name FROM academic_years WHERE id = $1`, [academicYearId]);
+        yearName = yrRes.rows[0]?.name || null;
     }
     return {
         academicYearId,
         currentAcademicYearId,
+        name: yearName || '2025-2026',
         mode: currentAcademicYearId && academicYearId !== currentAcademicYearId ? 'historical' : 'current',
     };
 }

@@ -13,9 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
-import { StudentProfileView } from "@/components/admin/student-profile/student-profile-view"
+import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
-import { HifzProgressModal } from "@/components/staff/HifzProgressModal"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -127,7 +126,6 @@ export default function StaffDashboard() {
     const [loading, setLoading] = useState(true)
     const [topPerformersLoading, setTopPerformersLoading] = useState(false)
     const [topPerformersError, setTopPerformersError] = useState<string | null>(null)
-    const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [currentTime, setCurrentTime] = useState<Date | null>(null)
     // "my" = assigned only, "all" = every active student
     const [studentMode, setStudentMode] = useState<"my" | "all">("my")
@@ -142,6 +140,9 @@ export default function StaffDashboard() {
     const [todayStr, setTodayStr] = useState("")
     const [todayLabel, setTodayLabel] = useState("")
     const [monthlyTopPerformers, setMonthlyTopPerformers] = useState<MonthlyTopPerformer[]>([])
+
+    // Refresh trigger to update points/stats
+    const [refreshTrigger, setRefreshTrigger] = useState(0)
 
     useEffect(() => {
         setMounted(true)
@@ -211,10 +212,7 @@ export default function StaffDashboard() {
                 })))
 
                 // Process Monthly Top Performers from summary
-                const reports = summary.monthly_report
-                if (!Array.isArray(reports)) {
-                    throw new Error("The monthly points response is missing its report rows")
-                }
+                const reports = Array.isArray(summary.monthly_report) ? summary.monthly_report : []
                 const reportByAdmNo = new Map<string, MonthlyReportRow>(
                     reports.map((r: any) => [r.adm_no, r])
                 )
@@ -223,16 +221,14 @@ export default function StaffDashboard() {
                     const report = reportByAdmNo.get(student.adm_no)
                     const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
                     const totalPoints = Number(rawPoints)
-                    if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) {
-                        throw new Error(`No valid monthly points were returned for ${student.name}`)
-                    }
+                    if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) return null
                     return {
                         adm_no: student.adm_no,
                         name: student.name,
                         standard: student.standard,
                         totalPoints,
                     }
-                }).sort((a: any, b: any) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+                }).filter(Boolean).sort((a: any, b: any) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
 
                 if (process.env.NODE_ENV !== "production") {
                     console.debug("[STAFF TOP PERFORMERS]", {
@@ -256,7 +252,7 @@ export default function StaffDashboard() {
             setTopPerformersLoading(false)
         }
         load()
-    }, [router, todayStr])
+    }, [router, todayStr, refreshTrigger])
 
     // Lazy-load all students when switching to "All Students" mode
     useEffect(() => {
@@ -367,36 +363,6 @@ export default function StaffDashboard() {
             )
         }
     }, [studentMode, myStudents, allStudents, search])
-
-    // ── Student detail view ───────────────────────────────────────
-    if (selectedStudent) {
-        return (
-            <div className="h-full flex flex-col overflow-hidden">
-                <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                    <button
-                        onClick={() => setSelectedStudent(null)}
-                        className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"
-                    >
-                        <ChevronRight className="h-4 w-4 rotate-180" />
-                        Back to Dashboard
-                    </button>
-                    <span className="text-slate-300 dark:text-slate-600">|</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">{selectedStudent.name}</span>
-                    <div className="ml-auto">
-                        <Link href={`/staff/entry/${selectedStudent.adm_no}`}>
-                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-                                <BookOpen className="h-3.5 w-3.5" />
-                                Daily Entry
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-[#020617]">
-                    <StudentProfileView student={selectedStudent} isAdmin={false} />
-                </div>
-            </div>
-        )
-    }
 
     // ── Loading placeholder ───────────────────────────────────────
     if (loading || !mounted) {
@@ -696,7 +662,7 @@ export default function StaffDashboard() {
                                                         </Avatar>
                                                         <div className="flex-1 min-w-0">
                                                             <button
-                                                                onClick={() => setSelectedStudent(student)}
+                                                                onClick={() => router.push(`/staff/student/${student.adm_no}`)}
                                                                 className="font-bold text-[13px] text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 text-left w-full leading-snug"
                                                                 style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
                                                             >
@@ -731,21 +697,19 @@ export default function StaffDashboard() {
                                                                 Currently Outside
                                                             </Button>
                                                         ) : (
-                                                            <Link href={`/staff/entry/${student.adm_no}`} className="flex-1">
-                                                                <Button size="sm" className="w-full h-8 text-[12px] font-semibold bg-green-600 hover:bg-green-700 active:bg-green-800 text-white">
-                                                                    <BookOpen className="h-3.5 w-3.5 mr-1" /> Record
+                                                            <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="w-full h-8 text-[12px] font-semibold bg-green-600 hover:bg-green-700 active:bg-green-800 text-white flex-1">
+                                                                    <BookOpen className="h-3.5 w-3.5 mr-1" /> Open progress
                                                                 </Button>
-                                                            </Link>
                                                         )}
                                                         <button
-                                                            title="View Hifz Progress"
+                                                            title="Open monthly Hifz register"
                                                             onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
                                                             className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#3d5ee1] hover:bg-[#e8ebfd] dark:hover:bg-[#1e2a5c] transition-colors shrink-0"
                                                         >
                                                             <BarChart2 className="h-4 w-4" />
                                                         </button>
                                                         <button
-                                                            onClick={() => setSelectedStudent(student)}
+                                                            onClick={() => router.push(`/staff/student/${student.adm_no}`)}
                                                             className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
                                                         >
                                                             <ChevronRight className="h-4 w-4" />
@@ -761,7 +725,7 @@ export default function StaffDashboard() {
                                                     </Avatar>
                                                     <div className="flex-1 min-w-0">
                                                         <button
-                                                            onClick={() => setSelectedStudent(student)}
+                                                            onClick={() => router.push(`/staff/student/${student.adm_no}`)}
                                                             className="font-semibold text-sm text-slate-900 dark:text-white hover:text-blue-600 line-clamp-2 break-words whitespace-normal text-left w-full"
                                                         >
                                                             {student.name}
@@ -794,20 +758,18 @@ export default function StaffDashboard() {
                                                                 Outside
                                                             </Button>
                                                         ) : (
-                                                            <Link href={`/staff/entry/${student.adm_no}`}>
-                                                                <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
-                                                                    <BookOpen className="h-3 w-3" /> Record
+                                                            <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                    <BookOpen className="h-3 w-3" /> Open progress
                                                                 </Button>
-                                                            </Link>
                                                         )}
                                                         <button
-                                                            title="View Hifz Progress"
+                                                            title="Open monthly Hifz register"
                                                             onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })}
                                                             className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
                                                         >
                                                             <BarChart2 className="h-4 w-4" />
                                                         </button>
-                                                        <button onClick={() => setSelectedStudent(student)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+                                                        <button onClick={() => router.push(`/staff/student/${student.adm_no}`)} className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
                                                             <ChevronRight className="h-4 w-4" />
                                                         </button>
                                                     </div>
@@ -843,17 +805,15 @@ export default function StaffDashboard() {
                                                             </div>
                                                             <div className="flex items-center gap-1.5 shrink-0">
                                                                 <button
-                                                                    title="View Hifz Progress"
+                                                                    title="Open monthly Hifz register"
                                                                     onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
                                                                     className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#3d5ee1] hover:bg-[#e8ebfd] transition-colors"
                                                                 >
                                                                     <BarChart2 className="h-4 w-4" />
                                                                 </button>
-                                                                <Link href={`/staff/entry/${student.adm_no}`}>
-                                                                    <Button size="sm" className="h-8 text-[11px] bg-green-600 hover:bg-green-700 text-white px-3">
-                                                                        <BookOpen className="h-3 w-3 mr-1" /> Record
-                                                                    </Button>
-                                                                </Link>
+                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-8 text-[11px] bg-green-600 hover:bg-green-700 text-white px-3">
+                                                                    <BookOpen className="h-3 w-3 mr-1" /> Open progress
+                                                                </Button>
                                                             </div>
                                                         </div>
                                                         {/* Desktop */}
@@ -867,17 +827,15 @@ export default function StaffDashboard() {
                                                             </div>
                                                             <div className="flex items-center gap-2 shrink-0">
                                                                 <button
-                                                                    title="View Hifz Progress"
+                                                                    title="Open monthly Hifz register"
                                                                     onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })}
                                                                     className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-[#e8ebfd] text-slate-400 hover:text-[#3d5ee1] transition-colors"
                                                                 >
                                                                     <BarChart2 className="h-4 w-4" />
                                                                 </button>
-                                                                <Link href={`/staff/entry/${student.adm_no}`}>
-                                                                    <Button size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
-                                                                        <BookOpen className="h-3 w-3" /> Record
-                                                                    </Button>
-                                                                </Link>
+                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                    <BookOpen className="h-3 w-3" /> Open progress
+                                                                </Button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -963,10 +921,14 @@ export default function StaffDashboard() {
             </div>
 
             {/* Hifz Progress Modal */}
-            <HifzProgressModal
+            <HifzMonthlyRegister
                 open={!!chartStudent}
                 onClose={() => setChartStudent(null)}
                 student={chartStudent}
+                onChange={() => {
+                    invalidateCache("/dashboard/staff")
+                    setRefreshTrigger(prev => prev + 1)
+                }}
             />
         </div>
     )

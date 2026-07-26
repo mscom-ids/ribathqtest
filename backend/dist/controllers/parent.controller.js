@@ -391,6 +391,7 @@ const getParentDashboard = async (req, res) => {
                  FROM hifz_logs hl
                  LEFT JOIN staff st ON hl.usthad_id = st.id
                  WHERE hl.student_id = $1
+                   AND hl.deleted_at IS NULL
                  ORDER BY hl.entry_date DESC, hl.created_at DESC
                  LIMIT 30`, [studentId]),
             db_1.db.query(`SELECT hl.id, hl.student_id, hl.mode, hl.entry_date,
@@ -402,10 +403,12 @@ const getParentDashboard = async (req, res) => {
                  WHERE hl.student_id = $1
                    AND hl.entry_date >= $2::date
                    AND hl.entry_date <= $3::date
+                   AND hl.deleted_at IS NULL
                  ORDER BY hl.entry_date ASC, hl.created_at ASC`, [studentId, fullMonth.startDate, fullMonth.endDate]),
             db_1.db.query(`SELECT surah_name, start_v, end_v, start_page, end_page
                  FROM hifz_logs
                  WHERE student_id = $1 AND mode = 'New Verses'
+                   AND deleted_at IS NULL
                  ORDER BY entry_date ASC, created_at ASC`, [studentId]),
             db_1.db.query(`SELECT report_month, hifz_pages, recent_pages, juz_revision,
                         total_juz, attendance, NULL::text AS grade, updated_at

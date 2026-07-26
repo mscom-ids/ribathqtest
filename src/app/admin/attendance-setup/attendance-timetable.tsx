@@ -150,6 +150,33 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     const [copyTargetDay, setCopyTargetDay] = useState("1")
     const [copySourceDay, setCopySourceDay] = useState("")
     const [copyEffectiveFrom, setCopyEffectiveFrom] = useState(localDateKey())
+    const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([])
+    const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
+
+    const loadSubjects = useCallback(async () => {
+        if (!academicYearId) return
+        try {
+            const mentorQuery = selectedMentorId ? `&mentor_id=${selectedMentorId}` : ""
+            const res = await api.get(`/attendance/subjects?academic_year_id=${academicYearId}&department=${department}${mentorQuery}`)
+            setSubjects(res.data?.data || [])
+        } catch (error) {
+            console.error("Could not load subjects", error)
+        }
+    }, [academicYearId, department, selectedMentorId])
+
+    useEffect(() => {
+        void loadSubjects()
+    }, [loadSubjects])
+
+    const uniqueSubjects = useMemo(() => {
+        const seen = new Set()
+        return subjects.filter(sub => {
+            const nameLower = String(sub.name || '').trim().toLowerCase()
+            if (seen.has(nameLower)) return false
+            seen.add(nameLower)
+            return true
+        })
+    }, [subjects])
 
     const loadData = useCallback(async () => {
         if (!academicYearId) return
@@ -264,6 +291,13 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         setStartTime("06:30")
         setEndTime("08:00")
         setEffectiveFrom(localDateKey())
+        
+        if (subjects.length > 0) {
+            setSelectedSubjectId(subjects[0].id)
+        } else {
+            setSelectedSubjectId("new")
+        }
+        
         setCreateOpen(true)
     }
 
@@ -304,7 +338,10 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     }
 
     async function createSchedule() {
-        if (!selectedMentorId || groupIds.length === 0 || !className.trim() || !startTime || !endTime) return
+        const isNewSubject = !selectedSubjectId || selectedSubjectId === "new"
+        const nameToSave = isNewSubject ? className.trim() : ""
+        
+        if (!selectedMentorId || groupIds.length === 0 || (isNewSubject && !nameToSave) || !startTime || !endTime) return
         if (startTime >= endTime) {
             toast({ title: "Invalid time", description: "End time must be after start time.", variant: "destructive" })
             return
@@ -314,7 +351,8 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
             await api.post("/attendance/schedules", {
                 academic_year_id: academicYearId,
                 class_type: department,
-                name: className.trim(),
+                name: nameToSave || undefined,
+                subject_id: isNewSubject ? undefined : selectedSubjectId,
                 day_of_week: Number(weekday),
                 start_time: startTime,
                 end_time: endTime,
@@ -325,6 +363,7 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
             invalidateCache("/attendance/schedules")
             setCreateOpen(false)
             await loadData()
+            await loadSubjects()
             toast({
                 title: "Weekly class created",
                 description: "Attendance will open only for this class and its selected divisions.",
@@ -617,13 +656,30 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                         </div>
 
                         <div>
-                            <p className="mb-2 text-xs font-bold text-slate-600">Class name</p>
-                            <Input
-                                value={className}
-                                onChange={event => setClassName(event.target.value)}
-                                placeholder="Example: Hifz @ Subh"
-                            />
+                            <p className="mb-2 text-xs font-bold text-slate-600">Subject</p>
+                            <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select or create a subject" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="new">+ Create New Subject...</SelectItem>
+                                    {uniqueSubjects.map(sub => (
+                                        <SelectItem key={sub.id} value={sub.id}>{sub.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
+
+                        {(selectedSubjectId === "new" || !selectedSubjectId) && (
+                            <div>
+                                <p className="mb-2 text-xs font-bold text-slate-600">New Subject Name</p>
+                                <Input
+                                    value={className}
+                                    onChange={event => setClassName(event.target.value)}
+                                    placeholder="Example: Hifz Class 1"
+                                />
+                            </div>
+                        )}
 
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div>

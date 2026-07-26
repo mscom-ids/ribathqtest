@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { getAllStudents, getStudentById, getStudentCounts, getStudentInsideOutsideSummary, createStudent, updateStudent, exportStudents, downloadStudentsExcel } from '../controllers/students.controller';
 import { getNextStudentId, getStaff } from '../controllers/students.helpers';
-import { getDisciplinaryRecords, createDisciplinaryRecord, deleteDisciplinaryRecord } from '../controllers/academics.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -32,11 +31,6 @@ router.get('/inside-outside-summary', requireRole(STUDENT_MANAGE_ROLES), getStud
 
 // GET /api/students
 router.get('/', requireRole(STUDENT_VIEW_ROLES), getAllStudents);
-
-// Disciplinary Records
-router.get('/disciplinary', requireRole(STUDENT_VIEW_ROLES), getDisciplinaryRecords);
-router.post('/disciplinary', requireRole(STUDENT_MANAGE_ROLES), createDisciplinaryRecord);
-router.delete('/disciplinary/:id', requireRole(STUDENT_MANAGE_ROLES), deleteDisciplinaryRecord);
 
 // GET /api/students/:id
 router.get('/:id', requireRole(STUDENT_VIEW_ROLES), getStudentById);

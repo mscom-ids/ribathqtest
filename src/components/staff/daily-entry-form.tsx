@@ -165,6 +165,8 @@ const formSchema = z.object({
 })
 
 type FormValues = z.infer<typeof formSchema>
+type EntryFormMode = "daily" | "range"
+type VerseRangeMode = "New Verses" | "Recent Revision"
 type HifzLogRow = {
     id?: string
     mode?: string
@@ -201,11 +203,12 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     // Gate the form render until student + progress + log are all loaded.
     // Without this gate, the form renders with the default "New Verses" mode
     // first, then re-renders to "Juz Revision (New)" once the progress check
-    // returns — that's the visible blink for huffaz students.
+    // returns Ã¢â‚¬â€ that's the visible blink for huffaz students.
     const [initialLoading, setInitialLoading] = useState(true)
 
-    // ── Range Entry mode state ──────────────────────────────────────────────
-    const [entryMode, setEntryMode] = useState<'daily' | 'range'>('daily')
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Range Entry mode state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    const [entryMode, setEntryMode] = useState<EntryFormMode>('daily')
+    const [rangeMode, setRangeMode] = useState<VerseRangeMode>('New Verses')
     type RangeEntry = { fromSurah: number | undefined; fromAyah: number | undefined; toSurah: number | undefined; toAyah: number | undefined }
     const [ranges, setRanges] = useState<RangeEntry[]>([{ fromSurah: undefined, fromAyah: undefined, toSurah: undefined, toAyah: undefined }])
     const [rangeDate, setRangeDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -284,10 +287,14 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 existingLog = existingLogs[0]
             }
 
-            // Pick the right starting mode BEFORE rendering — huffaz students
+            // Pick the right starting mode BEFORE rendering Ã¢â‚¬â€ huffaz students
             // never see the "New Verses" UI flicker first.
             const resolvedMode =
                 isStudentHafiz && initialMode === "New Verses" ? "Juz Revision (New)" : initialMode
+
+            if (resolvedMode === "New Verses" || resolvedMode === "Recent Revision") {
+                setRangeMode(resolvedMode)
+            }
 
             if (existingLog) {
                 setLogId(existingLog.id)
@@ -516,6 +523,14 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 router.push(returnTo)
             } else {
                 setLogId(null)
+                form.reset({
+                    date: form.getValues("date"),
+                    mode: form.getValues("mode"),
+                    new_verses: [{ surah_id: "" as any, start_v: "" as any, end_v: "" as any }],
+                    juz_number: undefined,
+                    juz_portion: undefined,
+                    juz_entries: [{ juz_number: undefined, juz_portion: undefined }],
+                })
             }
         } catch (err: any) {
             alert("Error deleting: " + err?.response?.data?.error || err.message)
@@ -523,7 +538,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
         setLoading(false)
     }
 
-    // ── Range Entry helpers ───────────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Range Entry helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     function expandRangeToLogs(fromSurahId: number, fromAyah: number, toSurahId: number, toAyah: number) {
         const records: { surah_name: string; start_v: number; end_v: number }[] = []
         for (let sid = fromSurahId; sid <= toSurahId; sid++) {
@@ -537,11 +552,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     }
 
     function rangePreview(r: RangeEntry): string {
-        if (!r.fromSurah || !r.toSurah) return '—'
+        if (!r.fromSurah || !r.toSurah) return 'Ã¢â‚¬â€'
         const from = typedSurahList.find(s => s.id === r.fromSurah)
         const to = typedSurahList.find(s => s.id === r.toSurah)
         const surahCount = (r.toSurah ?? 0) - (r.fromSurah ?? 0) + 1
-        return `${from?.name ?? ''} ${r.fromAyah ?? '?'} → ${to?.name ?? ''} ${r.toAyah ?? '?'} · ${surahCount} surah(s)`
+        return `${from?.name ?? ''} ${r.fromAyah ?? '?'} Ã¢â€ â€™ ${to?.name ?? ''} ${r.toAyah ?? '?'} Ã‚Â· ${surahCount} surah(s)`
     }
 
     async function handleRangeSave() {
@@ -564,7 +579,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 return
             }
             if (r.fromSurah === r.toSurah && (r.fromAyah ?? 0) > (r.toAyah ?? 0)) {
-                setRangeError(`Range ${i + 1}: Start ayah must be ≤ end ayah`)
+                setRangeError(`Range ${i + 1}: Start ayah must be Ã¢â€°Â¤ end ayah`)
                 return
             }
             if (toSurahData && (r.toAyah ?? 0) > toSurahData.totalVerses) {
@@ -592,7 +607,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                         student_id: studentId,
                         usthad_id: targetUsthadId,
                         entry_date: rangeDate,
-                        mode: 'New Verses',
+                        mode: rangeMode,
                         surah_name: rec.surah_name,
                         start_v: rec.start_v,
                         end_v: rec.end_v,
@@ -624,6 +639,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     }
     const isOldDate = !isDateAllowedForRecording(form.watch("date"))
     const isRangeDateLocked = !isDateAllowedForRecording(rangeDate)
+    const canUseRangeEntry = watchedMode === "New Verses" || watchedMode === "Recent Revision"
     const lockWindowDays = accessPolicy?.default_window_days || 7
     const unlockLabel = accessPolicy?.unlock_start_date && accessPolicy?.unlock_end_date
         ? ` Admin unlock: ${accessPolicy.unlock_start_date} to ${accessPolicy.unlock_end_date}.`
@@ -642,7 +658,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                     <h1 className="ml-2 text-lg font-bold text-slate-800 dark:text-slate-100">{student?.name || "Student"}</h1>
                 </div>
                 <div className="rounded-xl border border-orange-200 dark:border-orange-800/50 bg-orange-50 dark:bg-orange-950/20 p-6 text-center space-y-3">
-                    <div className="text-4xl">🚫</div>
+                    <div className="text-4xl">Ã°Å¸Å¡Â«</div>
                     <h2 className="font-bold text-orange-700 dark:text-orange-400 text-base">Student is Currently Outside</h2>
                     <p className="text-sm text-orange-600 dark:text-orange-500">
                         Hifz records cannot be added for students who are outside the institution.
@@ -665,32 +681,11 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                 <h1 className="ml-2 text-lg font-bold text-slate-800 dark:text-slate-100">{student?.name || "Loading..."}</h1>
             </div>
 
-            {/* ── Mode Toggle ───────────────────────────────────────────── */}
-            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-full mb-3">
-                <button
-                    type="button"
-                    onClick={() => setEntryMode('daily')}
-                    className={`flex-1 py-1.5 px-4 rounded-full text-xs font-bold transition-all ${
-                        entryMode === 'daily' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                >
-                    Daily Entry
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setEntryMode('range')}
-                    className={`flex-1 py-1.5 px-4 rounded-full text-xs font-bold transition-all ${
-                        entryMode === 'range' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                >
-                    Range Entry
-                </button>
-            </div>
-
-            {/* ── RANGE ENTRY MODE ──────────────────────────────────────── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Mode Toggle Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ RANGE ENTRY MODE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
             {entryMode === 'range' && (
                 <div className="space-y-3">
-                    {/* Date picker — free, no lock */}
+                    {/* Date picker Ã¢â‚¬â€ free, no lock */}
                     <div className="bg-white dark:bg-slate-900 border border-emerald-900/10 rounded-xl p-3 shadow-sm">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2">Entry Date (Historical)</p>
                         <input
@@ -708,11 +703,28 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                     {/* Range cards */}
                     <div className="bg-white dark:bg-slate-900 border border-emerald-900/10 rounded-xl shadow-sm overflow-hidden">
-                        <div className="p-3 pb-1.5 bg-emerald-50/30 dark:bg-emerald-950/10 border-b border-emerald-900/5">
-                            <p className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Recitation Ranges</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Each range is saved as individual surah records</p>
-                        </div>
-                        <div className="p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-3 p-3 pb-1.5 bg-emerald-50/30 dark:bg-emerald-950/10 border-b border-emerald-900/5">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Recitation Ranges</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">Each range is saved as individual surah records</p>
+                            </div>
+                            <div className="flex shrink-0 rounded-lg bg-white/70 p-0.5 dark:bg-slate-900/70">
+                                <button
+                                    type="button"
+                                    onClick={() => setRangeMode("New Verses")}
+                                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${rangeMode === "New Verses" ? "bg-emerald-600 text-white" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
+                                >
+                                    New Hifz
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRangeMode("Recent Revision")}
+                                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${rangeMode === "Recent Revision" ? "bg-orange-500 text-white" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
+                                >
+                                    Recent Rev.
+                                </button>
+                            </div>
+                        </div>                        <div className="p-3 space-y-3">
                             {ranges.map((r, idx) => (
                                 <div key={idx} className="p-3 border-l-2 border-emerald-500 bg-emerald-950/10 rounded-r-lg space-y-2">
                                     <div className="flex justify-between items-center">
@@ -769,7 +781,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                     {/* Preview */}
                                     {r.fromSurah && r.toSurah && (
                                         <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pt-1 border-t border-emerald-900/10">
-                                            📖 {rangePreview(r)}
+                                            Ã°Å¸â€œâ€“ {rangePreview(r)}
                                         </p>
                                     )}
                                 </div>
@@ -785,20 +797,30 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                     {/* Feedback */}
                     {rangeError && <p className="text-xs text-red-500 font-medium px-1">{rangeError}</p>}
-                    {rangeSuccess && <p className="text-xs text-emerald-600 font-bold px-1">✅ Saved successfully!</p>}
+                    {rangeSuccess && <p className="text-xs text-emerald-600 font-bold px-1">Ã¢Å“â€¦ Saved successfully!</p>}
 
-                    <Button
-                        type="button"
-                        onClick={handleRangeSave}
-                        disabled={rangeSaving || isRangeDateLocked}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-sm font-bold shadow-md"
-                    >
-                        {rangeSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2 h-4 w-4" />Save Range</>}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setEntryMode("daily")}
+                            className="h-10 px-4 text-xs font-bold"
+                        >
+                            Daily Entry
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleRangeSave}
+                            disabled={rangeSaving || isRangeDateLocked}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-sm font-bold shadow-md"
+                        >
+                            {rangeSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : <><Save className="mr-2 h-4 w-4" />Save {rangeMode === "New Verses" ? "New Hifz" : "Recent Revision"} Range</>}
+                        </Button>
+                    </div>
                 </div>
             )}
 
-            {/* ── DAILY ENTRY MODE ──────────────────────────────────────── */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ DAILY ENTRY MODE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
             {entryMode === 'daily' && (
                 <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
@@ -832,8 +854,23 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
                     <Card className="border border-emerald-900/10 shadow-sm overflow-hidden">
                         <CardHeader className="p-3 pb-1.5 bg-emerald-50/30 dark:bg-emerald-950/10 border-b border-emerald-900/5">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between gap-3">
                                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Hifz Progress Tracker</CardTitle>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!canUseRangeEntry) return
+                                        setRangeMode(watchedMode as VerseRangeMode)
+                                        setRangeDate(form.getValues("date"))
+                                        setRangeError(null)
+                                        setEntryMode("range")
+                                    }}
+                                    disabled={!canUseRangeEntry || isOldDate}
+                                    title={canUseRangeEntry ? "Record a Quran range" : "Range entry is available for New Hifz and Recent Revision"}
+                                    className="rounded-md border border-emerald-600/30 px-2.5 py-1 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-45 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                                >
+                                    Range Entry
+                                </button>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-3 p-3 pt-2">

@@ -4,7 +4,11 @@ import {
     bulkCreateHifzLogs, getMaxJuzForStudent, getProgressSummary,
     deleteHifzLog, getMonthlyReports, upsertMonthlyReport,
     calculateBulkMonthlyReport, getMonthlyReportSettings,
-    upsertMonthlyReportSettings
+    upsertMonthlyReportSettings,
+    getHifzStudentMonth,
+    createMonthlyHifzEntry,
+    updateMonthlyHifzEntry,
+    deleteMonthlyHifzEntry
 } from '../controllers/hifz.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 import { exportMonthlyReportExcel, exportMonthlyReportPdf } from '../controllers/hifz-export.controller';
@@ -20,6 +24,12 @@ router.get('/progress-summary', getProgressSummary);
 
 // GET /api/hifz/students
 router.get('/students', getHifzStudents);
+
+// Interactive month register: schedules, attendance, entries, summary, and eligibility.
+router.get('/students/:studentId/month', getHifzStudentMonth);
+router.post('/entries', createMonthlyHifzEntry);
+router.patch('/entries/:id', updateMonthlyHifzEntry);
+router.delete('/entries/:id', deleteMonthlyHifzEntry);
 
 // GET /api/hifz/logs
 router.get('/logs', getHifzLogsList);

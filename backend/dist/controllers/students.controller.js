@@ -656,6 +656,19 @@ const updateStudent = async (req, res) => {
             const newHifzMentorId = updateData.hifz_mentor_id !== undefined ? (updateData.hifz_mentor_id || null) : undefined;
             const oldHifzMentorId = currentRes.rows[0]?.hifz_mentor_id || null;
             if (newHifzMentorId !== undefined && String(newHifzMentorId || '') !== String(oldHifzMentorId || '')) {
+                const currentYear = await client.query(`SELECT id
+           FROM academic_years
+           WHERE is_current = true
+           ORDER BY start_date DESC
+           LIMIT 1`);
+                if (currentYear.rows[0]?.id) {
+                    await client.query(`INSERT INTO student_year_snapshots
+                (student_id, academic_year_id, hifz_mentor_id, status, updated_at)
+             VALUES ($1, $2, $3, 'active', now())
+             ON CONFLICT (student_id, academic_year_id) DO UPDATE SET
+                hifz_mentor_id = EXCLUDED.hifz_mentor_id,
+                updated_at = now()`, [studentId, currentYear.rows[0].id, newHifzMentorId]);
+                }
                 try {
                     // Close existing active entry
                     await client.query(`UPDATE hifz_mentor_history
@@ -682,6 +695,7 @@ const updateStudent = async (req, res) => {
             (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
             (0, server_cache_1.invalidateCacheByPrefix)('finance:active-students');
             (0, server_cache_1.invalidateCacheByPrefix)('attendance:');
+            (0, server_cache_1.invalidateCacheByPrefix)('mentor-students:');
             (0, server_cache_1.invalidateCacheByPrefix)('leaves:');
             res.json({ success: true, student: result.rows[0] });
         }

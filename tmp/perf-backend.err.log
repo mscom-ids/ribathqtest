@@ -4,3 +4,660 @@ Error: read ECONNRESET
   code: 'ECONNRESET',
   syscall: 'read'
 }
+[SLOW DB] 260ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[SLOW DB] 420ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW API] GET /api/staff/me 304 538.5ms
+[SLOW DB] 331ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[SLOW DB] 332ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[SLOW DB] 336ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[SLOW DB] 337ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW DB] 337ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[SLOW DB] 339ms params=2 sql="SELECT s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(sys.school_standard, s.standard) AS standard, s.dob, (SELECT name FROM staff WHERE id = sys.hifz_mentor_id) as hifz_mentor_name, (SELECT name FROM staff WHERE "
+[SLOW DB] 513ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW DB] 967ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date"
+[SLOW API] GET /api/dashboard/staff 200 1727.7ms
+[SLOW DB] 304ms params=2 sql="SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 304ms params=2 sql="SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 362ms params=2 sql="SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 365ms params=2 sql="SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime FROM student_leaves WHERE status = 'outside' AND start_datetime < ($2::date + 1) AND CO"
+[SLOW DB] 507ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW DB] 406ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date BETWEEN $1::date AND $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/reports/management/attendance 304 1204.7ms
+[SLOW DB] 696ms params=4 sql="SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[SLOW API] GET /api/reports/management/attendance 304 1026.5ms
+[SLOW DB] 346ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/dashboard/staff 304 526.1ms
+Error: read ECONNRESET
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:217:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}
+[SLOW DB] 255ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 301ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[SLOW DB] 387ms params=2 sql="SELECT * FROM attendance_subjects WHERE academic_year_id = $1 AND department = $2 ORDER BY name ASC"
+[SLOW API] GET /api/attendance/subjects 200 585.0ms
+[SLOW DB] 545ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[SLOW API] GET /api/academic-placements/attendance-groups 304 556.1ms
+[SLOW DB] 851ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/attendance/schedules 200 1382.7ms
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/management-reports.controller.ts(352,49): error TS2304: Cannot find name 'SubjectGroup'.
+src/controllers/management-reports.controller.ts(355,29): error TS2304: Cannot find name 'subjectGroupKey'.
+src/controllers/management-reports.controller.ts(374,23): error TS2304: Cannot find name 'sortSubjectGroups'.
+src/controllers/management-reports.controller.ts(382,33): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+src/controllers/management-reports.controller.ts(383,25): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+src/controllers/management-reports.controller.ts(392,61): error TS2304: Cannot find name 'ALL_SUBJECT_ID'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2304, 2304, 2304, 2304, 2304, 2304 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/management-reports.controller.ts(435,40): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(445,44): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(465,25): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(472,54): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(499,48): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(522,29): error TS18048: 'subject' is possibly 'undefined'.
+src/controllers/management-reports.controller.ts(523,31): error TS18048: 'subject' is possibly 'undefined'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    18048, 18048,
+    18048, 18048,
+    18048, 18048,
+    18048
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+(node:20004) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 exit listeners added to [Bus]. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/staff.controller.ts(78,41): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2345 ]
+}
+[SLOW DB] 578ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[SLOW API] GET /api/auth/me 304 590.1ms
+[SLOW DB] 668ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[SLOW API] GET /api/staff 304 677.5ms
+[SLOW DB] 678ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[SLOW DB] 704ms params=1 sql="SELECT COUNT(*) FROM students WHERE (hifz_mentor_id = $1 OR school_mentor_id = $1 OR madrasa_mentor_id = $1) AND status = 'active'"
+[SLOW API] GET /api/staff/c260111f-a091-4de2-97e2-e49bd7f0f89a 304 707.9ms
+[SLOW DB] 426ms params=0 sql="SELECT id FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 461ms params=1 sql="SELECT id, name, role FROM staff WHERE id = $1 LIMIT 1"
+[SLOW DB] 336ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW DB] 336ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.standard, s.batch_year, false AS is_hifz, (sys.school_mentor_id = $1) AS is_school, (sys.madrasa_mentor_id = $1) AS is_madrasa FROM students s JOIN student_year_sna"
+[SLOW API] GET /api/staff/c260111f-a091-4de2-97e2-e49bd7f0f89a/students 200 1285.8ms
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304,
+    2304, 1135, 1128,
+    1128, 1005, 1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(472,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(477,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(484,13): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(484,46): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(487,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(487,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(490,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(460,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(483,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(488,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(488,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(496,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304, 2304,
+    2322, 2695, 2304, 2304,
+    2304, 2304, 2304, 1135,
+    1128, 1128, 1005, 1128,
+    1135, 1128, 1128, 1005,
+    1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(471,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(476,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(486,13): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(486,46): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(489,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(489,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(492,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(485,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(490,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(490,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(498,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304, 2304,
+    2322, 2695, 2304, 2304,
+    2304, 2304, 2304, 1135,
+    1128, 1128, 1005, 1128,
+    1128, 1128, 1005, 1128
+  ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(428,13): error TS2695: Left side of comma operator is unused and has no side effects.
+src/controllers/hifz.controller.ts(439,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(439,40): error TS2304: Cannot find name 'result'.
+src/controllers/hifz.controller.ts(442,9): error TS2304: Cannot find name 'res'.
+src/controllers/hifz.controller.ts(471,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(415,9): error TS1135: Argument expression expected.
+src/controllers/hifz.controller.ts(436,9): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,5): error TS1128: Declaration or statement expected.
+src/controllers/hifz.controller.ts(440,7): error TS1005: 'try' expected.
+src/controllers/hifz.controller.ts(448,1): error TS1128: Declaration or statement expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [
+    2695, 2304, 2304,
+    2304, 2322, 1135,
+    1128, 1128, 1005,
+    1128
+  ]
+}
+(node:20004) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 exit listeners added to [Bus]. Use emitter.setMaxListeners() to increase limit
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(475,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+src/controllers/hifz.controller.ts(441,41): error TS1005: ',' expected.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2322, 1005 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/controllers/hifz.controller.ts(477,13): error TS2322: Type 'string | string[]' is not assignable to type 'string | null | undefined'.
+  Type 'string[]' is not assignable to type 'string'.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2322 ]
+}
+D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/services/hifz-monthly-register.service.ts(237,98): error TS2550: Property 'at' does not exist on type 'Schedule[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+
+    at createTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:859:12)
+    at reportTSError (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:863:19)
+    at getOutput (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1077:36)
+    at Object.compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1433:41)
+    at Module.m._compile (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\NewRQP\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19) {
+  diagnosticCodes: [ 2550 ]
+}
+Error: read ECONNRESET
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:217:20) {
+  errno: -4077,
+  code: 'ECONNRESET',
+  syscall: 'read'
+}

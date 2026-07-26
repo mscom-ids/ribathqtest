@@ -12,6 +12,11 @@ router.use((0, auth_middleware_1.requireRole)(['admin', 'principal', 'vice_princ
 router.get('/progress-summary', hifz_controller_1.getProgressSummary);
 // GET /api/hifz/students
 router.get('/students', hifz_controller_1.getHifzStudents);
+// Interactive month register: schedules, attendance, entries, summary, and eligibility.
+router.get('/students/:studentId/month', hifz_controller_1.getHifzStudentMonth);
+router.post('/entries', hifz_controller_1.createMonthlyHifzEntry);
+router.patch('/entries/:id', hifz_controller_1.updateMonthlyHifzEntry);
+router.delete('/entries/:id', hifz_controller_1.deleteMonthlyHifzEntry);
 // GET /api/hifz/logs
 router.get('/logs', hifz_controller_1.getHifzLogsList);
 // POST /api/hifz/logs/bulk  (must be before /:id to avoid conflict)

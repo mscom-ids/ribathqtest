@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
-import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle } from "lucide-react"
+import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle, User, BookOpen, CalendarCheck2, LineChart, GraduationCap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -222,12 +222,12 @@ export default function UnifiedReportView() {
                         <div className="space-y-2 md:col-span-2">
                             <Label>Date Range</Label>
                             {reportType === "Custom" ? (
-                                <div className="flex flex-col md:flex-row gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2 w-full">
                                     <Popover>
                                         <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full bg-white justify-start text-left font-normal", !dateRanges.start && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {dateRanges.start ? format(dateRanges.start, "PPP") : "Start Date"}
+                                            <Button variant="outline" className={cn("flex-1 min-w-0 bg-white justify-start text-left font-normal", !dateRanges.start && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                                                <span className="truncate">{dateRanges.start ? format(dateRanges.start, "PPP") : "Start Date"}</span>
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0" align="start">
@@ -236,9 +236,9 @@ export default function UnifiedReportView() {
                                     </Popover>
                                     <Popover>
                                         <PopoverTrigger asChild>
-                                            <Button variant="outline" className={cn("w-full bg-white justify-start text-left font-normal", !dateRanges.end && "text-muted-foreground")}>
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {dateRanges.end ? format(dateRanges.end, "PPP") : "End Date"}
+                                            <Button variant="outline" className={cn("flex-1 min-w-0 bg-white justify-start text-left font-normal", !dateRanges.end && "text-muted-foreground")}>
+                                                <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                                                <span className="truncate">{dateRanges.end ? format(dateRanges.end, "PPP") : "End Date"}</span>
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0" align="start">
@@ -282,9 +282,9 @@ export default function UnifiedReportView() {
 
             {/* PRINTABLE REGION */}
             {reportData && (
-                <div className="bg-white text-slate-900 border rounded-xl overflow-hidden print:border-none print:shadow-none shadow-sm print:p-0 p-6 print:m-0 print:w-full print:block">
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b pb-6 print:border-b-2">
+                <div className="report-print-area bg-white text-slate-900 border rounded-xl overflow-hidden print:border-none print:shadow-none shadow-sm print:p-0 p-6 print:m-0 print:w-full print:block">
+                    {/* Header — screen only */}
+                    <div className="flex items-center justify-between border-b pb-6 print:hidden">
                         <div>
                             <h2 className="text-2xl font-black uppercase tracking-wider text-slate-800">Student Progress Report</h2>
                             <p className="text-sm text-slate-500 mt-1 font-medium">{format(dateRanges.start, 'MMM d, yyyy')} — {format(dateRanges.end, 'MMM d, yyyy')} ({reportType})</p>
@@ -299,7 +299,7 @@ export default function UnifiedReportView() {
                         </div>
                     </div>
 
-                    <div className="mt-8 space-y-8">
+                    <div className="mt-8 space-y-8 print:hidden">
                         {/* Student Meta */}
                         <div className="bg-slate-50 print:bg-transparent border print:border-slate-300 rounded-xl p-5 print:p-4">
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -383,23 +383,23 @@ export default function UnifiedReportView() {
                                     }
                                 })
                                 return (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4">
                                         {Array.from(merged.values()).map((att: any, i: number) => {
                                             const countedTotal = att.effective_total || att.total || 0
                                             const pct = countedTotal > 0 ? Math.round((att.attended / countedTotal) * 100) : 0
                                             return (
-                                                <div key={i} className="border border-slate-200 rounded-lg p-4 print:border-slate-300 print:break-inside-avoid">
-                                                    <p className="text-sm font-bold text-slate-700 mb-2">{att.session}</p>
+                                                <div key={i} className="border border-slate-200 rounded-lg p-4 print:p-2.5 print:border-slate-300 print:break-inside-avoid">
+                                                    <p className="text-sm print:text-xs font-bold text-slate-700 mb-2 print:mb-1">{att.session}</p>
                                                     <div className="flex justify-between items-end">
-                                                        <div className="space-y-1">
-                                                            <p className="text-xs text-slate-600">Attended: <span className="font-semibold text-emerald-600">{att.attended}</span></p>
-                                                            <p className="text-xs text-slate-600">Not attended: <span className="font-semibold text-red-600">{att.not_attended}</span></p>
-                                                            <p className="text-xs text-slate-600">Cancelled: <span className="font-semibold text-slate-500">{att.cancelled}</span></p>
+                                                        <div className="space-y-1 print:space-y-0.5">
+                                                            <p className="text-xs print:text-[10px] text-slate-600">Attended: <span className="font-semibold text-emerald-600">{att.attended}</span></p>
+                                                            <p className="text-xs print:text-[10px] text-slate-600">Not attended: <span className="font-semibold text-red-600">{att.not_attended}</span></p>
+                                                            <p className="text-xs print:text-[10px] text-slate-600">Cancelled: <span className="font-semibold text-slate-500">{att.cancelled}</span></p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <span className="text-2xl font-black text-slate-800">{pct}%</span>
-                                                            <p className="text-[10px] text-slate-400 font-medium">counted: {countedTotal}</p>
-                                                            <p className="text-[10px] text-slate-400 font-medium">scheduled: {att.planned}</p>
+                                                            <span className="text-2xl print:text-lg font-black text-slate-800">{pct}%</span>
+                                                            <p className="text-[10px] print:text-[9px] text-slate-400 font-medium">counted: {countedTotal}</p>
+                                                            <p className="text-[10px] print:text-[9px] text-slate-400 font-medium">scheduled: {att.planned}</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -415,7 +415,7 @@ export default function UnifiedReportView() {
                         </div>
 
                         {reportData.performance && (
-                            <div className="print:break-inside-avoid">
+                            <div className="print:hidden">
                                 <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Performance & Grade</h3>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                     <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
@@ -446,7 +446,7 @@ export default function UnifiedReportView() {
                         {/* Hifz Progress Metrics */}
                         <div className="print:break-inside-avoid">
                             <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Hifz Activity</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-5 gap-4">
                                 {(()=>{
                                     const newVerses = reportData.hifz_logs_agg.find((l:any) => l.mode === 'New Verses')
                                     const juzRev = reportData.hifz_logs_agg.find((l:any) => l.mode === 'Juz Revision')
@@ -482,6 +482,243 @@ export default function UnifiedReportView() {
                                 })()}
                             </div>
                         </div>
+                    </div>
+
+                    {/* ===== PRINT-ONLY REDESIGNED REPORT ===== */}
+                    <div className="hidden print:block text-slate-900">
+                        {(() => {
+                            // Merge attendance by session name
+                            const merged = new Map<string, any>()
+                            ;(reportData.attendance || []).forEach((att: any) => {
+                                const rawSession = (att.session || 'Class').trim()
+                                const key = rawSession.toLowerCase()
+                                if (merged.has(key)) {
+                                    const ex = merged.get(key)
+                                    ex.attended += Number(att.attended ?? att.present ?? 0)
+                                    ex.not_attended += Number(att.not_attended ?? att.absent ?? 0)
+                                    ex.cancelled += Number(att.cancelled || 0)
+                                    ex.planned += Number(att.planned || att.total || 0)
+                                    ex.effective_total += Number(att.effective_total || att.total || 0)
+                                } else {
+                                    merged.set(key, {
+                                        session: rawSession.replace(/^hifz/i, 'Hifz'),
+                                        attended: Number(att.attended ?? att.present ?? 0),
+                                        not_attended: Number(att.not_attended ?? att.absent ?? 0),
+                                        cancelled: Number(att.cancelled || 0),
+                                        planned: Number(att.planned || att.total || 0),
+                                        effective_total: Number(att.effective_total || att.total || 0),
+                                    })
+                                }
+                            })
+                            const classes = Array.from(merged.values())
+                            const first = classes[0]
+                            const rest = classes.slice(1)
+                            const t = reportData.attendance_totals || {}
+                            const grade = reportData.performance?.grade || null
+
+                            const newVerses = reportData.hifz_logs_agg?.find((l: any) => l.mode === 'New Verses')
+                            const juzRev = reportData.hifz_logs_agg?.find((l: any) => l.mode === 'Juz Revision')
+                            const exactNewPages = Number(reportData.hifz_activity?.new_pages_recited ?? newVerses?.pages_recited ?? 0)
+                            const completedLifetimeJuz = Number(reportData.hifz_activity?.completed_lifetime_juz ?? 0)
+
+                            const pctOf = (c: any) => {
+                                const tot = c.effective_total || c.planned || 0
+                                return tot > 0 ? Math.round((c.attended / tot) * 100) : 0
+                            }
+
+                            const batchYear = reportData.student.batch_year || '2026'
+                            const studentBatch = reportData.student.adm_no ? `${reportData.student.adm_no}-${batchYear}` : 'N/A'
+
+                            return (
+                                <div className="p-[8mm] space-y-6 text-slate-900 font-sans">
+                                    {/* Title Header with GraduationCap Watermark */}
+                                    <div className="relative flex items-start justify-between border-b-2 border-slate-900 pb-3">
+                                        <GraduationCap className="absolute -right-2 -top-6 h-36 w-36 text-slate-200/50 -z-10 pointer-events-none stroke-[1.2]" />
+                                        <div>
+                                            <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">STUDENT PROGRESS REPORT</h1>
+                                            <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                                Academic Year {reportData.academic_year || "2025-2026"} • {format(dateRanges.start, 'MMM d, yyyy')} — {format(dateRanges.end, 'MMM d, yyyy')}
+                                            </p>
+                                        </div>
+                                        <div className="text-right z-10">
+                                            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Report Generated</p>
+                                            <p className="text-sm font-bold text-slate-900">{format(dateRanges.end, 'MMMM d, yyyy')}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Student Information */}
+                                    <div>
+                                        <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
+                                            <User className="h-3.5 w-3.5 text-slate-500" /> Student Information
+                                        </p>
+                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-2xl p-5 grid grid-cols-2 gap-x-12 gap-y-4">
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Full Name</p>
+                                                <p className="font-bold text-slate-900 text-sm mt-0.5">{reportData.student.name || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Student ID / Batch</p>
+                                                <p className="font-bold text-slate-900 text-sm mt-0.5">{studentBatch}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Class Level</p>
+                                                <p className="font-bold text-slate-900 text-sm mt-0.5">{reportData.student.standard || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Assigned Mentor</p>
+                                                <p className="font-bold text-slate-900 text-sm mt-0.5">{reportData.student.hifz_mentor || 'N/A'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Session Attendance Overview */}
+                                    <div>
+                                        <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
+                                            <CalendarCheck2 className="h-3.5 w-3.5 text-slate-500" /> Session Attendance Overview
+                                        </p>
+                                        <div className="grid grid-cols-4 gap-3">
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Cancelled</p>
+                                                <p className="text-2xl font-black text-slate-900 mt-1">{t.cancelledClasses ?? 0}</p>
+                                            </div>
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Attended</p>
+                                                <div className="mt-1 flex items-baseline justify-center">
+                                                    <span className="text-2xl font-black text-slate-900">{t.attendedClasses ?? 0}</span>
+                                                    <span className="text-xs font-semibold text-slate-400">/{t.effectiveClasses ?? 0}</span>
+                                                </div>
+                                            </div>
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Not Attended</p>
+                                                <p className="text-2xl font-black text-red-600 mt-1">{t.notAttendedClasses ?? 0}</p>
+                                            </div>
+                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Counted</p>
+                                                <p className="text-2xl font-black text-slate-900 mt-1">{t.effectiveClasses ?? 0}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Academic Class Details */}
+                                    <div className="break-inside-avoid">
+                                        <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
+                                            <BookOpen className="h-3.5 w-3.5 text-slate-500" /> Academic Class Details
+                                        </p>
+                                        {classes.length > 0 ? (
+                                            <>
+                                                {first && (
+                                                    <div className="border border-slate-300 rounded-xl overflow-hidden mb-3 bg-white">
+                                                        <div className="bg-[#1E293B] text-white px-5 py-3 flex items-center justify-between">
+                                                            <p className="font-bold text-sm text-white">{first.session}</p>
+                                                            <span className="text-[10px] bg-[#E2E8F0] text-[#1E293B] font-bold rounded-full px-3 py-0.5">
+                                                                Attendance: {pctOf(first)}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="bg-[#F1F5F9] grid grid-cols-3 px-5 py-2 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                                                            <span>Metric</span><span>Sessions</span><span>Performance</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-3 px-5 py-3.5 text-sm items-center bg-white">
+                                                            <span className="text-slate-700 font-medium">Session Completion</span>
+                                                            <span className="text-slate-900 font-bold">{first.attended} / {first.effective_total || first.planned || 0}</span>
+                                                            <span>
+                                                                <span className={cn("text-xs font-black uppercase tracking-wider", pctOf(first) >= 75 ? "text-emerald-600" : pctOf(first) >= 40 ? "text-amber-600" : "text-red-600")}>
+                                                                    {pctOf(first) >= 75 ? "GOOD" : pctOf(first) >= 40 ? "AVERAGE" : "CRITICAL"}
+                                                                </span>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {rest.length > 0 && (
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {rest.map((c: any, i: number) => (
+                                                            <div key={i} className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4">
+                                                                <div className="flex items-center justify-between mb-3 border-b border-slate-200/60 pb-2">
+                                                                    <p className="font-bold text-slate-900 text-sm">{c.session}</p>
+                                                                    <span className="text-xs font-bold text-slate-500">{pctOf(c)}% Rate</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-xs text-slate-500 font-medium">Sessions Attended</span>
+                                                                    <span className="font-black text-slate-900 text-lg">{c.attended}/{c.effective_total || c.planned || 0}</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-5 text-center text-slate-500 text-xs font-medium">
+                                                No academic class session records logged for this report period.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Learning Activity Metrics */}
+                                    <div className="break-inside-avoid">
+                                        <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
+                                            <LineChart className="h-3.5 w-3.5 text-slate-500" /> Learning Activity Metrics
+                                        </p>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="grid grid-cols-2 gap-3 col-span-2">
+                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Pages Recited</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-2">{exactNewPages.toFixed(1)}</p>
+                                                </div>
+                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Revision Days</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-2">{reportData.revision_days}</p>
+                                                </div>
+                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Juz Revisions</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-2">{juzRev?.entry_count || 0}</p>
+                                                </div>
+                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Total Lifetime Juz</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-2">{completedLifetimeJuz}</p>
+                                                </div>
+                                            </div>
+                                            <div className="bg-[#1E293B] text-white rounded-xl p-5 flex flex-col items-center justify-center text-center col-span-1 h-full min-h-[195px]">
+                                                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mb-2">Overall Grade Status</p>
+                                                {(() => {
+                                                    const rawGrade = String(grade || '').trim();
+                                                    const hasValidGrade = rawGrade !== '' && rawGrade.toUpperCase() !== 'NO GRADE' && rawGrade.toUpperCase() !== 'N/A';
+                                                    return (
+                                                        <>
+                                                            <div className="my-2 h-16 w-16 rounded-full border-2 border-slate-600 flex items-center justify-center">
+                                                                {hasValidGrade ? (
+                                                                    <span className="text-2xl font-black text-white">{rawGrade}</span>
+                                                                ) : (
+                                                                    <span className="h-0.5 w-6 bg-white/70 rounded"></span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-base font-extrabold tracking-wide text-white mt-1">
+                                                                {hasValidGrade ? rawGrade : 'NO GRADE'}
+                                                            </p>
+                                                            {!hasValidGrade && (
+                                                                <p className="text-[10px] text-slate-400 mt-1.5 italic leading-snug max-w-[160px]">
+                                                                    Insufficient data for current period evaluation.
+                                                                </p>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="pt-8 flex items-end justify-between border-t border-slate-200 mt-6 break-inside-avoid">
+                                        <div>
+                                            <div className="w-48 border-t border-slate-400 mb-1.5"></div>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Mentor Signature</p>
+                                            <p className="font-bold text-slate-900 text-xs mt-0.5">{reportData.student.hifz_mentor || 'N/A'}</p>
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 text-right max-w-[220px] leading-relaxed">
+                                            This is a system-generated document and does not require a physical stamp unless requested for external verification.
+                                        </p>
+                                    </div>
+                                </div>
+                            )
+                        })()}
                     </div>
                 </div>
             )}

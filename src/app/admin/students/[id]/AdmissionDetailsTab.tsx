@@ -30,7 +30,7 @@ function getApiErrorMessage(error: unknown) {
   return maybeError?.message || "Unknown error"
 }
 
-export default function AdmissionDetailsTab({ studentId, initialData }: { studentId: string, initialData?: Partial<AdmissionDetails> }) {
+export default function AdmissionDetailsTab({ studentId, initialData, canEdit = true }: { studentId: string, initialData?: Partial<AdmissionDetails>, canEdit?: boolean }) {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
 
@@ -74,9 +74,11 @@ export default function AdmissionDetailsTab({ studentId, initialData }: { studen
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Ma&apos;din Ribathul Qur&apos;an College</CardTitle>
+        {canEdit && (
         <Button variant="outline" size="sm" onClick={() => editing ? form.handleSubmit(onSubmit)() : setEditing(true)}>
           {loading ? "Saving..." : editing ? "Save" : "Update"}
         </Button>
+        )}
       </CardHeader>
       <CardContent>
         <Form {...form}>
