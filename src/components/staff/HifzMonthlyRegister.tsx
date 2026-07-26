@@ -5,7 +5,6 @@ import { addMonths, format, startOfMonth, subMonths } from "date-fns"
 import { BookOpen, Calendar, Check, ChevronLeft, ChevronRight, ChevronsUpDown, LayoutGrid, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Table2, Trash2, X } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -359,6 +358,46 @@ function emptyDraft(): DraftItem {
   return { surah_name: "", start_v: "", end_v: "", juz_number: "", juz_portion: "" }
 }
 
+type RangeDraft = { fromSurah: string; fromAyah: string; toSurah: string; toAyah: string }
+
+function emptyRangeDraft(): RangeDraft {
+  return { fromSurah: "", fromAyah: "", toSurah: "", toAyah: "" }
+}
+
+function expandRangeDrafts(ranges: RangeDraft[]): DraftItem[] {
+  const expanded: DraftItem[] = []
+
+  for (const range of ranges) {
+    const from = SURAH_BY_NAME.get(range.fromSurah)
+    const to = SURAH_BY_NAME.get(range.toSurah)
+    const fromAyah = Number(range.fromAyah)
+    const toAyah = Number(range.toAyah)
+
+    if (!from || !to || !Number.isInteger(fromAyah) || !Number.isInteger(toAyah)) {
+      throw new Error("Select both Surahs and enter the start and end verses.")
+    }
+    if (fromAyah < 1 || fromAyah > from.totalVerses || toAyah < 1 || toAyah > to.totalVerses) {
+      throw new Error("A verse number is outside the selected Surah.")
+    }
+    if (from.id > to.id || (from.id === to.id && fromAyah > toAyah)) {
+      throw new Error("The range end must come after its start.")
+    }
+
+    for (const surah of SURAHS) {
+      if (surah.id < from.id || surah.id > to.id) continue
+      expanded.push({
+        surah_name: surah.name,
+        start_v: String(surah.id === from.id ? fromAyah : 1),
+        end_v: String(surah.id === to.id ? toAyah : surah.totalVerses),
+        juz_number: "",
+        juz_portion: "",
+      })
+    }
+  }
+
+  return expanded
+}
+
 function HifzEntryEditor({ target, onClose, onSave }: {
   target: EditorTarget
   onClose: () => void
@@ -369,12 +408,16 @@ function HifzEntryEditor({ target, onClose, onSave }: {
   const allowed = target?.day.eligibility.allowed ?? false
   const [items, setItems] = useState<DraftItem[]>([])
   const [removedIds, setRemovedIds] = useState<string[]>([])
+  const [entryMode, setEntryMode] = useState<"individual" | "range">("individual")
+  const [ranges, setRanges] = useState<RangeDraft[]>([emptyRangeDraft()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setItems(existing.length ? existing.map(toDraft) : [emptyDraft()])
     setRemovedIds([])
+    setEntryMode("individual")
+    setRanges([emptyRangeDraft()])
     setError(null)
   }, [target?.day.date, target?.activity])
 
@@ -412,11 +455,22 @@ function HifzEntryEditor({ target, onClose, onSave }: {
     })
   }
 
+  const setRange = (index: number, patch: Partial<RangeDraft>) =>
+    setRanges((current) => current.map((range, i) => (i === index ? { ...range, ...patch } : range)))
+  const addRange = () => setRanges((current) => [...current, emptyRangeDraft()])
+  const removeRange = (index: number) => setRanges((current) => {
+    const next = current.filter((_, i) => i !== index)
+    return next.length ? next : [emptyRangeDraft()]
+  })
+
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      await onSave({ day: target.day, activity: target.activity }, items, removedIds)
+      const saveItems = entryMode === "range"
+        ? [...items.filter((item) => item.id), ...expandRangeDrafts(ranges)]
+        : items
+      await onSave({ day: target.day, activity: target.activity }, saveItems, removedIds)
       onClose()
     } catch (cause) {
       const err = cause as { response?: { data?: { error?: string } }; message?: string }
@@ -427,94 +481,146 @@ function HifzEntryEditor({ target, onClose, onSave }: {
   }
 
   const showFields = allowed || existing.length > 0
-  const canSave = showFields && (items.some((item) => (isRange ? item.surah_name : item.juz_number) || item.id) || removedIds.length > 0)
+  const hasRangeValue = ranges.some((range) => range.fromSurah || range.toSurah || range.fromAyah || range.toAyah)
+  const canSave = showFields && (entryMode === "range"
+    ? hasRangeValue || removedIds.length > 0
+    : items.some((item) => (isRange ? item.surah_name : item.juz_number) || item.id) || removedIds.length > 0)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 pb-3">
-        <p className="flex items-center gap-2 font-semibold text-slate-900">
-          <span dir="rtl" className="text-base">{activity.ar}</span>
-          <span className="text-xs font-medium text-slate-500">{activity.en}</span>
-        </p>
-        <p className="text-xs text-slate-500">{format(dayObj(target.day.date), "EEE, d MMMM yyyy")}</p>
-      </div>
+      <DialogHeader className="shrink-0 border-b border-slate-100 px-5 py-4 text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <DialogTitle className="flex items-center gap-2 font-semibold text-slate-900">
+              <span dir="rtl" className="text-base">{activity.ar}</span>
+              <span className="text-xs font-medium text-slate-500">{activity.en}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">{format(dayObj(target.day.date), "EEE, d MMMM yyyy")}</DialogDescription>
+          </div>
+          {isRange && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEntryMode((mode) => mode === "range" ? "individual" : "range")}
+              className="shrink-0 border-emerald-200 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+            >
+              {entryMode === "range" ? "Daily Entry" : "Range Entry"}
+            </Button>
+          )}
+        </div>
+      </DialogHeader>
 
       {!showFields && (
-        <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">{target.day.eligibility.reason}</p>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
+          <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">{target.day.eligibility.reason}</p>
+        </div>
       )}
 
       {showFields && (
-        <>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 [touch-action:pan-y]">
-            {items.map((item, index) => (
-              <div key={item.id || `new-${index}`} className="rounded-lg border border-slate-200 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    {isRange ? "Surah" : "Juz"} {index + 1}
-                  </span>
-                  {(items.length > 1 || item.id) && (
-                    <button type="button" onClick={() => removeItem(index)} className="flex items-center gap-1 text-xs font-medium text-red-500 hover:underline">
-                      <Trash2 className="h-3.5 w-3.5" />Delete
-                    </button>
+        <div
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
+
+        >
+          {entryMode === "range" ? (
+            <>
+              <p className="text-xs text-slate-500">Each range is saved as individual Surah records.</p>
+              {ranges.map((range, index) => (
+                <div key={index} className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Range {index + 1}</span>
+                    {ranges.length > 1 && (
+                      <button type="button" onClick={() => removeRange(index)} className="flex items-center gap-1 text-xs font-medium text-red-500 hover:underline">
+                        <Trash2 className="h-3.5 w-3.5" />Delete
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">From</Label>
+                      <SurahCombobox value={range.fromSurah} onChange={(name) => setRange(index, { fromSurah: name })} />
+                      <Input type="number" min="1" placeholder="Verse" value={range.fromAyah} onChange={(event) => setRange(index, { fromAyah: event.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">To</Label>
+                      <SurahCombobox value={range.toSurah} onChange={(name) => setRange(index, { toSurah: name })} />
+                      <Input type="number" min="1" placeholder="Verse" value={range.toAyah} onChange={(event) => setRange(index, { toAyah: event.target.value })} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addRange} className="w-full border-dashed">
+                <Plus className="mr-2 h-4 w-4" />Add another range
+              </Button>
+            </>
+          ) : (
+            <>
+              {items.map((item, index) => (
+                <div key={item.id || `new-${index}`} className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      {isRange ? "Surah" : "Juz"} {index + 1}
+                    </span>
+                    {(items.length > 1 || item.id) && (
+                      <button type="button" onClick={() => removeItem(index)} className="flex items-center gap-1 text-xs font-medium text-red-500 hover:underline">
+                        <Trash2 className="h-3.5 w-3.5" />Delete
+                      </button>
+                    )}
+                  </div>
+                  {isRange ? (
+                    <div className="space-y-2">
+                      <SurahCombobox value={item.surah_name} onChange={(name) => setItem(index, { surah_name: name })} />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1"><Label className="text-xs">Start verse</Label><Input type="number" min="1" value={item.start_v} onChange={(event) => setItem(index, { start_v: event.target.value })} /></div>
+                        <div className="space-y-1"><Label className="text-xs">End verse</Label><Input type="number" min="1" value={item.end_v} onChange={(event) => setItem(index, { end_v: event.target.value })} /></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Juz number</Label>
+                        <select value={item.juz_number} onChange={(event) => setItem(index, { juz_number: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                          <option value="">Select Juz</option>
+                          {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Portion</Label>
+                        <select value={item.juz_portion} onChange={(event) => setItem(index, { juz_portion: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                          <option value="">Select portion</option>
+                          {PORTIONS.map((portion) => <option key={portion}>{portion}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  {item.id && (item.recorded_by_name || item.created_at) && (
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      Recorded by {item.recorded_by_name || "mentor"}
+                      {item.created_at ? ` on ${format(new Date(item.created_at), "d MMM yyyy, HH:mm")}` : ""}
+                      {item.updated_at ? ` · edited ${format(new Date(item.updated_at), "d MMM yyyy, HH:mm")}` : ""}
+                    </p>
                   )}
                 </div>
-                {isRange ? (
-                  <div className="space-y-2">
-                    <SurahCombobox value={item.surah_name} onChange={(name) => setItem(index, { surah_name: name })} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1"><Label className="text-xs">Start verse</Label><Input type="number" min="1" value={item.start_v} onChange={(event) => setItem(index, { start_v: event.target.value })} /></div>
-                      <div className="space-y-1"><Label className="text-xs">End verse</Label><Input type="number" min="1" value={item.end_v} onChange={(event) => setItem(index, { end_v: event.target.value })} /></div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Juz number</Label>
-                      <select value={item.juz_number} onChange={(event) => setItem(index, { juz_number: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-                        <option value="">Select Juz</option>
-                        {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Portion</Label>
-                      <select value={item.juz_portion} onChange={(event) => setItem(index, { juz_portion: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-                        <option value="">Select portion</option>
-                        {PORTIONS.map((portion) => <option key={portion}>{portion}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {item.id && (item.recorded_by_name || item.created_at) && (
-                  <p className="mt-2 text-[11px] text-slate-400">
-                    Recorded by {item.recorded_by_name || "mentor"}
-                    {item.created_at ? ` on ${format(new Date(item.created_at), "d MMM yyyy, HH:mm")}` : ""}
-                    {item.updated_at ? ` · edited ${format(new Date(item.updated_at), "d MMM yyyy, HH:mm")}` : ""}
-                  </p>
-                )}
-              </div>
-            ))}
-
-            {showFields && (
+              ))}
               <Button type="button" variant="outline" size="sm" onClick={addItem} className="w-full border-dashed">
                 <Plus className="mr-2 h-4 w-4" />{isRange ? "Add another Surah" : "Add another Juz"}
               </Button>
-            )}
-          </div>
-
-          {error && <p className="shrink-0 pt-2 text-sm text-red-600">{error}</p>}
-
-          <div className="mt-3 flex shrink-0 justify-end gap-2 border-t bg-white pt-3">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-            <Button type="button" onClick={save} disabled={saving || !canSave}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save
-            </Button>
-          </div>
-        </>
+            </>
+          )}
+        </div>
       )}
+
+      {error && <p className="shrink-0 px-5 pb-2 text-sm text-red-600">{error}</p>}
+
+      <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 bg-white px-5 py-3">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button type="button" onClick={save} disabled={saving || !canSave}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save
+        </Button>
+      </div>
     </div>
   )
 }
-
 /* --------------------------- Cells & layouts --------------------------- */
 
 function HifzCell({ day, activity, onOpen }: { day: Day; activity: Activity; onOpen: () => void }) {
@@ -547,8 +653,8 @@ function HifzCell({ day, activity, onOpen }: { day: Day; activity: Activity; onO
       {groups.length ? (
         <div className="flex flex-col gap-1 items-center justify-center w-full">
           {groups.map((group, idx) => (
-            <span key={idx} className={cn("inline-flex flex-col items-center justify-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold shadow-sm max-w-full transition", colors.bg, colors.text, colors.border)}>
-              <span dir="rtl" className="block truncate">{entryChip(group)}</span>
+            <span key={idx} className={cn("inline-flex min-w-0 max-w-full flex-col items-center justify-center rounded-md border px-1.5 py-1 text-[10px] font-semibold leading-tight shadow-sm transition sm:px-2 sm:text-[11px]", colors.bg, colors.text, colors.border)}>
+              <span dir="rtl" className="block w-full min-w-0 break-words whitespace-normal text-center">{entryChip(group)}</span>
             </span>
           ))}
         </div>
@@ -568,7 +674,7 @@ function ColumnHeader({ activity }: { activity: Activity }) {
     oldJuzRevision: "مراجعة قديمة (Old Rev)",
   }
   return (
-    <span className="text-xs font-bold text-slate-500 whitespace-nowrap block text-center">
+    <span className="block break-words text-center text-[10px] font-bold leading-4 text-slate-500 sm:text-xs">
       {labelMap[activity] || activity}
     </span>
   )
@@ -599,50 +705,54 @@ function DesktopWeeklyRegister({ weeks, columns, renderCell }: {
   columns: Activity[]
   renderCell: (day: Day, activity: Activity) => React.ReactNode
 }) {
+  const activityColumnWidth = `${85 / columns.length}%`
+
   return (
     <div className="space-y-6">
       {weeks.map((week) => (
         <div key={week.index} className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-600 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider mb-1">
+            <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-blue-600">
               Week {week.index}
             </span>
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="w-full border-collapse text-left text-sm table-fixed">
+          <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
+            <table className="w-full max-w-full table-fixed border-collapse text-left text-[11px] sm:text-sm">
+              <colgroup>
+                <col style={{ width: "15%" }} />
+                {columns.map((activity) => <col key={activity} style={{ width: activityColumnWidth }} />)}
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="w-24 px-4 py-3 align-middle text-xs font-bold uppercase tracking-wider text-slate-400">Date</th>
+                  <th className="min-w-0 px-2 py-2 align-middle text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:px-3 sm:py-3 sm:text-xs">Date</th>
                   {columns.map((activity) => (
-                    <th key={activity} className="w-[28%] px-4 py-3 align-middle text-center text-xs font-semibold text-slate-500">
+                    <th key={activity} className="min-w-0 px-1.5 py-2 align-middle text-center text-[10px] font-semibold text-slate-500 sm:px-3 sm:py-3 sm:text-xs">
                       <ColumnHeader activity={activity} />
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {week.days.map((day) => {
-                  return (
-                    <tr key={day.date} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/30 transition-colors">
-                      <td className="px-4 py-3 align-middle font-medium text-slate-700 whitespace-nowrap">
-                        <span className="font-bold text-slate-900 mr-1">{format(dayObj(day.date), "d")}</span>
-                        <span className="text-xs text-slate-400 font-normal">{format(dayObj(day.date), "EEE")}</span>
-                        {day.attendance?.status === "PRESENT" && (
-                          <span className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" title="Present" />
-                        )}
+                {week.days.map((day) => (
+                  <tr key={day.date} className="border-b border-slate-50 last:border-0 transition-colors hover:bg-slate-50/30">
+                    <td className="min-w-0 whitespace-nowrap px-2 py-3 align-middle font-medium text-slate-700 sm:px-3">
+                      <span className="mr-1 font-bold text-slate-900">{format(dayObj(day.date), "d")}</span>
+                      <span className="text-[10px] font-normal text-slate-400 sm:text-xs">{format(dayObj(day.date), "EEE")}</span>
+                      {day.attendance?.status === "PRESENT" && (
+                        <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 sm:ml-2" title="Present" />
+                      )}
+                    </td>
+                    {columns.map((activity) => (
+                      <td key={activity} className="min-w-0 px-1 py-1 align-middle sm:px-2">
+                        {renderCell(day, activity)}
                       </td>
-                      {columns.map((activity) => (
-                        <td key={activity} className="px-2 py-1 align-middle">
-                          {renderCell(day, activity)}
-                        </td>
-                      ))}
-                    </tr>
-                  )
-                })}
+                    ))}
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-slate-100 bg-slate-50/50 text-xs font-bold text-slate-600">
-                  <td className="px-4 py-3 text-slate-400 uppercase tracking-wider text-left">Summary</td>
+                  <td className="min-w-0 px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400 sm:px-3 sm:py-3 sm:text-xs">Summary</td>
                   {columns.map((activity) => {
                     const summaryStr = getColumnSummary(week.days, activity)
                     const colorClass = activity === "newHifz" || activity === "newJuzRevision"
@@ -651,7 +761,7 @@ function DesktopWeeklyRegister({ weeks, columns, renderCell }: {
                         ? "text-orange-600"
                         : "text-emerald-600"
                     return (
-                      <td key={activity} className={cn("px-4 py-3 align-middle text-center", colorClass)}>
+                      <td key={activity} className={cn("min-w-0 px-1 py-2 align-middle text-center text-[10px] sm:px-2 sm:py-3 sm:text-xs", colorClass)}>
                         {summaryStr}
                       </td>
                     )
@@ -897,20 +1007,13 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
   const editorNode = <HifzEntryEditor target={editor} onClose={() => setEditor(null)} onSave={saveCell} />
 
   const renderCell = (day: Day, activity: Activity) => (
-    compact
-      ? <HifzCell day={day} activity={activity} onOpen={() => setEditor({ day, activity })} />
-      : (
-        <Popover open={editor?.day.date === day.date && editor.activity === activity} onOpenChange={(value) => setEditor(value ? { day, activity } : null)}>
-          <PopoverTrigger asChild><span><HifzCell day={day} activity={activity} onOpen={() => setEditor({ day, activity })} /></span></PopoverTrigger>
-          <PopoverContent align="start" side="bottom" sideOffset={6} collisionPadding={16} className="flex max-h-[min(70vh,var(--radix-popover-content-available-height))] w-[380px] flex-col overflow-hidden p-4">{editorNode}</PopoverContent>
-        </Popover>
-      )
+    <HifzCell day={day} activity={activity} onOpen={() => setEditor({ day, activity })} />
   )
 
-  const useCards = compact || view === "cards"
+  const useCards = false
 
   return <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
-    <DialogContent showCloseButton={false} className={cn("gap-0 overflow-hidden p-0", fullscreen ? "h-[96vh] max-w-[98vw]" : "max-w-6xl sm:max-h-[92vh]")}>
+    <DialogContent showCloseButton={false} className={cn("flex min-h-0 flex-col gap-0 overflow-hidden p-0", fullscreen ? "h-[96vh] max-h-[96vh] max-w-[98vw]" : "h-[92vh] max-h-[92vh] max-w-6xl")}>
       <DialogHeader className="border-b px-5 py-4 text-left">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -932,7 +1035,7 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Calendar className="h-4 w-4 text-slate-500" />{format(monthDate, "MMMM yyyy")}</div>
         <div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="text-slate-600 text-xs font-semibold" onClick={() => setMonthDate(startOfMonth(new Date()))}>Today</Button><Button variant="ghost" size="icon" onClick={() => setMonthDate((value) => addMonths(value, 1))} aria-label="Next month"><ChevronRight className="h-4 w-4 text-slate-600" /></Button></div>
       </div>
-      <div className={cn("overflow-auto p-5", fullscreen ? "max-h-[calc(96vh-130px)]" : "max-h-[calc(92vh-130px)]")}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y]">
         {loading && !register ? <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div> : register ? <>
           <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             {summaryCards.map((card) => {
@@ -956,7 +1059,15 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
             : <DesktopWeeklyRegister weeks={weeks} columns={columns} renderCell={renderCell} />}
         </> : <div className="py-16 text-center text-sm text-slate-500">Could not load this month.</div>}
       </div>
-      {(compact || useCards) && <Sheet open={!!editor} onOpenChange={(value) => !value && setEditor(null)}><SheetContent side="bottom" className="flex max-h-[88vh] flex-col overflow-hidden rounded-t-xl"><SheetHeader className="sr-only"><SheetTitle>Hifz entry editor</SheetTitle><SheetDescription>Record or edit the selected Hifz activity.</SheetDescription></SheetHeader>{editorNode}</SheetContent></Sheet>}
+      <Dialog open={!!editor} onOpenChange={(value) => !value && setEditor(null)}>
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName="z-[70] bg-slate-950/55"
+          className="z-[80] flex min-h-0 w-[440px] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl max-h-[min(590px,calc(100dvh-2rem))] sm:max-w-[440px]"
+        >
+          {editorNode}
+        </DialogContent>
+      </Dialog>
     </DialogContent>
   </Dialog>
 }
