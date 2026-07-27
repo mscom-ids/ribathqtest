@@ -547,6 +547,8 @@ export const getParentDashboard = async (req: Request, res: Response) => {
         const hifzAttendance = hifzAttendanceSummaries.get(student.adm_no) || null;
         const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
             expectedClassDaysOverride: hifzAttendance?.pointClassDays || hifzAttendance?.effectiveClasses || null,
+            attendedClasses: hifzAttendance?.attendedClasses || 0,
+            countedClasses: hifzAttendance?.effectiveClasses || 0,
         });
 
         // Detect if this is a Hafiz student:

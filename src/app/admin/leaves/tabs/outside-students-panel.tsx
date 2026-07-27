@@ -50,6 +50,11 @@ interface ReturnModalState {
     leaveType: string
 }
 
+function getLocalDateTimeInput(date = new Date()) {
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 function leaveTypeBadge(type: string, institutionalName?: string | null) {
     switch (type) {
         case 'institutional':
@@ -213,13 +218,16 @@ function RecordReturnDialog({
     onClose: () => void
     onSuccess: () => void
 }) {
-    const [returnDatetime, setReturnDatetime] = useState(() => {
-        const now = new Date()
-        now.setSeconds(0, 0)
-        return now.toISOString().slice(0, 16)
-    })
+    const [returnDatetime, setReturnDatetime] = useState(() => getLocalDateTimeInput())
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+
+    useEffect(() => {
+        if (state.open) {
+            setReturnDatetime(getLocalDateTimeInput())
+            setError('')
+        }
+    }, [state.open, state.leaveId])
 
     const handleSubmit = async () => {
         setLoading(true)

@@ -18,6 +18,8 @@ export interface AttendanceRecord {
 
 interface HifzReportPointOptions {
     expectedClassDaysOverride?: number | null;
+    attendedClasses?: number | null;
+    countedClasses?: number | null;
 }
 
 // Keep the report, ranking, and grade calculation on one shared scale.
@@ -25,11 +27,13 @@ const HIFZ_POINT_MAX = {
     newVerses: 20,
     recentRevision: 15,
     juzRevision: 15,
+    attendance: 20,
 } as const;
 const HIFZ_TOTAL_POINT_MAX =
     HIFZ_POINT_MAX.newVerses +
     HIFZ_POINT_MAX.recentRevision +
-    HIFZ_POINT_MAX.juzRevision;
+    HIFZ_POINT_MAX.juzRevision +
+    HIFZ_POINT_MAX.attendance;
 
 // A monthly ranking needs enough observed teaching time before a student can reach full marks.
 const MINIMUM_SCORING_CLASS_DAYS = 5;
@@ -68,16 +72,30 @@ export function calculateHifzReportPoints(
     const detectedClassDays = attendanceClassDays > 0 ? attendanceClassDays : uniqueLogDays.size;
     const totalClassDays = options?.expectedClassDaysOverride ?? detectedClassDays;
 
+    // Attendance is scored independently of the recitation class-day scale so a
+    // student with no logged classes still gets a fair 0 rather than a crash.
+    const roundTo2Early = roundTo2;
+    const countedClasses = Math.max(0, Number(options?.countedClasses ?? 0));
+    const attendedClasses = Math.max(0, Number(options?.attendedClasses ?? 0));
+    const attendancePercentage = countedClasses > 0
+        ? Math.min(100, (attendedClasses / countedClasses) * 100)
+        : 0;
+    const attendancePoints = roundTo2Early((attendancePercentage / 100) * HIFZ_POINT_MAX.attendance);
+
     if (totalClassDays === 0) {
+        const zeroTotal = attendancePoints;
+        const zeroPct = roundTo2Early((zeroTotal / HIFZ_TOTAL_POINT_MAX) * 100);
         return {
             detectedClassDays,
             totalClassDays: 0,
             newVersePoints: 0,
             recentRevisionPoints: 0,
             juzPoints: 0,
-            totalPoints: 0,
-            percentage: 0,
-            grade: 'NO GRADE'
+            attendancePoints,
+            attendancePercentage: roundTo2Early(attendancePercentage),
+            totalPoints: zeroTotal,
+            percentage: zeroPct,
+            grade: resolveGrade(zeroPct)
         };
     }
 
@@ -122,18 +140,8 @@ export function calculateHifzReportPoints(
     juzPoints = roundTo2(Math.min(juzPoints, HIFZ_POINT_MAX.juzRevision));
 
     // STEP 5: TOTAL & GRADE
-    const totalPoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints);
+    const totalPoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints + attendancePoints);
     const totalPercentage = roundTo2((totalPoints / HIFZ_TOTAL_POINT_MAX) * 100);
-
-    let grade = 'NO GRADE';
-    if (totalPercentage >= 95) grade = 'A++';
-    else if (totalPercentage >= 90) grade = 'A+';
-    else if (totalPercentage >= 80) grade = 'A';
-    else if (totalPercentage >= 70) grade = 'B+';
-    else if (totalPercentage >= 60) grade = 'B';
-    else if (totalPercentage >= 50) grade = 'C+';
-    else if (totalPercentage >= 40) grade = 'C';
-    else if (totalPercentage >= 35) grade = 'D+';
 
     return {
         detectedClassDays,
@@ -142,8 +150,22 @@ export function calculateHifzReportPoints(
         newVersePoints,
         recentRevisionPoints,
         juzPoints,
+        attendancePoints,
+        attendancePercentage: roundTo2(attendancePercentage),
         totalPoints,
         percentage: totalPercentage,
-        grade
+        grade: resolveGrade(totalPercentage)
     };
+}
+
+function resolveGrade(totalPercentage: number): string {
+    if (totalPercentage >= 95) return 'A++';
+    if (totalPercentage >= 90) return 'A+';
+    if (totalPercentage >= 80) return 'A';
+    if (totalPercentage >= 70) return 'B+';
+    if (totalPercentage >= 60) return 'B';
+    if (totalPercentage >= 50) return 'C+';
+    if (totalPercentage >= 40) return 'C';
+    if (totalPercentage >= 35) return 'D+';
+    return 'NO GRADE';
 }

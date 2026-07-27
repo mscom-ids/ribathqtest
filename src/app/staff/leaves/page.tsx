@@ -71,18 +71,28 @@ export default function StaffLeavesPage() {
     const fetchLeaves = async () => {
         setLoading(true)
         try {
-            const [leavesRes, outsideRes, institutionalRes] = await Promise.all([
+            const [leavesRes, outsideRes, institutionalRes] = await Promise.allSettled([
                 api.get('/staff/me/leaves'),
                 api.get('/leaves/outside-students'),
                 api.get('/leaves/institutional'),
             ])
-            if (leavesRes.data.success) setLeaves(leavesRes.data.leaves || [])
-            if (outsideRes.data.success) setOutsideCount(outsideRes.data.students?.length || 0)
-            if (institutionalRes.data.success) setInstitutionalWindows(institutionalRes.data.leaves || [])
-        } catch (err) {
-            console.error("Error fetching leaves:", err)
+
+            if (leavesRes.status === 'fulfilled' && leavesRes.value.data.success) {
+                setLeaves(leavesRes.value.data.leaves || [])
+            }
+            if (outsideRes.status === 'fulfilled' && outsideRes.value.data.success) {
+                setOutsideCount(outsideRes.value.data.students?.length || 0)
+            }
+            if (institutionalRes.status === 'fulfilled' && institutionalRes.value.data.success) {
+                setInstitutionalWindows(institutionalRes.value.data.leaves || [])
+            }
+
+        } catch {
+            // Individual request failures are handled by Promise.allSettled above.
+            // Keep the page usable without emitting a development overlay error.
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     useEffect(() => {

@@ -243,14 +243,14 @@ function useCompactLayout() {
 
 type Week = { index: number; days: Day[]; summary: { pages: number; revisionDays: number; juz: number } }
 
-// Group month days into ISO-ish weeks (Mon-start), with a per-week display summary.
+// Group month days into institutional weeks (Fri-Thu), with a per-week display summary.
 function groupIntoWeeks(days: Day[]): Week[] {
   const weeks: Week[] = []
   let current: Day[] = []
   for (const day of days) {
     const weekday = dayObj(day.date).getDay() // 0=Sun..6=Sat
-    const isMonday = weekday === 1
-    if (isMonday && current.length) {
+    const isFriday = weekday === 5
+    if (isFriday && current.length) {
       weeks.push(buildWeek(weeks.length + 1, current))
       current = []
     }
@@ -645,15 +645,15 @@ function HifzCell({ day, activity, onOpen }: { day: Day; activity: Activity; onO
       disabled={!canOpen}
       title={entries.length ? entries.map(entryTooltip).join(", ") : day.eligibility.reason || "Add Hifz entry"}
       className={cn(
-        "min-h-9 w-full rounded-md flex items-center justify-center text-center text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-300",
+        "min-h-0 w-full rounded-md py-0.5 flex items-center justify-center text-center text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-300",
         canOpen ? "hover:bg-slate-50/80 cursor-pointer" : "cursor-not-allowed opacity-90"
       )}
       data-register-cell={`${day.date}-${activity}`}
     >
       {groups.length ? (
-        <div className="flex flex-col gap-1 items-center justify-center w-full">
+        <div className="flex w-full flex-col items-center justify-center gap-0.5">
           {groups.map((group, idx) => (
-            <span key={idx} className={cn("inline-flex min-w-0 max-w-full flex-col items-center justify-center rounded-md border px-1.5 py-1 text-[10px] font-semibold leading-tight shadow-sm transition sm:px-2 sm:text-[11px]", colors.bg, colors.text, colors.border)}>
+            <span key={idx} className={cn("inline-flex min-w-0 max-w-full flex-col items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-tight shadow-none transition sm:px-2 sm:text-[11px]", colors.bg, colors.text, colors.border)}>
               <span dir="rtl" className="block w-full min-w-0 break-words whitespace-normal text-center">{entryChip(group)}</span>
             </span>
           ))}
@@ -705,77 +705,78 @@ function DesktopWeeklyRegister({ weeks, columns, renderCell }: {
   columns: Activity[]
   renderCell: (day: Day, activity: Activity) => React.ReactNode
 }) {
-  const activityColumnWidth = `${85 / columns.length}%`
+  const activityWidths = columns.length === 3
+    ? ["30%", "27%", "27%"]
+    : columns.map(() => `${84 / columns.length}%`)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {weeks.map((week) => (
-        <div key={week.index} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-blue-600">
-              Week {week.index}
-            </span>
+        <section key={week.index} className="overflow-hidden rounded-[20px] border border-slate-200 bg-white">
+          <div className="flex h-10 items-center bg-indigo-50/80 px-4 text-sm font-semibold text-indigo-600">
+            Week {week.index}
           </div>
-          <div className="min-w-0 max-w-full overflow-x-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
-            <table className="w-full max-w-full table-fixed border-collapse text-left text-[11px] sm:text-sm">
-              <colgroup>
-                <col style={{ width: "15%" }} />
-                {columns.map((activity) => <col key={activity} style={{ width: activityColumnWidth }} />)}
-              </colgroup>
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="min-w-0 px-2 py-2 align-middle text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:px-3 sm:py-3 sm:text-xs">Date</th>
-                  {columns.map((activity) => (
-                    <th key={activity} className="min-w-0 px-1.5 py-2 align-middle text-center text-[10px] font-semibold text-slate-500 sm:px-3 sm:py-3 sm:text-xs">
-                      <ColumnHeader activity={activity} />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {week.days.map((day) => (
-                  <tr key={day.date} className="border-b border-slate-50 last:border-0 transition-colors hover:bg-slate-50/30">
-                    <td className="min-w-0 whitespace-nowrap px-2 py-3 align-middle font-medium text-slate-700 sm:px-3">
-                      <span className="mr-1 font-bold text-slate-900">{format(dayObj(day.date), "d")}</span>
+          <table className="w-full max-w-full table-fixed border-collapse text-left text-[11px] sm:text-sm">
+            <colgroup>
+              <col style={{ width: "16%" }} />
+              {columns.map((activity, index) => <col key={activity} style={{ width: activityWidths[index] }} />)}
+            </colgroup>
+            <thead>
+              <tr className="h-10 border-y border-slate-100 bg-slate-50/90">
+                <th className="min-w-0 px-2 py-1 align-middle text-[10px] font-semibold text-slate-500 sm:px-3 sm:text-xs">Date</th>
+                {columns.map((activity) => (
+                  <th key={activity} className="min-w-0 px-1 py-1 align-middle text-center text-[10px] font-semibold text-slate-500 sm:px-2 sm:text-xs">
+                    <ColumnHeader activity={activity} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {week.days.map((day) => {
+                const hasEntries = columns.some((activity) => (day.entries[activity] || []).length > 0)
+                const isFriday = format(dayObj(day.date), "EEE") === "Fri"
+                return (
+                  <tr key={day.date} className={cn("h-10 border-b border-slate-100 last:border-0", hasEntries ? "bg-emerald-50/30" : isFriday ? "bg-amber-50/35" : "bg-white")}>
+                    <td className="min-w-0 whitespace-nowrap px-2 py-1 align-middle font-medium text-slate-700 sm:px-3">
+                      <span className="mr-1 text-sm font-semibold text-slate-900">{format(dayObj(day.date), "d")}</span>
                       <span className="text-[10px] font-normal text-slate-400 sm:text-xs">{format(dayObj(day.date), "EEE")}</span>
                       {day.attendance?.status === "PRESENT" && (
-                        <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 sm:ml-2" title="Present" />
+                        <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" title="Present" />
                       )}
                     </td>
                     {columns.map((activity) => (
-                      <td key={activity} className="min-w-0 px-1 py-1 align-middle sm:px-2">
+                      <td key={activity} className="min-w-0 px-1 py-0.5 align-middle sm:px-2">
                         {renderCell(day, activity)}
                       </td>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-100 bg-slate-50/50 text-xs font-bold text-slate-600">
-                  <td className="min-w-0 px-2 py-2 text-left text-[10px] uppercase tracking-wider text-slate-400 sm:px-3 sm:py-3 sm:text-xs">Summary</td>
-                  {columns.map((activity) => {
-                    const summaryStr = getColumnSummary(week.days, activity)
-                    const colorClass = activity === "newHifz" || activity === "newJuzRevision"
-                      ? "text-blue-600"
-                      : activity === "recentRevision" || activity === "oldJuzRevision"
-                        ? "text-orange-600"
-                        : "text-emerald-600"
-                    return (
-                      <td key={activity} className={cn("min-w-0 px-1 py-2 align-middle text-center text-[10px] sm:px-2 sm:py-3 sm:text-xs", colorClass)}>
-                        {summaryStr}
-                      </td>
-                    )
-                  })}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="h-10 border-t border-slate-200 bg-slate-100/80 text-xs font-semibold text-slate-600">
+                <td className="min-w-0 px-2 py-1 text-left text-[10px] font-semibold text-slate-500 sm:px-3 sm:text-xs">Summary</td>
+                {columns.map((activity) => {
+                  const summaryStr = getColumnSummary(week.days, activity)
+                  const colorClass = activity === "newHifz" || activity === "newJuzRevision"
+                    ? "text-blue-600"
+                    : activity === "recentRevision" || activity === "oldJuzRevision"
+                      ? "text-orange-600"
+                      : "text-emerald-600"
+                  return (
+                    <td key={activity} className={cn("min-w-0 px-1 py-1 align-middle text-center text-[10px] sm:px-2 sm:text-xs", colorClass)}>
+                      {summaryStr}
+                    </td>
+                  )
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </section>
       ))}
     </div>
   )
 }
-
 // Mobile day-card renderer.
 function MobileDayCardRegister({ weeks, columns, onOpen }: {
   weeks: Week[]
@@ -1037,7 +1038,7 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y]">
         {loading && !register ? <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div> : register ? <>
-          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             {summaryCards.map((card) => {
               return (
                 <div key={card.label} className={cn("rounded-xl p-4 flex flex-col justify-center items-start text-left h-20 shadow-sm border transition-all duration-200", card.bg)}>
@@ -1051,7 +1052,7 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
               )
             })}
           </div>
-          <div className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-3.5">
+          <div className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
             WEEKLY HIFZ REPORT — Monthly breakdown by week
           </div>
           {useCards

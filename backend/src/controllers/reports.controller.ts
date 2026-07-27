@@ -761,6 +761,8 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
                 ? Number(savedPointDays)
                 : attendanceSummary?.pointClassDays || attendanceSummary?.effectiveClasses || 0,
+            attendedClasses: attendanceSummary?.attendedClasses || 0,
+            countedClasses: attendanceSummary?.effectiveClasses || 0,
         });
 
         // Compute aggregations in memory for UI compatibility

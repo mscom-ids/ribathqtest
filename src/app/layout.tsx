@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   title: "Ribathul Quran",
   description: "Management Portal for Ma'din Ribathul Quran",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: "/logo.png?v=20260727",
+    apple: "/logo.png?v=20260727",
   },
 };
 

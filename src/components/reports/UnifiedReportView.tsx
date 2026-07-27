@@ -137,7 +137,8 @@ export default function UnifiedReportView() {
             `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
             `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/15 points`,
             `Juz Revision: ${performance?.juzPoints ?? 0}/15 points`,
-            `Total: ${performance?.totalPoints ?? 0}/50 points (${performance?.percentage ?? 0}%)`,
+            `Attendance: ${performance?.attendancePoints ?? 0}/20 points (${performance?.attendancePercentage ?? 0}%)`,
+            `Total: ${performance?.totalPoints ?? 0}/70 points (${performance?.percentage ?? 0}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
         ].join("\n")
         window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
@@ -417,7 +418,7 @@ export default function UnifiedReportView() {
                         {reportData.performance && (
                             <div className="print:hidden">
                                 <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Performance & Grade</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                                     <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
                                         <p className="text-xs font-semibold text-blue-700">New Verses</p>
                                         <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/20</p>
@@ -430,9 +431,14 @@ export default function UnifiedReportView() {
                                         <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
                                         <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/15</p>
                                     </div>
+                                    <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
+                                        <p className="text-xs font-semibold text-teal-700">Attendance</p>
+                                        <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
+                                        <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
+                                    </div>
                                     <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
                                         <p className="text-xs font-semibold text-emerald-700">Total</p>
-                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/50</p>
+                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/70</p>
                                         <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
                                     </div>
                                     <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
@@ -690,12 +696,9 @@ export default function UnifiedReportView() {
                                                                     <span className="h-0.5 w-6 bg-white/70 rounded"></span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-base font-extrabold tracking-wide text-white mt-1">
-                                                                {hasValidGrade ? rawGrade : 'NO GRADE'}
-                                                            </p>
                                                             {!hasValidGrade && (
-                                                                <p className="text-[10px] text-slate-400 mt-1.5 italic leading-snug max-w-[160px]">
-                                                                    Insufficient data for current period evaluation.
+                                                                <p className="text-base font-extrabold tracking-wide text-white mt-1">
+                                                                    NO GRADE
                                                                 </p>
                                                             )}
                                                         </>

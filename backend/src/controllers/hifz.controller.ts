@@ -799,6 +799,8 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
 
         const calculations = calculateHifzReportPoints(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
+            attendedClasses: attendanceSummary?.attendedClasses || 0,
+            countedClasses: attendanceSummary?.effectiveClasses || 0,
         });
 
         res.json({
@@ -948,6 +950,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     const studentLogs = logsByStudent[student.adm_no] || [];
                     const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
                         expectedClassDaysOverride: effectiveClassDays,
+                        attendedClasses: attendanceSummary?.attendedClasses || 0,
+                        countedClasses: attendanceSummary?.effectiveClasses || 0,
                     });
                     if (manualRecord) {
                         return {
