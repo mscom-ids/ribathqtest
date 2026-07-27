@@ -47,12 +47,37 @@ const pool = new Pool({
   idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS || 1_800_000),
   connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 10_000),
   statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15_000),
+  keepAlive: true,
+  keepAliveInitialDelayMillis: Number(process.env.DB_KEEPALIVE_INITIAL_DELAY_MS || 10_000),
+  maxLifetimeSeconds: Number(process.env.DB_MAX_LIFETIME_SECONDS || 900),
 });
 
 pool.on('error', (err) => {
+  if (isTransientConnectionError(err)) {
+    console.warn('[DB POOL] transient connection reset; failed client will be replaced');
+    return;
+  }
   console.error('Unexpected error on idle pg client', err);
   // pg-pool removes the failed client. Keep the API process alive so later
   // requests can replace a connection after a transient network interruption.
+});
+
+process.on('uncaughtException', (error: any) => {
+  if (isTransientConnectionError(error) && error?.syscall === 'read') {
+    console.warn('[DB POOL] ignored transient socket reset');
+    return;
+  }
+  console.error('[PROCESS] uncaught exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (error: any) => {
+  if (isTransientConnectionError(error)) {
+    console.warn('[DB POOL] ignored transient connection rejection');
+    return;
+  }
+  console.error('[PROCESS] unhandled rejection:', error);
+  process.exit(1);
 });
 
 const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);

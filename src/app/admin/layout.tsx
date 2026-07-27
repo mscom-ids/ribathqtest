@@ -20,7 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const isChatPage = pathname.startsWith('/admin/chat')
 
     return (
-        <div className="min-h-screen bg-[#f5f8f5] dark:bg-[#111520] transition-colors relative">
+        <div className={cn(`bg-[#f5f8f5] dark:bg-[#111520] transition-colors relative`, isChatPage ? "h-screen overflow-hidden" : "min-h-screen")}>
             <AdminBackgroundWarmup />
             <AdminSidebar 
                 mobileOpen={sidebarOpen} 
@@ -29,11 +29,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
             />
             <div className={cn(
-                "flex flex-col min-h-screen transition-all duration-300",
+                "flex flex-col transition-all duration-300",
+                isChatPage ? "h-screen overflow-hidden" : "min-h-screen",
                 isCollapsed ? "lg:pl-[80px]" : "lg:pl-[260px]"
             )}>
                 <TopNav onOpenSidebar={() => setSidebarOpen(true)} />
-                <main className={`flex-1 pt-[60px] ${isChatPage ? 'overflow-hidden flex flex-col' : ''}`}>
+                <main className={`flex-1 pt-[60px] min-h-0 ${isChatPage ? 'h-[calc(100vh-60px)] overflow-hidden flex flex-col' : ''}`}>
                     {isChatPage ? (
                         children
                     ) : (

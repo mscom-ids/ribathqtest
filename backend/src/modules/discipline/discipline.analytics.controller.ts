@@ -116,7 +116,7 @@ export async function getDisciplineSettings(_req: Request, res: Response) {
                 db.query(`SELECT c.*,COALESCE(json_agg(o ORDER BY o.name) FILTER(WHERE o.id IS NOT NULL),'[]') offences
                           FROM discipline_categories c LEFT JOIN discipline_offence_types o ON o.category_id=c.id
                           GROUP BY c.id ORDER BY c.sort_order,c.name`),
-                db.query("SELECT id,name,role FROM staff WHERE status='active' ORDER BY name"),
+                db.query('SELECT id,name,role FROM staff WHERE is_active = true ORDER BY name'),
             ]);
             return { settings: Object.fromEntries(settings.rows.map(row => [row.key, row.value])), categories: categories.rows, staff: staff.rows };
         });

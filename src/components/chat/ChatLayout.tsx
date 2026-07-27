@@ -323,10 +323,10 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
     // RENDER
     // ═══════════════════════════════════════════════════════════════════════════
     return (
-        <div className="flex flex-1 h-full bg-white dark:bg-slate-950 overflow-hidden">
+        <div className="flex flex-1 min-h-0 h-full bg-white dark:bg-slate-950 overflow-hidden">
 
             {/* ─── LEFT PANEL: Conversations ──────────────────────────────── */}
-            <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-[360px] lg:w-[380px] border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shrink-0`}>
+            <div className={`${showMobileChat ? 'hidden md:flex' : 'flex'} flex-col min-h-0 w-full md:w-[360px] lg:w-[380px] border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shrink-0`}>
 
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800">
@@ -422,7 +422,7 @@ export default function ChatLayout({ isAdmin }: { isAdmin: boolean }) {
             </div>
 
             {/* ─── RIGHT PANEL: Chat View ─────────────────────────────────── */}
-            <div className={`${!showMobileChat ? 'hidden md:flex' : 'flex'} flex-col flex-1 bg-white dark:bg-slate-950`}>
+            <div className={`${!showMobileChat ? 'hidden md:flex' : 'flex'} flex-col flex-1 min-h-0 bg-white dark:bg-slate-950`}>
                 {!activeConv ? (
                     /* Empty state */
                     <div className="flex flex-col items-center justify-center h-full text-slate-400">
