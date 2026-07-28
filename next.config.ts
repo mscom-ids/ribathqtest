@@ -4,21 +4,16 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   compress: true,
   async rewrites() {
-    if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_API_URL) {
-      // Backend origin e.g. https://my-backend.onrender.com
-      const backendOrigin = process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/?$/, '');
-      return [
-        {
-          source: '/api/:path*',
-          destination: `${backendOrigin}/api/:path*`, // Proxy to Backend API
-        },
-        {
-          source: '/public/:path*',
-          destination: `${backendOrigin}/public/:path*`, // Proxy to Backend Static Files (avatars)
-        }
-      ];
-    }
-    return [];
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL
+      || (process.env.NODE_ENV !== 'production' ? 'http://localhost:5000/api' : '');
+
+    if (!apiBaseUrl) return [];
+
+    const backendOrigin = apiBaseUrl.replace(/\/api\/?$/, '');
+    return [
+      { source: '/api/:path*', destination: `${backendOrigin}/api/:path*` },
+      { source: '/public/:path*', destination: `${backendOrigin}/public/:path*` },
+    ];
   },
   async headers() {
     if (process.env.NODE_ENV !== 'production') {

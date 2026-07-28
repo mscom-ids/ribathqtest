@@ -24,8 +24,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { ProgressRing } from "@/components/parent/progress-ring"
+import { LeaveRequestModal } from "./leave-request-modal"
 import api from "@/lib/api"
 
 type StudentProfile = {
@@ -224,10 +225,6 @@ function valueText(value: string | number | null | undefined, suffix = "") {
     return `${value}${suffix}`
 }
 
-function scrollTabsBy(container: HTMLElement | null, amount: number) {
-    container?.scrollBy({ left: amount, behavior: "smooth" })
-}
-
 export default function ParentDashboard() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
@@ -235,6 +232,8 @@ export default function ParentDashboard() {
     const [month, setMonth] = useState(currentMonthKey())
     const [data, setData] = useState<ParentDashboardData | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [tab, setTab] = useState("summary")
+    const [leaveOpen, setLeaveOpen] = useState(false)
 
     async function loadDashboard(options?: { silent?: boolean; nextMonth?: string }) {
         const targetMonth = options?.nextMonth || month
@@ -320,119 +319,109 @@ export default function ParentDashboard() {
     const student = data.student
 
     return (
-        <main className="parent-portal min-h-screen bg-[#f5f7fb] pb-8 text-slate-900 overflow-x-hidden">
+        <main className="parent-portal min-h-screen overflow-x-hidden bg-[#eef1f8] text-slate-900">
             <style>{printStyles}</style>
-            <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
-                <header className="no-print mb-5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Parent Portal</p>
-                        <h1 className="mt-1 truncate text-2xl font-bold tracking-normal text-slate-950">Student Progress</h1>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                        <Button size="icon" variant="outline" onClick={() => loadDashboard({ silent: true })} disabled={refreshing}>
-                            <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                        </Button>
-                        <Button size="icon" variant="outline" onClick={handleLogout}>
-                            <LogOut className="h-4 w-4 text-red-600" />
-                        </Button>
-                    </div>
-                </header>
+            <div className="parent-shell mx-auto w-full max-w-[520px] pb-28">
+                <section className="no-print relative overflow-hidden rounded-b-[32px] bg-gradient-to-br from-teal-600 via-teal-700 to-emerald-800 px-5 pb-8 pt-6 text-white shadow-lg shadow-teal-900/20">
+                    <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/10" />
+                    <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-white/5" />
 
-                <section className="report-root mb-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div className="flex min-w-0 items-center gap-4">
-                            <Avatar className="h-16 w-16 rounded-lg">
+                    <div className="relative flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/70">Assalamu Alaikum</p>
+                            <h1 className="mt-1 truncate text-xl font-black leading-tight">{student.name}</h1>
+                            <p className="mt-1 text-xs font-semibold text-white/80">
+                                {(student.hifz_standard || student.standard || "Standard not set")} · {student.adm_no}
+                            </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                                onClick={() => loadDashboard({ silent: true })}
+                                disabled={refreshing}
+                                aria-label="Refresh"
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                            >
+                                <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                            </button>
+                            <Avatar className="h-11 w-11 border-2 border-white/40">
                                 <AvatarImage src={student.photo_url || undefined} alt={student.name} />
-                                <AvatarFallback className="rounded-lg bg-slate-900 text-white">
+                                <AvatarFallback className="bg-white/20 text-sm font-bold text-white">
                                     {student.name?.slice(0, 2).toUpperCase() || "ST"}
                                 </AvatarFallback>
                             </Avatar>
-                            <div className="min-w-0 flex-1">
-                                <h2 className="truncate text-xl font-bold text-slate-950">{student.name}</h2>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    <Badge variant="secondary">Adm {student.adm_no}</Badge>
-                                    <Badge variant="outline">{student.hifz_standard || student.standard || "Standard not set"}</Badge>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="no-print flex flex-wrap items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => changeMonth(-1)}>
-                                <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <div className="min-w-32 rounded-md border bg-slate-50 px-3 py-2 text-center text-sm font-bold">
-                                {formatMonth(month)}
-                            </div>
-                            <Button variant="outline" size="sm" onClick={() => changeMonth(1)}>
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" onClick={() => window.print()} className="bg-slate-950 text-white hover:bg-slate-800">
-                                <Download className="mr-2 h-4 w-4" />
-                                PDF
-                            </Button>
                         </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <InfoTile icon={UserRound} label="DOB" value={formatDate(student.dob)} />
-                        <InfoTile icon={GraduationCap} label="Batch" value={student.batch_year || "-"} />
-                        <InfoTile icon={BookOpen} label="Hifz Mentor" value={student.hifz_mentor || "Unassigned"} />
-                        <InfoTile icon={ClipboardList} label="Month" value={formatMonth(data.period.month)} />
+                    <div className="relative mt-6 flex items-center gap-5 rounded-2xl bg-white/12 p-4 backdrop-blur-sm">
+                        <ProgressRing percentage={attendancePercent} size={82} strokeWidth={9} color="text-white" trackColor="text-white/25" labelColor="text-white" />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-white/70">Attendance · {formatMonth(month)}</p>
+                            <p className="mt-1 text-2xl font-black leading-none">
+                                {attendance?.attendedClasses || 0}<span className="text-base font-bold text-white/70">/{totalClasses}</span>
+                            </p>
+                            <p className="mt-1.5 text-xs font-semibold text-white/80">
+                                Hifz grade {hifzSummary?.grade || "-"} · {Math.round(progress)}% memorized
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="relative mt-4 flex items-center justify-between gap-2">
+                        <button onClick={() => changeMonth(-1)} aria-label="Previous month" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 hover:bg-white/25">
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <p className="flex-1 text-center text-sm font-bold">{formatMonth(month)}</p>
+                        <button onClick={() => changeMonth(1)} aria-label="Next month" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 hover:bg-white/25">
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
                     </div>
                 </section>
 
-                <div className="no-print mb-5 grid grid-cols-2 gap-3">
-                    <MetricCard icon={CalendarCheck} label="Attendance" value={`${attendancePercent}%`} detail={`${attendance?.attendedClasses || 0}/${totalClasses} attended`} tone="sky" />
-                    <MetricCard icon={TrendingUp} label="Hifz Grade" value={hifzSummary?.grade || "-"} detail={`${valueText(hifzSummary?.total_recited)} total recited`} tone="emerald" />
-                    <MetricCard icon={BookOpen} label="Hifz Progress" value={`${Math.round(progress)}%`} detail={`${hifzSummary?.completed_juz || 0} completed juz`} tone="violet" />
-                    <MetricCard icon={FileText} label="Latest Exam" value={latestExam ? `${latestExam.percentage}%` : "-"} detail={latestExam?.title || "No exam marks found"} tone="amber" />
-                </div>
-
-                <Tabs defaultValue="summary" className="no-print space-y-6">
-                    <section className="-mx-4 mb-2 sm:mx-0">
-                        <Button
-                            size="icon"
-                            variant="outline"
-                            className="hidden"
-                            onClick={() => scrollTabsBy(document.getElementById("parent-tab-scroll"), -240)}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <div id="parent-tab-scroll" className="tab-scroll overflow-x-auto px-4 pb-2 sm:px-0">
-                            <TabsList className="!inline-flex !h-auto !w-max !items-stretch justify-start gap-4 bg-transparent !p-0 text-slate-600">
-                                <PortalTab value="summary" icon={BarChart3} label="Summary" />
-                                <PortalTab value="attendance" icon={CalendarCheck} label="Attendance" />
-                                <PortalTab value="hifz" icon={BookOpen} label="Hifz Report" />
-                                <PortalTab value="exams" icon={FileText} label="Exams" />
-                                <PortalTab value="report" icon={Download} label="PDF Report" />
-                            </TabsList>
+                <Tabs value={tab} onValueChange={setTab} className="no-print px-4 pt-5">
+                    <TabsContent value="summary" className="mt-0 space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <MetricCard icon={CalendarCheck} label="Attendance" value={`${attendancePercent}%`} detail={`${attendance?.attendedClasses || 0}/${totalClasses} attended`} tone="sky" />
+                            <MetricCard icon={TrendingUp} label="Hifz Grade" value={hifzSummary?.grade || "-"} detail={`${valueText(hifzSummary?.total_recited)} total recited`} tone="emerald" />
+                            <MetricCard icon={BookOpen} label="Hifz Progress" value={`${Math.round(progress)}%`} detail={`${hifzSummary?.completed_juz || 0} completed juz`} tone="violet" />
+                            <MetricCard icon={FileText} label="Latest Exam" value={latestExam ? `${latestExam.percentage}%` : "-"} detail={latestExam?.title || "No exam marks found"} tone="amber" />
                         </div>
-                        <Button
-                            size="icon"
-                            variant="outline"
-                            className="hidden"
-                            onClick={() => scrollTabsBy(document.getElementById("parent-tab-scroll"), 240)}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </section>
-
-                    <TabsContent value="summary" className="space-y-4">
                         <SummaryPanel data={data} attendancePercent={attendancePercent} totalClasses={totalClasses} isHafiz={data.hifz_report?.is_hafiz ?? false} />
                     </TabsContent>
 
-                    <TabsContent value="attendance" className="space-y-4">
+                    <TabsContent value="attendance" className="mt-0 space-y-4">
                         <AttendancePanel attendance={attendance} attendancePercent={attendancePercent} totalClasses={totalClasses} />
                     </TabsContent>
 
-                    <TabsContent value="hifz" className="space-y-4">
+                    <TabsContent value="hifz" className="mt-0 space-y-4">
                         <HifzPanel report={data.hifz_report} logs={data.hifz_logs} monthlyReports={data.reports} />
                     </TabsContent>
 
-                    <TabsContent value="exams" className="space-y-4">
+                    <TabsContent value="exams" className="mt-0 space-y-4">
                         <ExamsPanel exams={data.exams} />
                     </TabsContent>
 
-                    <TabsContent value="report" className="space-y-4">
+                    <TabsContent value="profile" className="mt-0 space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <InfoTile icon={UserRound} label="DOB" value={formatDate(student.dob)} />
+                            <InfoTile icon={GraduationCap} label="Batch" value={student.batch_year || "-"} />
+                            <InfoTile icon={BookOpen} label="Hifz Mentor" value={student.hifz_mentor || "Unassigned"} />
+                            <InfoTile icon={ClipboardList} label="Month" value={formatMonth(data.period.month)} />
+                        </div>
+
+                        <div className="grid gap-2">
+                            <Button onClick={() => setLeaveOpen(true)} variant="outline" className="h-12 justify-start gap-3 rounded-2xl">
+                                <ClipboardList className="h-4 w-4 text-teal-700" />
+                                Request leave
+                            </Button>
+                            <Button onClick={() => window.print()} className="h-12 justify-start gap-3 rounded-2xl bg-slate-950 text-white hover:bg-slate-800">
+                                <Download className="h-4 w-4" />
+                                Download monthly report PDF
+                            </Button>
+                            <Button onClick={handleLogout} variant="outline" className="h-12 justify-start gap-3 rounded-2xl text-red-600">
+                                <LogOut className="h-4 w-4" />
+                                Logout
+                            </Button>
+                        </div>
+
                         <ReportPanel data={data} attendancePercent={attendancePercent} totalClasses={totalClasses} isHafiz={data.hifz_report?.is_hafiz ?? false} />
                     </TabsContent>
                 </Tabs>
@@ -441,7 +430,39 @@ export default function ParentDashboard() {
                     <ReportPanel data={data} attendancePercent={attendancePercent} totalClasses={totalClasses} isHafiz={data.hifz_report?.is_hafiz ?? false} />
                 </div>
             </div>
+
+            <nav className="no-print fixed bottom-0 left-1/2 z-40 w-full max-w-[520px] -translate-x-1/2 border-t border-slate-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+                <div className="flex items-stretch justify-between">
+                    <BottomTab active={tab === "summary"} onClick={() => setTab("summary")} icon={BarChart3} label="Home" />
+                    <BottomTab active={tab === "attendance"} onClick={() => setTab("attendance")} icon={CalendarCheck} label="Attendance" />
+                    <BottomTab active={tab === "hifz"} onClick={() => setTab("hifz")} icon={BookOpen} label="Hifz" />
+                    <BottomTab active={tab === "exams"} onClick={() => setTab("exams")} icon={FileText} label="Exams" />
+                    <BottomTab active={tab === "profile"} onClick={() => setTab("profile")} icon={UserRound} label="Profile" />
+                </div>
+            </nav>
+
+            <LeaveRequestModal open={leaveOpen} onOpenChange={setLeaveOpen} studentId={student.adm_no} studentName={student.name} />
         </main>
+    )
+}
+
+function BottomTab({ active, onClick, icon: Icon, label }: {
+    active: boolean
+    onClick: () => void
+    icon: LucideIcon
+    label: string
+}) {
+    return (
+        <button
+            onClick={onClick}
+            aria-current={active ? "page" : undefined}
+            className={`flex flex-1 flex-col items-center gap-1 px-1 pb-2.5 pt-2 text-[10px] font-bold transition-colors ${active ? "text-teal-700" : "text-slate-400"}`}
+        >
+            <span className={`flex h-9 w-9 items-center justify-center rounded-2xl transition-colors ${active ? "bg-teal-600 text-white shadow-md shadow-teal-200" : "bg-transparent"}`}>
+                <Icon className="h-[18px] w-[18px]" />
+            </span>
+            {label}
+        </button>
     )
 }
 
@@ -1118,24 +1139,6 @@ function InfoTile({ icon: Icon, label, value }: {
     )
 }
 
-function PortalTab({ value, icon: Icon, label }: {
-    value: string
-    icon: LucideIcon
-    label: string
-}) {
-    return (
-        <TabsTrigger
-            value={value}
-            className="group !h-24 !w-24 !flex-none !shrink-0 !basis-24 flex-col gap-2 !rounded-2xl !border !border-slate-100 !bg-white !px-0 !py-0 !text-slate-600 shadow-sm transition-all after:!hidden data-[state=active]:!border-teal-600 data-[state=active]:!bg-teal-600 data-[state=active]:!text-white data-[state=active]:shadow-lg data-[state=active]:shadow-teal-100"
-        >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-500 group-data-[state=active]:bg-teal-500 group-data-[state=active]:text-white">
-                <Icon className="h-6 w-6" />
-            </span>
-            <span className="whitespace-normal px-1 text-center text-[11px] font-extrabold leading-tight">{label}</span>
-        </TabsTrigger>
-    )
-}
-
 function MetricCard({ icon: Icon, label, value, detail, tone }: {
     icon: LucideIcon
     label: string
@@ -1239,6 +1242,11 @@ const printStyles = `
         .parent-portal {
             background: white !important;
             padding: 0 !important;
+        }
+
+        .parent-shell {
+            max-width: none !important;
+            padding-bottom: 0 !important;
         }
 
         .report-root {

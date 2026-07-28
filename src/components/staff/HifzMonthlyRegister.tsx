@@ -276,7 +276,15 @@ function buildWeek(index: number, days: Day[]): Week {
 
 /* --------------------------- Surah combobox --------------------------- */
 
-function SurahCombobox({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+function SurahCombobox({
+  value,
+  onChange,
+  portalContainer,
+}: {
+  value: string
+  onChange: (name: string) => void
+  portalContainer?: HTMLElement | null
+}) {
   const [open, setOpen] = useState(false)
   const selected = value ? SURAH_BY_NAME.get(value) : undefined
   return (
@@ -294,7 +302,11 @@ function SurahCombobox({ value, onChange }: { value: string; onChange: (name: st
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(360px,calc(100vw-2rem))] p-0" align="start">
+      <PopoverContent
+        container={portalContainer ?? undefined}
+        className="z-[100] w-[min(360px,calc(100vw-2rem))] p-0"
+        align="start"
+      >
         <Command
           filter={(itemValue, search) => {
             const term = search.toLowerCase()
@@ -302,7 +314,7 @@ function SurahCombobox({ value, onChange }: { value: string; onChange: (name: st
           }}
         >
           <CommandInput placeholder="Search Surah (Arabic or English)…" className="h-9" />
-          <CommandList className="max-h-[300px]">
+          <CommandList className="max-h-[300px] overscroll-contain [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
             <CommandEmpty>No Surah found.</CommandEmpty>
             <CommandGroup>
               {SURAHS.map((surah) => (
@@ -398,10 +410,11 @@ function expandRangeDrafts(ranges: RangeDraft[]): DraftItem[] {
   return expanded
 }
 
-function HifzEntryEditor({ target, onClose, onSave }: {
+function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   target: EditorTarget
   onClose: () => void
   onSave: (target: { day: Day; activity: Activity }, items: DraftItem[], removedIds: string[]) => Promise<void>
+  portalContainer?: HTMLElement | null
 }) {
   const activity = target?.activity ? ACTIVITY[target.activity] : null
   const existing = useMemo(() => (target ? target.day.entries[target.activity] || [] : []), [target])
@@ -538,12 +551,12 @@ function HifzEntryEditor({ target, onClose, onSave }: {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">From</Label>
-                      <SurahCombobox value={range.fromSurah} onChange={(name) => setRange(index, { fromSurah: name })} />
+                      <SurahCombobox value={range.fromSurah} onChange={(name) => setRange(index, { fromSurah: name })} portalContainer={portalContainer} />
                       <Input type="number" min="1" placeholder="Verse" value={range.fromAyah} onChange={(event) => setRange(index, { fromAyah: event.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs">To</Label>
-                      <SurahCombobox value={range.toSurah} onChange={(name) => setRange(index, { toSurah: name })} />
+                      <SurahCombobox value={range.toSurah} onChange={(name) => setRange(index, { toSurah: name })} portalContainer={portalContainer} />
                       <Input type="number" min="1" placeholder="Verse" value={range.toAyah} onChange={(event) => setRange(index, { toAyah: event.target.value })} />
                     </div>
                   </div>
@@ -569,7 +582,7 @@ function HifzEntryEditor({ target, onClose, onSave }: {
                   </div>
                   {isRange ? (
                     <div className="space-y-2">
-                      <SurahCombobox value={item.surah_name} onChange={(name) => setItem(index, { surah_name: name })} />
+                      <SurahCombobox value={item.surah_name} onChange={(name) => setItem(index, { surah_name: name })} portalContainer={portalContainer} />
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1"><Label className="text-xs">Start verse</Label><Input type="number" min="1" value={item.start_v} onChange={(event) => setItem(index, { start_v: event.target.value })} /></div>
                         <div className="space-y-1"><Label className="text-xs">End verse</Label><Input type="number" min="1" value={item.end_v} onChange={(event) => setItem(index, { end_v: event.target.value })} /></div>
@@ -1005,7 +1018,16 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
     }
   }, [register])
 
-  const editorNode = <HifzEntryEditor target={editor} onClose={() => setEditor(null)} onSave={saveCell} />
+  const [entryDialogNode, setEntryDialogNode] = useState<HTMLDivElement | null>(null)
+
+  const editorNode = (
+    <HifzEntryEditor
+      target={editor}
+      onClose={() => setEditor(null)}
+      onSave={saveCell}
+      portalContainer={entryDialogNode}
+    />
+  )
 
   const renderCell = (day: Day, activity: Activity) => (
     <HifzCell day={day} activity={activity} onOpen={() => setEditor({ day, activity })} />
@@ -1062,6 +1084,7 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
       </div>
       <Dialog open={!!editor} onOpenChange={(value) => !value && setEditor(null)}>
         <DialogContent
+          ref={setEntryDialogNode}
           showCloseButton={false}
           overlayClassName="z-[70] bg-slate-950/55"
           className="z-[80] flex min-h-0 w-[440px] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-2xl border border-slate-200 p-0 shadow-2xl max-h-[min(590px,calc(100dvh-2rem))] sm:max-w-[440px]"

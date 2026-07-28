@@ -16,11 +16,7 @@ import { Label } from "@/components/ui/label"
 import { getRedirectPathForRole } from "@/lib/auth"
 
 function getApiUrl() {
-    const IS_DEV = process.env.NODE_ENV !== 'production'
-    const baseApiUrl = IS_DEV ? "http://localhost:5000/api" : "/api"
-    return typeof window === 'undefined' || !IS_DEV
-        ? baseApiUrl
-        : baseApiUrl.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):5000/, `http://${window.location.hostname}:5000`)
+    return "/api"
 }
 
 function normalizeParentDob(value: string) {
@@ -41,14 +37,20 @@ function normalizeParentDob(value: string) {
     return `${year}-${month}-${day}`
 }
 
-export default function LoginForm() {
+type LoginFormProps = {
+    parentOnly?: boolean
+}
+
+export default function LoginForm({ parentOnly = false }: LoginFormProps) {
     const [userId, setUserId] = useState("")
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const title = "Welcome back"
-    const description = "Staff use email and password. Parents use admission number and DOB."
+    const title = parentOnly ? "Parent Portal" : "Welcome back"
+    const description = parentOnly
+        ? "View your child's attendance, Hifz progress, and approved updates."
+        : "Sign in with your staff email and password."
 
     const isSubmitDisabled = useMemo(() => {
         if (loading) return true
@@ -97,16 +99,20 @@ export default function LoginForm() {
         const timeoutId = setTimeout(() => controller.abort(), 15000)
 
         try {
-            const data = userId.includes("@")
-                ? await handleStaffLogin(controller.signal)
-                : await handleParentLogin(controller.signal)
+            const data = parentOnly
+                ? await handleParentLogin(controller.signal)
+                : await handleStaffLogin(controller.signal)
             const profile = data.user
 
             if (!data.success || !profile) {
                 throw new Error(data.error || "Failed to login")
             }
 
-            window.location.href = getRedirectPathForRole(profile.role)
+if (parentOnly && profile.role !== "parent") {
+                throw new Error("This login is only for parent accounts.")
+            }
+
+            window.location.href = parentOnly ? "/home" : getRedirectPathForRole(profile.role)
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error("Failed to login")
             setError(error.name === "AbortError"
@@ -119,7 +125,7 @@ export default function LoginForm() {
     }
 
     return (
-        <Card className="login-card">
+        <Card className={`login-card${parentOnly ? " login-card-parent" : ""}`}>
             <style>{loginFormStyles}</style>
             <CardHeader className="login-card-header">
                 <div className="login-logo">
@@ -140,13 +146,13 @@ export default function LoginForm() {
 
                 <form onSubmit={onSubmit} className="login-form">
                     <div className="login-field">
-                        <Label htmlFor="user_id">User ID</Label>
+                        <Label htmlFor="user_id">{parentOnly ? "Admission number" : "Email address"}</Label>
                         <div className="login-input-wrap">
                             <UserRound size={17} aria-hidden />
                             <Input
                                 id="user_id"
                                 type="text"
-                                placeholder="Email or admission number"
+                                placeholder={parentOnly ? "Admission number" : "Staff email address"}
                                 value={userId}
                                 onChange={(event) => {
                                     setUserId(event.target.value)
@@ -158,20 +164,21 @@ export default function LoginForm() {
                         </div>
                     </div>
                     <div className="login-field">
-                        <Label htmlFor="password">Password</Label>
+                        <Label htmlFor="password">{parentOnly ? "Date of birth" : "Password"}</Label>
                         <div className="login-input-wrap">
                             <LockKeyhole size={17} aria-hidden />
                             <Input
                                 id="password"
-                                type="password"
-                                placeholder="Password or DOB (DD/MM/YYYY)"
+                                type={parentOnly ? "text" : "password"}
+                                inputMode={parentOnly ? "numeric" : undefined}
+                                placeholder={parentOnly ? "DD/MM/YYYY" : "Password"}
                                 value={password}
                                 onChange={(event) => {
                                     setPassword(event.target.value)
                                     setError(null)
                                 }}
                                 className="login-input"
-                                autoComplete="current-password"
+                                autoComplete={parentOnly ? "bday" : "current-password"}
                             />
                         </div>
                     </div>
@@ -185,7 +192,7 @@ export default function LoginForm() {
             </CardContent>
             <CardFooter className="login-card-footer">
                 <p>
-                    Restricted System. Authorized access only.
+                    {parentOnly ? "Private access for parents." : "Restricted System. Authorized access only."}
                 </p>
             </CardFooter>
         </Card>
@@ -205,6 +212,10 @@ const loginFormStyles = `
         color: #eef6fb;
         box-shadow: 0 28px 80px rgba(0, 0, 0, 0.36);
         transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .login-card-parent {
+        border-color: rgba(84, 152, 129, 0.28);
     }
 
     .login-card:hover {

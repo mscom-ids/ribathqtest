@@ -5,12 +5,16 @@ export function ProgressRing({
     percentage,
     size = 120,
     strokeWidth = 10,
-    color = "text-emerald-500"
+    color = "text-emerald-500",
+    trackColor = "text-slate-200 dark:text-slate-800",
+    labelColor = "text-emerald-800 dark:text-emerald-400"
 }: {
     percentage: number
     size?: number
     strokeWidth?: number
     color?: string
+    trackColor?: string
+    labelColor?: string
 }) {
     const radius = (size - strokeWidth) / 2
     const circumference = radius * 2 * Math.PI
@@ -24,7 +28,7 @@ export function ProgressRing({
                 height={size}
             >
                 <circle
-                    className="text-slate-200 dark:text-slate-800"
+                    className={trackColor}
                     strokeWidth={strokeWidth}
                     stroke="currentColor"
                     fill="transparent"
@@ -45,7 +49,7 @@ export function ProgressRing({
                     cy={size / 2}
                 />
             </svg>
-            <span className="absolute text-2xl text-emerald-800 dark:text-emerald-400">
+            <span className={`absolute text-2xl ${labelColor}`}>
                 {Math.round(percentage)}%
             </span>
         </div>

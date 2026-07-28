@@ -7,7 +7,8 @@
       "Bash(node -e ':*)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(echo \"BACKEND_EXIT=$?\")",
-      "Bash(echo \"FRONTEND_EXIT=$?\")"
+      "Bash(echo \"FRONTEND_EXIT=$?\")",
+      "Bash(curl -s -D- -o /dev/null http://localhost:3000/admin)"
     ]
   }
 }
