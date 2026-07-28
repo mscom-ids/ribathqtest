@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -112,16 +112,19 @@ function wait(ms: number) {
 let warmupInFlight: Promise<void> | null = null;
 
 async function openWarmConnections(target: number) {
-  const clients: PoolClient[] = [];
   const attempts = Array.from({ length: Math.min(Math.max(0, target), poolMax) }, async () => {
     const client = await pool.connect();
-    clients.push(client);
-    await client.query('SELECT 1');
+    try {
+      await client.query('SELECT 1');
+    } finally {
+      // Release each connection as soon as it is ready. Holding every acquired
+      // client until the last connect finishes can starve live requests when the
+      // pool is already partially occupied.
+      client.release();
+    }
   });
 
   const results = await Promise.allSettled(attempts);
-  clients.forEach(client => client.release());
-
   const failure = results.find(result => result.status === 'rejected');
   if (failure?.status === 'rejected') throw failure.reason;
 }
@@ -147,7 +150,9 @@ export function startDatabaseKeepAlive() {
   if (!Number.isFinite(intervalMs) || intervalMs <= 0 || poolWarmConnections <= 0) return null;
 
   const timer = setInterval(() => {
-    void warmDatabasePool(poolWarmConnections).catch(error => {
+    // Keeping the configured minimum warm is enough between traffic bursts and
+    // avoids briefly occupying the whole pool every keep-alive interval.
+    void warmDatabasePool(Math.max(1, poolMin)).catch(error => {
       console.warn('[DB POOL] keep-alive failed:', error?.message || error);
     });
   }, intervalMs);

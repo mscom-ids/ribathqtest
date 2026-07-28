@@ -50,11 +50,34 @@ const pool = new pg_1.Pool({
     idleTimeoutMillis: Number(process.env.DB_POOL_IDLE_TIMEOUT_MS || 1800000),
     connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 10000),
     statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 15000),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: Number(process.env.DB_KEEPALIVE_INITIAL_DELAY_MS || 10000),
+    maxLifetimeSeconds: Number(process.env.DB_MAX_LIFETIME_SECONDS || 900),
 });
 pool.on('error', (err) => {
+    if (isTransientConnectionError(err)) {
+        console.warn('[DB POOL] transient connection reset; failed client will be replaced');
+        return;
+    }
     console.error('Unexpected error on idle pg client', err);
     // pg-pool removes the failed client. Keep the API process alive so later
     // requests can replace a connection after a transient network interruption.
+});
+process.on('uncaughtException', (error) => {
+    if (isTransientConnectionError(error) && error?.syscall === 'read') {
+        console.warn('[DB POOL] ignored transient socket reset');
+        return;
+    }
+    console.error('[PROCESS] uncaught exception:', error);
+    process.exit(1);
+});
+process.on('unhandledRejection', (error) => {
+    if (isTransientConnectionError(error)) {
+        console.warn('[DB POOL] ignored transient connection rejection');
+        return;
+    }
+    console.error('[PROCESS] unhandled rejection:', error);
+    process.exit(1);
 });
 const SLOW_QUERY_MS = Number(process.env.SLOW_QUERY_MS || 250);
 const READ_RETRY_ATTEMPTS = Number(process.env.DB_READ_RETRY_ATTEMPTS || 2);
@@ -80,14 +103,19 @@ function wait(ms) {
 }
 let warmupInFlight = null;
 async function openWarmConnections(target) {
-    const clients = [];
     const attempts = Array.from({ length: Math.min(Math.max(0, target), poolMax) }, async () => {
         const client = await pool.connect();
-        clients.push(client);
-        await client.query('SELECT 1');
+        try {
+            await client.query('SELECT 1');
+        }
+        finally {
+            // Release each connection as soon as it is ready. Holding every acquired
+            // client until the last connect finishes can starve live requests when the
+            // pool is already partially occupied.
+            client.release();
+        }
     });
     const results = await Promise.allSettled(attempts);
-    clients.forEach(client => client.release());
     const failure = results.find(result => result.status === 'rejected');
     if (failure?.status === 'rejected')
         throw failure.reason;
@@ -112,7 +140,9 @@ function startDatabaseKeepAlive() {
     if (!Number.isFinite(intervalMs) || intervalMs <= 0 || poolWarmConnections <= 0)
         return null;
     const timer = setInterval(() => {
-        void warmDatabasePool(poolWarmConnections).catch(error => {
+        // Keeping the configured minimum warm is enough between traffic bursts and
+        // avoids briefly occupying the whole pool every keep-alive interval.
+        void warmDatabasePool(Math.max(1, poolMin)).catch(error => {
             console.warn('[DB POOL] keep-alive failed:', error?.message || error);
         });
     }, intervalMs);

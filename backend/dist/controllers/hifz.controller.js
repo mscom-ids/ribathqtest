@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteMonthlyHifzEntry = exports.updateMonthlyHifzEntry = exports.createMonthlyHifzEntry = exports.getHifzStudentMonth = exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = exports.getProgressSummary = exports.upsertMonthlyReportSettings = exports.getMonthlyReportSettings = exports.upsertMonthlyReport = exports.getMonthlyReports = exports.deleteHifzLog = exports.bulkCreateHifzLogs = exports.updateHifzLog = exports.createHifzLog = exports.getMaxJuzForStudent = exports.getHifzLog = exports.getHifzLogsList = exports.getHifzStudents = void 0;
+exports.deleteMonthlyHifzEntry = exports.updateMonthlyHifzEntry = exports.createMonthlyHifzEntry = exports.batchSaveMonthlyHifzEntries = exports.getHifzStudentMonth = exports.calculateBulkMonthlyReport = exports.calculateMonthlyReportData = exports.getProgressSummary = exports.upsertMonthlyReportSettings = exports.getMonthlyReportSettings = exports.upsertMonthlyReport = exports.getMonthlyReports = exports.deleteHifzLog = exports.bulkCreateHifzLogs = exports.updateHifzLog = exports.createHifzLog = exports.getMaxJuzForStudent = exports.getHifzLog = exports.getHifzLogsList = exports.getHifzStudents = void 0;
 const db_1 = require("../config/db");
 const hifz_calculator_1 = require("../utils/hifz-calculator");
 const quran_juz_1 = require("../utils/quran-juz");
@@ -687,6 +687,8 @@ const calculateMonthlyReportData = async (req, res) => {
         const effectiveClassDays = resolvePointClassDays(automaticPointClassDays, countedClassDays, scheduledClassDays, fallbackClassDays, overrideClassDays);
         const calculations = (0, hifz_calculator_1.calculateHifzReportPoints)(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
+            attendedClasses: attendanceSummary?.attendedClasses || 0,
+            countedClasses: attendanceSummary?.effectiveClasses || 0,
         });
         res.json({
             success: true,
@@ -795,6 +797,8 @@ const calculateBulkMonthlyReport = async (req, res) => {
                 const studentLogs = logsByStudent[student.adm_no] || [];
                 const calculatedPoints = (0, hifz_calculator_1.calculateHifzReportPoints)(studentLogs, [], {
                     expectedClassDaysOverride: effectiveClassDays,
+                    attendedClasses: attendanceSummary?.attendedClasses || 0,
+                    countedClasses: attendanceSummary?.effectiveClasses || 0,
                 });
                 if (manualRecord) {
                     return {
@@ -1029,6 +1033,228 @@ const saveMonthlyHifzEntry = async (req, res, existingId) => {
         client.release();
     }
 };
+const MONTHLY_HIFZ_BATCH_LIMIT = 200;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/**
+ * Apply one monthly-register cell edit atomically.
+ *
+ * A cross-Surah range still produces one hifz_logs row per Surah, but all rows
+ * share one authorization/eligibility check and one transaction. Existing rows
+ * are touched only when the client explicitly includes them in `updates`.
+ */
+const batchSaveMonthlyHifzEntries = async (req, res) => {
+    let client = null;
+    let transactionOpen = false;
+    try {
+        const studentId = String(req.body?.student_id || '').trim();
+        const entryDate = toDateKey(req.body?.entry_date);
+        const mode = String(req.body?.mode || '').trim();
+        const requestedSessionId = req.body?.session_id ? String(req.body.session_id).trim() : null;
+        const rawCreates = req.body?.creates;
+        const rawUpdates = req.body?.updates;
+        const rawDeleteIds = req.body?.delete_ids;
+        if (!studentId || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate) || !VALID_HIFZ_MODES.has(mode)) {
+            throw monthlyRegisterError('student_id, entry_date, and a valid mode are required.');
+        }
+        if (requestedSessionId && !UUID_PATTERN.test(requestedSessionId)) {
+            throw monthlyRegisterError('Invalid Hifz session.');
+        }
+        if ((rawCreates !== undefined && !Array.isArray(rawCreates))
+            || (rawUpdates !== undefined && !Array.isArray(rawUpdates))
+            || (rawDeleteIds !== undefined && !Array.isArray(rawDeleteIds))) {
+            throw monthlyRegisterError('creates, updates, and delete_ids must be arrays.');
+        }
+        const creates = (rawCreates || []).map((item, index) => normalizeHifzLogInput({
+            ...(item && typeof item === 'object' ? item : {}),
+            student_id: studentId,
+            entry_date: entryDate,
+            mode,
+            session_id: requestedSessionId,
+        }, index));
+        const updates = (rawUpdates || []).map((item, index) => {
+            const id = String(item?.id || '').trim();
+            if (!UUID_PATTERN.test(id))
+                throw monthlyRegisterError(`Update ${index + 1}: invalid entry id.`);
+            return {
+                id,
+                log: normalizeHifzLogInput({
+                    ...(item && typeof item === 'object' ? item : {}),
+                    student_id: studentId,
+                    entry_date: entryDate,
+                    mode,
+                    session_id: requestedSessionId,
+                }, creates.length + index),
+            };
+        });
+        const deleteIds = (rawDeleteIds || []).map((value, index) => {
+            const id = String(value || '').trim();
+            if (!UUID_PATTERN.test(id))
+                throw monthlyRegisterError(`Delete ${index + 1}: invalid entry id.`);
+            return id;
+        });
+        const operationCount = creates.length + updates.length + deleteIds.length;
+        if (operationCount === 0)
+            throw monthlyRegisterError('At least one Hifz entry change is required.');
+        if (operationCount > MONTHLY_HIFZ_BATCH_LIMIT) {
+            throw monthlyRegisterError(`A single Hifz save cannot exceed ${MONTHLY_HIFZ_BATCH_LIMIT} changes.`);
+        }
+        const referencedIds = [...updates.map((item) => item.id), ...deleteIds];
+        if (new Set(referencedIds).size !== referencedIds.length) {
+            throw monthlyRegisterError('The same Hifz entry cannot be updated or deleted more than once.');
+        }
+        const hasWrites = creates.length > 0 || updates.length > 0;
+        if (hasWrites)
+            await enforceHifzRecordingAccess(req, entryDate);
+        await enforceHifzStudentAccess(req, [studentId]);
+        const [staffId, academicContext] = await Promise.all([
+            (0, staff_utils_1.getStaffId)(req),
+            (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id),
+        ]);
+        client = await db_1.db.getClient();
+        await client.query('BEGIN');
+        transactionOpen = true;
+        const existingRows = referencedIds.length > 0
+            ? (await client.query(`SELECT *
+                 FROM hifz_logs
+                 WHERE id = ANY($1::uuid[])
+                   AND deleted_at IS NULL
+                 FOR UPDATE`, [referencedIds])).rows
+            : [];
+        if (existingRows.length !== referencedIds.length) {
+            throw monthlyRegisterError('One or more Hifz entries no longer exist.', 409);
+        }
+        for (const existing of existingRows) {
+            if (String(existing.student_id) !== studentId
+                || toDateKey(existing.entry_date) !== entryDate
+                || String(existing.mode) !== mode) {
+                throw monthlyRegisterError('A Hifz entry cannot be moved to another student, date, or activity.');
+            }
+        }
+        let effectiveSessionId = requestedSessionId;
+        if (hasWrites) {
+            const fallbackExisting = existingRows.find((row) => row.session_id);
+            const eligibility = await (0, hifz_monthly_register_service_1.resolveHifzEntryEligibility)({
+                db: client,
+                studentId,
+                mentorId: staffId
+                    || creates.find((log) => log.usthad_id)?.usthad_id
+                    || existingRows.find((row) => row.usthad_id)?.usthad_id
+                    || null,
+                entryDate,
+                academicYearId: academicContext.academicYearId,
+                requestedSessionId: requestedSessionId || fallbackExisting?.session_id || null,
+            });
+            if (!eligibility.allowed || !eligibility.sessionId) {
+                throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409);
+            }
+            effectiveSessionId = eligibility.sessionId;
+        }
+        const deletedRows = deleteIds.length > 0
+            ? (await client.query(`DELETE FROM hifz_logs
+                 WHERE id = ANY($1::uuid[])
+                 RETURNING id`, [deleteIds])).rows
+            : [];
+        let updatedRows = [];
+        if (updates.length > 0) {
+            const values = [];
+            const tuples = [];
+            let parameter = 1;
+            for (const item of updates) {
+                tuples.push(`($${parameter++}::uuid,$${parameter++}::date,$${parameter++}::text,$${parameter++}::text,$${parameter++}::integer,$${parameter++}::integer,$${parameter++}::integer,$${parameter++}::integer,$${parameter++}::integer,$${parameter++}::text,$${parameter++}::uuid)`);
+                values.push(item.id, entryDate, mode, item.log.surah_name, item.log.start_v, item.log.end_v, item.log.start_page, item.log.end_page, item.log.juz_number, item.log.juz_portion, effectiveSessionId);
+            }
+            const result = await client.query(`UPDATE hifz_logs AS target
+                 SET entry_date = source.entry_date,
+                     mode = source.mode,
+                     surah_name = source.surah_name,
+                     start_v = source.start_v,
+                     end_v = source.end_v,
+                     start_page = source.start_page,
+                     end_page = source.end_page,
+                     juz_number = source.juz_number,
+                     juz_portion = source.juz_portion,
+                     session_id = source.session_id,
+                     attendance_record_id = (
+                         SELECT mark.id
+                         FROM student_attendance_marks mark
+                         WHERE mark.student_id = target.student_id
+                           AND mark.schedule_id = source.session_id
+                           AND mark.date = source.entry_date
+                         LIMIT 1
+                     ),
+                     updated_at = NOW()
+                 FROM (VALUES ${tuples.join(',')}) AS source(
+                     id, entry_date, mode, surah_name, start_v, end_v,
+                     start_page, end_page, juz_number, juz_portion, session_id
+                 )
+                 WHERE target.id = source.id
+                 RETURNING target.*`, values);
+            updatedRows = result.rows;
+        }
+        let createdRows = [];
+        if (creates.length > 0) {
+            const values = [];
+            const tuples = [];
+            let parameter = 1;
+            for (const log of creates) {
+                tuples.push(`($${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},$${parameter++},`
+                    + `(SELECT id FROM student_attendance_marks WHERE student_id = $${parameter - 12} AND schedule_id = $${parameter - 1} AND date = $${parameter - 10}::date LIMIT 1),`
+                    + `$${parameter++},$${parameter++})`);
+                values.push(studentId, staffId || log.usthad_id || null, entryDate, mode, log.surah_name, log.start_v, log.end_v, log.start_page, log.end_page, log.juz_number, log.juz_portion, effectiveSessionId, staffId || null, log.notes);
+            }
+            const result = await client.query(`INSERT INTO hifz_logs (
+                    student_id, usthad_id, entry_date, mode, surah_name, start_v, end_v,
+                    start_page, end_page, juz_number, juz_portion, session_id,
+                    attendance_record_id, created_by, notes
+                 ) VALUES ${tuples.join(',')}
+                 RETURNING *`, values);
+            createdRows = result.rows;
+        }
+        await client.query('COMMIT');
+        transactionOpen = false;
+        client.release();
+        client = null;
+        (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
+        (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
+        let monthRegister = null;
+        let refreshRequired = false;
+        try {
+            monthRegister = await getMonthlyRegister(req, studentId, entryDate.slice(0, 7));
+        }
+        catch (hydrationError) {
+            refreshRequired = true;
+            console.error('Hifz batch saved but month hydration failed:', hydrationError?.message || hydrationError);
+        }
+        return res.json({
+            success: true,
+            entries: [...updatedRows, ...createdRows],
+            deleted_ids: deletedRows.map((row) => String(row.id)),
+            day: monthRegister?.days?.find((day) => day.date === entryDate) || null,
+            summary: monthRegister?.summary || null,
+            monthRegister,
+            refresh_required: refreshRequired,
+        });
+    }
+    catch (error) {
+        if (client && transactionOpen) {
+            await client.query('ROLLBACK').catch(() => undefined);
+            transactionOpen = false;
+        }
+        if (client) {
+            client.release();
+            client = null;
+        }
+        return res.status(error.statusCode || 500).json({
+            success: false,
+            error: error.statusCode ? error.message : hifzLogErrorMessage(error),
+        });
+    }
+    finally {
+        if (client)
+            client.release();
+    }
+};
+exports.batchSaveMonthlyHifzEntries = batchSaveMonthlyHifzEntries;
 const createMonthlyHifzEntry = async (req, res) => {
     await saveMonthlyHifzEntry(req, res);
 };

@@ -14,6 +14,7 @@ router.get('/progress-summary', hifz_controller_1.getProgressSummary);
 router.get('/students', hifz_controller_1.getHifzStudents);
 // Interactive month register: schedules, attendance, entries, summary, and eligibility.
 router.get('/students/:studentId/month', hifz_controller_1.getHifzStudentMonth);
+router.post('/entries/batch', hifz_controller_1.batchSaveMonthlyHifzEntries);
 router.post('/entries', hifz_controller_1.createMonthlyHifzEntry);
 router.patch('/entries/:id', hifz_controller_1.updateMonthlyHifzEntry);
 router.delete('/entries/:id', hifz_controller_1.deleteMonthlyHifzEntry);

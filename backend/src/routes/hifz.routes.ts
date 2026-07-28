@@ -7,6 +7,7 @@ import {
     upsertMonthlyReportSettings,
     getHifzStudentMonth,
     createMonthlyHifzEntry,
+    batchSaveMonthlyHifzEntries,
     updateMonthlyHifzEntry,
     deleteMonthlyHifzEntry
 } from '../controllers/hifz.controller';
@@ -27,6 +28,7 @@ router.get('/students', getHifzStudents);
 
 // Interactive month register: schedules, attendance, entries, summary, and eligibility.
 router.get('/students/:studentId/month', getHifzStudentMonth);
+router.post('/entries/batch', batchSaveMonthlyHifzEntries);
 router.post('/entries', createMonthlyHifzEntry);
 router.patch('/entries/:id', updateMonthlyHifzEntry);
 router.delete('/entries/:id', deleteMonthlyHifzEntry);

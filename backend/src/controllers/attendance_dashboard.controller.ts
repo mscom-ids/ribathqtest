@@ -366,7 +366,9 @@ const MENTOR_COL_MAP: Record<string, 'hifz_mentor_id' | 'school_mentor_id' | 'ma
     madrassa: 'madrasa_mentor_id',
 };
 
-type MentorCountMap = Record<'hifz' | 'school' | 'madrasa', Record<string, number>>;
+type MentorCountMap = Record<'hifz' | 'school' | 'madrasa', Record<string, number>> & {
+    hifzRosterCount?: number | null;
+};
 
 // Single-query helper: returns, for one mentor, how many active students of each
 // (class_type, standard) they own. Replaces the N+1 COUNT(*) loops that used to
@@ -375,84 +377,116 @@ async function loadMentorStudentCounts(mentorId: string, academicYearId?: string
     if (academicYearId) {
         try {
             const grouped = await db.query(
-            `WITH configured AS (
-                SELECT id, department, standard
-                FROM attendance_groups
-                WHERE academic_year_id = $2 AND mentor_id = $1
-             ),
-             assigned AS (
-                SELECT gs.student_id, c.department, c.standard
-                FROM configured c
-                JOIN attendance_group_students gs ON gs.group_id = c.id
-                JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
-             )
-             SELECT EXISTS(SELECT 1 FROM configured) AS configured,
-                    COALESCE(jsonb_agg(assigned) FILTER (WHERE assigned.student_id IS NOT NULL), '[]'::jsonb) AS assignments
-             FROM assigned`,
-            [mentorId, academicYearId],
-        );
-        if (grouped.rows[0]?.configured) {
-            const counts: MentorCountMap = { hifz: {}, school: {}, madrasa: {} };
-            const assignments = parseLinkedGroups(grouped.rows[0].assignments);
-            for (const row of assignments) {
-                const departmentValue = String(row.department || '').toLowerCase();
-                const department: keyof MentorCountMap =
-                    departmentValue === 'school' ? 'school' :
-                    (departmentValue === 'madrasa' || departmentValue === 'madrassa') ? 'madrasa' :
-                    'hifz';
-                const standard = normalizeScheduleStandard(String(row.standard || '').trim());
-                if (!standard) continue;
-                counts[department][standard] = (counts[department][standard] || 0) + 1;
-            }
-            return counts;
+                `WITH configured AS (
+                    SELECT id, department, standard
+                    FROM attendance_groups
+                    WHERE academic_year_id = $2 AND mentor_id = $1
+                 ),
+                 assigned AS (
+                    SELECT gs.student_id, c.department, c.standard
+                    FROM configured c
+                    JOIN attendance_group_students gs ON gs.group_id = c.id
+                    JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+                 )
+                 SELECT EXISTS(SELECT 1 FROM configured) AS configured,
+                        COALESCE(jsonb_agg(assigned) FILTER (WHERE assigned.student_id IS NOT NULL), '[]'::jsonb) AS assignments,
+                        (
+                            SELECT COUNT(DISTINCT snapshot.student_id)::int
+                            FROM student_year_snapshots snapshot
+                            JOIN students active_student
+                              ON active_student.adm_no = snapshot.student_id
+                             AND LOWER(COALESCE(active_student.status, 'active')) = 'active'
+                            WHERE snapshot.academic_year_id = $2
+                              AND snapshot.hifz_mentor_id = $1
+                              AND LOWER(COALESCE(snapshot.status, 'active')) = 'active'
+                        ) AS hifz_roster_count
+                 FROM assigned`,
+                [mentorId, academicYearId],
+            );
+            if (grouped.rows[0]?.configured) {
+                const counts: MentorCountMap = { hifz: {}, school: {}, madrasa: {} };
+                const assignments = parseLinkedGroups(grouped.rows[0].assignments);
+                for (const row of assignments) {
+                    const departmentValue = String(row.department || '').toLowerCase();
+                    const department: keyof Pick<MentorCountMap, 'hifz' | 'school' | 'madrasa'> =
+                        departmentValue === 'school' ? 'school' :
+                        (departmentValue === 'madrasa' || departmentValue === 'madrassa') ? 'madrasa' :
+                        'hifz';
+                    const standard = normalizeScheduleStandard(String(row.standard || '').trim());
+                    if (!standard) continue;
+                    counts[department][standard] = (counts[department][standard] || 0) + 1;
+                }
+                counts.hifzRosterCount = Number(grouped.rows[0]?.hifz_roster_count || 0);
+                return counts;
             }
         } catch (error) {
             // Keep attendance available while a legacy group row is corrected.
             console.warn('[attendance] Falling back to mentor assignments:', error);
         }
     }
-    const result = await db.query(
-        `SELECT adm_no, standard, is_hifz, is_school, is_madrasa
-         FROM (
-             SELECT s.adm_no, s.standard,
-                    (s.hifz_mentor_id    = $1) AS is_hifz,
-                    (s.school_mentor_id  = $1) AS is_school,
-                    (s.madrasa_mentor_id = $1) AS is_madrasa
-             FROM students s
-             WHERE s.status = 'active'
-               AND s.standard IS NOT NULL
-               AND (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
-               AND NOT EXISTS (
-                   SELECT 1 FROM mentor_delegations d
-                   WHERE d.from_staff_id = $1
-                     AND d.status = 'approved'
-                     AND (d.student_id IS NULL OR d.student_id = s.adm_no)
-               )
 
-             UNION ALL
+    const assignmentSql = `
+        SELECT s.adm_no, s.standard,
+               (s.hifz_mentor_id    = $1) AS is_hifz,
+               (s.school_mentor_id  = $1) AS is_school,
+               (s.madrasa_mentor_id = $1) AS is_madrasa
+        FROM students s
+        WHERE s.status = 'active'
+          AND s.standard IS NOT NULL
+          AND (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
+          AND NOT EXISTS (
+              SELECT 1 FROM mentor_delegations d
+              WHERE d.from_staff_id = $1
+                AND d.status = 'approved'
+                AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+          )
 
-             SELECT s.adm_no, s.standard,
-                    (s.hifz_mentor_id    = d.from_staff_id) AS is_hifz,
-                    (s.school_mentor_id  = d.from_staff_id) AS is_school,
-                    (s.madrasa_mentor_id = d.from_staff_id) AS is_madrasa
-             FROM mentor_delegations d
-             JOIN students s ON (
-                s.hifz_mentor_id = d.from_staff_id
-                OR s.school_mentor_id = d.from_staff_id
-                OR s.madrasa_mentor_id = d.from_staff_id
-             )
-             WHERE d.to_staff_id = $1
-               AND d.status = 'approved'
-               AND (d.student_id IS NULL OR d.student_id = s.adm_no)
-               AND s.status = 'active'
-               AND s.standard IS NOT NULL
-         ) assigned`,
-        [mentorId]
-    );
+        UNION ALL
+
+        SELECT s.adm_no, s.standard,
+               (s.hifz_mentor_id    = d.from_staff_id) AS is_hifz,
+               (s.school_mentor_id  = d.from_staff_id) AS is_school,
+               (s.madrasa_mentor_id = d.from_staff_id) AS is_madrasa
+        FROM mentor_delegations d
+        JOIN students s ON (
+           s.hifz_mentor_id = d.from_staff_id
+           OR s.school_mentor_id = d.from_staff_id
+           OR s.madrasa_mentor_id = d.from_staff_id
+        )
+        WHERE d.to_staff_id = $1
+          AND d.status = 'approved'
+          AND (d.student_id IS NULL OR d.student_id = s.adm_no)
+          AND s.status = 'active'
+          AND s.standard IS NOT NULL
+    `;
+
+    const result = academicYearId
+        ? await db.query(
+            `WITH assigned AS (${assignmentSql}),
+                  canonical_hifz AS (
+                    SELECT COUNT(DISTINCT snapshot.student_id)::int AS student_count
+                    FROM student_year_snapshots snapshot
+                    JOIN students active_student
+                      ON active_student.adm_no = snapshot.student_id
+                     AND LOWER(COALESCE(active_student.status, 'active')) = 'active'
+                    WHERE snapshot.academic_year_id = $2
+                      AND snapshot.hifz_mentor_id = $1
+                      AND LOWER(COALESCE(snapshot.status, 'active')) = 'active'
+                  )
+             SELECT assigned.*, canonical_hifz.student_count AS hifz_roster_count
+             FROM canonical_hifz
+             LEFT JOIN assigned ON TRUE`,
+            [mentorId, academicYearId],
+        )
+        : await db.query(
+            `WITH assigned AS (${assignmentSql}) SELECT * FROM assigned`,
+            [mentorId],
+        );
 
     const counts: MentorCountMap = { hifz: {}, school: {}, madrasa: {} };
     const seen = { hifz: new Set<string>(), school: new Set<string>(), madrasa: new Set<string>() };
     for (const row of result.rows) {
+        if (!row.adm_no) continue;
         const std = row.standard;
         if (row.is_hifz && !seen.hifz.has(`${std}|${row.adm_no}`)) {
             seen.hifz.add(`${std}|${row.adm_no}`);
@@ -467,9 +501,11 @@ async function loadMentorStudentCounts(mentorId: string, academicYearId?: string
             counts.madrasa[std] = (counts.madrasa[std] || 0) + 1;
         }
     }
+    counts.hifzRosterCount = academicYearId
+        ? Number(result.rows[0]?.hifz_roster_count || 0)
+        : Object.values(counts.hifz).reduce((sum, count) => sum + count, 0);
     return counts;
 }
-
 // Sum students-per-standard for a schedule's normalised standards.
 async function getMentorStudentCounts(mentorId: string, academicYearId?: string | null): Promise<MentorCountMap> {
     return cachedResult(
@@ -513,10 +549,14 @@ async function countStudentsForScheduleWithRules(
     mentorId?: string | null,
     academicYearId?: string | null,
     date?: string | null,
+    prefetchedHifzStudentCount?: number | null,
 ) {
     const rosterMentorId = mentorId || schedule.mentor_id || null;
     if (isHifzSchedule(schedule) && academicYearId && rosterMentorId) {
         if (mentorId && schedule.mentor_id && schedule.mentor_id !== mentorId) return 0;
+        if (prefetchedHifzStudentCount !== null && prefetchedHifzStudentCount !== undefined) {
+            return prefetchedHifzStudentCount;
+        }
         const students = await getActiveMentorStudents(db, rosterMentorId, {
             academicYearId,
         });
@@ -652,13 +692,15 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         const { date, academic_year_id } = req.query;
         if (!date) return res.status(400).json({ success: false, error: 'date is required (YYYY-MM-DD)' });
 
-        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const user = (req as any).user;
+        const isMentor = MENTOR_ROLES.includes(user?.role);
+        const [yearContext, mentorId] = await Promise.all([
+            getAcademicYearContext(db, academic_year_id),
+            isMentor ? getStaffId(req) : Promise.resolve(null),
+        ]);
         const effectiveAcademicYearId = yearContext.academicYearId;
         const targetDate = new Date(date as string);
         const dayOfWeek = targetDate.getDay(); // 0=Sun,1=Mon...6=Sat
-        const user = (req as any).user;
-        const isMentor = MENTOR_ROLES.includes(user?.role);
-        const mentorId = isMentor ? await getStaffId(req) : null;
         if (isMentor && !mentorId) return res.json({ success: true, data: [] });
 
         const cacheKey = makeCacheKey('attendance:schedules-for-date', {
@@ -692,16 +734,36 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
 
         query += ` ORDER BY a.start_time`;
 
-        const result = await db.query(query, params);
+        // The schedule topology is identical for every mentor. Cache and dedupe
+        // this JSON aggregation independently from mentor-specific counts.
+        const baseSchedulesPromise = cachedResult(
+            makeCacheKey('attendance:base-schedules-for-date', {
+                academic_year_id: effectiveAcademicYearId || 'legacy',
+                date: String(date),
+            }),
+            5 * 60_000,
+            async () => (await db.query(query, params)).rows,
+        );
 
         // ── For mentor roles: filter to only schedules where they have students ──
         if (isMentor) {
-            // ONE query, then in-memory filter. See getMentorStudentCounts.
-            const counts = await getMentorStudentCounts(mentorId!, effectiveAcademicYearId);
+            // One mentor-summary query supplies School/Madrasa counts and the
+            // canonical Hifz roster count, so mixed days stay at one query phase.
+            const [scheduleRows, counts] = await Promise.all([
+                baseSchedulesPromise,
+                getMentorStudentCounts(mentorId!, effectiveAcademicYearId),
+            ]);
 
-            const filteredSchedules = (await Promise.all(result.rows.map(async (schedule: any) => ({
+            const filteredSchedules = (await Promise.all(scheduleRows.map(async (schedule: any) => ({
                 ...schedule,
-                student_count: await countStudentsForScheduleWithRules(schedule, counts, mentorId, effectiveAcademicYearId || undefined, date as string),
+                student_count: await countStudentsForScheduleWithRules(
+                    schedule,
+                    counts,
+                    mentorId,
+                    effectiveAcademicYearId || undefined,
+                    date as string,
+                    counts.hifzRosterCount ?? null,
+                ),
             })))).filter((s: any) => s.student_count > 0);
 
             setCached(cacheKey, filteredSchedules, 60_000);
@@ -709,7 +771,8 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         }
 
         // For Admins/Principals, attach expected mentors to each schedule
-        const [studentsRes, staffRes] = await Promise.all([
+        const [scheduleRows, studentsRes, staffRes] = await Promise.all([
+            baseSchedulesPromise,
             db.query(
                 `SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`,
             ),
@@ -717,7 +780,7 @@ export const getSchedulesForDate = async (req: Request, res: Response) => {
         ]);
         const staffMap = new Map(staffRes.rows.map((s: any) => [s.id, s.name]));
 
-        const schedulesWithMentors = result.rows.map((schedule: any) => {
+        const schedulesWithMentors = scheduleRows.map((schedule: any) => {
             const classType = (schedule.class_type || '').toLowerCase();
             const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
             const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
@@ -1432,9 +1495,25 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         if (!schedule_id) return res.status(400).json({ success: false, error: "schedule_id required" });
         const yearContext = await getAcademicYearContext(db, academic_year_id);
         const effectiveRequestAcademicYearId = yearContext.academicYearId;
-        const scheduleParams: any[] = [schedule_id];
+        const scheduleParams: any[] = [schedule_id, date || null];
         let scheduleQuery = `SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time,
-                                    a.academic_year_id, a.mentor_id, ${SCHEDULE_GROUPS_SELECT}
+                                    a.academic_year_id, a.mentor_id, ${SCHEDULE_GROUPS_SELECT},
+                                    COALESCE((
+                                        SELECT jsonb_agg(jsonb_build_object(
+                                            'student_id', sam.student_id,
+                                            'status', sam.status
+                                        ))
+                                        FROM student_attendance_marks sam
+                                        WHERE sam.schedule_id = a.id
+                                          AND sam.date = $2::date
+                                    ), '[]'::jsonb) AS saved_marks,
+                                    (
+                                        SELECT to_jsonb(cancellation)
+                                        FROM attendance_cancellations cancellation
+                                        WHERE cancellation.schedule_id = a.id
+                                          AND cancellation.date = $2::date
+                                        LIMIT 1
+                                    ) AS attendance_cancellation
                              FROM attendance_schedules a
                              WHERE a.id = $1`;
         if (effectiveRequestAcademicYearId) {
@@ -1446,12 +1525,9 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         // Previously these were sequential awaits even though the schedule
         // lookup doesn't depend on the staff id at all.
         const isMentorRole = MENTOR_ROLES.includes(user?.role);
-        const [resolvedMentorId, schedRes, cancellationRes] = await Promise.all([
+        const [resolvedMentorId, schedRes] = await Promise.all([
             isMentorRole ? getStaffId(req) : Promise.resolve(null),
             db.query(scheduleQuery, scheduleParams),
-            date
-                ? db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date])
-                : Promise.resolve({ rows: [] as any[] }),
         ]);
 
         if (isMentorRole && resolvedMentorId) {
@@ -1474,7 +1550,8 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
-        const cancellation = cancellationRes.rows[0] || null;
+        const cancellation = schedule.attendance_cancellation || null;
+        const savedMarks = Array.isArray(schedule.saved_marks) ? schedule.saved_marks : [];
         const activeDbStds = cancellation
             ? dbStds.filter(std => !isStandardCancelled(cancellation, std))
             : dbStds;
@@ -1483,6 +1560,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
             return res.json({
                 success: true,
                 students: [],
+                marks: savedMarks,
                 cancellation: {
                     is_cancelled: true,
                     cancelled_standards: cancellationStandards(cancellation),
@@ -1688,7 +1766,7 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
             }
         }
 
-        res.json({ success: true, students: studentsWithLeave });
+        res.json({ success: true, students: studentsWithLeave, marks: savedMarks });
     } catch (e: any) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -1701,17 +1779,25 @@ export const markAttendance = async (req: Request, res: Response) => {
         const { schedule_id, date, student_marks, on_behalf_of } = req.body;
         const userRole = (req as any).user.role;
         const userId = (req as any).user.id;
-        const staffId = await getStaffId(req); // Resolve the actual staff ID
+        const [staffId, schedRes, currentYearContext] = await Promise.all([
+            getStaffId(req),
+            db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]),
+            getAcademicYearContext(db),
+        ]);
 
         // If an admin/principal is marking on behalf of a specific mentor,
         // store the mark under the mentor's ID so their portal shows it as "Marked"
         const ADMIN_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
         const effectiveMarkedBy = ADMIN_ROLES.includes(userRole) && on_behalf_of ? on_behalf_of : (staffId || userId);
 
-        const schedRes = await db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]);
         if (schedRes.rows.length === 0) return res.status(404).json({ success: false, error: "Schedule not found" });
         const schedule = schedRes.rows[0];
-        const currentYearContext = await getAcademicYearContext(db);
+        if (MENTOR_ROLES.includes(userRole) && schedule.mentor_id && schedule.mentor_id !== staffId) {
+            return res.status(403).json({
+                success: false,
+                error: 'This timetable slot belongs to another mentor.',
+            });
+        }
         if (currentYearContext.academicYearId && schedule.academic_year_id !== currentYearContext.academicYearId) {
             return res.status(409).json({
                 success: false,
@@ -1723,12 +1809,22 @@ export const markAttendance = async (req: Request, res: Response) => {
         // attendance modals and removes any earlier mark saved before a leave was
         // registered for the same class date.
         const submittedMarks = Array.isArray(student_marks) ? student_marks : [];
-        const existingMarks = await db.query(
-            `SELECT student_id
-             FROM student_attendance_marks
-             WHERE schedule_id = $1 AND date = $2`,
-            [schedule_id, date],
-        );
+        const [existingMarks, cancelCheck] = await Promise.all([
+            db.query(
+                `SELECT student_id
+                 FROM student_attendance_marks
+                 WHERE schedule_id = $1 AND date = $2`,
+                [schedule_id, date],
+            ),
+            db.query(
+                'SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2',
+                [schedule_id, date],
+            ),
+        ]);
+        const cancellation = cancelCheck.rows[0] || null;
+        if (isFullCancellation(cancellation)) {
+            return res.status(400).json({ success: false, error: "Cannot mark attendance for a cancelled class" });
+        }
         const leaveCandidateIds = Array.from(new Set([
             ...submittedMarks.map((mark: any) => mark.student_id),
             ...existingMarks.rows.map((mark: any) => mark.student_id),
@@ -1823,11 +1919,7 @@ export const markAttendance = async (req: Request, res: Response) => {
             }
         }
 
-        const cancelCheck = await db.query('SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2', [schedule_id, date]);
-        const cancellation = cancelCheck.rows[0] || null;
-        if (isFullCancellation(cancellation)) {
-            return res.status(400).json({ success: false, error: "Cannot mark attendance for a cancelled class" });
-        }
+
         if (cancellation && marksToPersist.length > 0) {
             const submittedIds: string[] = marksToPersist.map((m: any) => m.student_id);
             const submittedStudents = await db.query(
@@ -1870,41 +1962,46 @@ export const markAttendance = async (req: Request, res: Response) => {
         const client = await db.getClient();
         try {
             await client.query('BEGIN');
-            // Bulk-insert all student marks in ONE round trip via unnest()
-            // (replaces the previous per-student loop = N round trips).
-            if (marksToPersist.length > 0) {
-                const studentIds = marksToPersist.map((m: any) => m.student_id);
-                const statuses   = marksToPersist.map((m: any) => m.status);
+            const studentIds = marksToPersist.map((mark: any) => mark.student_id);
+            const statuses = marksToPersist.map((mark: any) => mark.status);
 
-                await client.query(
-                    `INSERT INTO student_attendance_marks
-                         (schedule_id, student_id, date, status, marked_by)
-                     SELECT $1::uuid, sid, $2::date, st, $3::uuid
-                     FROM unnest($4::text[], $5::text[]) AS t(sid, st)
-                     ON CONFLICT (schedule_id, student_id, date) DO UPDATE
-                     SET status = EXCLUDED.status, marked_by = EXCLUDED.marked_by`,
-                    [schedule_id, date, effectiveMarkedBy, studentIds, statuses]
-                );
-            }
-
-            // Auto shadow-mark Mentor Staff record
-            await client.query(
-                `INSERT INTO staff_attendance (staff_id, date, status)
-                 VALUES ($1, $2, 'present')
-                 ON CONFLICT (staff_id, date) DO UPDATE SET status = 'present'`,
-                [staffId || userId, date]
-            );
-
-            // Record the Master Class Completion Marker — scoped per mentor
+            // All three upserts are one atomic database statement. This keeps the
+            // existing conflict rules while removing two remote round trips.
             const result = await client.query(
-                `INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at)
-                 VALUES ($1, $2, $3, NOW())
-                 ON CONFLICT (schedule_id, date, marked_by) DO UPDATE SET updated_at = NOW() RETURNING *`,
-                [schedule_id, date, effectiveMarkedBy]
+                `WITH saved_student_marks AS (
+                    INSERT INTO student_attendance_marks
+                        (schedule_id, student_id, date, status, marked_by)
+                    SELECT $1::uuid, sid, $2::date, st, $3::uuid
+                    FROM unnest($4::text[], $5::text[]) AS input(sid, st)
+                    ON CONFLICT (schedule_id, student_id, date) DO UPDATE
+                    SET status = EXCLUDED.status,
+                        marked_by = EXCLUDED.marked_by
+                    RETURNING id
+                 ),
+                 saved_staff_attendance AS (
+                    INSERT INTO staff_attendance (staff_id, date, status)
+                    VALUES ($6::uuid, $2::date, 'present')
+                    ON CONFLICT (staff_id, date) DO UPDATE SET status = 'present'
+                    RETURNING staff_id
+                 ),
+                 saved_class_mark AS (
+                    INSERT INTO attendance_marks (schedule_id, date, marked_by, updated_at)
+                    VALUES ($1::uuid, $2::date, $3::uuid, NOW())
+                    ON CONFLICT (schedule_id, date, marked_by) DO UPDATE
+                    SET updated_at = NOW()
+                    RETURNING *
+                 )
+                 SELECT saved_class_mark.*,
+                        (SELECT COUNT(*)::int FROM saved_student_marks) AS student_mark_count
+                 FROM saved_class_mark`,
+                [schedule_id, date, effectiveMarkedBy, studentIds, statuses, staffId || userId],
             );
-
             await client.query('COMMIT');
-            invalidateCacheByPrefix('attendance:');
+            // Marks do not change timetable topology or mentor rosters. Keep
+            // those safe caches warm and invalidate only mark-derived views.
+            invalidateCacheByPrefix('attendance:dashboard');
+            invalidateCacheByPrefix('attendance:daily-stats');
+            invalidateCacheByPrefix('attendance:student-summaries');
             invalidateCacheByPrefix('reports:management-');
             invalidateCacheByPrefix('reports:mentors');
             invalidateCacheByPrefix('reports:students');

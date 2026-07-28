@@ -922,36 +922,62 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
     if (!student) return
     const meta = ACTIVITY[targetCell.activity]
     const basePayload = (item: DraftItem) => ({
-      mode: meta.mode,
-      entry_date: targetCell.day.date,
-      session_id: targetCell.day.eligibility.sessionId,
       surah_name: meta.kind === "range" ? (item.surah_name || null) : null,
       start_v: meta.kind === "range" && item.start_v ? Number(item.start_v) : null,
       end_v: meta.kind === "range" && item.end_v ? Number(item.end_v) : null,
       juz_number: meta.kind === "juz" && item.juz_number ? Number(item.juz_number) : null,
       juz_portion: meta.kind === "juz" ? (item.juz_portion || null) : null,
-      student_id: student.adm_no,
     })
-
     const hasValue = (item: DraftItem) => (meta.kind === "range" ? !!item.surah_name : !!item.juz_number)
-    let last: MonthRegister | undefined
+    const nullableNumber = (value: number | null | undefined) => value == null ? null : Number(value)
+    const originals = new Map(targetCell.day.entries[targetCell.activity].map((entry) => [entry.id, entry]))
 
-    // Deletes first (removed rows + emptied existing rows).
+    // A range expansion can contain many Surahs. Send only genuinely new/changed
+    // rows and let the server apply the whole cell edit in one transaction.
     const emptiedIds = items.filter((item) => item.id && !hasValue(item)).map((item) => item.id!)
-    for (const id of [...removedIds, ...emptiedIds]) {
-      const response = await api.delete(`/hifz/entries/${id}`)
-      last = response.data?.monthRegister as MonthRegister
-    }
+    const deleteIds = Array.from(new Set([...removedIds, ...emptiedIds]))
+    const deleted = new Set(deleteIds)
+    const creates: ReturnType<typeof basePayload>[] = []
+    const updates: Array<ReturnType<typeof basePayload> & { id: string }> = []
 
     for (const item of items) {
-      if (!hasValue(item)) continue
-      const response = item.id
-        ? await api.patch(`/hifz/entries/${item.id}`, basePayload(item))
-        : await api.post("/hifz/entries", basePayload(item))
-      last = response.data?.monthRegister as MonthRegister
+      if (!hasValue(item) || (item.id && deleted.has(item.id))) continue
+      const payload = basePayload(item)
+      if (!item.id) {
+        creates.push(payload)
+        continue
+      }
+
+      const original = originals.get(item.id)
+      const unchanged = !!original
+        && (original.surah_name || null) === payload.surah_name
+        && nullableNumber(original.start_v) === payload.start_v
+        && nullableNumber(original.end_v) === payload.end_v
+        && nullableNumber(original.juz_number) === payload.juz_number
+        && (original.juz_portion || null) === payload.juz_portion
+      if (!unchanged) updates.push({ id: item.id, ...payload })
     }
 
-    applyRegister(last)
+    if (creates.length === 0 && updates.length === 0 && deleteIds.length === 0) return
+
+    const response = await api.post("/hifz/entries/batch", {
+      student_id: student.adm_no,
+      entry_date: targetCell.day.date,
+      session_id: targetCell.day.eligibility.sessionId,
+      mode: meta.mode,
+      creates,
+      updates,
+      delete_ids: deleteIds,
+    })
+    const updated = response.data?.monthRegister as MonthRegister | undefined
+    if (updated) {
+      applyRegister(updated)
+    } else {
+      // The write is already committed. A rare hydration failure should refresh
+      // the view, never make the user retry a successful save.
+      MONTH_CACHE.delete(cacheKey)
+      await loadMonth()
+    }
     onChange?.()
   }
 

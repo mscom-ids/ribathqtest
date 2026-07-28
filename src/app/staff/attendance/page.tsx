@@ -217,7 +217,6 @@ export default function StaffAttendancePage() {
     // Load sessions for the selected date — fires all 3 calls in parallel.
     // (Previously each awaited the next, adding ~3 RTTs to every date change.)
     const loadDateSessions = useCallback(async () => {
-        if (!staffId) return
         setLoadingSessions(true)
 
         try {
@@ -273,7 +272,7 @@ export default function StaffAttendancePage() {
         } finally {
             setLoadingSessions(false)
         }
-    }, [staffId, dateStr])
+    }, [dateStr])
 
     useEffect(() => { loadDateSessions() }, [loadDateSessions])
 
@@ -302,10 +301,8 @@ export default function StaffAttendancePage() {
         }
     }, [loadingSessions, sessionRows, daysDiff, isEditable])
 
-    // Open attendance marking modal — opens immediately, loads data in background.
-    // Both API calls now fire in parallel; previously call #2 awaited #1 because
-    // it filtered by student IDs, but the backend filter is optional and the
-    // map-by-id matching already ignores any extra rows.
+    // Open the modal immediately and load its authorized roster, saved marks,
+    // cancellation, and fresh outside status in one request.
     const openMarkingModal = async (session: SessionInfo) => {
         setActiveSession(session)
         setSessionStudents([])
@@ -316,11 +313,11 @@ export default function StaffAttendancePage() {
         setModalOpen(true)  // ← open instantly, show spinner inside
 
         try {
-            const [stuRes, attRes] = await Promise.all([
-                api.get('/attendance/students', { params: { schedule_id: session.id, date: dateStr } }),
-                api.get('/attendance/marks', { params: { date: dateStr, schedule_id: session.id } })
-                    .catch(() => ({ data: { data: [] } })),
-            ])
+            // The roster response also includes the saved marks after applying
+            // the same schedule-ownership check, avoiding a second round trip.
+            const stuRes = await api.get('/attendance/students', {
+                params: { schedule_id: session.id, date: dateStr },
+            })
 
             const scheduleStudents: Student[] = stuRes.data?.students || []
             setSessionStudents(scheduleStudents)
@@ -355,7 +352,7 @@ export default function StaffAttendancePage() {
 
             // Override with any existing saved marks (but not for leave-locked students).
             // Map-by-id naturally ignores any rows that aren't in this roster.
-            const existingAtt = attRes.data?.data || []
+            const existingAtt = stuRes.data?.marks || []
             existingAtt.forEach((a: any) => {
                 if (map[a.student_id] !== undefined && !locks[a.student_id]) {
                     const savedStatus = String(a.status || "").toLowerCase()
@@ -411,9 +408,16 @@ export default function StaffAttendancePage() {
             
             toast.success(`Attendance saved for ${student_marks.length} students`)
             invalidateCache('/attendance/dashboard')
-            invalidateCache('/attendance/schedules-for-date')
+            setSessionRows((rows) => rows.map((row) => row.session.id === activeSession.id
+                ? {
+                    ...row,
+                    status: "marked",
+                    studentCount: sessionStudents.length,
+                    markedCount: student_marks.length,
+                }
+                : row
+            ))
             setModalOpen(false)
-            loadDateSessions() // Refresh the table
         } catch (error: any) {
             toast.error(`Failed to save: ${error.message || 'Unknown error'}`)
             console.error(error)
@@ -437,7 +441,6 @@ export default function StaffAttendancePage() {
 
             toast.success(`${activeSession.name} cancelled for ${format(selectedDate, "MMM d")}`)
             invalidateCache('/attendance/dashboard')
-            invalidateCache('/attendance/schedules-for-date')
             setModalOpen(false)
             loadDateSessions()
         } catch (error: any) {

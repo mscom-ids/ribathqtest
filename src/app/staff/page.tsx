@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { format, getDay } from "date-fns"
@@ -143,6 +143,9 @@ export default function StaffDashboard() {
 
     // Refresh trigger to update points/stats
     const [refreshTrigger, setRefreshTrigger] = useState(0)
+    // The register can contain several cell edits. Refresh the expensive staff
+    // dashboard once when the register closes instead of after every cell save.
+    const hifzRegisterDirtyRef = useRef(false)
 
     useEffect(() => {
         setMounted(true)
@@ -923,11 +926,17 @@ export default function StaffDashboard() {
             {/* Hifz Progress Modal */}
             <HifzMonthlyRegister
                 open={!!chartStudent}
-                onClose={() => setChartStudent(null)}
+                onClose={() => {
+                    setChartStudent(null)
+                    if (hifzRegisterDirtyRef.current) {
+                        hifzRegisterDirtyRef.current = false
+                        setRefreshTrigger(prev => prev + 1)
+                    }
+                }}
                 student={chartStudent}
                 onChange={() => {
                     invalidateCache("/dashboard/staff")
-                    setRefreshTrigger(prev => prev + 1)
+                    hifzRegisterDirtyRef.current = true
                 }}
             />
         </div>

@@ -118,7 +118,8 @@ async function loadStudent(db, studentId, academicYearId) {
                 COALESCE(hp.hifz_stage,
                     CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
                 ) AS hifz_stage,
-                COALESCE(hp.completed_hifz, false) AS completed_hifz
+                COALESCE(hp.completed_hifz, false) AS completed_hifz,
+                COALESCE(student_groups.group_ids, ARRAY[]::uuid[]) AS group_ids
          FROM students s
          LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
          LEFT JOIN student_year_snapshots sys
@@ -128,21 +129,23 @@ async function loadStudent(db, studentId, academicYearId) {
            ON p.student_id = s.adm_no
           AND p.academic_year_id = $2::uuid
           AND p.status = 'active'
+         LEFT JOIN LATERAL (
+             SELECT array_agg(gs.group_id ORDER BY gs.group_id) AS group_ids
+             FROM attendance_group_students gs
+             JOIN attendance_groups g ON g.id = gs.group_id
+             WHERE gs.student_id = s.adm_no
+               AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)
+         ) student_groups ON true
          WHERE s.adm_no = $1
            AND LOWER(COALESCE(s.status, 'active')) = 'active'
          LIMIT 1`, [studentId, academicYearId]);
     if (!result.rows[0])
         return null;
-    const groups = await db.query(`SELECT gs.group_id
-         FROM attendance_group_students gs
-         JOIN attendance_groups g ON g.id = gs.group_id
-         WHERE gs.student_id = $1
-           AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)`, [studentId, academicYearId]);
     const row = result.rows[0];
     return {
         ...row,
         hifz_stage: row.hifz_stage === 'HAFIZ_REVISION' ? 'HAFIZ_REVISION' : 'MEMORIZING',
-        group_ids: groups.rows.map((group) => String(group.group_id)),
+        group_ids: (row.group_ids || []).map((groupId) => String(groupId)),
     };
 }
 async function loadSchedules(db, startDate, endDate, academicYearId) {
@@ -290,32 +293,31 @@ function monthSummary(logs, student, completedJuz = 0) {
 async function getHifzStudentMonthRegister(options) {
     const { start, end, dates } = monthRange(options.month);
     const requestedAt = options.requestedAt || new Date();
-    const student = await loadStudent(options.db, options.studentId, options.academicYearId || null);
-    if (!student) {
-        const error = new Error('Student not found or inactive.');
-        error.statusCode = 404;
-        throw error;
-    }
-    const [logsResult, schedules, marksResult, cancellationsResult, lifetimeNewLogsResult] = await Promise.all([
+    const [student, logsResult, schedules, marksResult, cancellationsResult, lifetimeNewLogsResult] = await Promise.all([
+        loadStudent(options.db, options.studentId, options.academicYearId || null),
         options.db.query(`SELECT hl.*, recorder.name AS recorded_by_name
              FROM hifz_logs hl
              LEFT JOIN staff recorder ON recorder.id = hl.created_by
              WHERE hl.student_id = $1
                AND hl.entry_date BETWEEN $2::date AND $3::date
                AND hl.deleted_at IS NULL
-             ORDER BY hl.entry_date, hl.created_at, hl.id`, [student.adm_no, start, end]),
+             ORDER BY hl.entry_date, hl.created_at, hl.id`, [options.studentId, start, end]),
         loadSchedules(options.db, start, end, options.academicYearId || null),
         options.db.query(`SELECT schedule_id, date, status
              FROM student_attendance_marks
-             WHERE student_id = $1 AND date BETWEEN $2::date AND $3::date`, [student.adm_no, start, end]),
+             WHERE student_id = $1 AND date BETWEEN $2::date AND $3::date`, [options.studentId, start, end]),
         options.db.query(`SELECT schedule_id, date, cancelled_standards
              FROM attendance_cancellations
              WHERE date BETWEEN $1::date AND $2::date`, [start, end]),
         options.db.query(`SELECT surah_name, start_v, end_v
              FROM hifz_logs
-             WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL
-             ORDER BY entry_date ASC, created_at ASC`, [student.adm_no]),
+             WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL`, [options.studentId]),
     ]);
+    if (!student) {
+        const error = new Error('Student not found or inactive.');
+        error.statusCode = 404;
+        throw error;
+    }
     // A student who has recorded the final verse of all 30 Juz is a Hafiz — surface
     // the HAFIZ_REVISION stage even if student_hifz_profiles.hifz_stage is stale/unset.
     // This drives entry modes, summary shape, and the frontend columns consistently.
