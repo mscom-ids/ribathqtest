@@ -253,7 +253,6 @@ function selectApplicableSchedule(options: {
 export async function resolveHifzEntryEligibility(options: {
     db: Queryable;
     studentId: string;
-    mentorId?: string | null;
     entryDate: string;
     requestedAt?: Date;
     academicYearId?: string | null;
@@ -279,12 +278,9 @@ export async function resolveHifzEntryEligibility(options: {
     if (!student) {
         return { allowed: false, reason: 'Student is not active for Hifz recording.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
     }
-
-    const mentorId = options.mentorId || student.hifz_mentor_id;
-    if (!mentorId || mentorId !== student.hifz_mentor_id) {
-        return { allowed: false, reason: 'This student is not assigned to the current mentor.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
-    }
-
+    // Current mentor assignments define roster ownership. Hifz entry is opened
+    // by a matching PRESENT attendance mark for the session, so authorised
+    // teaching staff can record the progress after attendance is completed.
     const schedules = await loadSchedules(options.db, entryDate, entryDate, options.academicYearId || null);
     const preserveSessionId = existingRecord.rows[0]?.session_id || null;
     const dayMarks = await options.db.query(
