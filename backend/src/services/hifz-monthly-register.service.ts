@@ -224,11 +224,7 @@ function selectApplicableSchedule(options: {
     presentSessionIds?: Set<string> | null;
 }) {
     const { schedules, student, date, requestedAt, requestedSessionId, preserveSessionId, presentSessionIds } = options;
-    const candidates = schedules
-        .filter((schedule) => scheduleAppliesOn(schedule, date))
-        .filter((schedule) => !schedule.mentor_id || schedule.mentor_id === student.hifz_mentor_id)
-        .filter((schedule) => scheduleAppliesToStudent(schedule, student))
-        .sort((a, b) => normalizedTime(a.start_time).localeCompare(normalizedTime(b.start_time)));
+    const candidates = applicableSchedulesForStudent(schedules, student, date);
 
     const requested = requestedSessionId || preserveSessionId;
     if (requested) return candidates.find((schedule) => schedule.id === requested) || null;
@@ -248,6 +244,14 @@ function selectApplicableSchedule(options: {
     if (date > indiaNow.date) return null;
     const filteredCandidates = candidates.filter((schedule) => normalizedTime(schedule.start_time) <= indiaNow.time);
     return pickPreferringPresent(filteredCandidates);
+}
+
+function applicableSchedulesForStudent(schedules: Schedule[], student: RegisterStudent, date: string) {
+    return schedules
+        .filter((schedule) => scheduleAppliesOn(schedule, date))
+        .filter((schedule) => !schedule.mentor_id || schedule.mentor_id === student.hifz_mentor_id)
+        .filter((schedule) => scheduleAppliesToStudent(schedule, student))
+        .sort((a, b) => normalizedTime(a.start_time).localeCompare(normalizedTime(b.start_time)));
 }
 
 export async function resolveHifzEntryEligibility(options: {
@@ -279,8 +283,8 @@ export async function resolveHifzEntryEligibility(options: {
         return { allowed: false, reason: 'Student is not active for Hifz recording.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
     }
     // Current mentor assignments define roster ownership. Hifz entry is opened
-    // by a matching PRESENT attendance mark for the session, so authorised
-    // teaching staff can record the progress after attendance is completed.
+    // by a matching PRESENT attendance mark when a class applies. If neither the
+    // mentor nor this student has a class on the date, attendance is not required.
     const schedules = await loadSchedules(options.db, entryDate, entryDate, options.academicYearId || null);
     const preserveSessionId = existingRecord.rows[0]?.session_id || null;
     const dayMarks = await options.db.query(
@@ -294,6 +298,7 @@ export async function resolveHifzEntryEligibility(options: {
             .filter((mark) => String(mark.status).toUpperCase() === 'PRESENT')
             .map((mark) => String(mark.schedule_id)),
     );
+    const applicableSchedules = applicableSchedulesForStudent(schedules, student, entryDate);
     const schedule = selectApplicableSchedule({
         schedules,
         student,
@@ -304,6 +309,10 @@ export async function resolveHifzEntryEligibility(options: {
         presentSessionIds,
     });
     if (!schedule) {
+        const requestedSpecificSession = options.requestedSessionId || preserveSessionId;
+        if (applicableSchedules.length === 0 && !requestedSpecificSession) {
+            return { allowed: true, reason: null, sessionId: null, attendanceStatus: 'NOT_REQUIRED', sessionStart: null, sessionEnd: null };
+        }
         return { allowed: false, reason: 'No Hifz session is available for this date.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
     }
 
@@ -449,6 +458,7 @@ export async function getHifzStudentMonthRegister(options: {
     const days = dates.map((date) => {
         const dayLogs = logsByDate.get(date) || [];
         const existingSessionId = dayLogs.find((log) => log.session_id)?.session_id || null;
+        const applicableSchedules = applicableSchedulesForStudent(schedules, student, date);
         const schedule = selectApplicableSchedule({ schedules, student, date, requestedAt, preserveSessionId: existingSessionId, presentSessionIds: presentByDate.get(date) || null });
         const cancellation = schedule ? cancellations.get(`${schedule.id}|${date}`) : null;
         const rawStatus = schedule ? marks.get(`${schedule.id}|${date}`)?.status : null;
@@ -459,6 +469,8 @@ export async function getHifzStudentMonthRegister(options: {
         let eligibility: HifzEntryEligibility;
         if (date > now.date) {
             eligibility = { allowed: false, reason: 'Future dates cannot be recorded.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
+        } else if (!schedule && applicableSchedules.length === 0 && !existingSessionId) {
+            eligibility = { allowed: true, reason: null, sessionId: null, attendanceStatus: 'NOT_REQUIRED', sessionStart: null, sessionEnd: null };
         } else if (!schedule || !scheduleAppliesOn(schedule, date)) {
             eligibility = { allowed: false, reason: 'No Hifz session is available for this date.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
         } else if (attendanceStatus === 'CANCELLED') {

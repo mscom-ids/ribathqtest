@@ -46,20 +46,43 @@ const enforceHifzRecordingAccess = async (req, entryDate) => {
         throw err;
     }
 };
-const enforceHifzStudentAccess = async (req, _studentIds) => {
+const enforceHifzStudentAccess = async (req, studentIds) => {
     const user = req.user;
     const role = String(user?.role || '').toLowerCase();
     if (!['staff', 'usthad', 'mentor'].includes(role))
         return;
-    const staffId = await (0, staff_utils_1.getStaffId)(req);
-    if (!staffId) {
+    const requestedStudentIds = Array.from(new Set(studentIds.map(String).filter(Boolean)));
+    const delegation = await (0, staff_utils_1.getDelegationContext)(req);
+    if (!delegation?.staffId) {
         const err = new Error('Mentor staff profile not found.');
         err.statusCode = 403;
         throw err;
     }
-    // Mentor assignments remain the source for normal rosters. Individual Hifz
-    // writes are authorised by resolveHifzEntryEligibility, which requires the
-    // student to be PRESENT for the matching Hifz attendance session.
+    if (delegation.studentId && requestedStudentIds.some((studentId) => studentId !== delegation.studentId)) {
+        const err = new Error('This delegation does not allow Hifz entries for the selected student.');
+        err.statusCode = 403;
+        throw err;
+    }
+    if (requestedStudentIds.length === 0)
+        return;
+    const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
+    const result = await db_1.db.query(`SELECT s.adm_no
+         FROM students s
+         LEFT JOIN student_year_snapshots sys
+           ON sys.student_id = s.adm_no
+          AND sys.academic_year_id = $3::uuid
+         LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
+         WHERE s.adm_no = ANY($1::text[])
+           AND LOWER(COALESCE(s.status, 'active')) = 'active'
+           AND COALESCE(sys.hifz_mentor_id, hp.mentor_id, s.hifz_mentor_id) = $2::uuid`, [requestedStudentIds, delegation.staffId, academicContext.academicYearId]);
+    const authorizedStudentIds = new Set(result.rows.map((row) => String(row.adm_no)));
+    if (requestedStudentIds.some((studentId) => !authorizedStudentIds.has(studentId))) {
+        const err = new Error('You can record Hifz progress only for students assigned to you.');
+        err.statusCode = 403;
+        throw err;
+    }
+    // Scheduled class days still require PRESENT attendance through
+    // resolveHifzEntryEligibility. Genuine no-class days need no attendance mark.
 };
 const getDetectedClassDays = async (startDate, endDate) => {
     const result = await db_1.db.query(`SELECT COUNT(DISTINCT date) AS class_days
@@ -922,8 +945,8 @@ const getHifzStudentMonth = async (req, res) => {
         if (!studentId || !/^\d{4}-\d{2}$/.test(month)) {
             throw monthlyRegisterError('studentId and month (YYYY-MM) are required.');
         }
-        // Mentor assignment controls normal rosters. Entry eligibility is based on
-        // a matching PRESENT attendance mark for each selected Hifz session.
+        // Mentor assignment controls normal rosters. Entry eligibility requires a
+        // matching PRESENT mark on class days and permits genuine no-class days.
         const register = await getMonthlyRegister(req, studentId, month);
         res.json({ success: true, ...register });
     }
@@ -958,7 +981,7 @@ const saveMonthlyHifzEntry = async (req, res, existingId) => {
             requestedSessionId: log.session_id || null,
             existingRecordId: existingId || null,
         });
-        if (!eligibility.allowed || !eligibility.sessionId) {
+        if (!eligibility.allowed) {
             throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409);
         }
         const result = existing
@@ -1116,7 +1139,7 @@ const batchSaveMonthlyHifzEntries = async (req, res) => {
                 academicYearId: academicContext.academicYearId,
                 requestedSessionId: requestedSessionId || fallbackExisting?.session_id || null,
             });
-            if (!eligibility.allowed || !eligibility.sessionId) {
+            if (!eligibility.allowed) {
                 throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409);
             }
             effectiveSessionId = eligibility.sessionId;
