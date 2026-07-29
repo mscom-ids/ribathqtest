@@ -11,7 +11,6 @@ const mentor_access_policy_1 = require("../utils/mentor-access-policy");
 const academic_year_1 = require("../utils/academic-year");
 const hifz_monthly_register_service_1 = require("../services/hifz-monthly-register.service");
 const staff_utils_1 = require("../utils/staff.utils");
-const mentor_students_service_1 = require("../services/mentor-students.service");
 const HIFZ_SUMMARY_TTL_MS = 5 * 60000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60000;
 const HIFZ_MONTHLY_POINT_DAY_VERSION = 3;
@@ -47,7 +46,7 @@ const enforceHifzRecordingAccess = async (req, entryDate) => {
         throw err;
     }
 };
-const enforceHifzStudentAccess = async (req, studentIds) => {
+const enforceHifzStudentAccess = async (req, _studentIds) => {
     const user = req.user;
     const role = String(user?.role || '').toLowerCase();
     if (!['staff', 'usthad', 'mentor'].includes(role))
@@ -58,17 +57,9 @@ const enforceHifzStudentAccess = async (req, studentIds) => {
         err.statusCode = 403;
         throw err;
     }
-    const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
-    const mentorStudentIds = await (0, mentor_students_service_1.getActiveMentorStudentIds)(db_1.db, staffId, {
-        academicYearId: academicContext.academicYearId,
-    });
-    for (const studentId of studentIds) {
-        if (!mentorStudentIds.has(studentId)) {
-            const err = new Error(`Access denied for student ${studentId}.`);
-            err.statusCode = 403;
-            throw err;
-        }
-    }
+    // Mentor assignments remain the source for normal rosters. Individual Hifz
+    // writes are authorised by resolveHifzEntryEligibility, which requires the
+    // student to be PRESENT for the matching Hifz attendance session.
 };
 const getDetectedClassDays = async (startDate, endDate) => {
     const result = await db_1.db.query(`SELECT COUNT(DISTINCT date) AS class_days
@@ -931,23 +922,9 @@ const getHifzStudentMonth = async (req, res) => {
         if (!studentId || !/^\d{4}-\d{2}$/.test(month)) {
             throw monthlyRegisterError('studentId and month (YYYY-MM) are required.');
         }
-        // Viewing is open to all mentor roles (the dashboard exposes an "All Students"
-        // list); writes stay locked down — eligibility rejects non-assigned mentors and
-        // the entry endpoints still call enforceHifzStudentAccess.
+        // Mentor assignment controls normal rosters. Entry eligibility is based on
+        // a matching PRESENT attendance mark for each selected Hifz session.
         const register = await getMonthlyRegister(req, studentId, month);
-        const role = String(req.user?.role || '').toLowerCase();
-        if (['staff', 'usthad', 'mentor'].includes(role)) {
-            const staffId = await (0, staff_utils_1.getStaffId)(req);
-            if (staffId !== register.student.mentorId) {
-                for (const day of register.days) {
-                    day.eligibility = {
-                        ...day.eligibility,
-                        allowed: false,
-                        reason: 'View only — this student is assigned to another mentor.',
-                    };
-                }
-            }
-        }
         res.json({ success: true, ...register });
     }
     catch (error) {
@@ -976,7 +953,6 @@ const saveMonthlyHifzEntry = async (req, res, existingId) => {
         const eligibility = await (0, hifz_monthly_register_service_1.resolveHifzEntryEligibility)({
             db: client,
             studentId: log.student_id,
-            mentorId: staffId || log.usthad_id || existing?.usthad_id || null,
             entryDate: log.entry_date,
             academicYearId: academicContext.academicYearId,
             requestedSessionId: log.session_id || null,
@@ -1136,10 +1112,6 @@ const batchSaveMonthlyHifzEntries = async (req, res) => {
             const eligibility = await (0, hifz_monthly_register_service_1.resolveHifzEntryEligibility)({
                 db: client,
                 studentId,
-                mentorId: staffId
-                    || creates.find((log) => log.usthad_id)?.usthad_id
-                    || existingRows.find((row) => row.usthad_id)?.usthad_id
-                    || null,
                 entryDate,
                 academicYearId: academicContext.academicYearId,
                 requestedSessionId: requestedSessionId || fallbackExisting?.session_id || null,

@@ -501,6 +501,17 @@ function countStudentsForSchedule(schedule, counts) {
     return total;
 }
 async function countStudentsForScheduleWithRules(schedule, counts, mentorId, academicYearId, date, prefetchedHifzStudentCount) {
+    // A linked attendance group is the authoritative roster for this slot.
+    // The same mentor can have different students in Hifz Class 1, 2, and 3.
+    const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
+    if (linkedGroups.length > 0) {
+        if (mentorId && schedule.mentor_id && schedule.mentor_id !== mentorId)
+            return 0;
+        const relevantGroups = mentorId
+            ? linkedGroups.filter(group => !group.mentor_id || group.mentor_id === mentorId)
+            : linkedGroups;
+        return relevantGroups.reduce((total, group) => total + Number(group.student_count || 0), 0);
+    }
     const rosterMentorId = mentorId || schedule.mentor_id || null;
     if ((0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && academicYearId && rosterMentorId) {
         if (mentorId && schedule.mentor_id && schedule.mentor_id !== mentorId)
@@ -512,12 +523,6 @@ async function countStudentsForScheduleWithRules(schedule, counts, mentorId, aca
             academicYearId,
         });
         return students.length;
-    }
-    const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
-    if (linkedGroups.length > 0) {
-        if (mentorId && schedule.mentor_id && schedule.mentor_id !== mentorId)
-            return 0;
-        return linkedGroups.reduce((total, group) => total + Number(group.student_count || 0), 0);
     }
     return countStudentsForSchedule(schedule, counts);
 }
@@ -1375,20 +1380,31 @@ const getStudentsForSchedule = async (req, res) => {
             : (classType === 'madrasa' || classType === 'madrassa') ? 'madrasa'
                 : classType === 'hifz' ? 'hifz'
                     : null;
+        // Explicit schedule groups are authoritative for this individual slot.
+        // Only an ungrouped Hifz slot may fall back to the mentor's full roster.
+        const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
+        const relevantLinkedGroups = mentor_id
+            ? linkedGroups.filter(group => !group.mentor_id || group.mentor_id === mentor_id)
+            : linkedGroups;
+        if (isMentorRole && linkedGroups.length > 0 && relevantLinkedGroups.length === 0) {
+            return res.status(403).json({ success: false, error: 'This timetable roster belongs to another mentor.' });
+        }
         const hifzRosterMentorId = schedule.mentor_id || mentor_id || null;
-        const hifzAssignmentRoster = (0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && hifzRosterMentorId && effectiveAcademicYearId
+        const hifzAssignmentRoster = (0, hifz_session_eligibility_1.isHifzSchedule)(schedule)
+            && linkedGroups.length === 0
+            && hifzRosterMentorId
+            && effectiveAcademicYearId
             ? await (0, mentor_students_service_1.getActiveMentorStudents)(db_1.db, String(hifzRosterMentorId), {
                 academicYearId: effectiveAcademicYearId,
             })
             : null;
         let configuredGroupRoster = null;
-        const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
         if (hifzAssignmentRoster === null && linkedGroups.length > 0 && effectiveAcademicYearId) {
             if (isMentorRole && schedule.mentor_id && schedule.mentor_id !== mentor_id) {
                 return res.status(403).json({ success: false, error: 'This timetable slot belongs to another mentor.' });
             }
-            const groupIds = linkedGroups.map(group => group.id);
-            const groupRoster = await db_1.db.query(`WITH configured AS (
+            const groupIds = relevantLinkedGroups.map(group => group.id);
+            const groupRoster = groupIds.length > 0 ? await db_1.db.query(`WITH configured AS (
                     SELECT id
                     FROM attendance_groups
                     WHERE id = ANY($1::uuid[])
@@ -1408,7 +1424,7 @@ const getStudentsForSchedule = async (req, res) => {
                  SELECT EXISTS(SELECT 1 FROM configured) AS configured,
                         COALESCE(jsonb_agg(assigned ORDER BY assigned.standard, assigned.name)
                             FILTER (WHERE assigned.adm_no IS NOT NULL), '[]'::jsonb) AS students
-                 FROM assigned`, [groupIds, effectiveAcademicYearId, activeDbStds]);
+                 FROM assigned`, [groupIds, effectiveAcademicYearId, activeDbStds]) : { rows: [{ students: [] }] };
             configuredGroupRoster = groupRoster.rows[0]?.students || [];
         }
         else if (hifzAssignmentRoster === null && mentor_id && effectiveAcademicYearId && attendanceDepartment) {
@@ -1553,7 +1569,9 @@ const markAttendance = async (req, res) => {
         const userId = req.user.id;
         const [staffId, schedRes, currentYearContext] = await Promise.all([
             (0, staff_utils_1.getStaffId)(req),
-            db_1.db.query('SELECT * FROM attendance_schedules WHERE id = $1', [schedule_id]),
+            db_1.db.query(`SELECT a.*, ${SCHEDULE_GROUPS_SELECT}
+                 FROM attendance_schedules a
+                 WHERE a.id = $1`, [schedule_id]),
             (0, academic_year_1.getAcademicYearContext)(db_1.db),
         ]);
         // If an admin/principal is marking on behalf of a specific mentor,
@@ -1599,6 +1617,39 @@ const markAttendance = async (req, res) => {
             ...mark,
             status: outsideStudentIds.has(mark.student_id) ? 'Outside' : mark.status,
         }));
+        const submittedIds = marksToPersist.map((mark) => mark.student_id);
+        const linkedGroups = parseLinkedGroups(schedule.attendance_groups);
+        const rosterAcademicYearId = currentYearContext.academicYearId || schedule.academic_year_id || null;
+        // Enforce the roster attached to this exact timetable slot. This stops
+        // a full mentor roster from being submitted to a smaller Hifz session.
+        if (linkedGroups.length > 0 && submittedIds.length > 0) {
+            if (!rosterAcademicYearId) {
+                return res.status(409).json({ success: false, error: 'The timetable roster has no academic-year context.' });
+            }
+            const rosterMentorId = MENTOR_ROLES.includes(userRole)
+                ? staffId
+                : (ADMIN_ROLES.includes(userRole) && on_behalf_of ? String(on_behalf_of) : null);
+            const relevantGroups = rosterMentorId
+                ? linkedGroups.filter(group => !group.mentor_id || group.mentor_id === rosterMentorId)
+                : linkedGroups;
+            const groupIds = relevantGroups.map(group => group.id);
+            const authorizedGroupStudents = groupIds.length > 0
+                ? await db_1.db.query(`SELECT DISTINCT gs.student_id
+                     FROM attendance_group_students gs
+                     JOIN attendance_groups g ON g.id = gs.group_id
+                     WHERE gs.group_id = ANY($1::uuid[])
+                       AND g.academic_year_id = $2
+                       AND gs.student_id = ANY($3::text[])`, [groupIds, rosterAcademicYearId, submittedIds])
+                : { rows: [] };
+            const authorizedIds = new Set(authorizedGroupStudents.rows.map((row) => row.student_id));
+            const unauthorizedIds = submittedIds.filter(id => !authorizedIds.has(id));
+            if (unauthorizedIds.length > 0) {
+                return res.status(403).json({
+                    success: false,
+                    error: `Access denied: Student(s) are not assigned to this timetable session: ${unauthorizedIds.join(', ')}`,
+                });
+            }
+        }
         // ── Security Guard: mentor roles may only mark their own students ──
         if (MENTOR_ROLES.includes(userRole) && marksToPersist.length > 0) {
             if (staffId) {
@@ -1610,8 +1661,7 @@ const markAttendance = async (req, res) => {
                     madrassa: 'madrasa_mentor_id',
                 };
                 const mentorCol = mentorColMap[classType];
-                const submittedIds = marksToPersist.map((m) => m.student_id);
-                if ((0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && currentYearContext.academicYearId) {
+                if (linkedGroups.length === 0 && (0, hifz_session_eligibility_1.isHifzSchedule)(schedule) && currentYearContext.academicYearId) {
                     const assignedIds = await (0, mentor_students_service_1.getActiveMentorStudentIds)(db_1.db, staffId, {
                         academicYearId: currentYearContext.academicYearId,
                         studentIds: submittedIds,
@@ -1625,7 +1675,7 @@ const markAttendance = async (req, res) => {
                         });
                     }
                 }
-                else if (mentorCol) {
+                else if (linkedGroups.length === 0 && mentorCol) {
                     // Fetch permanently assigned students
                     const permRes = await db_1.db.query(`SELECT adm_no
                          FROM students
