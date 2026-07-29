@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const leaves_controller_1 = require("../controllers/leaves.controller");
+const leave_corrections_controller_1 = require("../controllers/leave-corrections.controller");
 const router = (0, express_1.Router)();
 const LEAVE_VIEW_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
 const LEAVE_MANAGE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
@@ -34,5 +35,6 @@ router.get('/group/:id/students', (0, auth_middleware_1.requireRole)(LEAVE_RETUR
 router.post('/group/:id/bulk-return', (0, auth_middleware_1.requireRole)(LEAVE_RETURN_ROLES), leaves_controller_1.bulkRecordGroupReturn);
 // Returns & Movements — any mentor or admin can record a return
 router.post('/record-return', (0, auth_middleware_1.requireRole)(LEAVE_RETURN_ROLES), leaves_controller_1.recordReturn);
+router.patch('/:id/correction', (0, auth_middleware_1.requireRole)(LEAVE_RETURN_ROLES), leave_corrections_controller_1.correctStudentLeave);
 router.get('/movements', (0, auth_middleware_1.requireRole)(LEAVE_MANAGE_ROLES), leaves_controller_1.getMovementHistory);
 exports.default = router;

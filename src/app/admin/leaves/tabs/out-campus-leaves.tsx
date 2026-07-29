@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Search, Plus, MapPin, CalendarClock, Activity, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react"
+import { Search, Plus, CalendarClock, Activity, ChevronLeft, ChevronRight, AlertCircle, Pencil } from "lucide-react"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
@@ -14,9 +14,10 @@ import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { OutCampusModal } from "../out-campus-modal"
 import { RecordReturnModal } from "../record-return-modal"
+import { LeaveCorrectionModal, isLeaveEditWindowOpen, type EditableLeave } from "../leave-correction-modal"
 
 export function OutCampusLeavesTab() {
-    const [leaves, setLeaves] = useState<any[]>([])
+    const [leaves, setLeaves] = useState<EditableLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     
@@ -26,6 +27,7 @@ export function OutCampusLeavesTab() {
 
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [leaveForRecord, setLeaveForRecord] = useState<{ id: string, type: 'personal' | 'group' } | null>(null)
+    const [leaveForEdit, setLeaveForEdit] = useState<EditableLeave | null>(null)
 
     const fetchLeaves = async (force = false) => {
         setLoading(true)
@@ -47,8 +49,8 @@ export function OutCampusLeavesTab() {
 
     const filtered = useMemo(() => {
         return leaves.filter(l => 
-            l.student?.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            l.student?.adm_no.toLowerCase().includes(searchQuery.toLowerCase())
+            (l.student?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (l.student?.adm_no || "").toLowerCase().includes(searchQuery.toLowerCase())
         )
     }, [leaves, searchQuery])
 
@@ -126,7 +128,7 @@ export function OutCampusLeavesTab() {
                                             </div>
                                             {leave.remarks && (
                                                 <div className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded border border-slate-100 dark:border-slate-800">
-                                                    "{leave.remarks}"
+                                                    &ldquo;{leave.remarks}&rdquo;
                                                 </div>
                                             )}
                                         </div>
@@ -140,7 +142,7 @@ export function OutCampusLeavesTab() {
                                     <TableCell>
                                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono whitespace-nowrap">
                                             <CalendarClock className="h-3 w-3" />
-                                            {format(new Date(leave.start_datetime), "MMM d, h:mm a")} - {format(new Date(leave.end_datetime), "MMM d, h:mm a")}
+                                            {format(new Date(leave.start_datetime), "MMM d, h:mm a")} - {leave.end_datetime ? format(new Date(leave.end_datetime), "MMM d, h:mm a") : "—"}
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-center">
@@ -149,17 +151,33 @@ export function OutCampusLeavesTab() {
                                         {leave.status === 'pending' && <Badge variant="outline" className="text-amber-600 border-amber-300">PENDING</Badge>}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {leave.status === 'outside' && (
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                onClick={() => setLeaveForRecord({ id: leave.is_group ? leave.group_id : leave.id, type: leave.is_group ? 'group' : 'personal' })}
-                                                className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                                            >
-                                                <Activity className="h-4 w-4 mr-1.5" />
-                                                {leave.is_group ? "Manage Returns" : "Record Return"}
-                                            </Button>
-                                        )}
+                                        <div className="flex justify-end gap-2">
+                                            {!leave.is_group && (
+                                                isLeaveEditWindowOpen(leave.can_edit_exit_details, leave.exit_editable_until)
+                                                || isLeaveEditWindowOpen(leave.can_edit_return, leave.return_editable_until)
+                                            ) && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setLeaveForEdit(leave)}
+                                                    className="text-slate-700 border-slate-200 hover:bg-slate-50"
+                                                >
+                                                    <Pencil className="h-4 w-4 mr-1.5" />
+                                                    Edit
+                                                </Button>
+                                            )}
+                                            {leave.status === 'outside' && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setLeaveForRecord({ id: leave.is_group ? leave.group_id! : leave.id, type: leave.is_group ? 'group' : 'personal' })}
+                                                    className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                                >
+                                                    <Activity className="h-4 w-4 mr-1.5" />
+                                                    {leave.is_group ? "Manage Returns" : "Record Return"}
+                                                </Button>
+                                            )}
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -240,6 +258,15 @@ export function OutCampusLeavesTab() {
                 <RecordReturnModal
                     leaveId={leaveForRecord.id} type={leaveForRecord.type}
                     open={!!leaveForRecord} onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
+                    onSuccess={() => fetchLeaves(true)}
+                />
+            )}
+
+            {leaveForEdit && (
+                <LeaveCorrectionModal
+                    leave={leaveForEdit}
+                    open={!!leaveForEdit}
+                    onOpenChange={(nextOpen) => !nextOpen && setLeaveForEdit(null)}
                     onSuccess={() => fetchLeaves(true)}
                 />
             )}

@@ -887,9 +887,36 @@ const getLeavesFilter = async (req, res) => {
             const { limit, offset } = parseLimitOffset(req.query, 250, 500);
             const params = [type];
             let query = `
-                SELECT sl.*, s.name as student_name, COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard, s.adm_no as student_adm_no
+                SELECT sl.*,
+                       sl.created_at + interval '30 minutes' AS exit_editable_until,
+                       (sl.group_id IS NULL
+                        AND sl.leave_type <> 'institutional'
+                        AND NOW() <= sl.created_at + interval '30 minutes') AS can_edit_exit_details,
+                       COALESCE(return_edit.return_marked_at,
+                                CASE WHEN sl.actual_return_datetime IS NOT NULL THEN sl.updated_at END) AS return_marked_at,
+                       CASE
+                         WHEN sl.actual_return_datetime IS NOT NULL
+                           THEN COALESCE(return_edit.return_marked_at, sl.updated_at) + interval '6 hours'
+                         ELSE NULL
+                       END AS return_editable_until,
+                       (sl.group_id IS NULL
+                        AND sl.leave_type <> 'institutional'
+                        AND sl.actual_return_datetime IS NOT NULL
+                        AND sl.status IN ('returned', 'completed')
+                        AND NOW() <= COALESCE(return_edit.return_marked_at, sl.updated_at) + interval '6 hours') AS can_edit_return,
+                       s.name as student_name,
+                       COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard,
+                       s.adm_no as student_adm_no
                 FROM student_leaves sl
                 JOIN students s ON sl.student_id = s.adm_no
+                LEFT JOIN LATERAL (
+                    SELECT sm.created_at AS return_marked_at
+                    FROM student_movements sm
+                    WHERE sm.leave_id = sl.id
+                      AND sm.direction IN ('in', 'return')
+                    ORDER BY sm.created_at DESC
+                    LIMIT 1
+                ) return_edit ON true
                 WHERE sl.leave_type = $1
             `;
             if (staffId) {
@@ -1268,6 +1295,22 @@ const getAllLeaves = async (req, res) => {
             const [leavesRes, countRes] = await Promise.all([
                 db_1.db.query(`
                     SELECT sl.*,
+                           sl.created_at + interval '30 minutes' AS exit_editable_until,
+                           (sl.group_id IS NULL
+                            AND sl.leave_type <> 'institutional'
+                            AND NOW() <= sl.created_at + interval '30 minutes') AS can_edit_exit_details,
+                           COALESCE(return_edit.return_marked_at,
+                                    CASE WHEN sl.actual_return_datetime IS NOT NULL THEN sl.updated_at END) AS return_marked_at,
+                           CASE
+                             WHEN sl.actual_return_datetime IS NOT NULL
+                               THEN COALESCE(return_edit.return_marked_at, sl.updated_at) + interval '6 hours'
+                             ELSE NULL
+                           END AS return_editable_until,
+                           (sl.group_id IS NULL
+                            AND sl.leave_type <> 'institutional'
+                            AND sl.actual_return_datetime IS NOT NULL
+                            AND sl.status IN ('returned', 'completed')
+                            AND NOW() <= COALESCE(return_edit.return_marked_at, sl.updated_at) + interval '6 hours') AS can_edit_return,
                            CASE
                              WHEN sl.status IN ('returned', 'completed')
                               AND sl.actual_return_datetime IS NOT NULL
@@ -1280,6 +1323,14 @@ const getAllLeaves = async (req, res) => {
                            s.adm_no as student_adm_no
                     FROM student_leaves sl
                     JOIN students s ON sl.student_id = s.adm_no
+                    LEFT JOIN LATERAL (
+                        SELECT sm.created_at AS return_marked_at
+                        FROM student_movements sm
+                        WHERE sm.leave_id = sl.id
+                          AND sm.direction IN ('in', 'return')
+                        ORDER BY sm.created_at DESC
+                        LIMIT 1
+                    ) return_edit ON true
                     ${whereClause}
                     ORDER BY sl.created_at DESC
                     LIMIT $${limitIdx} OFFSET $${offsetIdx}

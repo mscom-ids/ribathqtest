@@ -20,6 +20,7 @@ import {
     bulkRecordGroupReturn,
     getAllLeaves
 } from '../controllers/leaves.controller';
+import { correctStudentLeave } from '../controllers/leave-corrections.controller';
 
 const router = Router();
 const LEAVE_VIEW_ROLES = ['admin', 'principal', 'vice_principal', 'controller', 'staff', 'usthad', 'mentor'];
@@ -58,6 +59,7 @@ router.post('/group/:id/bulk-return', requireRole(LEAVE_RETURN_ROLES), bulkRecor
 
 // Returns & Movements — any mentor or admin can record a return
 router.post('/record-return', requireRole(LEAVE_RETURN_ROLES), recordReturn);
+router.patch('/:id/correction', requireRole(LEAVE_RETURN_ROLES), correctStudentLeave);
 router.get('/movements', requireRole(LEAVE_MANAGE_ROLES), getMovementHistory);
 
 export default router;

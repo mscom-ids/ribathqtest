@@ -37,6 +37,20 @@ function normalizeParentDob(value: string) {
     return `${year}-${month}-${day}`
 }
 
+async function readJsonResponse(res: Response) {
+    const contentType = res.headers.get("content-type")?.toLowerCase() || ""
+
+    if (!contentType.includes("application/json")) {
+        throw new Error(
+            res.ok
+                ? "The login service returned an invalid response. Please try again."
+                : "The login service is unavailable. Please try again shortly."
+        )
+    }
+
+    return res.json()
+}
+
 type LoginFormProps = {
     parentOnly?: boolean
 }
@@ -66,7 +80,7 @@ export default function LoginForm({ parentOnly = false }: LoginFormProps) {
             signal,
         })
 
-        const data = await res.json()
+        const data = await readJsonResponse(res)
         if (!res.ok) throw new Error(data.error || "Invalid credentials")
         return data
     }
@@ -85,7 +99,7 @@ export default function LoginForm({ parentOnly = false }: LoginFormProps) {
             signal,
         })
 
-        const data = await res.json()
+        const data = await readJsonResponse(res)
         if (!res.ok) throw new Error(data.error || "Invalid admission number or date of birth")
         return data
     }
@@ -108,7 +122,7 @@ export default function LoginForm({ parentOnly = false }: LoginFormProps) {
                 throw new Error(data.error || "Failed to login")
             }
 
-if (parentOnly && profile.role !== "parent") {
+            if (parentOnly && profile.role !== "parent") {
                 throw new Error("This login is only for parent accounts.")
             }
 

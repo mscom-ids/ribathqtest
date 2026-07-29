@@ -4,16 +4,27 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   compress: true,
   async rewrites() {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL
-      || (process.env.NODE_ENV !== 'production' ? 'http://localhost:5000/api' : '');
+    const apiBaseUrl = (
+      process.env.BACKEND_API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://127.0.0.1:5000/api'
+    ).trim();
+    const backendOrigin = apiBaseUrl
+      .replace(/\/+$/, '')
+      .replace(/\/api$/, '');
 
-    if (!apiBaseUrl) return [];
-
-    const backendOrigin = apiBaseUrl.replace(/\/api\/?$/, '');
-    return [
-      { source: '/api/:path*', destination: `${backendOrigin}/api/:path*` },
-      { source: '/public/:path*', destination: `${backendOrigin}/public/:path*` },
-    ];
+    return {
+      beforeFiles: [
+        {
+          source: '/api/parent/:path*',
+          destination: '/parent-api-proxy/:path*',
+        },
+      ],
+      afterFiles: [
+        { source: '/api/:path*', destination: `${backendOrigin}/api/:path*` },
+        { source: '/public/:path*', destination: `${backendOrigin}/public/:path*` },
+      ],
+    };
   },
   async headers() {
     if (process.env.NODE_ENV !== 'production') {

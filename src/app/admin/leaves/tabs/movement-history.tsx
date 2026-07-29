@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Search, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react"
+import { useState, useEffect, useMemo, useCallback } from "react"
+import { Search, ChevronLeft, ChevronRight, AlertCircle, Pencil } from "lucide-react"
 import { format } from "date-fns"
 
 import { Input } from "@/components/ui/input"
@@ -10,39 +10,46 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
+import { LeaveCorrectionModal, isLeaveEditWindowOpen, type EditableLeave } from "../leave-correction-modal"
 
 export function MovementHistoryTab() {
-    const [leaves, setLeaves] = useState<any[]>([])
+    const [leaves, setLeaves] = useState<EditableLeave[]>([])
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [totalItems, setTotalItems] = useState(0)
+    const [leaveForEdit, setLeaveForEdit] = useState<EditableLeave | null>(null)
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(100)
 
-    useEffect(() => {
-        const fetchLeaves = async () => {
-            setLoading(true)
-            try {
-                const res = await cachedGet('/leaves', {
-                    limit: pageSize,
-                    offset: (currentPage - 1) * pageSize,
-                    search: searchQuery.trim() || undefined,
-                }, 30_000)
-                if (res.data.success) {
-                    setLeaves(res.data.leaves || [])
-                    setTotalItems(Number(res.data.pagination?.total || 0))
-                }
-            } catch {
-                console.warn("Failed to load movement history")
-            } finally {
-                setLoading(false)
-            }
+    const fetchLeaves = useCallback(async (force = false) => {
+        setLoading(true)
+        const params = {
+            limit: pageSize,
+            offset: (currentPage - 1) * pageSize,
+            search: searchQuery.trim() || undefined,
         }
-        fetchLeaves()
+        try {
+            const res = force
+                ? await api.get('/leaves', { params })
+                : await cachedGet('/leaves', params, 30_000)
+            if (res.data.success) {
+                setLeaves(res.data.leaves || [])
+                setTotalItems(Number(res.data.pagination?.total || 0))
+            }
+        } catch {
+            console.warn("Failed to load movement history")
+        } finally {
+            setLoading(false)
+        }
     }, [currentPage, pageSize, searchQuery])
+
+    useEffect(() => {
+        fetchLeaves()
+    }, [fetchLeaves])
 
     const filtered = useMemo(() => {
         if (searchQuery.trim()) return leaves
@@ -67,7 +74,7 @@ export function MovementHistoryTab() {
         return filtered
     }, [filtered])
 
-    const formatDateTime = (dateStr: string | null) => {
+    const formatDateTime = (dateStr: string | null | undefined) => {
         if (!dateStr) return "—"
         try {
             return format(new Date(dateStr), "dd-MM-yyyy - hh:mm a")
@@ -107,13 +114,14 @@ export function MovementHistoryTab() {
                                 <TableHead>Returned At</TableHead>
                                 <TableHead>Leave Type</TableHead>
                                 <TableHead className="text-right">Return Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={9} className="text-center h-32 text-slate-500">Loading...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={10} className="text-center h-32 text-slate-500">Loading...</TableCell></TableRow>
                             ) : paginatedData.length === 0 ? (
-                                <TableRow><TableCell colSpan={9} className="text-center h-48 text-slate-500">
+                                <TableRow><TableCell colSpan={10} className="text-center h-48 text-slate-500">
                                     <div className="flex flex-col items-center justify-center">
                                         <AlertCircle className="h-8 w-8 mb-2 opacity-20" />
                                         <p>No movement history found</p>
@@ -121,6 +129,10 @@ export function MovementHistoryTab() {
                                 </TableCell></TableRow>
                             ) : paginatedData.map((leave, index) => {
                                 const returnStatus = leave.computed_return_status || leave.return_status
+                                const canEdit = !leave.group_id && (
+                                    isLeaveEditWindowOpen(leave.can_edit_exit_details, leave.exit_editable_until)
+                                    || isLeaveEditWindowOpen(leave.can_edit_return, leave.return_editable_until)
+                                )
                                 return (
                                 <TableRow key={leave.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                     <TableCell className="text-slate-500">
@@ -163,6 +175,14 @@ export function MovementHistoryTab() {
                                         )}
                                         {leave.status === 'outside' && <span className="text-xs font-bold text-amber-500 uppercase tracking-widest">Ongoing</span>}
                                         {leave.status === 'pending' && <span className="text-xs text-slate-400">—</span>}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {canEdit && (
+                                            <Button variant="outline" size="sm" onClick={() => setLeaveForEdit(leave)}>
+                                                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                                                Edit
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                                 )
@@ -254,6 +274,15 @@ export function MovementHistoryTab() {
                     </div>
                 )}
             </Card>
+
+            {leaveForEdit && (
+                <LeaveCorrectionModal
+                    leave={leaveForEdit}
+                    open={!!leaveForEdit}
+                    onOpenChange={(nextOpen) => !nextOpen && setLeaveForEdit(null)}
+                    onSuccess={() => fetchLeaves(true)}
+                />
+            )}
         </div>
     )
 }
