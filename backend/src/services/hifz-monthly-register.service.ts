@@ -288,7 +288,7 @@ export async function resolveHifzEntryEligibility(options: {
     const schedules = await loadSchedules(options.db, entryDate, entryDate, options.academicYearId || null);
     const preserveSessionId = existingRecord.rows[0]?.session_id || null;
     const dayMarks = await options.db.query(
-        `SELECT schedule_id, status
+        `SELECT schedule_id, status, marked_by
          FROM student_attendance_marks
          WHERE student_id = $1 AND date = $2::date`,
         [options.studentId, entryDate],
@@ -296,6 +296,7 @@ export async function resolveHifzEntryEligibility(options: {
     const presentSessionIds = new Set<string>(
         dayMarks.rows
             .filter((mark) => String(mark.status).toUpperCase() === 'PRESENT')
+            .filter((mark) => !student.hifz_mentor_id || String(mark.marked_by) === String(student.hifz_mentor_id))
             .map((mark) => String(mark.schedule_id)),
     );
     const applicableSchedules = applicableSchedulesForStudent(schedules, student, entryDate);
@@ -336,6 +337,9 @@ export async function resolveHifzEntryEligibility(options: {
     }
     if (attendanceStatus !== 'PRESENT') {
         return { allowed: false, reason: 'This student was not marked present for the current session.', sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
+    }
+    if (student.hifz_mentor_id && String(marks.rows[0]?.marked_by) !== String(student.hifz_mentor_id)) {
+        return { allowed: false, reason: 'The assigned mentor must mark this student PRESENT before Hifz progress can be recorded.', sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
     }
 
     return { allowed: true, reason: null, sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
@@ -403,7 +407,7 @@ export async function getHifzStudentMonthRegister(options: {
         ),
         loadSchedules(options.db, start, end, options.academicYearId || null),
         options.db.query(
-            `SELECT schedule_id, date, status
+            `SELECT schedule_id, date, status, marked_by
              FROM student_attendance_marks
              WHERE student_id = $1 AND date BETWEEN $2::date AND $3::date`,
             [options.studentId, start, end],
@@ -446,7 +450,8 @@ export async function getHifzStudentMonthRegister(options: {
     marksResult.rows.forEach((mark) => {
         const key = dateKey(mark.date);
         marks.set(`${mark.schedule_id}|${key}`, mark);
-        if (String(mark.status).toUpperCase() === 'PRESENT') {
+        if (String(mark.status).toUpperCase() === 'PRESENT'
+            && (!student.hifz_mentor_id || String(mark.marked_by) === String(student.hifz_mentor_id))) {
             if (!presentByDate.has(key)) presentByDate.set(key, new Set());
             presentByDate.get(key)!.add(String(mark.schedule_id));
         }
@@ -461,7 +466,8 @@ export async function getHifzStudentMonthRegister(options: {
         const applicableSchedules = applicableSchedulesForStudent(schedules, student, date);
         const schedule = selectApplicableSchedule({ schedules, student, date, requestedAt, preserveSessionId: existingSessionId, presentSessionIds: presentByDate.get(date) || null });
         const cancellation = schedule ? cancellations.get(`${schedule.id}|${date}`) : null;
-        const rawStatus = schedule ? marks.get(`${schedule.id}|${date}`)?.status : null;
+        const attendanceMark = schedule ? marks.get(`${schedule.id}|${date}`) : null;
+        const rawStatus = attendanceMark?.status;
         const attendanceStatus = isCancellationForStudent(cancellation, student)
             ? 'CANCELLED'
             : rawStatus ? String(rawStatus).toUpperCase() : null;
@@ -479,6 +485,8 @@ export async function getHifzStudentMonthRegister(options: {
             eligibility = { allowed: false, reason: 'Attendance must be marked before recording Hifz.', sessionId: schedule.id, attendanceStatus: null, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
         } else if (attendanceStatus !== 'PRESENT') {
             eligibility = { allowed: false, reason: 'This student was not marked present for the current session.', sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
+        } else if (student.hifz_mentor_id && String(attendanceMark?.marked_by) !== String(student.hifz_mentor_id)) {
+            eligibility = { allowed: false, reason: 'The assigned mentor must mark this student PRESENT before Hifz progress can be recorded.', sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
         } else {
             eligibility = { allowed: true, reason: null, sessionId: schedule.id, attendanceStatus, sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
         }

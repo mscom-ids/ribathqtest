@@ -46,12 +46,28 @@ const enforceHifzRecordingAccess = async (req, entryDate) => {
         throw err;
     }
 };
-const enforceHifzStudentAccess = async (req, studentIds) => {
+const enforceHifzStudentAccess = async (req, requests) => {
     const user = req.user;
     const role = String(user?.role || '').toLowerCase();
     if (!['staff', 'usthad', 'mentor'].includes(role))
         return;
-    const requestedStudentIds = Array.from(new Set(studentIds.map(String).filter(Boolean)));
+    const normalizedRequests = [];
+    const seenRequests = new Set();
+    for (const request of requests) {
+        const normalized = {
+            studentId: String(request.studentId || '').trim(),
+            entryDate: request.entryDate ? toDateKey(request.entryDate) : null,
+            sessionId: request.sessionId ? String(request.sessionId) : null,
+        };
+        if (!normalized.studentId)
+            continue;
+        const key = `${normalized.studentId}|${normalized.entryDate || ''}|${normalized.sessionId || ''}`;
+        if (seenRequests.has(key))
+            continue;
+        seenRequests.add(key);
+        normalizedRequests.push(normalized);
+    }
+    const requestedStudentIds = Array.from(new Set(normalizedRequests.map((request) => request.studentId)));
     const delegation = await (0, staff_utils_1.getDelegationContext)(req);
     if (!delegation?.staffId) {
         const err = new Error('Mentor staff profile not found.');
@@ -66,23 +82,57 @@ const enforceHifzStudentAccess = async (req, studentIds) => {
     if (requestedStudentIds.length === 0)
         return;
     const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
-    const result = await db_1.db.query(`SELECT s.adm_no
-         FROM students s
+    const result = await db_1.db.query(`WITH requested AS (
+             SELECT *
+             FROM jsonb_to_recordset($1::jsonb)
+                  AS request(student_id text, entry_date date, session_id text)
+         )
+         SELECT DISTINCT
+                request.student_id,
+                request.entry_date::text AS entry_date,
+                request.session_id
+         FROM requested request
+         JOIN students s ON s.adm_no = request.student_id
          LEFT JOIN student_year_snapshots sys
            ON sys.student_id = s.adm_no
           AND sys.academic_year_id = $3::uuid
          LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
-         WHERE s.adm_no = ANY($1::text[])
-           AND LOWER(COALESCE(s.status, 'active')) = 'active'
-           AND COALESCE(sys.hifz_mentor_id, hp.mentor_id, s.hifz_mentor_id) = $2::uuid`, [requestedStudentIds, delegation.staffId, academicContext.academicYearId]);
-    const authorizedStudentIds = new Set(result.rows.map((row) => String(row.adm_no)));
-    if (requestedStudentIds.some((studentId) => !authorizedStudentIds.has(studentId))) {
-        const err = new Error('You can record Hifz progress only for students assigned to you.');
+         WHERE LOWER(COALESCE(s.status, 'active')) = 'active'
+           AND (
+               COALESCE(sys.hifz_mentor_id, hp.mentor_id, s.hifz_mentor_id) = $2::uuid
+               OR (
+                   request.entry_date IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1
+                       FROM student_attendance_marks mark
+                       JOIN attendance_schedules schedule ON schedule.id = mark.schedule_id
+                       WHERE mark.student_id = request.student_id
+                         AND mark.date = request.entry_date
+                         AND UPPER(mark.status) = 'PRESENT'
+                         AND mark.marked_by = COALESCE(sys.hifz_mentor_id, hp.mentor_id, s.hifz_mentor_id)
+                         AND LOWER(schedule.class_type) = 'hifz'
+                         AND (request.session_id IS NULL OR mark.schedule_id::text = request.session_id)
+                   )
+               )
+           )`, [
+        JSON.stringify(normalizedRequests.map((request) => ({
+            student_id: request.studentId,
+            entry_date: request.entryDate,
+            session_id: request.sessionId,
+        }))),
+        delegation.staffId,
+        academicContext.academicYearId,
+    ]);
+    const authorizedRequests = new Set(result.rows.map((row) => (`${String(row.student_id)}|${row.entry_date || ''}|${row.session_id || ''}`)));
+    const hasUnauthorizedRequest = normalizedRequests.some((request) => (!authorizedRequests.has(`${request.studentId}|${request.entryDate || ''}|${request.sessionId || ''}`)));
+    if (hasUnauthorizedRequest) {
+        const err = new Error("Another mentor can record this student's Hifz progress only after the assigned mentor marks the student PRESENT.");
         err.statusCode = 403;
         throw err;
     }
-    // Scheduled class days still require PRESENT attendance through
-    // resolveHifzEntryEligibility. Genuine no-class days need no attendance mark.
+    // Scheduled class days still require qualifying PRESENT attendance through
+    // resolveHifzEntryEligibility. Genuine no-class days need no attendance mark
+    // for the student's assigned mentor.
 };
 const getDetectedClassDays = async (startDate, endDate) => {
     const result = await db_1.db.query(`SELECT COUNT(DISTINCT date) AS class_days
@@ -363,7 +413,7 @@ const createHifzLog = async (req, res) => {
     try {
         const log = normalizeHifzLogInput(req.body);
         await enforceHifzRecordingAccess(req, log.entry_date);
-        await enforceHifzStudentAccess(req, [log.student_id]);
+        await enforceHifzStudentAccess(req, [{ studentId: log.student_id, entryDate: log.entry_date, sessionId: log.session_id }]);
         const result = await db_1.db.query(`INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`, [
@@ -392,7 +442,11 @@ const updateHifzLog = async (req, res) => {
         if (entry_date) {
             await enforceHifzRecordingAccess(req, entry_date);
         }
-        await enforceHifzStudentAccess(req, [student_id]);
+        await enforceHifzStudentAccess(req, [{
+                studentId: String(student_id || ''),
+                entryDate: entry_date || null,
+                sessionId: req.body.session_id || null,
+            }]);
         const result = await db_1.db.query(`UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, mode=$4,
              surah_name=$5, start_v=$6, end_v=$7, start_page=$8, end_page=$9,
              juz_number=$10, juz_portion=$11 WHERE id=$12 RETURNING *`, [student_id, usthad_id || null, entry_date, mode,
@@ -427,7 +481,11 @@ const bulkCreateHifzLogs = async (req, res) => {
         for (const entryDate of uniqueEntryDates) {
             await enforceHifzRecordingAccess(req, entryDate);
         }
-        await enforceHifzStudentAccess(req, Array.from(new Set(logs.map((log) => String(log.student_id)))));
+        await enforceHifzStudentAccess(req, logs.map((log) => ({
+            studentId: String(log.student_id),
+            entryDate: log.entry_date,
+            sessionId: log.session_id,
+        })));
         // ── Step 1: bulk-fetch existing verse-range rows that could collide
         // with any candidate, in a SINGLE query. Replaces the per-row SELECT
         // dedup that ran inside the original loop.
@@ -491,7 +549,7 @@ const deleteHifzLog = async (req, res) => {
         if (existing.rows[0]) {
             const { student_id, entry_date, mode } = existing.rows[0];
             await enforceHifzRecordingAccess(req, entry_date);
-            await enforceHifzStudentAccess(req, [student_id]);
+            await enforceHifzStudentAccess(req, [{ studentId: student_id }]);
             await db_1.db.query(`DELETE FROM hifz_logs
                  WHERE student_id = $1
                    AND entry_date = $2
@@ -970,7 +1028,7 @@ const saveMonthlyHifzEntry = async (req, res, existingId) => {
             throw monthlyRegisterError('A Hifz entry cannot be moved to another student.');
         }
         await enforceHifzRecordingAccess(req, log.entry_date);
-        await enforceHifzStudentAccess(req, [log.student_id]);
+        await enforceHifzStudentAccess(req, [{ studentId: log.student_id, entryDate: log.entry_date, sessionId: log.session_id }]);
         const staffId = await (0, staff_utils_1.getStaffId)(req);
         const academicContext = await (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id);
         const eligibility = await (0, hifz_monthly_register_service_1.resolveHifzEntryEligibility)({
@@ -1104,7 +1162,7 @@ const batchSaveMonthlyHifzEntries = async (req, res) => {
         const hasWrites = creates.length > 0 || updates.length > 0;
         if (hasWrites)
             await enforceHifzRecordingAccess(req, entryDate);
-        await enforceHifzStudentAccess(req, [studentId]);
+        await enforceHifzStudentAccess(req, [{ studentId, entryDate, sessionId: requestedSessionId }]);
         const [staffId, academicContext] = await Promise.all([
             (0, staff_utils_1.getStaffId)(req),
             (0, academic_year_1.getAcademicYearContext)(db_1.db, req.query.academic_year_id),
@@ -1265,7 +1323,7 @@ const deleteMonthlyHifzEntry = async (req, res) => {
         const log = existing.rows[0];
         if (!log)
             throw monthlyRegisterError('Hifz entry not found.', 404);
-        await enforceHifzStudentAccess(req, [log.student_id]);
+        await enforceHifzStudentAccess(req, [{ studentId: log.student_id }]);
         await db_1.db.query('DELETE FROM hifz_logs WHERE id = $1', [id]);
         (0, server_cache_1.invalidateCacheByPrefix)('hifz:');
         (0, server_cache_1.invalidateCacheByPrefix)('reports:students');
