@@ -30,6 +30,8 @@ export async function proxyParentApiRequest(
         headers.delete("host")
         headers.delete("connection")
         headers.delete("content-length")
+        headers.delete("origin")
+        headers.delete("referer")
 
         const method = request.method.toUpperCase()
         const body =

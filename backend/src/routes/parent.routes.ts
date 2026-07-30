@@ -8,6 +8,15 @@ const router = Router();
 const parentLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  keyGenerator: (req) => {
+    const admissionNo = String(
+      req.body?.admission_no || req.body?.admissionNo || ''
+    )
+      .trim()
+      .toLowerCase();
+
+    return admissionNo || 'missing-admission-number';
+  },
   message: { success: false, error: 'Too many login attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

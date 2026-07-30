@@ -32,15 +32,26 @@ const DASHBOARD_DELEGATIONS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DASHBOARD_D
 
 // ── Mini calendar ─────────────────────────────────────────────────────────────
 function MiniCalendar({ events = [] }: { events?: any[] }) {
-    const today = new Date()
-    const [year, setYear] = useState(today.getFullYear())
-    const [month, setMonth] = useState(today.getMonth())
+    const [today, setToday] = useState<Date | null>(null)
+    const [year, setYear] = useState<number | null>(null)
+    const [month, setMonth] = useState<number | null>(null)
+
+    useEffect(() => {
+        const localToday = new Date()
+        setToday(localToday)
+        setYear(localToday.getFullYear())
+        setMonth(localToday.getMonth())
+    }, [])
+
+    if (!today || year === null || month === null) {
+        return <div className="h-[330px] animate-pulse rounded-md bg-slate-50 dark:bg-slate-800/50" />
+    }
 
     const firstDay = new Date(year, month, 1).getDay()
     const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-    const prev = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
-    const next = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+    const prev = () => { if (month === 0) { setMonth(11); setYear(year - 1) } else setMonth(month - 1) }
+    const next = () => { if (month === 11) { setMonth(0); setYear(year + 1) } else setMonth(month + 1) }
 
     const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
 
@@ -90,6 +101,20 @@ function MiniCalendar({ events = [] }: { events?: any[] }) {
             </div>
         </div>
     )
+}
+
+function DashboardUpdatedDate() {
+    const [label, setLabel] = useState("Updated recently")
+
+    useEffect(() => {
+        setLabel(`Updated Recently on ${new Date().toLocaleDateString("en-US", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+        })}`)
+    }, [])
+
+    return <>{label}</>
 }
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -190,8 +215,6 @@ export default function AdminDashboardPage() {
         start_time: "09:00", end_time: "10:00", message: ""
     }
     const [newEvent, setNewEvent] = useState(defaultEventState)
-    const today = new Date()
-
     const load = useCallback(async () => {
         setLoading(true)
         try {
@@ -367,7 +390,7 @@ export default function AdminDashboardPage() {
                 
                 <div className="z-10 flex items-center gap-2 text-[13px] font-medium text-slate-300 bg-white/5 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/10">
                     <CalendarDays className="h-4 w-4" />
-                    Updated Recently on {today.toLocaleDateString("en-US", { day:"numeric", month:"short", year:"numeric" })}
+                    <DashboardUpdatedDate />
                 </div>
             </div>
 

@@ -1,4 +1,4 @@
-﻿import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
 // Next.js proxy runs on the Edge runtime, so this is only a UX/router guard.
 // API authorization is still enforced cryptographically by the Express backend.
@@ -90,11 +90,6 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(canonicalUrl);
     }
 
-    if (currentPath === '/manifest.webmanifest') {
-      return NextResponse.rewrite(
-        new URL('/parent/manifest.webmanifest', request.url)
-      );
-    }
 
     if (
       currentPath.startsWith('/admin') ||
@@ -203,6 +198,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
   ],
 };
