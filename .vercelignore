@@ -7,3 +7,6 @@
 /scratch/
 /scripts/
 /tmp/
+/check-r263.ts
+/fix-constraints.ts
+/migrate-hifz.ts

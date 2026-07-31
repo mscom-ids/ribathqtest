@@ -55,6 +55,9 @@
         "scripts",
         "scripts/**/*",
         "tmp",
-        "tmp/**/*"
+        "tmp/**/*",
+        "check-r263.ts",
+        "fix-constraints.ts",
+        "migrate-hifz.ts"
     ]
 }
