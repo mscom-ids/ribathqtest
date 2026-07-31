@@ -1,0 +1,9 @@
+backend/
+server/
+backup_*/
+.snapshots/
+.claude/
+.codex-remote-attachments/
+scratch/
+scripts/
+tmp/
