@@ -231,7 +231,11 @@ export default function UnifiedReportView() {
                                                 <span className="truncate">{dateRanges.start ? format(dateRanges.start, "PPP") : "Start Date"}</span>
                                             </Button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <PopoverContent
+                                            className="w-auto max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0"
+                                            align="start"
+                                            collisionPadding={12}
+                                        >
                                             <Calendar mode="single" selected={dateRanges.start} onSelect={(d) => d && setDateRanges(p => ({ ...p, start: d }))} />
                                         </PopoverContent>
                                     </Popover>
@@ -242,7 +246,11 @@ export default function UnifiedReportView() {
                                                 <span className="truncate">{dateRanges.end ? format(dateRanges.end, "PPP") : "End Date"}</span>
                                             </Button>
                                         </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <PopoverContent
+                                            className="w-auto max-w-[calc(100vw-1.5rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0"
+                                            align="start"
+                                            collisionPadding={12}
+                                        >
                                             <Calendar mode="single" selected={dateRanges.end} onSelect={(d) => d && setDateRanges(p => ({ ...p, end: d }))} />
                                         </PopoverContent>
                                     </Popover>
