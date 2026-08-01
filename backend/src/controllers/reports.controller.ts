@@ -757,12 +757,23 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         );
         const attendanceSummary = attendanceSummaries.get(student_id as string);
         const savedPointDays = pointDaysRes.rows[0]?.expected_class_days;
+        // Was this student a Hafiz at the START of the report window? Uses the
+        // same rule as the monthly register (count 'New Verses' logs before the
+        // period start). A student who completes their 30th Juz during this
+        // period stays on the Memorizing layout until the next report.
+        const priorNewVerseLogs = lifetimeLogsRes.rows.filter((log: any) => {
+            const key = toDateKey(log.entry_date);
+            return key < reportWindow.effective_start_date;
+        });
+        const isHafiz = countCompletedJuz(priorNewVerseLogs) >= 30;
+        const hifzStage: 'MEMORIZING' | 'HAFIZ_REVISION' = isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
         const performance = calculateHifzReportPoints(periodLogs as any, [], {
             expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
                 ? Number(savedPointDays)
                 : attendanceSummary?.pointClassDays || attendanceSummary?.effectiveClasses || 0,
             attendedClasses: attendanceSummary?.attendedClasses || 0,
             countedClasses: attendanceSummary?.effectiveClasses || 0,
+            isHafiz,
         });
 
         // Portion → Juz-value helper (Full = 1, Half = 0.5, Q1-Q4 = 0.25 each).
@@ -801,13 +812,29 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         }
         const hifz_logs_agg = Array.from(hifzAggByMode.values());
 
-        // Total Juz recited across every Juz Revision variant (plain + New + Old).
+        // Total Juz recited — must match the stage the student is scored on,
+        // otherwise the "Juz Revised" tile shows a bigger number than the
+        // breakdowns above it (bug: plain "Juz Revision" logs inflated the
+        // total for Hafiz students who are only supposed to log New/Old).
+        const juzRevisionModesForTotal = isHafiz
+            ? ['Juz Revision (New)', 'Juz Revision (Old)']
+            : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
         const totalJuzRecited = Math.round(
             (periodLogs
-                .filter((l: any) => typeof l.mode === 'string' && l.mode.startsWith('Juz Revision'))
+                .filter((l: any) => l.mode && juzRevisionModesForTotal.includes(l.mode))
                 .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0)
                 + Number.EPSILON) * 100
         ) / 100;
+
+        // Hafiz-only breakdown: New vs Old revision Juz totals (0.25 / 0.5 / 1 per portion).
+        // Rendered in the Hafiz layout of the report card and PDF.
+        const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+        const newJuzRevision = round2(periodLogs
+            .filter((l: any) => l.mode === 'Juz Revision (New)')
+            .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0));
+        const oldJuzRevision = round2(periodLogs
+            .filter((l: any) => l.mode === 'Juz Revision (Old)')
+            .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0));
 
         const revision_days = new Set(
             periodLogs.filter(l => l.mode === 'Recent Revision').map(l => {
@@ -825,6 +852,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                 attendance: attendanceSummary?.sessions || [],
                 attendance_totals: attendanceSummary || null,
                 performance,
+                hifz_stage: hifzStage,
                 period_logs: periodLogs,
                 lifetime_new_logs: lifetimeLogsRes.rows,
                 hifz_logs_agg,
@@ -832,6 +860,8 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                     new_pages_recited: exactNewPages,
                     completed_lifetime_juz: countCompletedJuz(lifetimeLogsRes.rows),
                     juz_recited: totalJuzRecited,
+                    new_juz_revision: newJuzRevision,
+                    old_juz_revision: oldJuzRevision,
                 },
                 revision_days
             }

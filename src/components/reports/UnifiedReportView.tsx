@@ -131,12 +131,21 @@ export default function UnifiedReportView() {
 
         const countryPhone = phone.length === 10 ? `91${phone}` : phone
         const performance = reportData?.performance
+        const isHafiz = reportData?.hifz_stage === 'HAFIZ_REVISION'
+        const perfLines = isHafiz
+            ? [
+                `New Revision: ${reportData?.hifz_activity?.new_juz_revision ?? 0} Juz`,
+                `Old Revision: ${reportData?.hifz_activity?.old_juz_revision ?? 0} Juz`,
+              ]
+            : [
+                `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
+                `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/15 points`,
+                `Juz Revision: ${performance?.juzPoints ?? 0}/15 points`,
+              ]
         const message = [
             "Assalamu Alaikum,",
             `${student.name}'s ${reportType.toLowerCase()} Hifz report (${format(dateRanges.start, 'MMMM yyyy')}):`,
-            `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
-            `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/15 points`,
-            `Juz Revision: ${performance?.juzPoints ?? 0}/15 points`,
+            ...perfLines,
             `Attendance: ${performance?.attendancePoints ?? 0}/20 points (${performance?.attendancePercentage ?? 0}%)`,
             `Total: ${performance?.totalPoints ?? 0}/70 points (${performance?.percentage ?? 0}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
@@ -426,35 +435,65 @@ export default function UnifiedReportView() {
                         {reportData.performance && (
                             <div className="print:hidden">
                                 <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Performance & Grade</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
-                                        <p className="text-xs font-semibold text-blue-700">New Verses</p>
-                                        <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/20</p>
+                                {reportData.hifz_stage === 'HAFIZ_REVISION' ? (
+                                    // Hafiz layout: Juz Revision is scored as one combined 50-point bucket
+                                    // (New + Old). Show the two Juz breakdowns instead of memorizing buckets.
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-blue-700">New Revision (Juz)</p>
+                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.hifz_activity?.new_juz_revision ?? 0}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-orange-700">Old Revision (Juz)</p>
+                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.hifz_activity?.old_juz_revision ?? 0}</p>
+                                        </div>
+                                        <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-teal-700">Attendance</p>
+                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
+                                            <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-emerald-700">Total</p>
+                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/70</p>
+                                            <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
+                                            <p className="text-xs font-semibold text-slate-600">Grade</p>
+                                            <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
+                                            <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
+                                        </div>
                                     </div>
-                                    <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
-                                        <p className="text-xs font-semibold text-orange-700">Recent Revision</p>
-                                        <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/15</p>
+                                ) : (
+                                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-blue-700">New Verses</p>
+                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/20</p>
+                                        </div>
+                                        <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-orange-700">Recent Revision</p>
+                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/15</p>
+                                        </div>
+                                        <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
+                                            <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/15</p>
+                                        </div>
+                                        <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-teal-700">Attendance</p>
+                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
+                                            <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
+                                            <p className="text-xs font-semibold text-emerald-700">Total</p>
+                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/70</p>
+                                            <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
+                                            <p className="text-xs font-semibold text-slate-600">Grade</p>
+                                            <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
+                                            <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
+                                        </div>
                                     </div>
-                                    <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 print:border-slate-300 print:bg-transparent">
-                                        <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
-                                        <p className="mt-1 text-2xl font-black text-violet-900">{reportData.performance.juzPoints}/15</p>
-                                    </div>
-                                    <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
-                                        <p className="text-xs font-semibold text-teal-700">Attendance</p>
-                                        <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
-                                        <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
-                                    </div>
-                                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
-                                        <p className="text-xs font-semibold text-emerald-700">Total</p>
-                                        <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/70</p>
-                                        <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
-                                    </div>
-                                    <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
-                                        <p className="text-xs font-semibold text-slate-600">Grade</p>
-                                        <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
-                                        <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         )}
                         {/* Hifz Progress Metrics */}
@@ -470,18 +509,38 @@ export default function UnifiedReportView() {
                                     const completedLifetimeJuz = Number(reportData.hifz_activity?.completed_lifetime_juz ?? 0)
                                     const juzRecited = Number(reportData.hifz_activity?.juz_recited ?? juzRevAggSum ?? 0)
 
+                                    const isHafizStage = reportData.hifz_stage === 'HAFIZ_REVISION'
+                                    const newJuzRev = Number(reportData.hifz_activity?.new_juz_revision ?? 0)
+                                    const oldJuzRev = Number(reportData.hifz_activity?.old_juz_revision ?? 0)
                                     return (
                                         <>
-                                           <div className="bg-blue-50 text-blue-900 border border-blue-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
-                                               <p className="text-xs text-blue-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">New Pages Recited</p>
-                                               <p className="text-3xl font-black">{exactNewPages}</p>
-                                               <p className="text-[10px] mt-1 text-blue-600/60 font-medium print:text-slate-400">Exact Mushaf page coverage</p>
-                                           </div>
-                                           <div className="bg-orange-50 text-orange-900 border border-orange-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
-                                               <p className="text-xs text-orange-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Revision Days</p>
-                                               <p className="text-3xl font-black">{reportData.revision_days}</p>
-                                               <p className="text-[10px] mt-1 text-orange-600/60 font-medium print:text-slate-400">Consistent daily reviews</p>
-                                           </div>
+                                           {isHafizStage ? (
+                                               <>
+                                                   <div className="bg-blue-50 text-blue-900 border border-blue-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
+                                                       <p className="text-xs text-blue-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">New Revision (Juz)</p>
+                                                       <p className="text-3xl font-black">{newJuzRev}</p>
+                                                       <p className="text-[10px] mt-1 text-blue-600/60 font-medium print:text-slate-400">Recently completed Juz</p>
+                                                   </div>
+                                                   <div className="bg-orange-50 text-orange-900 border border-orange-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
+                                                       <p className="text-xs text-orange-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Old Revision (Juz)</p>
+                                                       <p className="text-3xl font-black">{oldJuzRev}</p>
+                                                       <p className="text-[10px] mt-1 text-orange-600/60 font-medium print:text-slate-400">Long-term retention</p>
+                                                   </div>
+                                               </>
+                                           ) : (
+                                               <>
+                                                   <div className="bg-blue-50 text-blue-900 border border-blue-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
+                                                       <p className="text-xs text-blue-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">New Pages Recited</p>
+                                                       <p className="text-3xl font-black">{exactNewPages}</p>
+                                                       <p className="text-[10px] mt-1 text-blue-600/60 font-medium print:text-slate-400">Exact Mushaf page coverage</p>
+                                                   </div>
+                                                   <div className="bg-orange-50 text-orange-900 border border-orange-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
+                                                       <p className="text-xs text-orange-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Revision Days</p>
+                                                       <p className="text-3xl font-black">{reportData.revision_days}</p>
+                                                       <p className="text-[10px] mt-1 text-orange-600/60 font-medium print:text-slate-400">Consistent daily reviews</p>
+                                                   </div>
+                                               </>
+                                           )}
                                            <div className="bg-emerald-50 text-emerald-900 border border-emerald-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
                                                <p className="text-xs text-emerald-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Juz Revised</p>
                                                <p className="text-3xl font-black">{juzRecited}</p>
@@ -679,14 +738,29 @@ export default function UnifiedReportView() {
                                         </p>
                                         <div className="grid grid-cols-3 gap-3">
                                             <div className="grid grid-cols-2 gap-3 col-span-2">
-                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Pages Recited</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-2">{exactNewPages.toFixed(1)}</p>
-                                                </div>
-                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Revision Days</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-2">{reportData.revision_days}</p>
-                                                </div>
+                                                {reportData.hifz_stage === 'HAFIZ_REVISION' ? (
+                                                    <>
+                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Revision (Juz)</p>
+                                                            <p className="text-3xl font-black text-slate-900 mt-2">{Number(reportData.hifz_activity?.new_juz_revision ?? 0)}</p>
+                                                        </div>
+                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Old Revision (Juz)</p>
+                                                            <p className="text-3xl font-black text-slate-900 mt-2">{Number(reportData.hifz_activity?.old_juz_revision ?? 0)}</p>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Pages Recited</p>
+                                                            <p className="text-3xl font-black text-slate-900 mt-2">{exactNewPages.toFixed(1)}</p>
+                                                        </div>
+                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Revision Days</p>
+                                                            <p className="text-3xl font-black text-slate-900 mt-2">{reportData.revision_days}</p>
+                                                        </div>
+                                                    </>
+                                                )}
                                                 <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
                                                     <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Juz Revised</p>
                                                     <p className="text-3xl font-black text-slate-900 mt-2">{juzRecited}</p>

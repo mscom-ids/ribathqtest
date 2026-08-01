@@ -110,15 +110,24 @@ export function calculateHifzReportPoints(
     // recite and only shrink when a class is cancelled.
     const isHafiz = !!options?.isHafiz;
 
-    // Juz Revision sum — for Memorizing students this catches the plain "Juz Revision"
-    // mode; for Hafiz students it catches both "Juz Revision (New)" and "Juz Revision (Old)".
+    // Juz Revision sum — must mirror what the report table shows in the
+    // "Juz Revision" columns, otherwise grade and columns disagree.
+    // - Memorizing display sums plain "Juz Revision" + "(New)" + "(Old)" logs.
+    // - Hafiz display shows ONLY "(New)" and "(Old)" — any plain "Juz Revision"
+    //   entry for a Hafiz student is invisible in the columns, so must not
+    //   count here either (that was the bug that pushed Suhail KP to A++ from
+    //   plain-mode entries not appearing in his 1.5 / 4.75 totals).
+    // Portion-less logs contribute 0 (matches the display's portionValue).
+    const juzRevisionModes = isHafiz
+        ? ['Juz Revision (New)', 'Juz Revision (Old)']
+        : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
     let totalJuzRecited = 0;
-    logs.filter(l => l.mode?.startsWith('Juz Revision')).forEach(log => {
+    logs.filter(l => l.mode && juzRevisionModes.includes(l.mode)).forEach(log => {
         const portion = log.juz_portion;
         if (portion === 'Full') totalJuzRecited += 1;
         else if (portion?.includes('Half')) totalJuzRecited += 0.5;
         else if (portion?.startsWith('Q')) totalJuzRecited += 0.25;
-        else totalJuzRecited += 1;
+        else if (portion) totalJuzRecited += 1;
     });
 
     let newVersePoints = 0;
