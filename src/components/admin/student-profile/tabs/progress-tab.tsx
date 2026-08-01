@@ -123,9 +123,21 @@ export function ProgressTab({ student }: { student: Student }) {
                 }
             }
 
-            // Cap at 30 Juz (604 pages max)
-            const calcTotalJuz = getCompletedJuzList(lifetimeLogs as any).length
-            const studentIsHafiz = calcTotalJuz >= 30
+            // Hafiz status is evaluated as of the month being viewed. If the student
+            // hadn't completed 30 Juz before this month started, this month renders
+            // in MEMORIZING format even if they're a Hafiz today. Prevents the
+            // retroactive-view bug where past months change layout after transition.
+            const priorMonthLifetimeLogs = lifetimeLogs.filter((log: any) => {
+                const d = new Date(log.entry_date)
+                return !isNaN(d.getTime()) && d < startOfCurrentMonth
+            })
+            const throughMonthLifetimeLogs = lifetimeLogs.filter((log: any) => {
+                const d = new Date(log.entry_date)
+                return !isNaN(d.getTime()) && d <= endOfCurrentMonth
+            })
+            const priorMonthJuz = getCompletedJuzList(priorMonthLifetimeLogs as any).length
+            const calcTotalJuz = getCompletedJuzList(throughMonthLifetimeLogs as any).length
+            const studentIsHafiz = priorMonthJuz >= 30
             setIsHafiz(studentIsHafiz)
 
             if (logs.length > 0) {
@@ -313,7 +325,14 @@ export function ProgressTab({ student }: { student: Student }) {
                 const dayLogs = logsByDate.get(dateStr) || []
                 const newVerses = dayLogs.filter((l: any) => l.mode === "New Verses")
                 const recentRev = dayLogs.filter((l: any) => l.mode === "Recent Revision")
-                const juzRev = dayLogs.filter((l: any) => l.mode === "Juz Revision")
+                // Transition month: fold Hafiz-mode Juz Rev logs into the Memorizing
+                // "Juz Rev" column so they still display when the view is MEMORIZING.
+                // Hafiz view uses newRevHafiz/oldRevHafiz separately, so no overlap.
+                const juzRev = dayLogs.filter((l: any) =>
+                    l.mode === "Juz Revision"
+                    || l.mode === "Juz Revision (New)"
+                    || l.mode === "Juz Revision (Old)"
+                )
                 const newRevHafiz = dayLogs.filter((l: any) => l.mode === "Juz Revision (New)")
                 const oldRevHafiz = dayLogs.filter((l: any) => l.mode === "Juz Revision (Old)")
 

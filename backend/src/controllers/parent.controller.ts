@@ -436,11 +436,15 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                     s.dob,
                     hm.name AS hifz_mentor,
                     sm.name AS school_mentor,
-                    mm.name AS madrasa_mentor
+                    mm.name AS madrasa_mentor,
+                    COALESCE(hp.hifz_stage,
+                        CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
+                    ) AS hifz_stage
                  FROM students s
                  LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
                  LEFT JOIN staff sm ON s.school_mentor_id = sm.id
                  LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
+                 LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
                  WHERE s.adm_no = $1 AND s.status = 'active'
                  LIMIT 1`,
                 [studentId]
@@ -473,7 +477,7 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                 [studentId, fullMonth.startDate, fullMonth.endDate]
             ),
             db.query(
-                `SELECT surah_name, start_v, end_v, start_page, end_page
+                `SELECT surah_name, start_v, end_v, start_page, end_page, entry_date
                  FROM hifz_logs
                  WHERE student_id = $1 AND mode = 'New Verses'
                    AND deleted_at IS NULL
@@ -560,36 +564,26 @@ export const getParentDashboard = async (req: Request, res: Response) => {
         const completedJuz = countCompletedJuz(lifetimeNewLogsResult.rows);
         const hifzAttendance = hifzAttendanceSummaries.get(student.adm_no) || null;
         const hifzMonthTarget = (hifzMonthTargetSummaries || hifzAttendanceSummaries).get(student.adm_no) || null;
+
+        // Hafiz status is evaluated as of the start of the month being viewed —
+        // a student who completes their 30th Juz mid-month is still shown as
+        // MEMORIZING for that month, and the Hafiz view kicks in from the next month.
+        const priorMonthNewLogs = lifetimeNewLogsResult.rows.filter(
+            (log: any) => {
+                const iso = typeof log.entry_date === 'string'
+                    ? log.entry_date.slice(0, 10)
+                    : new Date(log.entry_date).toISOString().slice(0, 10);
+                return iso < startDate;
+            }
+        );
+        const isHafiz = countCompletedJuz(priorMonthNewLogs) >= 30;
+
         const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
             expectedClassDaysOverride: hifzMonthTarget?.pointClassDays || hifzMonthTarget?.effectiveClasses || null,
             attendedClasses: hifzAttendance?.attendedClasses || 0,
             countedClasses: hifzMonthTarget?.effectiveClasses || 0,
+            isHafiz,
         });
-
-        // Detect if this is a Hafiz student:
-        // Strategy: check month logs first (most reliable — reflects current mode).
-        // If the month is empty, fall back to the last 30 lifetime logs.
-        // A student is Hafiz if ANY of their relevant logs use Hafiz modes
-        // (Juz Revision (New) / Juz Revision (Old)).
-        // We do NOT require the absence of regular modes — a student who was
-        // previously a regular Hifz student before becoming Hafiz will still
-        // have old regular logs in their history.
-        const monthHafizModes = monthLogs.some(
-            (log: any) => log.mode === 'Juz Revision (New)' || log.mode === 'Juz Revision (Old)'
-        );
-        const monthRegularModes = monthLogs.some(
-            (log: any) => log.mode === 'New Verses' || log.mode === 'Recent Revision' || log.mode === 'Juz Revision'
-        );
-        const recentHafizModes = logsResult.rows.some(
-            (log: any) => log.mode === 'Juz Revision (New)' || log.mode === 'Juz Revision (Old)'
-        );
-        // If the month has data: trust month logs exclusively.
-        // If month is empty: fall back to recent 30 logs.
-        const isHafizByLogs = monthLogs.length > 0
-            ? monthHafizModes && !monthRegularModes   // month has Hafiz entries and no regular entries
-            : recentHafizModes;                        // no month data — any recent Hafiz log is enough
-        const isHafizByStandard = String(student.hifz_standard || '').toLowerCase().includes('hafiz');
-        const isHafiz = isHafizByStandard || isHafizByLogs;
 
         const hifzReport = {
             month: fullMonth.monthKey,

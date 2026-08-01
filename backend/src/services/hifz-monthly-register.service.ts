@@ -350,8 +350,25 @@ function entriesForDay(logs: any[], stage: HifzStage) {
         newHifz: [], recentRevision: [], juzRevision: [], newJuzRevision: [], oldJuzRevision: [],
     };
     for (const log of logs) {
-        const key = modeKey(log.mode);
-        if (key in entries && HIFZ_MODES_BY_STAGE[stage].includes(log.mode)) entries[key].push(log);
+        if (stage === 'HAFIZ_REVISION') {
+            const key = modeKey(log.mode);
+            if (key in entries && HIFZ_MODES_BY_STAGE.HAFIZ_REVISION.includes(log.mode)) {
+                entries[key].push(log);
+            }
+        } else {
+            // MEMORIZING view. In the transition month a student may have already
+            // logged Juz Revision (New)/(Old); surface those under the Juz Revision
+            // column so no work is dropped from the register.
+            if (log.mode === 'New Verses') entries.newHifz.push(log);
+            else if (log.mode === 'Recent Revision') entries.recentRevision.push(log);
+            else if (
+                log.mode === 'Juz Revision'
+                || log.mode === 'Juz Revision (New)'
+                || log.mode === 'Juz Revision (Old)'
+            ) {
+                entries.juzRevision.push(log);
+            }
+        }
     }
     return entries;
 }
@@ -375,10 +392,17 @@ function monthSummary(logs: any[], student: RegisterStudent, completedJuz = 0) {
         };
     }
 
+    // MEMORIZING view: fold any Hafiz-mode Juz Revision logs from the transition
+    // month into the plain juzRevised total so the summary matches the register cells.
+    const juzRevisedTotal =
+        juz.reduce((total, log) => total + portionValue(log.juz_portion), 0)
+        + totalNewJuz
+        + totalOldJuz;
+
     return {
         newHifzPages: calculateCoveredPagesFromLogs(newHifz),
         revisionDays: new Set(recent.map((log) => dateKey(log.entry_date))).size,
-        juzRevised: juz.reduce((total, log) => total + portionValue(log.juz_portion), 0),
+        juzRevised: juzRevisedTotal,
         completedJuz,
         completionPercent: student.completed_hifz ? 100 : Math.min(100, Number(((completedJuz / 30) * 100).toFixed(2))),
     };
@@ -419,7 +443,7 @@ export async function getHifzStudentMonthRegister(options: {
             [start, end],
         ),
         options.db.query(
-            `SELECT surah_name, start_v, end_v
+            `SELECT surah_name, start_v, end_v, entry_date
              FROM hifz_logs
              WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL`,
             [options.studentId],
@@ -431,13 +455,27 @@ export async function getHifzStudentMonthRegister(options: {
         throw error;
     }
 
-    // A student who has recorded the final verse of all 30 Juz is a Hafiz — surface
-    // the HAFIZ_REVISION stage even if student_hifz_profiles.hifz_stage is stale/unset.
-    // This drives entry modes, summary shape, and the frontend columns consistently.
-    const completedJuz = countCompletedJuz(lifetimeNewLogsResult.rows);
-    if (completedJuz >= 30) {
+    // Stage is evaluated *as of the month being viewed*, not the current lifetime state.
+    // A student who completes their 30th Juz on May 15 should still see the MEMORIZING
+    // view for May (their transition month) — the Hafiz view only kicks in from June.
+    // Past months are unaffected: they were memorizing then, so their record renders as such.
+    const priorMonthLogs = lifetimeNewLogsResult.rows.filter(
+        (log: any) => dateKey(log.entry_date) < start,
+    );
+    const throughMonthLogs = lifetimeNewLogsResult.rows.filter(
+        (log: any) => dateKey(log.entry_date) <= end,
+    );
+    const wasHafizAtStart = countCompletedJuz(priorMonthLogs) >= 30;
+    const completedJuz = countCompletedJuz(throughMonthLogs);
+    if (wasHafizAtStart) {
         student.hifz_stage = 'HAFIZ_REVISION';
         student.completed_hifz = true;
+    } else {
+        // Force MEMORIZING for months before the student became Hafiz, even when
+        // the DB stage flag says HAFIZ_REVISION. This is what makes past-month
+        // views stable when a student later transitions.
+        student.hifz_stage = 'MEMORIZING';
+        student.completed_hifz = false;
     }
 
     const logsByDate = new Map<string, any[]>();

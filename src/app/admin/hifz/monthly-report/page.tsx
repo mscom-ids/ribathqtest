@@ -43,13 +43,16 @@ type StudentMonthlyStats = {
     standard: string
     usthad_name: string
     usthad_phone: string
+    hifz_stage?: 'MEMORIZING' | 'HAFIZ_REVISION'
     hifz_pages: number
     recent_days: number
     juz_revision: number
-    total_juz: number | string // Allow string for "N/A"
+    new_juz_revision?: number
+    old_juz_revision?: number
+    total_juz: number | string
     grade: string
     attendance: string
-    is_manual: boolean // Flag to indicate if data is from manual entry
+    is_manual: boolean
     scheduledClassDays?: number
     pointClassDays?: number
     cancelledClasses?: number
@@ -297,6 +300,9 @@ _Generated from Ma'din Ribathul Quran ERP_
         return matchesSearch && matchesStandard && matchesUsthad
     })
 
+    const memorizingStats = filteredStats.filter(s => s.hifz_stage !== 'HAFIZ_REVISION')
+    const hafizStats = filteredStats.filter(s => s.hifz_stage === 'HAFIZ_REVISION')
+
     const standards = Array.from(new Set(stats.map(s => s.standard))).sort((a, b) => Number(a) - Number(b))
     const usthads = Array.from(new Set(stats.map(s => s.usthad_name))).sort()
 
@@ -449,8 +455,14 @@ _Generated from Ma'din Ribathul Quran ERP_
                 </CardContent>
             </Card>
 
-            {/* Data Table */}
+            {/* Memorizing students section */}
             <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-[#1a2234]">
+                <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Memorizing Students</h2>
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">
+                        {memorizingStats.length}
+                    </Badge>
+                </div>
                 <Table>
                     <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                         <TableRow>
@@ -475,14 +487,14 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ) : filteredStats.length === 0 ? (
+                        ) : memorizingStats.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={9} className="text-center h-32 text-slate-500">
-                                    No data found for this month.
+                                    No memorizing students for this month.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredStats.map((s) => (
+                            memorizingStats.map((s) => (
                                 <TableRow key={s.adm_no} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                     <TableCell className="pl-6 font-medium">
                                         <div>
@@ -496,12 +508,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-emerald-600'}`}>{s.juz_revision}</TableCell>
                                     <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
                                     <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className={gradeBadgeClass(s.grade)}
-                                        >
-                                            {s.grade}
-                                        </Badge>
+                                        <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
                                     </TableCell>
                                     <TableCell>{formatAttendanceText(s)}</TableCell>
                                     <TableCell className="text-slate-500 text-sm">{s.usthad_name}</TableCell>
@@ -534,6 +541,87 @@ _Generated from Ma'din Ribathul Quran ERP_
                     </TableBody>
                 </Table>
             </Card>
+
+            {/* Hafiz students section — students who completed 30 Juz before this month started */}
+            {(loading || hafizStats.length > 0) && (
+                <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-[#1a2234]">
+                    <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Hafiz Students</h2>
+                        <Badge variant="secondary" className="bg-violet-100 text-violet-700 hover:bg-violet-100">
+                            {hafizStats.length}
+                        </Badge>
+                        <span className="text-xs text-slate-400 ml-1">(30 Juz complete)</span>
+                    </div>
+                    <Table>
+                        <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                            <TableRow>
+                                <TableHead className="pl-6">Student</TableHead>
+                                <TableHead>New Revision (J)</TableHead>
+                                <TableHead>Old Revision (J)</TableHead>
+                                <TableHead>Point Days</TableHead>
+                                <TableHead>Grade</TableHead>
+                                <TableHead>Attendance</TableHead>
+                                <TableHead>Usthad</TableHead>
+                                <TableHead className="text-right pr-6">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} className="text-center h-24">
+                                        <div className="flex items-center justify-center gap-2 text-slate-500">
+                                            <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                hafizStats.map((s) => (
+                                    <TableRow key={s.adm_no} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                        <TableCell className="pl-6 font-medium">
+                                            <div>
+                                                {s.name}
+                                                {s.is_manual && <Badge variant="secondary" className="ml-2 text-[10px] h-4 px-1 bg-blue-100 text-blue-700 hover:bg-blue-100">Manual</Badge>}
+                                                <span className="text-xs text-slate-400 block">{s.standard} Std • {s.adm_no}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.new_juz_revision ?? 0}</TableCell>
+                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.old_juz_revision ?? 0}</TableCell>
+                                        <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
+                                        </TableCell>
+                                        <TableCell>{formatAttendanceText(s)}</TableCell>
+                                        <TableCell className="text-slate-500 text-sm">{s.usthad_name}</TableCell>
+                                        <TableCell className="text-right pr-6">
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50"
+                                                    onClick={() => openEditDialog(s)}
+                                                    title="Edit Report"
+                                                >
+                                                    <Edit2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-8 gap-2 text-green-600 border-green-200 hover:bg-green-50"
+                                                    onClick={() => handleShare(s)}
+                                                    title="Share via WhatsApp"
+                                                >
+                                                    <Share2 className="h-3.5 w-3.5" />
+                                                    Share
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </Card>
+            )}
 
             {/* Edit Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

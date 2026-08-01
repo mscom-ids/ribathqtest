@@ -20,13 +20,20 @@ interface HifzReportPointOptions {
     expectedClassDaysOverride?: number | null;
     attendedClasses?: number | null;
     countedClasses?: number | null;
+    isHafiz?: boolean;
 }
 
-// Keep the report, ranking, and grade calculation on one shared scale.
+// Two scales, both summing to 70 so Memorizing and Hafiz students rank together.
+// Memorizing: New Verses 20 + Recent Rev 15 + Juz Rev 15 + Attendance 20.
+// Hafiz (30 Juz complete): Juz Revision (New+Old combined) 50 + Attendance 20.
 const HIFZ_POINT_MAX = {
     newVerses: 20,
     recentRevision: 15,
     juzRevision: 15,
+    attendance: 20,
+} as const;
+const HAFIZ_POINT_MAX = {
+    juzRevision: 50,
     attendance: 20,
 } as const;
 const HIFZ_TOTAL_POINT_MAX =
@@ -101,26 +108,10 @@ export function calculateHifzReportPoints(
     // supplied by the caller via expectedClassDaysOverride. Students climb toward
     // a fixed monthly target instead of a rolling one, so scores go up as they
     // recite and only shrink when a class is cancelled.
-    const expectedPages = totalClassDays * 0.9;
-    const totalPagesRecited = calculateCoveredPagesFromLogs(logs.filter(l => l.mode === 'New Verses'));
-    let newVersePoints = expectedPages > 0
-        ? (totalPagesRecited / expectedPages) * HIFZ_POINT_MAX.newVerses
-        : 0;
-    newVersePoints = roundTo2(Math.min(newVersePoints, HIFZ_POINT_MAX.newVerses));
+    const isHafiz = !!options?.isHafiz;
 
-    const uniqueRecentDates = new Set<string>();
-    logs.filter(l => l.mode === 'Recent Revision').forEach(log => {
-        const iso = safeToISO(log.entry_date);
-        if (iso) uniqueRecentDates.add(iso);
-    });
-    const daysRecitedRecent = uniqueRecentDates.size;
-
-    const expectedRecentDays = totalClassDays * 0.7;
-    let recentRevisionPoints = expectedRecentDays > 0
-        ? (daysRecitedRecent / expectedRecentDays) * HIFZ_POINT_MAX.recentRevision
-        : 0;
-    recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, HIFZ_POINT_MAX.recentRevision));
-
+    // Juz Revision sum — for Memorizing students this catches the plain "Juz Revision"
+    // mode; for Hafiz students it catches both "Juz Revision (New)" and "Juz Revision (Old)".
     let totalJuzRecited = 0;
     logs.filter(l => l.mode?.startsWith('Juz Revision')).forEach(log => {
         const portion = log.juz_portion;
@@ -130,13 +121,47 @@ export function calculateHifzReportPoints(
         else totalJuzRecited += 1;
     });
 
-    const expectedJuz = totalClassDays * 0.7;
-    let juzPoints = expectedJuz > 0
-        ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
-        : 0;
-    juzPoints = roundTo2(Math.min(juzPoints, HIFZ_POINT_MAX.juzRevision));
+    let newVersePoints = 0;
+    let recentRevisionPoints = 0;
+    let juzPoints = 0;
 
-    // STEP 5: TOTAL & GRADE
+    if (isHafiz) {
+        // Hafiz: expect 0.5 Juz per class day. New + Old combined out of 50.
+        const expectedHafizJuz = totalClassDays * 0.5;
+        juzPoints = expectedHafizJuz > 0
+            ? (totalJuzRecited / expectedHafizJuz) * HAFIZ_POINT_MAX.juzRevision
+            : 0;
+        juzPoints = roundTo2(Math.min(juzPoints, HAFIZ_POINT_MAX.juzRevision));
+    } else {
+        // Memorizing: three separate recitation buckets.
+        const expectedPages = totalClassDays * 0.9;
+        const totalPagesRecited = calculateCoveredPagesFromLogs(logs.filter(l => l.mode === 'New Verses'));
+        newVersePoints = expectedPages > 0
+            ? (totalPagesRecited / expectedPages) * HIFZ_POINT_MAX.newVerses
+            : 0;
+        newVersePoints = roundTo2(Math.min(newVersePoints, HIFZ_POINT_MAX.newVerses));
+
+        const uniqueRecentDates = new Set<string>();
+        logs.filter(l => l.mode === 'Recent Revision').forEach(log => {
+            const iso = safeToISO(log.entry_date);
+            if (iso) uniqueRecentDates.add(iso);
+        });
+        const daysRecitedRecent = uniqueRecentDates.size;
+
+        const expectedRecentDays = totalClassDays * 0.7;
+        recentRevisionPoints = expectedRecentDays > 0
+            ? (daysRecitedRecent / expectedRecentDays) * HIFZ_POINT_MAX.recentRevision
+            : 0;
+        recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, HIFZ_POINT_MAX.recentRevision));
+
+        const expectedJuz = totalClassDays * 0.7;
+        juzPoints = expectedJuz > 0
+            ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
+            : 0;
+        juzPoints = roundTo2(Math.min(juzPoints, HIFZ_POINT_MAX.juzRevision));
+    }
+
+    // Both scales sum to 70 so ranking is comparable across Memorizing and Hafiz.
     const totalPoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints + attendancePoints);
     const totalPercentage = roundTo2((totalPoints / HIFZ_TOTAL_POINT_MAX) * 100);
 

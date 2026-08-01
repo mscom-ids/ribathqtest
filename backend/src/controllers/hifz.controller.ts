@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 5;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 7;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -838,11 +838,15 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
             db.query(
                 `SELECT s.adm_no,
                         COALESCE(sys.school_standard, s.standard) AS attendance_standard,
-                        COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard
+                        COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard,
+                        COALESCE(hp.hifz_stage,
+                            CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
+                        ) AS hifz_stage
                  FROM students s
                  LEFT JOIN student_year_snapshots sys
                    ON sys.student_id = s.adm_no
                   AND sys.academic_year_id = $2
+                 LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
                  WHERE s.adm_no = $1`,
                 [student_id, academicContext.academicYearId]
             ),
@@ -886,10 +890,12 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
             overrideClassDays
         );
 
+        const isHafiz = studentResult.rows[0]?.hifz_stage === 'HAFIZ_REVISION';
         const calculations = calculateHifzReportPoints(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
             attendedClasses: attendanceSummary?.attendedClasses || 0,
             countedClasses: targetSummary?.effectiveClasses || 0,
+            isHafiz,
         });
 
         res.json({
@@ -938,17 +944,21 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     ? [academicContext.academicYearId, mentor_id]
                     : [academicContext.academicYearId];
 
-                const [studentsResult, logsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+                const [studentsResult, logsResult, priorNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                     db.query(
                         `SELECT s.adm_no, s.name,
                          COALESCE(sys.school_standard, s.standard) AS attendance_standard,
                          COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard,
-                         st.name as usthad_name, st.phone as usthad_phone
+                         st.name as usthad_name, st.phone as usthad_phone,
+                         COALESCE(hp.hifz_stage,
+                             CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
+                         ) AS hifz_stage
                          FROM students s
                          LEFT JOIN student_year_snapshots sys
                            ON sys.student_id = s.adm_no
                           AND sys.academic_year_id = $1
                          LEFT JOIN staff st ON st.id = COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id)
+                         LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
                          WHERE s.status = 'active'
                          ${mentorFilterClause}
                          ORDER BY s.adm_no`,
@@ -962,6 +972,18 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                            AND deleted_at IS NULL`,
                         [startDate, endDate]
                     ),
+                    // Prior-month New Verses logs — used to decide whether each student
+                    // was already a Hafiz (completed 30 Juz) BEFORE this month started.
+                    // The transition month keeps the Memorizing layout; the Hafiz layout
+                    // only kicks in from the month after completion.
+                    db.query(
+                        `SELECT student_id, surah_name, start_v, end_v
+                         FROM hifz_logs
+                         WHERE mode = 'New Verses'
+                           AND deleted_at IS NULL
+                           AND entry_date < $1::date`,
+                        [startDate]
+                    ),
                     db.query(
                         `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
                         [reportMonth]
@@ -970,6 +992,18 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     getDetectedLogDays(startDate, endDate),
                     getMonthlyClassDaysSetting(reportMonth),
                 ]);
+
+                const priorNewLogsByStudent: Record<string, any[]> = {};
+                for (const log of priorNewLogsResult.rows) {
+                    const key = String(log.student_id);
+                    if (!priorNewLogsByStudent[key]) priorNewLogsByStudent[key] = [];
+                    priorNewLogsByStudent[key].push(log);
+                }
+                const wasHafizAtStartByStudent: Record<string, boolean> = {};
+                for (const student of studentsResult.rows) {
+                    const priorLogs = priorNewLogsByStudent[student.adm_no] || [];
+                    wasHafizAtStartByStudent[student.adm_no] = countCompletedJuz(priorLogs) >= 30;
+                }
 
                 // Two summaries: one over the elapsed range for actual attended/effective
                 // counts, one over the full month for the point-days denominator so
@@ -1059,11 +1093,35 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     // countedClasses uses the full month target so attendance points climb
                     // toward the month's total instead of showing 100% off a single day.
                     const studentLogs = logsByStudent[student.adm_no] || [];
+                    // Stage is evaluated as of the START of the month: a student who
+                    // completes their 30th Juz this month keeps the MEMORIZING layout
+                    // until next month. This matches the register / progress modal.
+                    const isHafiz = wasHafizAtStartByStudent[student.adm_no] === true;
+                    const effectiveStage: 'MEMORIZING' | 'HAFIZ_REVISION' =
+                        isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
                     const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
                         expectedClassDaysOverride: effectiveClassDays,
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         countedClasses: targetSummary?.effectiveClasses || 0,
+                        isHafiz,
                     });
+
+                    // Per-student Juz Revision breakdowns from this month's logs.
+                    const portionValue = (portion: any) => {
+                        if (portion === 'Full') return 1;
+                        if (typeof portion === 'string' && portion.includes('Half')) return 0.5;
+                        if (typeof portion === 'string' && portion.startsWith('Q')) return 0.25;
+                        return portion ? 1 : 0;
+                    };
+                    let plainJuzTotal = 0;
+                    let newJuzTotal = 0;
+                    let oldJuzTotal = 0;
+                    studentLogs.forEach((log: any) => {
+                        if (log.mode === 'Juz Revision') plainJuzTotal += portionValue(log.juz_portion);
+                        else if (log.mode === 'Juz Revision (New)') newJuzTotal += portionValue(log.juz_portion);
+                        else if (log.mode === 'Juz Revision (Old)') oldJuzTotal += portionValue(log.juz_portion);
+                    });
+
                     if (manualRecord) {
                         return {
                             adm_no: student.adm_no,
@@ -1071,9 +1129,12 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             standard: student.standard,
                             usthad_name: student.usthad_name || 'Unassigned',
                             usthad_phone: student.usthad_phone || '',
+                            hifz_stage: effectiveStage,
                             hifz_pages: Number(manualRecord.hifz_pages),
                             recent_days: Number(manualRecord.recent_pages),
                             juz_revision: Number(manualRecord.juz_revision),
+                            new_juz_revision: parseFloat(newJuzTotal.toFixed(2)),
+                            old_juz_revision: parseFloat(oldJuzTotal.toFixed(2)),
                             total_juz: Number(manualRecord.total_juz) || '-',
                             attendance: manualRecord.attendance || '-',
                             is_manual: true,
@@ -1109,14 +1170,10 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         } catch (e) {}
                     });
 
-                    let juzRevTotal = 0;
-                    studentLogs.filter((l: any) => l.mode?.startsWith('Juz Revision')).forEach((log: any) => {
-                        const portion = log.juz_portion;
-                        if (portion === 'Full') juzRevTotal += 1;
-                        else if (portion?.includes('Half')) juzRevTotal += 0.5;
-                        else if (portion?.startsWith('Q')) juzRevTotal += 0.25;
-                        else juzRevTotal += 1;
-                    });
+                    // For MEMORIZING students the Juz Rev column folds all variants
+                    // (including any transition-month Hafiz-mode logs). Hafiz students
+                    // use new_juz_revision / old_juz_revision instead.
+                    const combinedJuzTotal = plainJuzTotal + newJuzTotal + oldJuzTotal;
 
                     return {
                         adm_no: student.adm_no,
@@ -1124,9 +1181,12 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         standard: student.standard,
                         usthad_name: student.usthad_name || 'Unassigned',
                         usthad_phone: student.usthad_phone || '',
+                        hifz_stage: effectiveStage,
                         hifz_pages: parseFloat(hifzPages.toFixed(1)),
                         recent_days: recentDates.size,
-                        juz_revision: parseFloat(juzRevTotal.toFixed(2)),
+                        juz_revision: parseFloat(combinedJuzTotal.toFixed(2)),
+                        new_juz_revision: parseFloat(newJuzTotal.toFixed(2)),
+                        old_juz_revision: parseFloat(oldJuzTotal.toFixed(2)),
                         total_juz: maxJuz > 0 ? maxJuz : '-',
                         attendance: attendanceSummary?.attendanceLabel || '-',
                         scheduledClassDays: targetSummary?.plannedClasses || 0,
