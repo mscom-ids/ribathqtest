@@ -154,7 +154,7 @@ export function calculateHifzReportPoints(
             : 0;
         recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, HIFZ_POINT_MAX.recentRevision));
 
-        const expectedJuz = totalClassDays * 0.7;
+        const expectedJuz = totalClassDays * 0.5;
         juzPoints = expectedJuz > 0
             ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
             : 0;
