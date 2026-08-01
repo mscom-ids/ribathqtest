@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 3;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 5;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -831,7 +831,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
             return res.status(400).json({ success: false, error: 'student_id and month are required' });
         }
 
-        const { startDate, endDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month as string);
+        const { startDate, endDate, fullMonthEndDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month as string);
 
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
         const [studentResult, logsResult] = await Promise.all([
@@ -859,18 +859,24 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
 
-        const [attendanceSummaries, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+        // Two summaries: elapsed (for actual attended counts) and full-month
+        // (for the point-days denominator so scoring targets the whole month).
+        const [attendanceSummaries, monthTargetSummaries, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
             getStudentAttendanceSummaries(db, studentResult.rows, startDate, endDate, 'hifz', academicContext.academicYearId),
+            endDate === fullMonthEndDate
+                ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
+                : getStudentAttendanceSummaries(db, studentResult.rows, startDate, fullMonthEndDate, 'hifz', academicContext.academicYearId),
             getDetectedClassDays(startDate, endDate),
             getDetectedLogDays(startDate, endDate),
             getMonthlyClassDaysSetting(reportMonth),
         ]);
 
         const attendanceSummary = attendanceSummaries.get(student_id as string);
-        const scheduledClassDays = attendanceSummary?.plannedClasses || 0;
-        const cancelledClassDays = attendanceSummary?.cancelledClasses || 0;
-        const countedClassDays = attendanceSummary?.effectiveClasses || 0;
-        const automaticPointClassDays = attendanceSummary?.pointClassDays || 0;
+        const targetSummary = (monthTargetSummaries || attendanceSummaries).get(student_id as string);
+        const scheduledClassDays = targetSummary?.plannedClasses || 0;
+        const cancelledClassDays = targetSummary?.cancelledClasses || 0;
+        const countedClassDays = targetSummary?.effectiveClasses || 0;
+        const automaticPointClassDays = targetSummary?.pointClassDays || 0;
         const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
         const effectiveClassDays = resolvePointClassDays(
             automaticPointClassDays,
@@ -883,7 +889,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         const calculations = calculateHifzReportPoints(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
             attendedClasses: attendanceSummary?.attendedClasses || 0,
-            countedClasses: attendanceSummary?.effectiveClasses || 0,
+            countedClasses: targetSummary?.effectiveClasses || 0,
         });
 
         res.json({
@@ -924,7 +930,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
             makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', academic_year_id: academicContext.academicYearId || 'legacy', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
             HIFZ_MONTHLY_TTL_MS,
             async () => {
-                const { startDate, endDate, reportMonth, isCurrentMonth } = period;
+                const { startDate, endDate, fullMonthEndDate, reportMonth, isCurrentMonth } = period;
                 const mentorFilterClause = mentor_id
                     ? ` AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $2`
                     : '';
@@ -965,14 +971,30 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     getMonthlyClassDaysSetting(reportMonth),
                 ]);
 
-                const attendanceSummaries = await getStudentAttendanceSummaries(
-                    db,
-                    studentsResult.rows,
-                    startDate,
-                    endDate,
-                    'hifz',
-                    academicContext.academicYearId
-                );
+                // Two summaries: one over the elapsed range for actual attended/effective
+                // counts, one over the full month for the point-days denominator so
+                // scoring is based on the whole month's target, not just days elapsed.
+                const [attendanceSummaries, monthTargetSummaries] = await Promise.all([
+                    getStudentAttendanceSummaries(
+                        db,
+                        studentsResult.rows,
+                        startDate,
+                        endDate,
+                        'hifz',
+                        academicContext.academicYearId
+                    ),
+                    endDate === fullMonthEndDate
+                        ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
+                        : getStudentAttendanceSummaries(
+                            db,
+                            studentsResult.rows,
+                            startDate,
+                            fullMonthEndDate,
+                            'hifz',
+                            academicContext.academicYearId
+                        ),
+                ]);
+                const targetSummaries = monthTargetSummaries || attendanceSummaries;
 
                 const logsByStudent: Record<string, any[]> = {};
                 logsResult.rows.forEach((log: any) => {
@@ -987,14 +1009,14 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
 
                 const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
                 const scheduledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = attendanceSummaries.get(student.adm_no);
+                    const summary = targetSummaries.get(student.adm_no);
                     return Math.max(max, summary?.plannedClasses || 0);
                 }, 0);
                 const fallbackAllowedForStudent = (plannedClasses: number) => (
                     plannedClasses === 0 && scheduledClassDays === 0
                 );
                 const reportClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = attendanceSummaries.get(student.adm_no);
+                    const summary = targetSummaries.get(student.adm_no);
                     const plannedClasses = summary?.plannedClasses || 0;
                     const value = resolvePointClassDays(
                         summary?.pointClassDays || 0,
@@ -1006,23 +1028,27 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     return Math.max(max, value);
                 }, 0);
                 const cancelledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = attendanceSummaries.get(student.adm_no);
+                    const summary = targetSummaries.get(student.adm_no);
                     return Math.max(max, summary?.cancelledClasses || 0);
                 }, 0);
                 const automaticPointClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = attendanceSummaries.get(student.adm_no);
+                    const summary = targetSummaries.get(student.adm_no);
                     return Math.max(max, summary?.pointClassDays || 0);
                 }, 0);
 
                 const reports = studentsResult.rows.map((student: any) => {
                     const manualRecord = manualByStudent[student.adm_no];
                     const attendanceSummary = attendanceSummaries.get(student.adm_no);
-                    const automaticPointClassDays = attendanceSummary?.pointClassDays || 0;
-                    const plannedClasses = attendanceSummary?.plannedClasses || 0;
+                    const targetSummary = targetSummaries.get(student.adm_no);
+                    // Denominator = full month's planned − cancelled (target),
+                    // so scores climb toward a fixed monthly ceiling. Elapsed
+                    // attendance counts still come from attendanceSummary.
+                    const automaticPointClassDays = targetSummary?.pointClassDays || 0;
+                    const plannedClasses = targetSummary?.plannedClasses || 0;
                     const allowFallback = fallbackAllowedForStudent(plannedClasses);
                     const effectiveClassDays = resolvePointClassDays(
                         automaticPointClassDays,
-                        attendanceSummary?.effectiveClasses || 0,
+                        targetSummary?.effectiveClasses || 0,
                         plannedClasses,
                         allowFallback ? fallbackClassDays : 0,
                         allowFallback ? overrideClassDays : null
@@ -1030,11 +1056,13 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
 
                     // Manual monthly figures remain the report display values. Live
                     // Hifz logs still determine performance points, including range entry.
+                    // countedClasses uses the full month target so attendance points climb
+                    // toward the month's total instead of showing 100% off a single day.
                     const studentLogs = logsByStudent[student.adm_no] || [];
                     const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
                         expectedClassDaysOverride: effectiveClassDays,
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
-                        countedClasses: attendanceSummary?.effectiveClasses || 0,
+                        countedClasses: targetSummary?.effectiveClasses || 0,
                     });
                     if (manualRecord) {
                         return {
@@ -1053,9 +1081,9 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             grade: manualRecord.grade || '-',
                             totalClassDays: effectiveClassDays,
                             detectedClassDays,
-                            scheduledClassDays: attendanceSummary?.plannedClasses || scheduledClassDays,
+                            scheduledClassDays: targetSummary?.plannedClasses || scheduledClassDays,
                             pointClassDays: automaticPointClassDays,
-                            cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                            cancelledClasses: targetSummary?.cancelledClasses || 0,
                             attendedClasses: attendanceSummary?.attendedClasses || 0,
                             notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                         };
@@ -1101,9 +1129,9 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         juz_revision: parseFloat(juzRevTotal.toFixed(2)),
                         total_juz: maxJuz > 0 ? maxJuz : '-',
                         attendance: attendanceSummary?.attendanceLabel || '-',
-                        scheduledClassDays: attendanceSummary?.plannedClasses || 0,
+                        scheduledClassDays: targetSummary?.plannedClasses || 0,
                         pointClassDays: automaticPointClassDays,
-                        cancelledClasses: attendanceSummary?.cancelledClasses || 0,
+                        cancelledClasses: targetSummary?.cancelledClasses || 0,
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                         is_manual: false,

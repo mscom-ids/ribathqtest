@@ -35,8 +35,6 @@ const HIFZ_TOTAL_POINT_MAX =
     HIFZ_POINT_MAX.juzRevision +
     HIFZ_POINT_MAX.attendance;
 
-// A monthly ranking needs enough observed teaching time before a student can reach full marks.
-const MINIMUM_SCORING_CLASS_DAYS = 5;
 export function calculateHifzReportPoints(
     logs: HifzLog[],
     attendance: AttendanceRecord[],
@@ -99,17 +97,17 @@ export function calculateHifzReportPoints(
         };
     }
 
-    // STEP 2: NEW VERSE POINT CALCULATION
+    // Denominator is the FULL month's expected class days (planned − cancelled),
+    // supplied by the caller via expectedClassDaysOverride. Students climb toward
+    // a fixed monthly target instead of a rolling one, so scores go up as they
+    // recite and only shrink when a class is cancelled.
+    const expectedPages = totalClassDays * 0.9;
     const totalPagesRecited = calculateCoveredPagesFromLogs(logs.filter(l => l.mode === 'New Verses'));
-
-    const scoringClassDays = Math.max(totalClassDays, MINIMUM_SCORING_CLASS_DAYS);
-    const expectedPages = scoringClassDays * 0.9;
     let newVersePoints = expectedPages > 0
         ? (totalPagesRecited / expectedPages) * HIFZ_POINT_MAX.newVerses
         : 0;
     newVersePoints = roundTo2(Math.min(newVersePoints, HIFZ_POINT_MAX.newVerses));
 
-    // STEP 3: RECENT REVISION POINT
     const uniqueRecentDates = new Set<string>();
     logs.filter(l => l.mode === 'Recent Revision').forEach(log => {
         const iso = safeToISO(log.entry_date);
@@ -117,23 +115,22 @@ export function calculateHifzReportPoints(
     });
     const daysRecitedRecent = uniqueRecentDates.size;
 
-    const expectedRecentDays = scoringClassDays * 0.7;
+    const expectedRecentDays = totalClassDays * 0.7;
     let recentRevisionPoints = expectedRecentDays > 0
         ? (daysRecitedRecent / expectedRecentDays) * HIFZ_POINT_MAX.recentRevision
         : 0;
     recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, HIFZ_POINT_MAX.recentRevision));
 
-    // STEP 4: JUZ REVISION POINT
     let totalJuzRecited = 0;
     logs.filter(l => l.mode?.startsWith('Juz Revision')).forEach(log => {
         const portion = log.juz_portion;
         if (portion === 'Full') totalJuzRecited += 1;
         else if (portion?.includes('Half')) totalJuzRecited += 0.5;
         else if (portion?.startsWith('Q')) totalJuzRecited += 0.25;
-        else totalJuzRecited += 1; // Default
+        else totalJuzRecited += 1;
     });
 
-    const expectedJuz = scoringClassDays * 0.7;
+    const expectedJuz = totalClassDays * 0.7;
     let juzPoints = expectedJuz > 0
         ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
         : 0;
@@ -146,7 +143,6 @@ export function calculateHifzReportPoints(
     return {
         detectedClassDays,
         totalClassDays,
-        scoringClassDays,
         newVersePoints,
         recentRevisionPoints,
         juzPoints,

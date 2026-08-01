@@ -517,7 +517,16 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
 
-        const [attendanceSummaries, hifzAttendanceSummaries] = await Promise.all([
+        // Hifz scoring uses the full month's planned − cancelled as the denominator
+        // so the student's points climb toward a fixed monthly target instead of
+        // resetting each day. Attended/effective counts still come from the elapsed
+        // range so displayed attendance reflects reality.
+        const hifzStudentInput = [{
+            adm_no: student.adm_no,
+            standard: student.hifz_standard || student.standard,
+            attendance_standard: student.hifz_standard || student.standard,
+        }];
+        const [attendanceSummaries, hifzAttendanceSummaries, hifzMonthTargetSummaries] = await Promise.all([
             getStudentAttendanceSummaries(
                 db,
                 [{
@@ -530,25 +539,31 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             ),
             getStudentAttendanceSummaries(
                 db,
-                [{
-                    adm_no: student.adm_no,
-                    standard: student.hifz_standard || student.standard,
-                    attendance_standard: student.hifz_standard || student.standard,
-                }],
+                hifzStudentInput,
                 startDate,
                 endDate,
                 'hifz'
             ),
+            endDate === fullMonth.endDate
+                ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
+                : getStudentAttendanceSummaries(
+                    db,
+                    hifzStudentInput,
+                    startDate,
+                    fullMonth.endDate,
+                    'hifz'
+                ),
         ]);
 
         const monthLogs = monthLogsResult.rows;
         const monthSummary = summarizeHifzLogs(monthLogs);
         const completedJuz = countCompletedJuz(lifetimeNewLogsResult.rows);
         const hifzAttendance = hifzAttendanceSummaries.get(student.adm_no) || null;
+        const hifzMonthTarget = (hifzMonthTargetSummaries || hifzAttendanceSummaries).get(student.adm_no) || null;
         const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
-            expectedClassDaysOverride: hifzAttendance?.pointClassDays || hifzAttendance?.effectiveClasses || null,
+            expectedClassDaysOverride: hifzMonthTarget?.pointClassDays || hifzMonthTarget?.effectiveClasses || null,
             attendedClasses: hifzAttendance?.attendedClasses || 0,
-            countedClasses: hifzAttendance?.effectiveClasses || 0,
+            countedClasses: hifzMonthTarget?.effectiveClasses || 0,
         });
 
         // Detect if this is a Hafiz student:
