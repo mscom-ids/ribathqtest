@@ -90,6 +90,42 @@ function getGreeting(h: number) {
     return "Good Evening"
 }
 
+// ─── Helper: build ranked top performers from a monthly-report payload ─────────
+// Maps each assigned student to their monthly points, drops students with no
+// report row, and sorts by points desc (name as tie-breaker).
+function buildPerformers(
+    reports: MonthlyReportRow[],
+    students: { adm_no: string; name: string; standard: string }[]
+): MonthlyTopPerformer[] {
+    const reportByAdmNo = new Map<string, MonthlyReportRow>(reports.map((r) => [r.adm_no, r]))
+    return students
+        .map((student) => {
+            const report = reportByAdmNo.get(student.adm_no)
+            const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
+            const totalPoints = Number(rawPoints)
+            if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) return null
+            return {
+                adm_no: student.adm_no,
+                name: student.name,
+                standard: student.standard,
+                totalPoints,
+            }
+        })
+        .filter((p): p is MonthlyTopPerformer => p !== null)
+        .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+}
+
+// ─── Helper: months from Jun 2026 up to anchor month ─────────────────────────
+function buildMonthOptions(anchor: Date): { value: string; label: string }[] {
+    const opts: { value: string; label: string }[] = []
+    const start = new Date(2026, 5, 1) // June 2026
+    const cur = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    for (let d = new Date(cur); d >= start; d.setMonth(d.getMonth() - 1)) {
+        opts.push({ value: format(d, "yyyy-MM"), label: format(d, "MMM yyyy") })
+    }
+    return opts
+}
+
 // ─── Helper: SVG Donut ───────────────────────────────────────────────────────
 function DonutRing({
     pct, size = 96, stroke = 12, color = "#3b82f6", bg = "#e2e8f0",
@@ -140,6 +176,11 @@ export default function StaffDashboard() {
     const [todayStr, setTodayStr] = useState("")
     const [todayLabel, setTodayLabel] = useState("")
     const [monthlyTopPerformers, setMonthlyTopPerformers] = useState<MonthlyTopPerformer[]>([])
+    // Top Performers month picker. "" until the client date resolves, then the
+    // current month. Selecting the current month reuses `dashboardReports` (no
+    // extra request); any other month hits the cached /calculate endpoint.
+    const [selectedMonth, setSelectedMonth] = useState("")
+    const [dashboardReports, setDashboardReports] = useState<MonthlyReportRow[]>([])
 
     // Refresh trigger to update points/stats
     const [refreshTrigger, setRefreshTrigger] = useState(0)
@@ -153,6 +194,7 @@ export default function StaffDashboard() {
         setCurrentTime(now)
         setTodayStr(format(now, "yyyy-MM-dd"))
         setTodayLabel(format(now, "EEEE, MMMM d, yyyy"))
+        setSelectedMonth(format(now, "yyyy-MM"))
     }, [])
 
     // Clock tick
@@ -214,48 +256,57 @@ export default function StaffDashboard() {
                     name: s.name || `${s.class_type} Class`,
                 })))
 
-                // Process Monthly Top Performers from summary
+                // Current-month reports arrive with the dashboard payload — stash
+                // them so the Top Performers month effect can build the ranking
+                // without a second request when the current month is selected.
                 const reports = Array.isArray(summary.monthly_report) ? summary.monthly_report : []
-                const reportByAdmNo = new Map<string, MonthlyReportRow>(
-                    reports.map((r: any) => [r.adm_no, r])
-                )
-
-                const assignedPerformers = students.map((student: any) => {
-                    const report = reportByAdmNo.get(student.adm_no)
-                    const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
-                    const totalPoints = Number(rawPoints)
-                    if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) return null
-                    return {
-                        adm_no: student.adm_no,
-                        name: student.name,
-                        standard: student.standard,
-                        totalPoints,
-                    }
-                }).filter(Boolean).sort((a: any, b: any) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
-
-                if (process.env.NODE_ENV !== "production") {
-                    console.debug("[STAFF TOP PERFORMERS]", {
-                        month: todayStr.slice(0, 7),
-                        studentCount: students.length,
-                        reports: reports.map((report: MonthlyReportRow) => ({
-                            adm_no: report.adm_no,
-                            totalPoints: report.totalPoints ?? report.total_points ?? report.points,
-                        })),
-                    })
-                }
-                setMonthlyTopPerformers(assignedPerformers)
+                setDashboardReports(reports)
 
             } catch (err: any) {
                 console.warn("[STAFF PAGE] Load error:", err)
-                setMonthlyTopPerformers([])
-                setTopPerformersError("Monthly points could not be calculated")
+                setDashboardReports([])
                 if (err?.response?.status === 401) router.push("/login")
             }
             setLoading(false)
-            setTopPerformersLoading(false)
         }
         load()
     }, [router, todayStr, refreshTrigger])
+
+    // ─── Top Performers: build ranking for the selected month ──────────────────
+    // Current month → reuse dashboardReports (already fetched). Other months →
+    // fetch the backend's result-cached /calculate endpoint for this mentor.
+    useEffect(() => {
+        if (!selectedMonth || !staffId) return
+        const currentMonth = todayStr.slice(0, 7)
+        const students = myStudents.map((s) => ({ adm_no: s.adm_no, name: s.name, standard: s.standard }))
+
+        if (selectedMonth === currentMonth) {
+            setMonthlyTopPerformers(buildPerformers(dashboardReports, students))
+            setTopPerformersLoading(false)
+            setTopPerformersError(null)
+            return
+        }
+
+        let cancelled = false
+        setTopPerformersLoading(true)
+        setTopPerformersError(null)
+        cachedGet("/hifz/monthly-reports/calculate", { month: selectedMonth, mentor_id: staffId }, 60_000)
+            .then((res) => {
+                if (cancelled) return
+                const reports: MonthlyReportRow[] = Array.isArray(res.data?.reports) ? res.data.reports : []
+                setMonthlyTopPerformers(buildPerformers(reports, students))
+            })
+            .catch((err) => {
+                if (cancelled) return
+                console.warn("[STAFF TOP PERFORMERS] month load error:", err)
+                setMonthlyTopPerformers([])
+                setTopPerformersError("Monthly points could not be calculated")
+            })
+            .finally(() => {
+                if (!cancelled) setTopPerformersLoading(false)
+            })
+        return () => { cancelled = true }
+    }, [selectedMonth, staffId, dashboardReports, myStudents, todayStr])
 
     // Lazy-load all students when switching to "All Students" mode
     useEffect(() => {
@@ -283,6 +334,12 @@ export default function StaffDashboard() {
         if (myStudents.length === 0) return []
         return [...sessions].sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""))
     }, [sessions, myStudents.length])
+
+    // Last 12 months for the Top Performers picker (anchored on today).
+    const monthOptions = useMemo(
+        () => (todayStr ? buildMonthOptions(new Date(`${todayStr}T00:00:00`)) : []),
+        [todayStr]
+    )
 
     const presentCount = myStudents.filter(s => s.today_stats?.attendance === "Present" || s.today_stats?.attendance === "present").length
     const absentCount = myStudents.filter(s => s.today_stats?.attendance === "Absent").length
@@ -856,9 +913,21 @@ export default function StaffDashboard() {
                     <div className="lg:col-span-1 space-y-4">
                         {/* Top Performers */}
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-semibold text-sm dark:text-white">Top Performers</h3>
-                                <Award className="h-4 w-4 text-amber-500" />
+                            <div className="flex items-center justify-between mb-4 gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <h3 className="font-semibold text-sm dark:text-white shrink-0">Top Performers</h3>
+                                    <Award className="h-4 w-4 text-amber-500 shrink-0" />
+                                </div>
+                                <select
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    aria-label="Select month"
+                                    className="text-xs rounded-md border border-slate-200 dark:border-gray-700 bg-white dark:bg-[#0f172a] text-slate-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                                >
+                                    {monthOptions.map((m) => (
+                                        <option key={m.value} value={m.value}>{m.label}</option>
+                                    ))}
+                                </select>
                             </div>
                             {topPerformersLoading ? (
                                 <div className="flex items-center justify-center py-6 text-sm text-slate-400 gap-2">
@@ -868,6 +937,10 @@ export default function StaffDashboard() {
                             ) : topPerformersError ? (
                                 <div className="text-center py-6 text-sm text-red-500">
                                     {topPerformersError}
+                                </div>
+                            ) : monthlyTopPerformers.length === 0 ? (
+                                <div className="text-center py-6 text-sm text-slate-400">
+                                    No points recorded for this month.
                                 </div>
                             ) : (
                                 <div className="space-y-4">

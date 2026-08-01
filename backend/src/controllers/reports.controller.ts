@@ -765,15 +765,26 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             countedClasses: attendanceSummary?.effectiveClasses || 0,
         });
 
+        // Portion → Juz-value helper (Full = 1, Half = 0.5, Q1-Q4 = 0.25 each).
+        const juzPortionValue = (portion: any) => {
+            if (portion === 'Full') return 1;
+            if (typeof portion === 'string' && portion.includes('Half')) return 0.5;
+            if (typeof portion === 'string' && portion.startsWith('Q')) return 0.25;
+            return portion ? 1 : 0;
+        };
+
         // Compute aggregations in memory for UI compatibility
         const hifzAggByMode = new Map<string, any>();
         periodLogs.forEach((log: any) => {
             const mode = log.mode || 'Unknown';
-            const metric = hifzAggByMode.get(mode) || { mode, entry_count: 0, verses_recited: 0, pages_recited: 0 };
+            const metric = hifzAggByMode.get(mode) || { mode, entry_count: 0, verses_recited: 0, pages_recited: 0, juz_recited: 0 };
             metric.entry_count++;
             if (log.mode === 'New Verses') {
                 if (log.start_page && log.end_page) metric.pages_recited += (Number(log.end_page) - Number(log.start_page) + 1);
                 if (log.start_v && log.end_v) metric.verses_recited += Math.max(0, Number(log.end_v) - Number(log.start_v) + 1);
+            }
+            if (typeof log.mode === 'string' && log.mode.startsWith('Juz Revision')) {
+                metric.juz_recited += juzPortionValue(log.juz_portion);
             }
             hifzAggByMode.set(mode, metric);
         });
@@ -784,7 +795,19 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             // Count exact Madani Mushaf pages and merge overlapping ranges.
             newVersesMetric.pages_recited = exactNewPages;
         }
+        // Round Juz totals to 2 decimals for display.
+        for (const metric of hifzAggByMode.values()) {
+            metric.juz_recited = Math.round((metric.juz_recited + Number.EPSILON) * 100) / 100;
+        }
         const hifz_logs_agg = Array.from(hifzAggByMode.values());
+
+        // Total Juz recited across every Juz Revision variant (plain + New + Old).
+        const totalJuzRecited = Math.round(
+            (periodLogs
+                .filter((l: any) => typeof l.mode === 'string' && l.mode.startsWith('Juz Revision'))
+                .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0)
+                + Number.EPSILON) * 100
+        ) / 100;
 
         const revision_days = new Set(
             periodLogs.filter(l => l.mode === 'Recent Revision').map(l => {
@@ -808,6 +831,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
                 hifz_activity: {
                     new_pages_recited: exactNewPages,
                     completed_lifetime_juz: countCompletedJuz(lifetimeLogsRes.rows),
+                    juz_recited: totalJuzRecited,
                 },
                 revision_days
             }

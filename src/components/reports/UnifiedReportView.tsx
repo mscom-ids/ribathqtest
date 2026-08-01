@@ -293,12 +293,12 @@ export default function UnifiedReportView() {
             {reportData && (
                 <div className="report-print-area bg-white text-slate-900 border rounded-xl overflow-hidden print:border-none print:shadow-none shadow-sm print:p-0 p-6 print:m-0 print:w-full print:block">
                     {/* Header — screen only */}
-                    <div className="flex items-center justify-between border-b pb-6 print:hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-6 print:hidden">
                         <div>
                             <h2 className="text-2xl font-black uppercase tracking-wider text-slate-800">Student Progress Report</h2>
                             <p className="text-sm text-slate-500 mt-1 font-medium">{format(dateRanges.start, 'MMM d, yyyy')} — {format(dateRanges.end, 'MMM d, yyyy')} ({reportType})</p>
                         </div>
-                        <div className="flex items-center gap-2 print:hidden">
+                        <div className="flex items-center gap-2 print:hidden shrink-0">
                             <Button variant="outline" onClick={openWhatsApp}>
                                 <MessageCircle className="mr-2 h-4 w-4" /> Send to Parent
                             </Button>
@@ -463,9 +463,12 @@ export default function UnifiedReportView() {
                             <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-5 gap-4">
                                 {(()=>{
                                     const newVerses = reportData.hifz_logs_agg.find((l:any) => l.mode === 'New Verses')
-                                    const juzRev = reportData.hifz_logs_agg.find((l:any) => l.mode === 'Juz Revision')
+                                    const juzRevAggSum = (reportData.hifz_logs_agg || [])
+                                        .filter((l:any) => typeof l.mode === 'string' && l.mode.startsWith('Juz Revision'))
+                                        .reduce((sum:number, l:any) => sum + Number(l.juz_recited || 0), 0)
                                     const exactNewPages = Number(reportData.hifz_activity?.new_pages_recited ?? newVerses?.pages_recited ?? 0)
                                     const completedLifetimeJuz = Number(reportData.hifz_activity?.completed_lifetime_juz ?? 0)
+                                    const juzRecited = Number(reportData.hifz_activity?.juz_recited ?? juzRevAggSum ?? 0)
 
                                     return (
                                         <>
@@ -480,9 +483,9 @@ export default function UnifiedReportView() {
                                                <p className="text-[10px] mt-1 text-orange-600/60 font-medium print:text-slate-400">Consistent daily reviews</p>
                                            </div>
                                            <div className="bg-emerald-50 text-emerald-900 border border-emerald-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
-                                               <p className="text-xs text-emerald-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Juz Revisions</p>
-                                               <p className="text-3xl font-black">{juzRev?.entry_count || 0}</p>
-                                               <p className="text-[10px] mt-1 text-emerald-600/60 font-medium print:text-slate-400">Total logged sessions</p>
+                                               <p className="text-xs text-emerald-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Juz Revised</p>
+                                               <p className="text-3xl font-black">{juzRecited}</p>
+                                               <p className="text-[10px] mt-1 text-emerald-600/60 font-medium print:text-slate-400">Sum of Juz portions recited</p>
                                            </div>
                                            <div className="bg-purple-50 text-purple-900 border border-purple-100 print:border-slate-300 print:bg-transparent rounded-lg p-4">
                                                <p className="text-xs text-purple-600/80 print:text-slate-500 uppercase font-bold tracking-wider mb-1">Total Lifetime Juz</p>
@@ -531,9 +534,12 @@ export default function UnifiedReportView() {
                             const grade = reportData.performance?.grade || null
 
                             const newVerses = reportData.hifz_logs_agg?.find((l: any) => l.mode === 'New Verses')
-                            const juzRev = reportData.hifz_logs_agg?.find((l: any) => l.mode === 'Juz Revision')
+                            const juzRevAggSum = (reportData.hifz_logs_agg || [])
+                                .filter((l: any) => typeof l.mode === 'string' && l.mode.startsWith('Juz Revision'))
+                                .reduce((sum: number, l: any) => sum + Number(l.juz_recited || 0), 0)
                             const exactNewPages = Number(reportData.hifz_activity?.new_pages_recited ?? newVerses?.pages_recited ?? 0)
                             const completedLifetimeJuz = Number(reportData.hifz_activity?.completed_lifetime_juz ?? 0)
+                            const juzRecited = Number(reportData.hifz_activity?.juz_recited ?? juzRevAggSum ?? 0)
 
                             const pctOf = (c: any) => {
                                 const tot = c.effective_total || c.planned || 0
@@ -682,8 +688,8 @@ export default function UnifiedReportView() {
                                                     <p className="text-3xl font-black text-slate-900 mt-2">{reportData.revision_days}</p>
                                                 </div>
                                                 <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Juz Revisions</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-2">{juzRev?.entry_count || 0}</p>
+                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Juz Revised</p>
+                                                    <p className="text-3xl font-black text-slate-900 mt-2">{juzRecited}</p>
                                                 </div>
                                                 <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
                                                     <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Total Lifetime Juz</p>
