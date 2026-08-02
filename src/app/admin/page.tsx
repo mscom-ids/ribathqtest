@@ -323,16 +323,17 @@ export default function AdminDashboardPage() {
         const fetchAttendance = async () => {
             try {
                 const dates = (() => {
+                    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                     const t = new Date();
-                    const e = t.toISOString().split('T')[0];
+                    const e = fmt(t);
                     let s = e;
                     if (timeframe === 'week') {
                         const d = new Date(t);
                         d.setDate(d.getDate() - d.getDay()); // Sunday as start of week.
-                        s = d.toISOString().split('T')[0];
+                        s = fmt(d);
                     } else if (timeframe === 'month') {
                         const d = new Date(t.getFullYear(), t.getMonth(), 1);
-                        s = d.toISOString().split('T')[0];
+                        s = fmt(d);
                     }
                     return { s, e };
                 })();
