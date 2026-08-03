@@ -789,17 +789,31 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             return portion ? 1 : 0;
         };
 
+        // Juz Revision counts must match the scoring rule: for Memorizing
+        // students they only count strictly after the first-Juz milestone.
+        // Legacy pre-milestone rows (from before the write-time guard existed)
+        // are excluded from every aggregate the report card renders next to
+        // the score so the numbers stay consistent.
+        const isEligibleJuzRevisionLog = (log: any) => {
+            if (!log?.mode || !String(log.mode).startsWith('Juz Revision')) return false;
+            if (isHafiz) return true;
+            if (!firstJuzCompletionDate) return false;
+            return toDateKey(log.entry_date) > firstJuzCompletionDate;
+        };
+
         // Compute aggregations in memory for UI compatibility
         const hifzAggByMode = new Map<string, any>();
         periodLogs.forEach((log: any) => {
             const mode = log.mode || 'Unknown';
+            const isJuzRev = typeof log.mode === 'string' && log.mode.startsWith('Juz Revision');
+            if (isJuzRev && !isEligibleJuzRevisionLog(log)) return;
             const metric = hifzAggByMode.get(mode) || { mode, entry_count: 0, verses_recited: 0, pages_recited: 0, juz_recited: 0 };
             metric.entry_count++;
             if (log.mode === 'New Verses') {
                 if (log.start_page && log.end_page) metric.pages_recited += (Number(log.end_page) - Number(log.start_page) + 1);
                 if (log.start_v && log.end_v) metric.verses_recited += Math.max(0, Number(log.end_v) - Number(log.start_v) + 1);
             }
-            if (typeof log.mode === 'string' && log.mode.startsWith('Juz Revision')) {
+            if (isJuzRev) {
                 metric.juz_recited += juzPortionValue(log.juz_portion);
             }
             hifzAggByMode.set(mode, metric);
@@ -826,7 +840,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
         const totalJuzRecited = Math.round(
             (periodLogs
-                .filter((l: any) => l.mode && juzRevisionModesForTotal.includes(l.mode))
+                .filter((l: any) => l.mode && juzRevisionModesForTotal.includes(l.mode) && isEligibleJuzRevisionLog(l))
                 .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0)
                 + Number.EPSILON) * 100
         ) / 100;
@@ -835,10 +849,10 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         // Rendered in the Hafiz layout of the report card and PDF.
         const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
         const newJuzRevision = round2(periodLogs
-            .filter((l: any) => l.mode === 'Juz Revision (New)')
+            .filter((l: any) => l.mode === 'Juz Revision (New)' && isEligibleJuzRevisionLog(l))
             .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0));
         const oldJuzRevision = round2(periodLogs
-            .filter((l: any) => l.mode === 'Juz Revision (Old)')
+            .filter((l: any) => l.mode === 'Juz Revision (Old)' && isEligibleJuzRevisionLog(l))
             .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0));
 
         const revision_days = new Set(

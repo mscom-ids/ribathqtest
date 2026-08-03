@@ -199,6 +199,7 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
     const [isOutside, setIsOutside] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [isHafiz, setIsHafiz] = useState(false)
+    const [hasCompletedFirstJuz, setHasCompletedFirstJuz] = useState(false)
     const [accessPolicy, setAccessPolicy] = useState<MentorAccessPolicy | null>(null)
     // Gate the form render until student + progress + log are all loaded.
     // Without this gate, the form renders with the default "New Verses" mode
@@ -276,7 +277,9 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             const totalJuzCompleted = progRes?.data?.progressMap?.[studentId] || 0
             const isStudentHafiz = totalJuzCompleted >= 30
+            const studentHasFirstJuz = totalJuzCompleted >= 1
             setIsHafiz(isStudentHafiz)
+            setHasCompletedFirstJuz(studentHasFirstJuz)
 
             // Resolve existing logs without splitting the same date/mode into hidden session buckets.
             const existingLogs = logIdParam && logRes?.data?.success
@@ -289,8 +292,14 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
 
             // Pick the right starting mode BEFORE rendering Ã¢â‚¬â€ huffaz students
             // never see the "New Verses" UI flicker first.
-            const resolvedMode =
-                isStudentHafiz && initialMode === "New Verses" ? "Juz Revision (New)" : initialMode
+            // Also swap away from Juz Revision when the student has not yet
+            // completed their first Juz, since the backend rejects those writes.
+            let resolvedMode = initialMode
+            if (isStudentHafiz && initialMode === "New Verses") {
+                resolvedMode = "Juz Revision (New)"
+            } else if (!isStudentHafiz && !studentHasFirstJuz && initialMode === "Juz Revision") {
+                resolvedMode = "New Verses"
+            }
 
             if (resolvedMode === "New Verses" || resolvedMode === "Recent Revision") {
                 setRangeMode(resolvedMode)
@@ -910,7 +919,9 @@ export default function DailyEntryForm({ studentId }: { studentId: string }) {
                                                     <>
                                                         <SelectItem value="New Verses">New Verses</SelectItem>
                                                         <SelectItem value="Recent Revision">Recent Revision</SelectItem>
-                                                        <SelectItem value="Juz Revision">Juz Revision</SelectItem>
+                                                        {hasCompletedFirstJuz && (
+                                                            <SelectItem value="Juz Revision">Juz Revision</SelectItem>
+                                                        )}
                                                     </>
                                                 )}
                                             </SelectContent>

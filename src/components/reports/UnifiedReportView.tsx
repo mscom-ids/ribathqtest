@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
-import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle, User, BookOpen, CalendarCheck2, LineChart, GraduationCap } from "lucide-react"
+import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle, User, CalendarCheck2, LineChart, GraduationCap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -133,25 +133,39 @@ export default function UnifiedReportView() {
         const performance = reportData?.performance
         const isHafiz = reportData?.hifz_stage === 'HAFIZ_REVISION'
         const juzMax = Number(performance?.juzMax ?? (isHafiz ? 50 : 15))
-        const totalMax = Number(performance?.totalMax ?? 70)
+        const firstJuzDate = performance?.firstJuzCompletionDate ?? null
+        const juzZeroReason = firstJuzDate
+            ? 'no class days recorded'
+            : 'first Juz not yet completed'
+
+        // Human-readable activity numbers (what the student actually did),
+        // not the internal points scale. Parents care about pages / days / Juz.
+        const newPages = Number(reportData?.hifz_activity?.new_pages_recited ?? 0)
+        const revisionDays = Number(reportData?.revision_days ?? 0)
+        const juzRevised = Number(reportData?.hifz_activity?.juz_recited ?? 0)
+        const newJuzRev = Number(reportData?.hifz_activity?.new_juz_revision ?? 0)
+        const oldJuzRev = Number(reportData?.hifz_activity?.old_juz_revision ?? 0)
+        const attendedSessions = Number(reportData?.attendance_totals?.attendedClasses ?? 0)
+        const effectiveSessions = Number(reportData?.attendance_totals?.effectiveClasses ?? 0)
+        const attendancePct = Number(performance?.attendancePercentage ?? 0)
+
         const perfLines = isHafiz
             ? [
-                `New Revision: ${reportData?.hifz_activity?.new_juz_revision ?? 0} Juz`,
-                `Old Revision: ${reportData?.hifz_activity?.old_juz_revision ?? 0} Juz`,
+                `New Revision: ${newJuzRev} Juz`,
+                `Old Revision: ${oldJuzRev} Juz`,
               ]
             : [
-                `New Verses: ${performance?.newVersePoints ?? 0}/20 points`,
-                `Recent Revision: ${performance?.recentRevisionPoints ?? 0}/15 points`,
+                `New Hifz: ${newPages} pages recited`,
+                `Recent Revision: ${revisionDays} ${revisionDays === 1 ? 'day' : 'days'}`,
                 juzMax > 0
-                    ? `Juz Revision: ${performance?.juzPoints ?? 0}/${juzMax} points${juzMax < 15 ? ' (pro-rated)' : ''}`
-                    : 'Juz Revision: N/A (first Juz not yet completed)',
+                    ? `Juz Revision: ${juzRevised} Juz`
+                    : `Juz Revision: N/A (${juzZeroReason})`,
               ]
         const message = [
             "Assalamu Alaikum,",
             `${student.name}'s ${reportType.toLowerCase()} Hifz report (${format(dateRanges.start, 'MMMM yyyy')}):`,
             ...perfLines,
-            `Attendance: ${performance?.attendancePoints ?? 0}/20 points (${performance?.attendancePercentage ?? 0}%)`,
-            `Total: ${performance?.totalPoints ?? 0}/${totalMax} points (${performance?.percentage ?? 0}%)`,
+            `Attendance: ${attendedSessions}/${effectiveSessions} sessions (${attendancePct}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
         ].join("\n")
         window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
@@ -485,7 +499,11 @@ export default function UnifiedReportView() {
                                                     : 'N/A'}
                                             </p>
                                             {(reportData.performance.juzMax ?? 15) === 0 ? (
-                                                <p className="text-xs text-violet-700">Available after first Juz</p>
+                                                <p className="text-xs text-violet-700">
+                                                    {reportData.performance.firstJuzCompletionDate
+                                                        ? 'Excluded — no class days recorded'
+                                                        : 'Available after first Juz'}
+                                                </p>
                                             ) : (reportData.performance.juzMax ?? 15) < 15 ? (
                                                 <p className="text-xs text-violet-700">Pro-rated from completion</p>
                                             ) : null}
@@ -663,124 +681,68 @@ export default function UnifiedReportView() {
                                         </div>
                                     </div>
 
-                                    {/* Session Attendance Overview */}
+                                    {/* Attendance Summary — parent-friendly: sessions attended out of
+                                        held sessions, plus overall percentage. No Cancelled tile. */}
                                     <div>
                                         <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
-                                            <CalendarCheck2 className="h-3.5 w-3.5 text-slate-500" /> Session Attendance Overview
+                                            <CalendarCheck2 className="h-3.5 w-3.5 text-slate-500" /> Attendance Summary
                                         </p>
-                                        <div className="grid grid-cols-4 gap-3">
-                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Cancelled</p>
-                                                <p className="text-2xl font-black text-slate-900 mt-1">{t.cancelledClasses ?? 0}</p>
-                                            </div>
-                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Attended</p>
-                                                <div className="mt-1 flex items-baseline justify-center">
-                                                    <span className="text-2xl font-black text-slate-900">{t.attendedClasses ?? 0}</span>
-                                                    <span className="text-xs font-semibold text-slate-400">/{t.effectiveClasses ?? 0}</span>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Sessions Attended</p>
+                                                <div className="mt-1.5 flex items-baseline justify-center gap-1">
+                                                    <span className="text-3xl font-black text-emerald-900">{t.attendedClasses ?? 0}</span>
+                                                    <span className="text-sm font-semibold text-emerald-700/70">of {t.effectiveClasses ?? 0}</span>
                                                 </div>
                                             </div>
-                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Not Attended</p>
-                                                <p className="text-2xl font-black text-red-600 mt-1">{t.notAttendedClasses ?? 0}</p>
+                                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-red-700 tracking-wider">Sessions Missed</p>
+                                                <p className="text-3xl font-black text-red-700 mt-1.5">{t.notAttendedClasses ?? 0}</p>
                                             </div>
-                                            <div className="bg-white border border-slate-200 rounded-xl p-3.5 text-center">
-                                                <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total Counted</p>
-                                                <p className="text-2xl font-black text-slate-900 mt-1">{t.effectiveClasses ?? 0}</p>
+                                            <div className="bg-[#1E293B] text-white rounded-xl p-4 text-center">
+                                                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Attendance Rate</p>
+                                                <p className="text-3xl font-black mt-1.5">{reportData.performance?.attendancePercentage ?? 0}%</p>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Academic Class Details */}
+                                    {/* Learning Activity — parent-friendly labels and units */}
                                     <div className="break-inside-avoid">
                                         <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
-                                            <BookOpen className="h-3.5 w-3.5 text-slate-500" /> Academic Class Details
-                                        </p>
-                                        {classes.length > 0 ? (
-                                            <>
-                                                {first && (
-                                                    <div className="border border-slate-300 rounded-xl overflow-hidden mb-3 bg-white">
-                                                        <div className="bg-[#1E293B] text-white px-5 py-3 flex items-center justify-between">
-                                                            <p className="font-bold text-sm text-white">{first.session}</p>
-                                                            <span className="text-[10px] bg-[#E2E8F0] text-[#1E293B] font-bold rounded-full px-3 py-0.5">
-                                                                Attendance: {pctOf(first)}%
-                                                            </span>
-                                                        </div>
-                                                        <div className="bg-[#F1F5F9] grid grid-cols-3 px-5 py-2 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
-                                                            <span>Metric</span><span>Sessions</span><span>Performance</span>
-                                                        </div>
-                                                        <div className="grid grid-cols-3 px-5 py-3.5 text-sm items-center bg-white">
-                                                            <span className="text-slate-700 font-medium">Session Completion</span>
-                                                            <span className="text-slate-900 font-bold">{first.attended} / {first.effective_total || first.planned || 0}</span>
-                                                            <span>
-                                                                <span className={cn("text-xs font-black uppercase tracking-wider", pctOf(first) >= 75 ? "text-emerald-600" : pctOf(first) >= 40 ? "text-amber-600" : "text-red-600")}>
-                                                                    {pctOf(first) >= 75 ? "GOOD" : pctOf(first) >= 40 ? "AVERAGE" : "CRITICAL"}
-                                                                </span>
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {rest.length > 0 && (
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        {rest.map((c: any, i: number) => (
-                                                            <div key={i} className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4">
-                                                                <div className="flex items-center justify-between mb-3 border-b border-slate-200/60 pb-2">
-                                                                    <p className="font-bold text-slate-900 text-sm">{c.session}</p>
-                                                                    <span className="text-xs font-bold text-slate-500">{pctOf(c)}% Rate</span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="text-xs text-slate-500 font-medium">Sessions Attended</span>
-                                                                    <span className="font-black text-slate-900 text-lg">{c.attended}/{c.effective_total || c.planned || 0}</span>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-5 text-center text-slate-500 text-xs font-medium">
-                                                No academic class session records logged for this report period.
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Learning Activity Metrics */}
-                                    <div className="break-inside-avoid">
-                                        <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
-                                            <LineChart className="h-3.5 w-3.5 text-slate-500" /> Learning Activity Metrics
+                                            <LineChart className="h-3.5 w-3.5 text-slate-500" /> Hifz Activity This Period
                                         </p>
                                         <div className="grid grid-cols-3 gap-3">
                                             <div className="grid grid-cols-2 gap-3 col-span-2">
                                                 {reportData.hifz_stage === 'HAFIZ_REVISION' ? (
                                                     <>
-                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Revision (Juz)</p>
-                                                            <p className="text-3xl font-black text-slate-900 mt-2">{Number(reportData.hifz_activity?.new_juz_revision ?? 0)}</p>
+                                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wider">New Revision</p>
+                                                            <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{Number(reportData.hifz_activity?.new_juz_revision ?? 0)}</span> <span className="text-xs font-semibold text-slate-500">Juz</span></p>
                                                         </div>
-                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Old Revision (Juz)</p>
-                                                            <p className="text-3xl font-black text-slate-900 mt-2">{Number(reportData.hifz_activity?.old_juz_revision ?? 0)}</p>
+                                                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wider">Old Revision</p>
+                                                            <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{Number(reportData.hifz_activity?.old_juz_revision ?? 0)}</span> <span className="text-xs font-semibold text-slate-500">Juz</span></p>
                                                         </div>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">New Pages Recited</p>
-                                                            <p className="text-3xl font-black text-slate-900 mt-2">{exactNewPages.toFixed(1)}</p>
+                                                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[10px] uppercase font-bold text-blue-700 tracking-wider">New Hifz</p>
+                                                            <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{exactNewPages.toFixed(1)}</span> <span className="text-xs font-semibold text-slate-500">pages recited</span></p>
                                                         </div>
-                                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                            <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Revision Days</p>
-                                                            <p className="text-3xl font-black text-slate-900 mt-2">{reportData.revision_days}</p>
+                                                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                            <p className="text-[10px] uppercase font-bold text-orange-700 tracking-wider">Recent Revision</p>
+                                                            <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{reportData.revision_days}</span> <span className="text-xs font-semibold text-slate-500">{Number(reportData.revision_days) === 1 ? 'day' : 'days'}</span></p>
                                                         </div>
                                                     </>
                                                 )}
-                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Juz Revised</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-2">{juzRecited}</p>
+                                                <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[10px] uppercase font-bold text-violet-700 tracking-wider">Juz Revised</p>
+                                                    <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{juzRecited}</span> <span className="text-xs font-semibold text-slate-500">Juz</span></p>
                                                 </div>
-                                                <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
-                                                    <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Total Lifetime Juz</p>
-                                                    <p className="text-3xl font-black text-slate-900 mt-2">{completedLifetimeJuz}</p>
+                                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col justify-between h-[92px]">
+                                                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Total Memorised</p>
+                                                    <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{completedLifetimeJuz}</span> <span className="text-xs font-semibold text-slate-500">of 30 Juz</span></p>
                                                 </div>
                                             </div>
                                             <div className="bg-[#1E293B] text-white rounded-xl p-5 flex flex-col items-center justify-center text-center col-span-1 h-full min-h-[195px]">
