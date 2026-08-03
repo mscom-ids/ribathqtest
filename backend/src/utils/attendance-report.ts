@@ -33,6 +33,7 @@ export type StudentAttendanceSummary = {
     cancelledClasses: number;
     effectiveClasses: number;
     pointClassDays: number;
+    pointDayWeights: Record<string, number>;
     attendedClasses: number;
     notAttendedClasses: number;
     presentClasses: number;
@@ -48,6 +49,7 @@ const emptySummary = (): StudentAttendanceSummary => ({
     cancelledClasses: 0,
     effectiveClasses: 0,
     pointClassDays: 0,
+    pointDayWeights: {},
     attendedClasses: 0,
     notAttendedClasses: 0,
     presentClasses: 0,
@@ -431,11 +433,14 @@ async function computeStudentAttendanceSummaries(
     });
     summaries.forEach((summary, studentId) => {
         const dailyCounts = effectiveSessionsByStudentDate.get(studentId) || new Map<string, number>();
-        summary.pointClassDays = Array.from(dailyCounts.values()).reduce((total, count) => {
-            if (count >= 2) return total + 1;
-            if (count === 1) return total + 0.75;
-            return total;
-        }, 0);
+        summary.pointDayWeights = Object.fromEntries(
+            Array.from(dailyCounts.entries()).map(([date, count]) => [
+                date,
+                count >= 2 ? 1 : count === 1 ? 0.75 : 0,
+            ])
+        );
+        summary.pointClassDays = Object.values(summary.pointDayWeights)
+            .reduce((total, weight) => total + weight, 0);
     });
 
     return summaries;

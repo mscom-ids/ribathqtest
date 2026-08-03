@@ -147,3 +147,62 @@ export function countCompletedJuz(logs: { surah_name: string | null; start_v: nu
     }
     return count;
 }
+
+/**
+ * Returns the first date on which the student's cumulative New Verses logs
+ * fully covered any one Juz. All entries on the same date are applied before
+ * evaluating completion, so input ordering within a day cannot change the
+ * milestone.
+ */
+export function getFirstJuzCompletionDate(logs: {
+    surah_name: string | null;
+    start_v: number | null;
+    end_v: number | null;
+    entry_date: string | Date;
+}[]): string | null {
+    const datedRanges = logs
+        .map(log => {
+            if (!log.surah_name || !log.start_v || !log.end_v || !log.entry_date) return null;
+            const sid = getSurahId(log.surah_name);
+            if (!sid) return null;
+            const start = toGlobal(sid, log.start_v);
+            const end = toGlobal(sid, log.end_v);
+            const date = log.entry_date instanceof Date
+                ? log.entry_date.toISOString().slice(0, 10)
+                : String(log.entry_date).slice(0, 10);
+            if (start < 0 || end < start || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+            return { date, start, end };
+        })
+        .filter((range): range is { date: string; start: number; end: number } => range !== null)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+    const coverage: { start: number; end: number }[] = [];
+    for (let index = 0; index < datedRanges.length;) {
+        const date = datedRanges[index].date;
+        while (index < datedRanges.length && datedRanges[index].date === date) {
+            coverage.push({ start: datedRanges[index].start, end: datedRanges[index].end });
+            index += 1;
+        }
+
+        coverage.sort((a, b) => a.start - b.start);
+        const merged: { start: number; end: number }[] = [];
+        for (const range of coverage) {
+            const current = merged[merged.length - 1];
+            if (current && range.start <= current.end + 1) {
+                current.end = Math.max(current.end, range.end);
+            } else {
+                merged.push({ ...range });
+            }
+        }
+        coverage.splice(0, coverage.length, ...merged);
+
+        const completedAnyJuz = JUZ_BOUNDARIES.some(juz => {
+            const juzStart = toGlobal(juz.startSurah, juz.startVerse);
+            const juzEnd = toGlobal(juz.endSurah, juz.endVerse);
+            return coverage.some(range => range.start <= juzStart && range.end >= juzEnd);
+        });
+        if (completedAnyJuz) return date;
+    }
+
+    return null;
+}

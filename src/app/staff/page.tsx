@@ -81,6 +81,7 @@ type MonthlyReportRow = {
     totalPoints?: number | string | null
     total_points?: number | string | null
     points?: number | string | null
+    percentage?: number | string | null
 }
 
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
@@ -102,8 +103,20 @@ function buildPerformers(
         .map((student) => {
             const report = reportByAdmNo.get(student.adm_no)
             const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
-            const totalPoints = Number(rawPoints)
-            if (!report || rawPoints === undefined || rawPoints === null || !Number.isFinite(totalPoints)) return null
+            const rawPercentage = report?.percentage
+            const percentage = Number(rawPercentage)
+            const legacyPoints = Number(rawPoints)
+            if (!report) return null
+
+            // Juz Revision can now be non-applicable or pro-rated, so students
+            // have different raw maximums. Rank and display everyone on the
+            // same 70-point scale using their calculated percentage.
+            const totalPoints = rawPercentage !== undefined
+                && rawPercentage !== null
+                && Number.isFinite(percentage)
+                ? Math.round((percentage * 0.7 + Number.EPSILON) * 100) / 100
+                : legacyPoints
+            if (!Number.isFinite(totalPoints)) return null
             return {
                 adm_no: student.adm_no,
                 name: student.name,

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
-import { countCompletedJuz } from '../utils/quran-juz';
+import { countCompletedJuz, getFirstJuzCompletionDate } from '../utils/quran-juz';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
 import { getStudentAttendanceSummaries } from '../utils/attendance-report';
@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 9;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 10;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -259,6 +259,63 @@ function normalizeHifzLogInput(log: any, index = 0) {
     };
 }
 
+type HifzEligibilityLog = {
+    id?: string | null;
+    student_id: string;
+    entry_date: string;
+    mode: string;
+    surah_name?: string | null;
+    start_v?: number | null;
+    end_v?: number | null;
+};
+
+const enforceJuzRevisionEligibility = async (
+    queryable: { query: (text: string, params?: any[]) => Promise<{ rows: any[] }> },
+    logs: HifzEligibilityLog[],
+) => {
+    const candidates = logs.filter(log => String(log.mode || '').startsWith('Juz Revision'));
+    if (candidates.length === 0) return;
+
+    const studentIds = [...new Set(candidates.map(log => String(log.student_id)))];
+    const existingNewLogs = await queryable.query(
+        'SELECT id, student_id, surah_name, start_v, end_v, entry_date '
+        + 'FROM hifz_logs '
+        + 'WHERE student_id = ANY($1::text[]) '
+        + "AND mode = 'New Verses' "
+        + 'AND deleted_at IS NULL '
+        + 'ORDER BY entry_date ASC, created_at ASC',
+        [studentIds],
+    );
+
+    // When an existing row is being changed, remove its old value before
+    // evaluating eligibility, then include any incoming New Verses replacement.
+    const replacedIds = new Set(logs.map(log => String(log.id || '')).filter(Boolean));
+    const newLogsByStudent = new Map<string, any[]>();
+    for (const log of existingNewLogs.rows) {
+        if (replacedIds.has(String(log.id))) continue;
+        const key = String(log.student_id);
+        newLogsByStudent.set(key, [...(newLogsByStudent.get(key) || []), log]);
+    }
+    for (const log of logs) {
+        if (log.mode !== 'New Verses') continue;
+        const key = String(log.student_id);
+        newLogsByStudent.set(key, [...(newLogsByStudent.get(key) || []), log]);
+    }
+
+    for (const candidate of candidates) {
+        const completionDate = getFirstJuzCompletionDate(
+            newLogsByStudent.get(String(candidate.student_id)) || [],
+        );
+        // Revision starts on the next day after the first Juz is completed.
+        if (!completionDate || completionDate >= toDateKey(candidate.entry_date)) {
+            throw monthlyRegisterError(
+                'Juz Revision can be recorded only from the day after the student completes their first Juz.',
+                409,
+            );
+        }
+    }
+};
+
 function hifzLogErrorMessage(err: any) {
     if (err?.statusCode) return err.message;
     if (err?.code === '23503') {
@@ -458,6 +515,7 @@ export const createHifzLog = async (req: Request, res: Response) => {
         const log = normalizeHifzLogInput(req.body);
         await enforceHifzRecordingAccess(req, log.entry_date);
         await enforceHifzStudentAccess(req, [{ studentId: log.student_id, entryDate: log.entry_date, sessionId: log.session_id }]);
+        await enforceJuzRevisionEligibility(db, [log]);
         const result = await db.query(
             `INSERT INTO hifz_logs (student_id, usthad_id, entry_date, mode,
              surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion)
@@ -493,6 +551,15 @@ export const updateHifzLog = async (req: Request, res: Response) => {
             studentId: String(student_id || ''),
             entryDate: entry_date || null,
             sessionId: req.body.session_id || null,
+        }]);
+        await enforceJuzRevisionEligibility(db, [{
+            id: String(id),
+            student_id: String(student_id || ''),
+            entry_date: toDateKey(entry_date),
+            mode: String(mode || ''),
+            surah_name: surah_name || null,
+            start_v: start_v || null,
+            end_v: end_v || null,
         }]);
         const result = await db.query(
             `UPDATE hifz_logs SET student_id=$1, usthad_id=$2, entry_date=$3, mode=$4,
@@ -538,6 +605,7 @@ export const bulkCreateHifzLogs = async (req: Request, res: Response) => {
                 sessionId: log.session_id,
             })),
         );
+        await enforceJuzRevisionEligibility(db, logs);
 
         // ── Step 1: bulk-fetch existing verse-range rows that could collide
         // with any candidate, in a SINGLE query. Replaces the per-row SELECT
@@ -834,7 +902,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         const { startDate, endDate, fullMonthEndDate, reportMonth, isCurrentMonth } = getMonthlyReportPeriod(month as string);
 
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
-        const [studentResult, logsResult] = await Promise.all([
+        const [studentResult, logsResult, lifetimeNewLogsResult] = await Promise.all([
             db.query(
                 `SELECT s.adm_no,
                         COALESCE(sys.school_standard, s.standard) AS attendance_standard,
@@ -856,6 +924,15 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
                  WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
                    AND deleted_at IS NULL`,
                 [student_id, startDate, endDate]
+            ),
+            db.query(
+                `SELECT surah_name, start_v, end_v, entry_date
+                 FROM hifz_logs
+                 WHERE student_id = $1
+                   AND mode = 'New Verses'
+                   AND deleted_at IS NULL
+                 ORDER BY entry_date ASC, created_at ASC`,
+                [student_id]
             ),
         ]);
 
@@ -890,12 +967,20 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
             overrideClassDays
         );
 
-        const isHafiz = studentResult.rows[0]?.hifz_stage === 'HAFIZ_REVISION';
+        const priorNewLogs = lifetimeNewLogsResult.rows.filter(
+            (log: any) => toDateKey(log.entry_date) < startDate,
+        );
+        const isHafiz = countCompletedJuz(priorNewLogs) >= 30;
+        const firstJuzCompletionDate = getFirstJuzCompletionDate(lifetimeNewLogsResult.rows);
         const calculations = calculateHifzReportPoints(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
             attendedClasses: attendanceSummary?.attendedClasses || 0,
             countedClasses: targetSummary?.effectiveClasses || 0,
             isHafiz,
+            firstJuzCompletionDate,
+            periodStartDate: startDate,
+            periodEndDate: fullMonthEndDate,
+            pointDayWeights: targetSummary?.pointDayWeights || {},
         });
 
         res.json({
@@ -944,7 +1029,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     ? [academicContext.academicYearId, mentor_id]
                     : [academicContext.academicYearId];
 
-                const [studentsResult, logsResult, priorNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+                const [studentsResult, logsResult, lifetimeNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                     db.query(
                         `SELECT s.adm_no, s.name,
                          COALESCE(sys.school_standard, s.standard) AS attendance_standard,
@@ -972,17 +1057,14 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                            AND deleted_at IS NULL`,
                         [startDate, endDate]
                     ),
-                    // Prior-month New Verses logs — used to decide whether each student
-                    // was already a Hafiz (completed 30 Juz) BEFORE this month started.
-                    // The transition month keeps the Memorizing layout; the Hafiz layout
-                    // only kicks in from the month after completion.
+                    // Lifetime New Verses logs support the first-Juz milestone and
+                    // the existing start-of-month Hafiz-stage calculation.
                     db.query(
-                        `SELECT student_id, surah_name, start_v, end_v
+                        `SELECT student_id, surah_name, start_v, end_v, entry_date
                          FROM hifz_logs
                          WHERE mode = 'New Verses'
                            AND deleted_at IS NULL
-                           AND entry_date < $1::date`,
-                        [startDate]
+                         ORDER BY entry_date ASC, created_at ASC`
                     ),
                     db.query(
                         `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
@@ -993,16 +1075,21 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     getMonthlyClassDaysSetting(reportMonth),
                 ]);
 
-                const priorNewLogsByStudent: Record<string, any[]> = {};
-                for (const log of priorNewLogsResult.rows) {
+                const lifetimeNewLogsByStudent: Record<string, any[]> = {};
+                for (const log of lifetimeNewLogsResult.rows) {
                     const key = String(log.student_id);
-                    if (!priorNewLogsByStudent[key]) priorNewLogsByStudent[key] = [];
-                    priorNewLogsByStudent[key].push(log);
+                    if (!lifetimeNewLogsByStudent[key]) lifetimeNewLogsByStudent[key] = [];
+                    lifetimeNewLogsByStudent[key].push(log);
                 }
                 const wasHafizAtStartByStudent: Record<string, boolean> = {};
+                const firstJuzCompletionByStudent: Record<string, string | null> = {};
                 for (const student of studentsResult.rows) {
-                    const priorLogs = priorNewLogsByStudent[student.adm_no] || [];
+                    const lifetimeLogs = lifetimeNewLogsByStudent[student.adm_no] || [];
+                    const priorLogs = lifetimeLogs.filter(
+                        (log: any) => toDateKey(log.entry_date) < startDate,
+                    );
                     wasHafizAtStartByStudent[student.adm_no] = countCompletedJuz(priorLogs) >= 30;
+                    firstJuzCompletionByStudent[student.adm_no] = getFirstJuzCompletionDate(lifetimeLogs);
                 }
 
                 // Two summaries: one over the elapsed range for actual attended/effective
@@ -1104,6 +1191,10 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         countedClasses: targetSummary?.effectiveClasses || 0,
                         isHafiz,
+                        firstJuzCompletionDate: firstJuzCompletionByStudent[student.adm_no],
+                        periodStartDate: startDate,
+                        periodEndDate: fullMonthEndDate,
+                        pointDayWeights: targetSummary?.pointDayWeights || {},
                     });
 
                     // Per-student Juz Revision breakdowns from this month's logs.
@@ -1286,6 +1377,7 @@ const saveMonthlyHifzEntry = async (req: Request, res: Response, existingId?: st
         }
         await enforceHifzRecordingAccess(req, log.entry_date);
         await enforceHifzStudentAccess(req, [{ studentId: log.student_id, entryDate: log.entry_date, sessionId: log.session_id }]);
+        await enforceJuzRevisionEligibility(client, [{ ...log, id: existingId || null }]);
 
         const staffId = await getStaffId(req);
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
@@ -1461,6 +1553,12 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
                 || String(existing.mode) !== mode) {
                 throw monthlyRegisterError('A Hifz entry cannot be moved to another student, date, or activity.');
             }
+        }
+        if (hasWrites) {
+            await enforceJuzRevisionEligibility(client, [
+                ...creates,
+                ...updates.map((item: any) => ({ ...item.log, id: item.id })),
+            ]);
         }
 
         let effectiveSessionId = requestedSessionId;

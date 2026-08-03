@@ -21,10 +21,15 @@ interface HifzReportPointOptions {
     attendedClasses?: number | null;
     countedClasses?: number | null;
     isHafiz?: boolean;
+    firstJuzCompletionDate?: string | null;
+    periodStartDate?: string;
+    periodEndDate?: string;
+    pointDayWeights?: Record<string, number> | null;
 }
 
-// Two scales, both summing to 70 so Memorizing and Hafiz students rank together.
-// Memorizing: New Verses 20 + Recent Rev 15 + Juz Rev 15 + Attendance 20.
+// Memorizing: New Verses 20 + Recent Rev 15 + applicable Juz Rev up to 15 + Attendance 20.
+// Before the first completed Juz, the Juz component is non-applicable; in the
+// transition period its maximum is pro-rated by eligible Hifz point days.
 // Hafiz (30 Juz complete): Juz Revision (New+Old combined) 50 + Attendance 20.
 const HIFZ_POINT_MAX = {
     newVerses: 20,
@@ -36,11 +41,6 @@ const HAFIZ_POINT_MAX = {
     juzRevision: 50,
     attendance: 20,
 } as const;
-const HIFZ_TOTAL_POINT_MAX =
-    HIFZ_POINT_MAX.newVerses +
-    HIFZ_POINT_MAX.recentRevision +
-    HIFZ_POINT_MAX.juzRevision +
-    HIFZ_POINT_MAX.attendance;
 
 export function calculateHifzReportPoints(
     logs: HifzLog[],
@@ -51,6 +51,7 @@ export function calculateHifzReportPoints(
     const roundTo2 = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
 
     const safeToISO = (dateStr: any) => {
+        if (!dateStr) return null;
         try {
             const d = new Date(dateStr);
             if (isNaN(d.getTime())) return null;
@@ -75,7 +76,7 @@ export function calculateHifzReportPoints(
         if (iso) uniqueLogDays.add(iso);
     });
     const detectedClassDays = attendanceClassDays > 0 ? attendanceClassDays : uniqueLogDays.size;
-    const totalClassDays = options?.expectedClassDaysOverride ?? detectedClassDays;
+    const totalClassDays = Math.max(0, Number(options?.expectedClassDaysOverride ?? detectedClassDays));
 
     // Attendance is scored independently of the recitation class-day scale so a
     // student with no logged classes still gets a fair 0 rather than a crash.
@@ -86,16 +87,62 @@ export function calculateHifzReportPoints(
         ? Math.min(100, (attendedClasses / countedClasses) * 100)
         : 0;
     const attendancePoints = roundTo2Early((attendancePercentage / 100) * HIFZ_POINT_MAX.attendance);
+    const isHafiz = !!options?.isHafiz;
+
+    let juzEligibleRatio = 1;
+    let juzEligiblePointDays = totalClassDays;
+    const completionDate = safeToISO(options?.firstJuzCompletionDate);
+    const periodStartDate = safeToISO(options?.periodStartDate);
+    const periodEndDate = safeToISO(options?.periodEndDate);
+
+    if (!isHafiz && options && Object.prototype.hasOwnProperty.call(options, 'firstJuzCompletionDate')) {
+        if (!completionDate) {
+            juzEligibleRatio = 0;
+        } else if (periodStartDate && completionDate < periodStartDate) {
+            juzEligibleRatio = 1;
+        } else if (periodEndDate && completionDate >= periodEndDate) {
+            juzEligibleRatio = 0;
+        } else if (periodStartDate && periodEndDate) {
+            const weightedDays = Object.entries(options.pointDayWeights || {})
+                .filter(([date, weight]) => date >= periodStartDate && date <= periodEndDate && Number(weight) > 0);
+            const totalWeight = weightedDays.reduce((sum, [, weight]) => sum + Number(weight), 0);
+            if (totalWeight > 0) {
+                const eligibleWeight = weightedDays
+                    .filter(([date]) => date > completionDate)
+                    .reduce((sum, [, weight]) => sum + Number(weight), 0);
+                juzEligibleRatio = eligibleWeight / totalWeight;
+            } else {
+                // Without effective per-date Hifz point days, do not invent a
+                // calendar-day target. The component remains non-applicable for
+                // this transition period and becomes fully applicable next period.
+                juzEligibleRatio = 0;
+            }
+        }
+    }
+
+    juzEligibleRatio = Math.min(1, Math.max(0, juzEligibleRatio));
+    juzEligiblePointDays = roundTo2Early(totalClassDays * juzEligibleRatio);
+    const juzMax = isHafiz
+        ? HAFIZ_POINT_MAX.juzRevision
+        : roundTo2Early(HIFZ_POINT_MAX.juzRevision * juzEligibleRatio);
+    const totalMax = isHafiz
+        ? HAFIZ_POINT_MAX.juzRevision + HIFZ_POINT_MAX.attendance
+        : HIFZ_POINT_MAX.newVerses + HIFZ_POINT_MAX.recentRevision + juzMax + HIFZ_POINT_MAX.attendance;
 
     if (totalClassDays === 0) {
         const zeroTotal = attendancePoints;
-        const zeroPct = roundTo2Early((zeroTotal / HIFZ_TOTAL_POINT_MAX) * 100);
+        const zeroPct = totalMax > 0 ? roundTo2Early((zeroTotal / totalMax) * 100) : 0;
         return {
             detectedClassDays,
             totalClassDays: 0,
             newVersePoints: 0,
             recentRevisionPoints: 0,
             juzPoints: 0,
+            juzMax,
+            totalMax,
+            juzEligibleRatio: roundTo2Early(juzEligibleRatio),
+            juzEligiblePointDays,
+            firstJuzCompletionDate: completionDate,
             attendancePoints,
             attendancePercentage: roundTo2Early(attendancePercentage),
             totalPoints: zeroTotal,
@@ -108,8 +155,6 @@ export function calculateHifzReportPoints(
     // supplied by the caller via expectedClassDaysOverride. Students climb toward
     // a fixed monthly target instead of a rolling one, so scores go up as they
     // recite and only shrink when a class is cancelled.
-    const isHafiz = !!options?.isHafiz;
-
     // Juz Revision sum — must mirror what the report table shows in the
     // "Juz Revision" columns, otherwise grade and columns disagree.
     // - Memorizing display sums plain "Juz Revision" + "(New)" + "(Old)" logs.
@@ -122,7 +167,12 @@ export function calculateHifzReportPoints(
         ? ['Juz Revision (New)', 'Juz Revision (Old)']
         : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
     let totalJuzRecited = 0;
-    logs.filter(l => l.mode && juzRevisionModes.includes(l.mode)).forEach(log => {
+    logs.filter(log => {
+        if (!log.mode || !juzRevisionModes.includes(log.mode)) return false;
+        if (isHafiz) return true;
+        const entryDate = safeToISO(log.entry_date);
+        return !!completionDate && !!entryDate && entryDate > completionDate;
+    }).forEach(log => {
         const portion = log.juz_portion;
         if (portion === 'Full') totalJuzRecited += 1;
         else if (portion?.includes('Half')) totalJuzRecited += 0.5;
@@ -163,16 +213,16 @@ export function calculateHifzReportPoints(
             : 0;
         recentRevisionPoints = roundTo2(Math.min(recentRevisionPoints, HIFZ_POINT_MAX.recentRevision));
 
-        const expectedJuz = totalClassDays * 0.5;
+        const expectedJuz = juzEligiblePointDays * 0.5;
         juzPoints = expectedJuz > 0
-            ? (totalJuzRecited / expectedJuz) * HIFZ_POINT_MAX.juzRevision
+            ? (totalJuzRecited / expectedJuz) * juzMax
             : 0;
-        juzPoints = roundTo2(Math.min(juzPoints, HIFZ_POINT_MAX.juzRevision));
+        juzPoints = roundTo2(Math.min(juzPoints, juzMax));
     }
 
-    // Both scales sum to 70 so ranking is comparable across Memorizing and Hafiz.
+    // Percentage, not raw points, is the comparable value when the Juz maximum is dynamic.
     const totalPoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints + attendancePoints);
-    const totalPercentage = roundTo2((totalPoints / HIFZ_TOTAL_POINT_MAX) * 100);
+    const totalPercentage = totalMax > 0 ? roundTo2((totalPoints / totalMax) * 100) : 0;
 
     return {
         detectedClassDays,
@@ -180,6 +230,11 @@ export function calculateHifzReportPoints(
         newVersePoints,
         recentRevisionPoints,
         juzPoints,
+        juzMax,
+        totalMax: roundTo2(totalMax),
+        juzEligibleRatio: roundTo2(juzEligibleRatio),
+        juzEligiblePointDays,
+        firstJuzCompletionDate: completionDate,
         attendancePoints,
         attendancePercentage: roundTo2(attendancePercentage),
         totalPoints,

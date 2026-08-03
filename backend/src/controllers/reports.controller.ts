@@ -9,7 +9,7 @@ import { getAcademicYearBounds, resolveStudentReportWindow } from '../utils/repo
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
 import { getStaffId, isTeachingStaffRole } from '../utils/staff.utils';
 import { calculateCoveredPagesFromLogs } from '../utils/quran-data';
-import { countCompletedJuz } from '../utils/quran-juz';
+import { countCompletedJuz, getFirstJuzCompletionDate } from '../utils/quran-juz';
 
 const INDIA_TIMEZONE = 'Asia/Kolkata';
 
@@ -766,6 +766,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             return key < reportWindow.effective_start_date;
         });
         const isHafiz = countCompletedJuz(priorNewVerseLogs) >= 30;
+        const firstJuzCompletionDate = getFirstJuzCompletionDate(lifetimeLogsRes.rows);
         const hifzStage: 'MEMORIZING' | 'HAFIZ_REVISION' = isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
         const performance = calculateHifzReportPoints(periodLogs as any, [], {
             expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
@@ -774,6 +775,10 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             attendedClasses: attendanceSummary?.attendedClasses || 0,
             countedClasses: attendanceSummary?.effectiveClasses || 0,
             isHafiz,
+            firstJuzCompletionDate,
+            periodStartDate: reportWindow.effective_start_date,
+            periodEndDate: reportWindow.effective_end_date,
+            pointDayWeights: attendanceSummary?.pointDayWeights || {},
         });
 
         // Portion → Juz-value helper (Full = 1, Half = 0.5, Q1-Q4 = 0.25 each).

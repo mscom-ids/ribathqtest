@@ -9,7 +9,7 @@ import {
 } from '../utils/attendance-report';
 import { calculateHifzReportPoints } from '../utils/hifz-calculator';
 import { calculatePages, getSurahId, calculateCoveredPagesFromLogs } from '../utils/quran-data';
-import { countCompletedJuz } from '../utils/quran-juz';
+import { countCompletedJuz, getFirstJuzCompletionDate } from '../utils/quran-juz';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -577,12 +577,17 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             }
         );
         const isHafiz = countCompletedJuz(priorMonthNewLogs) >= 30;
+        const firstJuzCompletionDate = getFirstJuzCompletionDate(lifetimeNewLogsResult.rows);
 
         const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
             expectedClassDaysOverride: hifzMonthTarget?.pointClassDays || hifzMonthTarget?.effectiveClasses || null,
             attendedClasses: hifzAttendance?.attendedClasses || 0,
             countedClasses: hifzMonthTarget?.effectiveClasses || 0,
             isHafiz,
+            firstJuzCompletionDate,
+            periodStartDate: fullMonth.startDate,
+            periodEndDate: fullMonth.endDate,
+            pointDayWeights: hifzMonthTarget?.pointDayWeights || {},
         });
 
         const hifzReport = {
