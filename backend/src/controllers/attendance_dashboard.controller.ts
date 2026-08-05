@@ -1249,6 +1249,209 @@ export const copyScheduleDay = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Edit a weekly schedule in place while preserving every attendance mark.
+ *
+ * All fields (`start_time`, `end_time`, `name`, `group_ids`) update on the
+ * existing row. Attendance marks live in a separate table keyed by
+ * `(student_id, schedule_id, date)` — nothing about a time or roster edit
+ * touches them, so historical attendance is naturally preserved.
+ *
+ * Trade-off: reports from past dates render with the current time (not the
+ * time that was in effect on that date). This matches how schools track
+ * "the class" as a single ongoing entity rather than versioned per edit.
+ *
+ * The endpoint issues only the writes that actually changed and runs in a
+ * single transaction.
+ */
+export const updateSchedule = async (req: Request, res: Response) => {
+    const client = await db.getClient();
+    try {
+        const { id } = req.params;
+        const {
+            start_time,
+            end_time,
+            name,
+            group_ids,
+        } = req.body || {};
+
+        const existingRes = await client.query(
+            `SELECT a.id, a.academic_year_id, a.class_id, a.class_type, a.name, a.standards,
+                    a.day_of_week, a.start_time, a.end_time, a.duration_mins, a.effective_from,
+                    a.effective_until, a.mentor_id, a.subject_id, a.is_deleted,
+                    COALESCE(array_agg(asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uuid[]) AS group_ids
+             FROM attendance_schedules a
+             LEFT JOIN attendance_schedule_groups asg ON asg.schedule_id = a.id
+             WHERE a.id = $1
+             GROUP BY a.id`,
+            [id],
+        );
+        if (existingRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Schedule not found.' });
+        }
+        const existing = existingRes.rows[0];
+        if (existing.is_deleted) {
+            return res.status(400).json({ success: false, error: 'This class is already deactivated.' });
+        }
+
+        // Normalise inputs — undefined means "no change".
+        const nextStart = start_time !== undefined ? String(start_time) : String(existing.start_time);
+        const nextEnd = end_time !== undefined ? String(end_time) : String(existing.end_time);
+        const nextName = name !== undefined ? String(name).trim() : String(existing.name || '').trim();
+        const nextGroupIds = Array.isArray(group_ids)
+            ? Array.from(new Set(group_ids.map((g: unknown) => String(g || '').trim()).filter(Boolean)))
+            : (existing.group_ids || []).map(String);
+
+        if (!nextStart || !nextEnd || nextStart >= nextEnd) {
+            return res.status(400).json({ success: false, error: 'End time must be after start time.' });
+        }
+        if (!nextName) {
+            return res.status(400).json({ success: false, error: 'Class name cannot be empty.' });
+        }
+
+        // Postgres returns TIME as HH:MM:SS; the client sends HH:MM. Compare on HH:MM.
+        const oldStartHm = String(existing.start_time).slice(0, 5);
+        const oldEndHm = String(existing.end_time).slice(0, 5);
+        const timeChanged = nextStart.slice(0, 5) !== oldStartHm || nextEnd.slice(0, 5) !== oldEndHm;
+
+        const existingGroupSet = new Set((existing.group_ids || []).map(String));
+        const nextGroupSet = new Set(nextGroupIds);
+        const groupsChanged = existingGroupSet.size !== nextGroupSet.size
+            || Array.from(nextGroupSet).some(gid => !existingGroupSet.has(gid));
+        const nameChanged = nextName !== String(existing.name || '').trim();
+
+        // If the group_ids differ, validate them (department + mentor consistency).
+        let validatedGroups: any[] = [];
+        if (groupsChanged) {
+            if (nextGroupIds.length === 0) {
+                return res.status(400).json({ success: false, error: 'At least one division must remain linked to the class.' });
+            }
+            const groupRes = await client.query(
+                `SELECT id, academic_year_id, department, standard, division, mentor_id
+                 FROM attendance_groups
+                 WHERE id = ANY($1::uuid[])
+                   AND academic_year_id = $2`,
+                [nextGroupIds, existing.academic_year_id],
+            );
+            validatedGroups = groupRes.rows;
+            if (validatedGroups.length !== nextGroupIds.length) {
+                return res.status(400).json({ success: false, error: 'One or more divisions are invalid for this academic year.' });
+            }
+            const departments = new Set(validatedGroups.map(g => g.department));
+            if (departments.size !== 1 || departments.values().next().value !== String(existing.class_type)) {
+                return res.status(400).json({ success: false, error: 'All divisions must stay in the same department as the class.' });
+            }
+            const groupMentorIds = Array.from(new Set(validatedGroups.map(g => g.mentor_id).filter(Boolean)));
+            if (groupMentorIds.length !== 1 || (existing.mentor_id && groupMentorIds[0] !== existing.mentor_id)) {
+                return res.status(400).json({ success: false, error: 'All divisions must share the class\'s current teaching mentor.' });
+            }
+        }
+
+        // Reject a time collision with a DIFFERENT class on the same day/mentor.
+        if (timeChanged) {
+            const conflictRes = await client.query(
+                `SELECT a.id, a.name
+                 FROM attendance_schedules a
+                 WHERE a.day_of_week = $1
+                   AND a.id <> $2
+                   AND (a.is_deleted = false OR a.is_deleted IS NULL)
+                   AND (a.effective_until IS NULL OR a.effective_until >= CURRENT_DATE)
+                   AND ($3::uuid IS NULL OR a.academic_year_id = $3::uuid)
+                   AND a.mentor_id = $4
+                   AND $5::time < a.end_time
+                   AND $6::time > a.start_time`,
+                [existing.day_of_week, id, existing.academic_year_id, existing.mentor_id, nextStart, nextEnd],
+            );
+            if (conflictRes.rows.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    error: 'Time conflict with ' + (conflictRes.rows[0].name || 'another class') + ' on the same day.',
+                });
+            }
+        }
+
+        await client.query('BEGIN');
+
+        // ── In-place update: touch only the fields that changed. Attendance
+        // marks reference schedule_id + student_id + date, so no history is
+        // affected by editing time, name, or roster links.
+        if (timeChanged) {
+            const [sh, sm] = nextStart.split(':').map(Number);
+            const [eh, em] = nextEnd.split(':').map(Number);
+            const newDuration = (eh * 60 + em) - (sh * 60 + sm);
+            await client.query(
+                `UPDATE attendance_schedules
+                 SET start_time = $1, end_time = $2, duration_mins = $3
+                 WHERE id = $4`,
+                [nextStart, nextEnd, newDuration, id],
+            );
+        }
+
+        if (nameChanged) {
+            await client.query(
+                `UPDATE attendance_schedules SET name = $1 WHERE id = $2`,
+                [nextName, id],
+            );
+            if (existing.subject_id) {
+                // Rename the linked subject too so future references match.
+                await client.query(
+                    `UPDATE attendance_subjects SET name = $1 WHERE id = $2`,
+                    [nextName, existing.subject_id],
+                );
+            }
+        }
+
+        if (groupsChanged) {
+            const toRemove = Array.from(existingGroupSet).filter(gid => !nextGroupSet.has(gid));
+            const toAdd = Array.from(nextGroupSet).filter(gid => !existingGroupSet.has(gid));
+            if (toRemove.length > 0) {
+                await client.query(
+                    `DELETE FROM attendance_schedule_groups
+                     WHERE schedule_id = $1 AND group_id = ANY($2::uuid[])`,
+                    [id, toRemove],
+                );
+            }
+            if (toAdd.length > 0) {
+                await client.query(
+                    `INSERT INTO attendance_schedule_groups
+                        (schedule_id, group_id, academic_year_id, department)
+                     SELECT $1, id, academic_year_id, department
+                     FROM attendance_groups
+                     WHERE id = ANY($2::uuid[])
+                     ON CONFLICT (schedule_id, group_id) DO NOTHING`,
+                    [id, toAdd],
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        const anyChange = timeChanged || nameChanged || groupsChanged;
+        if (anyChange) {
+            invalidateCacheByPrefix('attendance:');
+            invalidateCacheByPrefix('reports:management-');
+        }
+        return res.json({
+            success: true,
+            message: anyChange
+                ? 'Class updated. All past attendance is preserved.'
+                : 'No changes.',
+            data: {
+                id,
+                name: nextName,
+                start_time: nextStart,
+                end_time: nextEnd,
+                group_ids: nextGroupIds,
+            },
+        });
+    } catch (err: any) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        const status = err?.code === '22P02' ? 400 : 500;
+        return res.status(status).json({ success: false, error: err.message });
+    } finally {
+        client.release();
+    }
+};
+
 export const deleteSchedule = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;

@@ -302,9 +302,12 @@ function SurahCombobox({
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
+      {/* Portal to document.body (Radix default) — do NOT pass `container`.
+          Portalling inside the parent DialogContent clips the popover when the
+          trigger sits near the bottom of the dialog (dialog uses overflow-hidden
+          and a bounded max-h). The higher z-index below keeps it above the dialog. */}
       <PopoverContent
-        container={portalContainer ?? undefined}
-        className="z-[100] w-[min(360px,calc(100vw-2rem))] p-0"
+        className="z-[200] w-[min(360px,calc(100vw-2rem))] p-0"
         align="start"
       >
         <Command

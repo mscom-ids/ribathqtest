@@ -10,6 +10,7 @@ import {
     Copy,
     ExternalLink,
     Loader2,
+    Pencil,
     Plus,
     Square,
     Trash2,
@@ -152,6 +153,17 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     const [copyEffectiveFrom, setCopyEffectiveFrom] = useState(localDateKey())
     const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([])
     const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
+    // ── Edit dialog state — reuses the roster picker but only allows changing
+    // time, class name, and division links. All other fields (weekday, mentor,
+    // subject) are pinned to the existing schedule so past attendance stays
+    // resolvable against the original schedule row.
+    const [editOpen, setEditOpen] = useState(false)
+    const [editSaving, setEditSaving] = useState(false)
+    const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+    const [editStartTime, setEditStartTime] = useState("06:30")
+    const [editEndTime, setEditEndTime] = useState("08:00")
+    const [editName, setEditName] = useState("")
+    const [editGroupIds, setEditGroupIds] = useState<string[]>([])
 
     const loadSubjects = useCallback(async () => {
         if (!academicYearId) return
@@ -375,6 +387,71 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
         }
     }
 
+    function openEdit(schedule: Schedule) {
+        setEditingSchedule(schedule)
+        setEditName(schedule.name || departmentLabel(department) + " Class")
+        // Times arrive as HH:MM:SS from Postgres; the <input type="time"> wants HH:MM.
+        setEditStartTime(String(schedule.start_time || "").slice(0, 5))
+        setEditEndTime(String(schedule.end_time || "").slice(0, 5))
+        setEditGroupIds(parseGroups(schedule.attendance_groups).map(g => String(g.id)))
+        setEditOpen(true)
+    }
+
+    function toggleEditGroup(groupId: string) {
+        setEditGroupIds(current => current.includes(groupId)
+            ? current.filter(id => id !== groupId)
+            : [...current, groupId])
+    }
+
+    function toggleEditStandard(standard: string) {
+        const standardGroupIds = rosterOptions
+            .filter(group => group.standard === standard)
+            .map(group => group.id)
+        const allSelected = standardGroupIds.every(id => editGroupIds.includes(id))
+        setEditGroupIds(current => allSelected
+            ? current.filter(id => !standardGroupIds.includes(id))
+            : Array.from(new Set([...current, ...standardGroupIds])),
+        )
+    }
+
+    async function saveEditSchedule() {
+        if (!editingSchedule) return
+        if (!editStartTime || !editEndTime || editStartTime >= editEndTime) {
+            toast({ title: "Invalid time", description: "End time must be after start time.", variant: "destructive" })
+            return
+        }
+        if (!editName.trim()) {
+            toast({ title: "Name required", description: "Class name cannot be empty.", variant: "destructive" })
+            return
+        }
+        if (editGroupIds.length === 0) {
+            toast({ title: "Select at least one division", description: "At least one roster must stay linked.", variant: "destructive" })
+            return
+        }
+        setEditSaving(true)
+        try {
+            const response = await api.patch("/attendance/schedules/" + editingSchedule.id, {
+                start_time: editStartTime,
+                end_time: editEndTime,
+                name: editName.trim(),
+                group_ids: editGroupIds,
+            })
+            invalidateCache("/attendance/schedules")
+            setEditOpen(false)
+            setEditingSchedule(null)
+            await loadData()
+            await loadSubjects()
+            toast({
+                title: "Class updated",
+                description: response.data?.message || "All past attendance is preserved.",
+            })
+        } catch (error) {
+            toast({ title: "Could not update class", description: errorMessage(error), variant: "destructive" })
+        } finally {
+            setEditSaving(false)
+        }
+    }
+
     async function removeSchedule(schedule: Schedule) {
         if (!window.confirm("Deactivate " + (schedule.name || "this class") + "? Past attendance will be preserved.")) return
         try {
@@ -572,14 +649,24 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                                                                 <Clock3 className="h-3.5 w-3.5 text-blue-600" />
                                                                 {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
                                                             </p>
-                                                            <button
-                                                                type="button"
-                                                                title="Deactivate class"
-                                                                onClick={() => void removeSchedule(schedule)}
-                                                                className="shrink-0 text-slate-300 transition hover:text-rose-500"
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
+                                                            <div className="flex shrink-0 items-center gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    title="Edit class time or divisions"
+                                                                    onClick={() => openEdit(schedule)}
+                                                                    className="text-slate-300 transition hover:text-blue-600"
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    title="Deactivate class"
+                                                                    onClick={() => void removeSchedule(schedule)}
+                                                                    className="text-slate-300 transition hover:text-rose-500"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <p className="mt-2 text-sm font-black text-slate-900">
                                                             {schedule.name || departmentLabel(department) + " Class"}
@@ -793,6 +880,136 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
                         >
                             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Create class
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) setEditingSchedule(null) }}>
+                <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto p-0">
+                    <DialogHeader className="border-b border-slate-100 px-6 py-5">
+                        <DialogTitle>Edit weekly class</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-5 px-6 py-5">
+                        <div className="border-l-2 border-blue-400 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+                            Past attendance is always preserved. Changes apply immediately to this class.
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-slate-50 px-4 py-3 text-sm">
+                            <span>
+                                <span className="text-slate-500">Weekday:</span>{" "}
+                                <strong>{DAYS.find(d => d.value === String(editingSchedule?.day_of_week))?.label || "—"}</strong>
+                            </span>
+                            <span>
+                                <span className="text-slate-500">Mentor:</span>{" "}
+                                <strong>{editingSchedule?.mentor_name || selectedMentor?.name || "—"}</strong>
+                            </span>
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-xs font-bold text-slate-600">Class name</p>
+                            <Input
+                                value={editName}
+                                onChange={event => setEditName(event.target.value)}
+                                placeholder="Example: Hifz Class 1"
+                            />
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <p className="mb-2 text-xs font-bold text-slate-600">Start time</p>
+                                <Input
+                                    type="time"
+                                    value={editStartTime}
+                                    onChange={event => setEditStartTime(event.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <p className="mb-2 text-xs font-bold text-slate-600">End time</p>
+                                <Input
+                                    type="time"
+                                    value={editEndTime}
+                                    onChange={event => setEditEndTime(event.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-bold text-slate-600">Classes &amp; divisions</p>
+                                    <p className="mt-0.5 text-xs text-slate-400">
+                                        Add or remove divisions. Past attendance for removed divisions stays queryable.
+                                    </p>
+                                </div>
+                                <span className="shrink-0 text-xs font-bold text-blue-600">{editGroupIds.length} selected</span>
+                            </div>
+
+                            <div className="max-h-64 overflow-y-auto border border-slate-200">
+                                {rostersByStandard.map(({ standard, rosters }) => {
+                                    const allSelected = rosters.every(roster => editGroupIds.includes(roster.id))
+                                    return (
+                                        <div key={standard} className="border-b border-slate-100 last:border-b-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleEditStandard(standard)}
+                                                className="flex w-full items-center justify-between bg-slate-50 px-4 py-2.5 text-left"
+                                            >
+                                                <span className="text-sm font-black text-slate-800">{standard} Standard</span>
+                                                <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                                                    {allSelected
+                                                        ? <CheckSquare2 className="h-4 w-4 text-blue-600" />
+                                                        : <Square className="h-4 w-4 text-slate-300" />}
+                                                    All
+                                                </span>
+                                            </button>
+                                            <div className="grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-2">
+                                                {rosters.map(roster => {
+                                                    const selected = editGroupIds.includes(roster.id)
+                                                    return (
+                                                        <button
+                                                            key={roster.id}
+                                                            type="button"
+                                                            aria-pressed={selected}
+                                                            onClick={() => toggleEditGroup(roster.id)}
+                                                            className={
+                                                                "flex items-center gap-3 bg-white px-4 py-3 text-left transition " +
+                                                                (selected ? "text-blue-700" : "text-slate-700 hover:bg-slate-50")
+                                                            }
+                                                        >
+                                                            {selected
+                                                                ? <CheckSquare2 className="h-5 w-5 shrink-0 text-blue-600" />
+                                                                : <Square className="h-5 w-5 shrink-0 text-slate-300" />}
+                                                            <span>
+                                                                <span className="block text-sm font-bold">Division {roster.division}</span>
+                                                                <span className="text-xs text-slate-400">{roster.student_count} students</span>
+                                                            </span>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+
+                                {rostersByStandard.length === 0 && (
+                                    <p className="px-4 py-10 text-center text-sm text-slate-400">
+                                        This mentor has no {departmentLabel(department)} class/division rosters.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="border-t border-slate-100 px-6 py-4">
+                        <Button variant="outline" onClick={() => { setEditOpen(false); setEditingSchedule(null) }}>Cancel</Button>
+                        <Button
+                            onClick={() => void saveEditSchedule()}
+                            disabled={editSaving || !editName.trim() || editGroupIds.length === 0}
+                        >
+                            {editSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Save changes
                         </Button>
                     </DialogFooter>
                 </DialogContent>
