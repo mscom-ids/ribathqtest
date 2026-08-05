@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
@@ -460,60 +460,123 @@ export default function StaffDashboard() {
     // this component) so the ranking list doesn't push the student list down.
     const topPerformersContent = (
         <>
-            <div className="flex items-center justify-between mb-4 gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                    <h3 className="font-semibold text-sm dark:text-white shrink-0">Top Performers</h3>
-                    <Award className="h-4 w-4 text-amber-500 shrink-0" />
+            <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
+                <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
+                <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
+                <div className="relative flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                            <Award className="h-5 w-5 text-amber-300" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="truncate text-base font-bold">Top Performers</h3>
+                            <p className="text-[11px] text-indigo-100">Monthly leaderboard</p>
+                        </div>
+                    </div>
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        aria-label="Select month"
+                        className="min-w-[100px] cursor-pointer rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-xs font-medium text-white outline-none backdrop-blur-sm transition hover:bg-white/20 focus:ring-2 focus:ring-white/60 [&>option]:text-slate-900"
+                    >
+                        {monthOptions.map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
                 </div>
-                <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    aria-label="Select month"
-                    className="text-xs rounded-md border border-slate-200 dark:border-gray-700 bg-white dark:bg-[#0f172a] text-slate-700 dark:text-gray-200 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                    {monthOptions.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                </select>
             </div>
+
             {topPerformersLoading ? (
-                <div className="flex items-center justify-center py-6 text-sm text-slate-400 gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-slate-800">
+                        <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                    </div>
                     Loading monthly points...
                 </div>
             ) : topPerformersError ? (
-                <div className="text-center py-6 text-sm text-red-500">
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-8 text-center text-sm text-red-500 dark:border-red-900/40 dark:bg-red-950/20">
                     {topPerformersError}
                 </div>
             ) : monthlyTopPerformers.length === 0 ? (
-                <div className="text-center py-6 text-sm text-slate-400">
-                    No points recorded for this month.
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
+                    <Award className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No points recorded</p>
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Try selecting another month.</p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {monthlyTopPerformers.map((stu, i) => (
-                        <div key={stu.adm_no} className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
-                                <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center font-bold text-xs
-                                    ${i === 0 ? "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400" :
-                                        i === 1 ? "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300" :
-                                            "bg-orange-50 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400"}`}
-                                >
-                                    #{i + 1}
+                    {monthlyTopPerformers[0] && (() => {
+                        const winner = monthlyTopPerformers[0]
+                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / 70) * 100))
+                        return (
+                            <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-4 shadow-sm dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/5 dark:to-slate-900">
+                                <div className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-amber-300/15" />
+                                <div className="relative flex items-center gap-3">
+                                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/25">
+                                        <Award className="h-6 w-6" />
+                                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-50 bg-white text-[9px] font-black text-amber-600 dark:border-slate-900 dark:bg-slate-800">1</span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Champion</span>
+                                        <p className="mt-1 truncate text-sm font-bold text-slate-900 dark:text-white" title={winner.name}>{winner.name}</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{winner.standard}</p>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                        <p className="text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{winner.totalPoints.toFixed(2)}</p>
+                                        <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">points</p>
+                                    </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm text-slate-900 dark:text-white truncate" title={stu.name}>{stu.name}</p>
-                                    <p className="text-[10px] text-slate-500 dark:text-gray-400">{stu.standard}</p>
+                                <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-slate-800">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: String(progress) + "%" }} />
                                 </div>
                             </div>
-                            <div className="text-right shrink-0">
-                                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                    {stu.totalPoints.toFixed(2)}
-                                </p>
-                                <p className="text-[10px] text-slate-400">points</p>
+                        )
+                    })()}
+
+                    {monthlyTopPerformers.length > 1 && (
+                        <div>
+                            <div className="mb-2 flex items-center justify-between px-1">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Leaderboard</p>
+                                <p className="text-[10px] text-slate-400">Score</p>
+                            </div>
+                            <div className="space-y-1.5">
+                                {monthlyTopPerformers.slice(1).map((stu, index) => {
+                                    const rank = index + 2
+                                    const medalClasses = rank === 2
+                                        ? "bg-slate-200 text-slate-600 ring-slate-300/70 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600"
+                                        : rank === 3
+                                            ? "bg-orange-100 text-orange-600 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/20"
+                                            : "bg-slate-100 text-slate-500 ring-transparent dark:bg-slate-800 dark:text-slate-400"
+                                    return (
+                                        <div
+                                            key={stu.adm_no}
+                                            className={"group flex items-center gap-3 rounded-xl border px-2.5 py-2.5 transition-all " + (rank <= 3
+                                                ? "border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                                                : "border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60")}
+                                        >
+                                            <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[10px] font-black ring-1 " + medalClasses}>
+                                                #{rank}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" title={stu.name}>{stu.name}</p>
+                                                <p className="mt-0.5 text-[10px] text-slate-400">{stu.standard}</p>
+                                            </div>
+                                            <div className={"shrink-0 rounded-lg px-2.5 py-1.5 text-right " + (rank <= 3
+                                                ? "bg-indigo-50 dark:bg-indigo-500/10"
+                                                : "bg-emerald-50 dark:bg-emerald-500/10")}>
+                                                <p className={"text-xs font-bold tabular-nums " + (rank <= 3
+                                                    ? "text-indigo-600 dark:text-indigo-400"
+                                                    : "text-emerald-600 dark:text-emerald-400")}>
+                                                    {stu.totalPoints.toFixed(2)}
+                                                </p>
+                                                <p className="text-[8px] uppercase tracking-wide text-slate-400">pts</p>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </div>
-                    ))}
+                    )}
                 </div>
             )}
         </>
@@ -522,12 +585,12 @@ export default function StaffDashboard() {
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
 
-            {/* ── Welcome Banner — flush against the sticky top bar on mobile
-                 (no gap, square top corners) so it reads as one continuous
-                 header instead of a separate floating card underneath a plain
-                 white bar. Reverts to a normal inset, fully-rounded card at
-                 the lg breakpoint, matching the desktop layout as before. ── */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-xl rounded-b-2xl lg:rounded-2xl lg:mx-6 lg:mt-6">
+            {/* ── Welcome Banner — sits close under the top bar on mobile (small
+                 inset, still fully rounded) so it reads as a natural
+                 continuation of the header rather than a separate card with a
+                 big gap, without going flush/square (that read as an abrupt
+                 slab). Reverts to the normal desktop inset at the lg breakpoint. ── */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
                 <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5" />
                 <div className="absolute -bottom-12 -left-6 w-40 h-40 rounded-full bg-white/5" />
                 <div className="absolute top-4 right-24 w-20 h-20 rounded-full bg-white/5" />
@@ -938,12 +1001,10 @@ export default function StaffDashboard() {
                         </button>
                     </SheetTrigger>
                     <SheetContent side="right" className="p-0 flex flex-col w-[85vw] sm:max-w-sm">
-                        <SheetHeader className="border-b border-slate-100 dark:border-gray-800">
-                            <SheetTitle className="flex items-center gap-2 text-base">
-                                <Award className="h-4 w-4 text-amber-500" /> Top Performers
-                            </SheetTitle>
-                        </SheetHeader>
-                        <div className="flex-1 overflow-y-auto px-4 pb-6">
+                        {/* Visually hidden — the visible heading lives inside
+                            topPerformersContent itself, so it isn't duplicated. */}
+                        <SheetTitle className="sr-only">Top Performers</SheetTitle>
+                        <div className="flex-1 overflow-y-auto px-5 pt-12 pb-6">
                             {topPerformersContent}
                         </div>
                     </SheetContent>
