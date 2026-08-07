@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 10;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 11;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);

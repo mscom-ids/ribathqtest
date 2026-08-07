@@ -277,13 +277,19 @@ async function computeStudentAttendanceSummaries(
              GROUP BY a.id`,
             params
         ),
+        // Fetch ALL memberships (current + historical) that were active at any point
+        // during the report period so that a student who changed groups mid-period
+        // gets class days counted from both their old and new schedule.
         db.query(
-            `SELECT gs.student_id, gs.group_id
+            `SELECT gs.student_id, gs.group_id,
+                    gs.effective_from, gs.effective_until
              FROM attendance_group_students gs
              JOIN attendance_groups g ON g.id = gs.group_id
              WHERE gs.student_id = ANY($1::text[])
-               AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)`,
-            [students.map(student => student.adm_no), academicYearId || null]
+               AND ($2::uuid IS NULL OR g.academic_year_id = $2::uuid)
+               AND gs.effective_from <= $3::date
+               AND (gs.effective_until IS NULL OR gs.effective_until >= $4::date)`,
+            [students.map(student => student.adm_no), academicYearId || null, endDate, startDate]
         ),
         db.query(
             `SELECT schedule_id, date, cancelled_standards
@@ -324,16 +330,32 @@ async function computeStudentAttendanceSummaries(
         marksByStudentScheduleDate.set(`${mark.student_id}|${mark.schedule_id}|${toDateKey(mark.date)}`, mark);
     });
 
-    const groupIdsByStudent = new Map<string, string[]>();
+    // Per-student group membership history for the period.
+    // Each entry carries the date range so we can resolve the correct
+    // group on a given date (handles mid-period group changes).
+    type GroupMembership = { group_id: string; from: string; until: string | null };
+    const groupHistoryByStudent = new Map<string, GroupMembership[]>();
     studentGroupsRes.rows.forEach((row: any) => {
-        const current = groupIdsByStudent.get(row.student_id) || [];
-        current.push(String(row.group_id));
-        groupIdsByStudent.set(row.student_id, current);
+        const list = groupHistoryByStudent.get(row.student_id) || [];
+        list.push({
+            group_id: String(row.group_id),
+            from: toDateKey(row.effective_from),
+            until: row.effective_until ? toDateKey(row.effective_until) : null,
+        });
+        groupHistoryByStudent.set(row.student_id, list);
     });
 
     const studentById = new Map(students.map(student => [
         student.adm_no,
-        { ...student, group_ids: student.group_ids || groupIdsByStudent.get(student.adm_no) || [] },
+        {
+            ...student,
+            // group_memberships carries date-ranged history; group_ids is kept as
+            // a flat list for the standards-fallback path in scheduleAppliesToStudent.
+            group_memberships: groupHistoryByStudent.get(student.adm_no) || [],
+            get group_ids() {
+                return (groupHistoryByStudent.get(student.adm_no) || []).map(m => m.group_id);
+            },
+        },
     ]));
     const effectiveSessionsByStudentDate = new Map<string, Map<string, number>>();
     const sessionByStudentSchedule = new Map<string, AttendanceSessionSummary>();
@@ -348,7 +370,28 @@ async function computeStudentAttendanceSummaries(
             for (const [studentId, student] of studentById) {
                 if (student.report_start_date && dateStr < student.report_start_date) continue;
                 if (student.report_end_date && dateStr > student.report_end_date) continue;
-                if (!scheduleAppliesToStudent(schedule, student)) continue;
+                // Date-aware group check: resolve which group(s) the student
+                // belonged to ON THIS SPECIFIC DATE and only match schedules for
+                // those groups. This correctly handles mid-period group changes
+                // (e.g. moved from Division A to Division D on Aug 5: before Aug 5
+                // Division A schedule counts, from Aug 5 Division D schedule counts).
+                const scheduleGroupIds = (schedule.group_ids || []).map(String).filter(Boolean);
+                if (scheduleGroupIds.length > 0) {
+                    const activeGroupIds = (student.group_memberships || [])
+                        .filter((m: GroupMembership) => m.from <= dateStr && (m.until === null || m.until >= dateStr))
+                        .map((m: GroupMembership) => m.group_id);
+                    const matchesGroup = activeGroupIds.some((id: string) => scheduleGroupIds.includes(id));
+                    if (!matchesGroup) {
+                        // Fall back: if the student has an actual mark here (legacy data
+                        // or groups added before history tracking), still count the session.
+                        const hasMark = marksByStudentScheduleDate.has(`${studentId}|${schedule.id}|${dateStr}`);
+                        if (!hasMark) continue;
+                    }
+                } else if (!scheduleAppliesToStudent(schedule, student)) {
+                    // Schedule uses standards (not groups) — fall back to existing logic.
+                    const hasMark = marksByStudentScheduleDate.has(`${studentId}|${schedule.id}|${dateStr}`);
+                    if (!hasMark) continue;
+                }
 
                 const summary = summaries.get(studentId) || emptySummary();
                 const sessionKey = String(schedule.id);

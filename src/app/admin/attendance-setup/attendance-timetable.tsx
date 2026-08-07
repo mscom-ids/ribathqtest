@@ -168,7 +168,8 @@ export function AttendanceTimetable({ academicYearId, refreshVersion = 0 }: Prop
     const loadSubjects = useCallback(async () => {
         if (!academicYearId) return
         try {
-            const mentorQuery = selectedMentorId ? `&mentor_id=${selectedMentorId}` : ""
+            const validMentorId = selectedMentorId && selectedMentorId !== "undefined" && selectedMentorId !== "all" ? selectedMentorId : ""
+            const mentorQuery = validMentorId ? `&mentor_id=${validMentorId}` : ""
             const res = await api.get(`/attendance/subjects?academic_year_id=${academicYearId}&department=${department}${mentorQuery}`)
             setSubjects(res.data?.data || [])
         } catch (error) {

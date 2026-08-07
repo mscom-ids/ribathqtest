@@ -1,54 +1,52 @@
 import { Router } from 'express';
-import { getFeePlans, getStudentLedger, recordPayment } from '../controllers/finance.controller';
-import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
+import { verifyToken } from '../middleware/auth.middleware';
+import { attachFinanceActor, rejectFinanceDelegation } from '../modules/finance/finance.auth';
+import {
+    financeErrorHandler, getAccounts, getActiveStudents, getCategories, getCurrentMonthlyFees,
+    getDashboard, getFeeSchedulesCompatibility, getLedgerCompatibility, getPaymentFormData,
+    getWorkspace, getAccount, postAccount, postCategory, postCharge, postFeeSchedule,
+    postMonthlyGenerateCompatibility, postMonthlyPreview, postMonthlyPublish, postOpeningBalances,
+    postPayment, postPaymentReverse, postObligationVoid, postPermission, postStudentAgreement, putAccountToggle, putCategoryToggle,
+    putPermissionRevoke, rejectFeeScheduleDelete, rejectMonthlyDelete, searchLedgerCompatibility,
+} from '../modules/finance/finance.controller';
 
 const router = Router();
-
-// Protect all finance routes
 router.use(verifyToken);
-router.use(verifyDelegation);
-router.use(requireRole(['admin', 'principal', 'controller']));
+router.use(attachFinanceActor);
 
-// GET /api/finance/fee-plans
-router.get('/fee-plans', getFeePlans);
-// GET /api/finance/ledger/:student_id
-router.get('/ledger/:student_id', getStudentLedger);
-// POST /api/finance/payments
-router.post('/payments', recordPayment);
+router.get('/workspace', getWorkspace);
+router.get('/students/:studentId/account', getAccount);
 
-// Implemented from financeActions
-import { generateMonthlyFees, deleteMonthlyFeesForMonth } from '../controllers/finance.actions.1';
-import { getFinanceDashboardData, getPaymentFormData, getChargeCategories, addChargeCategory, toggleChargeCategory, getPaymentAccounts, addPaymentAccount, togglePaymentAccount, addFeePlan, deleteFeePlan } from '../controllers/finance.admin.controller';
-import { addStudentCharge, searchStudentLedger, getMonthlyFeesForCurrentMonth, getActiveStudents } from '../controllers/finance.queries.controller';
+router.post('/charges', rejectFinanceDelegation, postCharge);
+router.post('/payments', rejectFinanceDelegation, postPayment);
+router.post('/payments/:id/reverse', rejectFinanceDelegation, postPaymentReverse);
+router.post('/obligations/:id/void', rejectFinanceDelegation, postObligationVoid);
+router.post('/opening-balances', rejectFinanceDelegation, postOpeningBalances);
+router.post('/monthly-fees/preview', rejectFinanceDelegation, postMonthlyPreview);
+router.post('/monthly-fees/publish', rejectFinanceDelegation, postMonthlyPublish);
+router.post('/fee-schedules', rejectFinanceDelegation, postFeeSchedule);
+router.post('/student-fee-agreements', rejectFinanceDelegation, postStudentAgreement);
+router.post('/permissions', rejectFinanceDelegation, postPermission);
+router.put('/permissions/:id/revoke', rejectFinanceDelegation, putPermissionRevoke);
 
-// Dashboard
-router.get('/dashboard', getFinanceDashboardData);
+router.get('/categories', getCategories);
+router.post('/categories', rejectFinanceDelegation, postCategory);
+router.put('/categories/:id/toggle', rejectFinanceDelegation, putCategoryToggle);
+router.get('/accounts', getAccounts);
+router.post('/accounts', rejectFinanceDelegation, postAccount);
+router.put('/accounts/:id/toggle', rejectFinanceDelegation, putAccountToggle);
 
-// Monthly Fees
-router.post('/monthly-fees/generate', generateMonthlyFees);
-router.delete('/monthly-fees/:yearMonth', deleteMonthlyFeesForMonth);
-router.get('/monthly-fees/current', getMonthlyFeesForCurrentMonth);
-
-// Charges & Ledger
-router.post('/charges', addStudentCharge);
-router.get('/ledger-search', searchStudentLedger);
-
-// Settings - Categories
-router.get('/categories', getChargeCategories);
-router.post('/categories', addChargeCategory);
-router.put('/categories/:id/toggle', toggleChargeCategory);
-
-// Settings - Accounts
-router.get('/accounts', getPaymentAccounts);
-router.post('/accounts', addPaymentAccount);
-router.put('/accounts/:id/toggle', togglePaymentAccount);
-
-// Settings - Fee Plans
-router.post('/fee-plans', addFeePlan);
-router.delete('/fee-plans/:id', deleteFeePlan);
-
-// Helper queries
+router.get('/dashboard', getDashboard);
 router.get('/active-students', getActiveStudents);
 router.get('/payment-form-data', getPaymentFormData);
+router.get('/monthly-fees/current', getCurrentMonthlyFees);
+router.post('/monthly-fees/generate', rejectFinanceDelegation, postMonthlyGenerateCompatibility);
+router.delete('/monthly-fees/:yearMonth', rejectFinanceDelegation, rejectMonthlyDelete);
+router.get('/ledger/:student_id', getLedgerCompatibility);
+router.get('/ledger-search', searchLedgerCompatibility);
+router.get('/fee-plans', getFeeSchedulesCompatibility);
+router.post('/fee-plans', rejectFinanceDelegation, postFeeSchedule);
+router.delete('/fee-plans/:id', rejectFinanceDelegation, rejectFeeScheduleDelete);
 
+router.use(financeErrorHandler);
 export default router;

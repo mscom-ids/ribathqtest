@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { LayoutDashboard, CalendarCheck, FileText, Menu, X, LogOut, BookOpen, DoorOpen, Landmark, MessageCircle, Users } from "lucide-react"
+import { LayoutDashboard, CalendarCheck, FileText, Menu, LogOut, DoorOpen, Landmark, MessageCircle, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { ModeToggle } from "@/components/mode-toggle"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
@@ -94,8 +94,17 @@ export default function StaffLayout({
         { href: "/staff/attendance", label: "Attend", icon: CalendarCheck },
         { href: "/staff/chat", label: "Chat", icon: MessageCircle, highlight: true },
         { href: "/staff/leaves", label: "Leaves", icon: DoorOpen },
-        { href: "/staff/reports", label: "Reports", icon: FileText },
     ]
+
+    const mobileMoreItems = [
+        { href: "/staff/reports", label: "Reports", description: "Student progress reports", icon: FileText },
+        { href: "/staff/assigned", label: "Assigned", description: "Assigned students", icon: Users },
+        { href: "/staff/finance", label: "Finance", description: "Finance module", icon: Landmark },
+    ]
+
+    const isMoreActive = mobileMoreItems.some((item) =>
+        pathname === item.href || pathname.startsWith(item.href + "/")
+    )
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
@@ -239,6 +248,66 @@ export default function StaffLayout({
                             </Link>
                         )
                     })}
+
+                    <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+                        <SheetTrigger asChild>
+                            <button
+                                type="button"
+                                className="flex flex-col items-center justify-center w-16 h-full gap-1"
+                                aria-label="Open more navigation"
+                                aria-expanded={isMobileOpen}
+                            >
+                                <div className={`flex items-center justify-center h-8 w-12 rounded-full transition-colors ${isMoreActive || isMobileOpen ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                    <Menu className="h-5 w-5" />
+                                </div>
+                                <span className={`text-[10px] font-medium ${isMoreActive || isMobileOpen ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                    More
+                                </span>
+                            </button>
+                        </SheetTrigger>
+
+                        <SheetContent
+                            side="bottom"
+                            className="md:hidden gap-0 rounded-t-3xl border-slate-200 bg-white p-0 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] dark:border-slate-800 dark:bg-slate-900"
+                        >
+                            <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
+                            <SheetHeader className="px-5 pb-3 pt-4 text-left">
+                                <SheetTitle className="text-lg font-bold">More</SheetTitle>
+                            </SheetHeader>
+
+                            <div className="grid grid-cols-3 gap-3 px-4">
+                                {mobileMoreItems.map((item) => {
+                                    const Icon = item.icon
+                                    const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+
+                                    return (
+                                        <SheetClose asChild key={item.href}>
+                                            <Link
+                                                href={item.href}
+                                                className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-4 text-center transition-colors ${isActive
+                                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
+                                                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/40'
+                                                }`}
+                                            >
+                                                <span className={`flex h-11 w-11 items-center justify-center rounded-full ${isActive
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-300'
+                                                }`}>
+                                                    <Icon className="h-5 w-5" />
+                                                </span>
+                                                <span>
+                                                    <span className="block text-sm font-semibold">{item.label}</span>
+                                                    <span className="mt-0.5 block text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                                                        {item.description}
+                                                    </span>
+                                                </span>
+                                            </Link>
+                                        </SheetClose>
+                                    )
+                                })}
+                            </div>
+                        </SheetContent>
+                    </Sheet>
                 </div>
             </nav>
         </div>

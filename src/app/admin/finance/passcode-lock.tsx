@@ -1,140 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Lock, ShieldAlert, KeyRound } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ShieldCheck } from "lucide-react"
 
-interface PasscodeLockProps {
-    onUnlock: () => void
-}
-
-export function PasscodeLock({ onUnlock }: PasscodeLockProps) {
-    const [passcode, setPasscode] = useState("")
-    const [error, setError] = useState(false)
-    const [loading, setLoading] = useState(false)
-
-    const handleNumberClick = (num: string) => {
-        if (passcode.length < 6) {
-            setPasscode(prev => prev + num)
-            setError(false)
-        }
-    }
-
-    const handleDelete = () => {
-        setPasscode(prev => prev.slice(0, -1))
-        setError(false)
-    }
-
-    const handleSubmit = async () => {
-        if (passcode.length !== 6) {
-            setError(true)
-            return
-        }
-
-        setLoading(true)
-        setError(false)
-
-        try {
-            // Temporary simple check for demo (default PIN is 123456)
-            // A dedicated /api/finance/settings/verify endpoint should replace this in the future
-            let isValid = passcode === "123456"; 
-
-            if (isValid) {
-                onUnlock()
-            } else {
-                setError(true)
-                setPasscode("")
-            }
-        } catch (err) {
-            setError(true)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (loading) return
-            
-            if (e.key >= '0' && e.key <= '9') {
-                handleNumberClick(e.key)
-            } else if (e.key === 'Backspace') {
-                handleDelete()
-            } else if (e.key === 'Enter') {
-                if (passcode.length === 6) {
-                    handleSubmit()
-                }
-            }
-        }
-
-        window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [passcode, loading])
-
+export function PasscodeLock() {
     return (
-        <div className="flex flex-col items-center justify-center min-h-[70vh]">
-            <div className="bg-[#1a2234] border border-slate-800/80 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-300">
-                <div className="h-16 w-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-6">
-                    <ShieldAlert className="h-8 w-8 text-blue-400" />
-                </div>
-                
-                <h2 className="text-2xl font-bold text-white mb-2">Restricted Access</h2>
-                <p className="text-sm text-slate-400 text-center mb-8">
-                    Enter the 6-digit finance passcode to access accounting and fees.
-                </p>
-
-                {/* PIN Display */}
-                <div className="flex gap-3 mb-8">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <div 
-                            key={i} 
-                            className={`w-4 h-4 rounded-full transition-all duration-200 ${
-                                i < passcode.length 
-                                ? "bg-white scale-100" 
-                                : "bg-slate-800 scale-75"
-                            } ${error ? 'bg-red-500 animate-pulse' : ''}`}
-                        />
-                    ))}
-                </div>
-
-                {/* Keypad */}
-                <div className="grid grid-cols-3 gap-4 w-full mb-6">
-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
-                        <button
-                            key={num}
-                            onClick={() => handleNumberClick(num)}
-                            className="h-14 rounded-xl bg-[#131b29] text-xl font-medium text-white hover:bg-slate-800 active:scale-95 transition-all outline-none"
-                        >
-                            {num}
-                        </button>
-                    ))}
-                    <button
-                        onClick={handleDelete}
-                        disabled={passcode.length === 0}
-                        className="h-14 rounded-xl bg-transparent text-slate-400 hover:text-white hover:bg-slate-800 active:scale-95 transition-all outline-none"
-                    >
-                        Del
-                    </button>
-                    <button
-                        onClick={() => handleNumberClick('0')}
-                        className="h-14 rounded-xl bg-[#131b29] text-xl font-medium text-white hover:bg-slate-800 active:scale-95 transition-all outline-none"
-                    >
-                        0
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={passcode.length !== 6 || loading}
-                        className="h-14 rounded-xl bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white flex items-center justify-center active:scale-95 transition-all outline-none disabled:opacity-50"
-                    >
-                        <KeyRound className="h-5 w-5" />
-                    </button>
-                </div>
-
-                {error && (
-                    <p className="text-red-400 text-sm font-medium animate-in slide-in-from-bottom-2">
-                        Incorrect passcode
-                    </p>
-                )}
+        <div className="flex min-h-64 items-center justify-center p-6">
+            <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <ShieldCheck className="mx-auto h-8 w-8 text-emerald-600" />
+                <h2 className="mt-3 font-black text-slate-950 dark:text-white">Finance access is protected</h2>
+                <p className="mt-2 text-sm text-slate-500">Your signed-in account role and finance permissions control access.</p>
             </div>
         </div>
     )

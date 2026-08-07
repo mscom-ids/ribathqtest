@@ -65,7 +65,6 @@ function buildWarmupTasks(): WarmupTask[] {
         { url: "/classes/academic-years", ttlMs: 5 * 60_000 },
         { url: "/attendance/schedules", ttlMs: 5 * 60_000 },
         { url: "/attendance/breaks", ttlMs: 5 * 60_000 },
-        { url: "/finance/active-students", ttlMs: 60_000 },
         { url: "/leaves/outside-students", ttlMs: 30_000 },
         { url: "/attendance/daily-stats", params: { start_date: dates.today, end_date: dates.today }, ttlMs: 30_000 },
         { url: "/chat/conversations", ttlMs: 60_000 },

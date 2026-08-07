@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { format, getDay } from "date-fns"
 import {
-    BookOpen, ChevronRight, Clock, CalendarDays,
+    BookOpen, ChevronRight, Clock,
     TrendingUp, Award, Search, Camera, Loader2, BarChart2,
     CheckCircle2, ClipboardCheck, DoorOpen, UserPlus,
     type LucideIcon,
@@ -946,38 +946,8 @@ export default function StaffDashboard() {
                         </div>
                     </div>
 
-                    {/* Right: today's sessions + live snapshot + top performers */}
+                    {/* Right: top performers */}
                     <div className="lg:col-span-1 space-y-4 order-1 lg:order-2">
-
-                        {/* Today's Sessions */}
-                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-5 shadow-sm">
-                            <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                                <CalendarDays className="h-4 w-4 text-blue-500" /> Today's Sessions
-                            </h3>
-                            {todaySessions.length === 0 ? (
-                                <p className="text-sm text-slate-400 text-center py-4">No sessions scheduled for today.</p>
-                            ) : (
-                                <div className="flex gap-3 overflow-x-auto pb-2">
-                                    {todaySessions.map((s) => {
-                                        const isNow = currentSession?.id === s.id
-                                        return (
-                                            <Link href={`/staff/attendance?session=${s.id}`} key={s.id} className="block shrink-0">
-                                                <div className={`w-44 rounded-xl border p-3 transition-colors ${isNow
-                                                        ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30"
-                                                        : "border-slate-200 dark:border-gray-700 bg-white dark:bg-[#111827] hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                    }`}>
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <p className="font-semibold text-sm truncate dark:text-white">{s.name}</p>
-                                                        {isNow && <span className="text-[9px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400 shrink-0">Now</span>}
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</div>
-                                                </div>
-                                            </Link>
-                                        )
-                                    })}
-                                </div>
-                            )}
-                        </div>
 
                         {/* Top Performers — desktop only; mobile gets the slide-in
                             panel below so this long ranking list doesn't push the

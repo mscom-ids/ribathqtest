@@ -231,9 +231,10 @@ export const replaceAttendanceGroupStudents = async (req: Request, res: Response
     const client = await db.getClient();
     try {
         const groupId = String(req.params.id || '');
-        const studentIds = Array.isArray(req.body?.student_ids)
-            ? [...new Set(req.body.student_ids.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0))]
-            : [];
+        const rawStudentIds: unknown[] = Array.isArray(req.body?.student_ids) ? req.body.student_ids : [];
+        const studentIds: string[] = Array.from(new Set(
+            rawStudentIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+        ));
         await client.query('BEGIN');
         const group = await client.query(
             `SELECT id, academic_year_id, department, standard, division, mentor_id
@@ -245,11 +246,12 @@ export const replaceAttendanceGroupStudents = async (req: Request, res: Response
             return res.status(404).json({ success: false, error: 'Attendance group not found.' });
         }
         const target = group.rows[0];
+        // Fetch currently-active members of this group only.
         const previous = await client.query(
-            'SELECT student_id FROM attendance_group_students WHERE group_id = $1',
+            'SELECT student_id FROM attendance_group_students WHERE group_id = $1 AND effective_until IS NULL',
             [groupId],
         );
-        const previousIds = previous.rows.map((row: any) => row.student_id);
+        const previousIds: string[] = previous.rows.map((row: any) => String(row.student_id));
         if (studentIds.length) {
             const eligible = await client.query(
                 `SELECT s.adm_no AS student_id
@@ -270,14 +272,43 @@ export const replaceAttendanceGroupStudents = async (req: Request, res: Response
             }
         }
 
-        await client.query('DELETE FROM attendance_group_students WHERE group_id = $1', [groupId]);
-        if (studentIds.length) {
+        // History-preserving roster update:
+        //   • Students leaving  → close their membership (set effective_until = yesterday)
+        //   • Students joining  → close any active membership in another group, then insert a new row
+        //   • Students staying  → no change (their row is untouched)
+        const today = new Date().toISOString().split('T')[0];
+        const newSet = new Set(studentIds);
+        const prevSet = new Set(previousIds);
+
+        const leaving = previousIds.filter((id: string) => !newSet.has(id));
+        if (leaving.length) {
             await client.query(
-                `INSERT INTO attendance_group_students (group_id, academic_year_id, department, student_id)
-                 SELECT $1, $2, $3, student_id FROM unnest($4::text[]) AS student_id
-                 ON CONFLICT (academic_year_id, department, student_id)
-                 DO UPDATE SET group_id = EXCLUDED.group_id, created_at = now()`,
-                [groupId, target.academic_year_id, target.department, studentIds],
+                `UPDATE attendance_group_students
+                 SET effective_until = $1::date - 1
+                 WHERE group_id = $2 AND student_id = ANY($3::text[]) AND effective_until IS NULL`,
+                [today, groupId, leaving],
+            );
+        }
+
+        const joining = studentIds.filter((id: string) => !prevSet.has(id));
+        if (joining.length) {
+            // Close any active membership in a DIFFERENT group (same dept/year) first.
+            await client.query(
+                `UPDATE attendance_group_students
+                 SET effective_until = $1::date - 1
+                 WHERE student_id = ANY($2::text[])
+                   AND academic_year_id = $3 AND department = $4
+                   AND effective_until IS NULL
+                   AND group_id <> $5`,
+                [today, joining, target.academic_year_id, target.department, groupId],
+            );
+            // Open the new membership.
+            await client.query(
+                `INSERT INTO attendance_group_students
+                     (group_id, academic_year_id, department, student_id, effective_from)
+                 SELECT $1, $2, $3, student_id, $4::date
+                 FROM unnest($5::text[]) AS student_id`,
+                [groupId, target.academic_year_id, target.department, today, joining],
             );
         }
 

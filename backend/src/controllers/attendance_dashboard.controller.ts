@@ -4,7 +4,7 @@ import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, getCached, invalidateCacheByPrefix, makeCacheKey, setCached } from '../utils/server-cache';
 import { getMentorAccessDecision } from '../utils/mentor-access-policy';
 import { getEligibleHifzStudentsForSchedule, isHifzSchedule } from '../utils/hifz-session-eligibility';
-import { getAcademicYearContext } from '../utils/academic-year';
+import { getAcademicYearContext, getAcademicYearParam } from '../utils/academic-year';
 import { getActiveMentorStudentIds, getActiveMentorStudents } from '../services/mentor-students.service';
 
 // All roles treated as a mentor (filtered access)
@@ -648,17 +648,21 @@ export const getSchedules = async (req: Request, res: Response) => {
 
         // For Admins/Principals, attach expected mentors to each schedule
         const [studentsRes, staffRes] = await Promise.all([
-            db.query(
-                `SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`,
+            cachedResult('schedules:students-mentor-stds', 60_000, async () =>
+                db.query(
+                    `SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL`,
+                )
             ),
-            db.query(`SELECT id, name FROM staff`),
+            cachedResult('schedules:staff-map', 60_000, async () =>
+                db.query(`SELECT id, name FROM staff`)
+            ),
         ]);
         const staffMap = new Map(staffRes.rows.map((s: any) => [s.id, s.name]));
 
         const schedulesWithMentors = schedules.map(schedule => {
             const classType = (schedule.class_type || '').toLowerCase();
             const mentorCol = MENTOR_COL_MAP[classType === 'madrassa' ? 'madrasa' : classType];
-            const rawStds = typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || []);
+            const rawStds = parseStandardList(schedule.standards);
             const dbStds = rawStds.map(normalizeScheduleStandard);
             const mentorStandards = new Map<string, Set<string>>();
 
@@ -687,7 +691,9 @@ export const getSchedules = async (req: Request, res: Response) => {
         setCached(cacheKey, schedulesWithMentors, 5 * 60_000);
         res.json({ success: true, data: schedulesWithMentors });
     } catch (err: any) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error('[getSchedules Error]', err);
+        const status = err?.code === '22P02' ? 400 : 500;
+        res.status(status).json({ success: false, error: err.message });
     }
 };
 
@@ -2484,20 +2490,23 @@ export const getDailyAttendanceStats = async (req: Request, res: Response) => {
 export const getSubjects = async (req: Request, res: Response) => {
     try {
         const { academic_year_id, department, mentor_id } = req.query;
-        if (!academic_year_id) return res.status(400).json({ success: false, error: 'Academic year is required.' });
+        const yearContext = await getAcademicYearContext(db, academic_year_id);
+        const effectiveYearId = yearContext.academicYearId || getAcademicYearParam(academic_year_id);
+        if (!effectiveYearId) return res.status(400).json({ success: false, error: 'Academic year is required.' });
 
         let query = `SELECT * FROM attendance_subjects WHERE academic_year_id = $1`;
-        const params: any[] = [academic_year_id];
+        const params: any[] = [effectiveYearId];
         let paramIndex = 2;
 
-        if (department) {
+        if (department && typeof department === 'string') {
             query += ` AND department = $${paramIndex++}`;
-            params.push(department);
+            params.push(department.trim());
         }
 
-        if (mentor_id) {
+        const validMentorId = getAcademicYearParam(mentor_id);
+        if (validMentorId) {
             query += ` AND (mentor_id = $${paramIndex++} OR mentor_id IS NULL)`;
-            params.push(mentor_id);
+            params.push(validMentorId);
         }
 
         query += ` ORDER BY name ASC`;
@@ -2505,6 +2514,8 @@ export const getSubjects = async (req: Request, res: Response) => {
         const result = await db.query(query, params);
         res.json({ success: true, data: result.rows });
     } catch (err: any) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error('[getSubjects Error]', err);
+        const status = err?.code === '22P02' ? 400 : 500;
+        res.status(status).json({ success: false, error: err.message });
     }
 };
