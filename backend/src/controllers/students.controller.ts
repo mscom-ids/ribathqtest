@@ -20,7 +20,7 @@ const LIGHT_STUDENT_COLS =
     `adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender,
      admission_date AS admission_date,
      admission_date AS date_of_join,
-     place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number`;
+     place, hifz_mentor_id, school_mentor_id, madrasa_mentor_id, phone_number, exit_date`;
 
 const FULL_STUDENT_COLS =
     LIGHT_STUDENT_COLS + ', address, nationality, pincode, post, district, state, local_body, aadhar, id_mark, comprehensive_details';
@@ -635,7 +635,14 @@ export const updateStudent = async (req: Request, res: Response) => {
 
     const keysToUpdate = Object.keys(updateData).filter(key => validColumns.includes(key));
 
-    if (keysToUpdate.length === 0) {
+    // Keep the lightweight `exit_date` column in sync with comprehensive_details.leaving_date
+    // whenever it's set. List views that skip the heavy JSON blob (light=true, e.g. the
+    // Alumni page) read this column instead — without it, a leaving date saved after the
+    // one-time backfill in 20260604000000_hifz_mentor_history.sql would never show up there.
+    const incomingLeavingDate = updateData.comprehensive_details?.leaving_date;
+    const syncExitDate = typeof incomingLeavingDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(incomingLeavingDate);
+
+    if (keysToUpdate.length === 0 && !syncExitDate) {
       return res.status(400).json({ success: false, error: 'No valid data provided for update' });
     }
 
@@ -691,6 +698,12 @@ export const updateStudent = async (req: Request, res: Response) => {
           setClauses.push(`${key} = $${paramCount}`);
         }
         values.push(updateData[key]);
+        paramCount++;
+      }
+
+      if (syncExitDate) {
+        setClauses.push(`exit_date = $${paramCount}::date`);
+        values.push(incomingLeavingDate.slice(0, 10));
         paramCount++;
       }
 

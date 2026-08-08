@@ -34,6 +34,7 @@ import api from "@/lib/api"
 const formSchema = z.object({
     adm_no: z.string().min(1, "Admission number is required"),
     name: z.string().min(2),
+    admission_date: z.string().optional(),
     dob: z.string().optional(),
     address: z.string().optional(),
     father_name: z.string().optional(),
@@ -84,6 +85,7 @@ export default function CreateStudentPage() {
         defaultValues: {
             adm_no: "",
             name: "",
+            admission_date: new Date().toISOString().slice(0, 10),
             dob: "",
             address: "",
             father_name: "",
@@ -141,6 +143,7 @@ export default function CreateStudentPage() {
             const response = await api.post("/students", {
                 admission_number: admNo,
                 full_name: values.name,
+                admission_date: values.admission_date || null,
                 date_of_birth: values.dob || null,
                 address_line: values.address || null,
                 parent_name: values.father_name || null,
@@ -235,6 +238,20 @@ export default function CreateStudentPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                     control={form.control}
+                                    name="admission_date"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Admission Date</FormLabel>
+                                            <FormControl>
+                                                <Input type="date" {...field} />
+                                            </FormControl>
+                                            <FormDescription>Date the student joined the institution</FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
                                     name="dob"
                                     render={({ field }) => (
                                         <FormItem>
@@ -246,6 +263,8 @@ export default function CreateStudentPage() {
                                         </FormItem>
                                     )}
                                 />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                     control={form.control}
                                     name="standard"
@@ -274,21 +293,20 @@ export default function CreateStudentPage() {
                                         </FormItem>
                                     )}
                                 />
+                                <FormField
+                                    control={form.control}
+                                    name="batch_year"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Batch Year</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
-
-                            <FormField
-                                control={form.control}
-                                name="batch_year"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Batch Year</FormLabel>
-                                        <FormControl>
-                                            <Input {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <FormField

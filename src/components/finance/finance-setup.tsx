@@ -34,6 +34,7 @@ import {
     type StudentFeeAgreementInput,
 } from "@/lib/finance-api"
 import { currentMonthValue, money, nextMonthValue, shortDate, todayValue } from "./finance-utils"
+import { SearchableSelect } from "./searchable-select"
 
 type SetupSection = "billing" | "rules" | "access" | "opening"
 
@@ -281,12 +282,16 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
 
             <SetupCard icon={UserRoundCog} title="Individual fee agreement" description="Use a dated agreement when a student pays more or less than the institution base fee.">
                 <form onSubmit={addAgreement} className="grid gap-4">
-                    <Field label="Student">
-                        <select required value={agreement.student_id} onChange={event => setAgreement({ ...agreement, student_id: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900">
-                            <option value="">Choose student</option>
-                            {students.map(student => { const id = studentFinanceId(student); return <option key={id} value={id}>{student.name} ({id})</option> })}
-                        </select>
-                    </Field>
+                    <SearchableSelect
+                        label="Student"
+                        placeholder="Choose student"
+                        searchPlaceholder="Search by name or ID..."
+                        items={students.map(student => { const id = studentFinanceId(student); return { id, label: `${student.name} (${id})` } })}
+                        value={agreement.student_id}
+                        onChange={v => setAgreement({ ...agreement, student_id: v })}
+                        required
+                        inputClassName="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    />
                     <div className="grid gap-3 sm:grid-cols-2">
                         <Field label="Agreement type">
                             <select
@@ -451,12 +456,16 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,.75fr)]">
             <SetupCard icon={ShieldCheck} title="Staff finance access" description="Grant only the category or collection action each staff member needs. The backend enforces every grant.">
                 <form onSubmit={grant} className="grid gap-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900 sm:grid-cols-2">
-                    <Field label="Staff">
-                        <select required value={form.staff_id} onChange={event => setForm({ ...form, staff_id: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
-                            <option value="">Choose staff</option>
-                            {(setup.staff || []).map(staff => <option key={staff.id} value={staff.id}>{staff.name}{staff.role ? ` · ${staff.role}` : ""}</option>)}
-                        </select>
-                    </Field>
+                    <SearchableSelect
+                        label="Staff"
+                        placeholder="Choose staff"
+                        searchPlaceholder="Search by name or role..."
+                        items={(setup.staff || []).map(staff => ({ id: staff.id, label: `${staff.name}${staff.role ? ` · ${staff.role}` : ""}` }))}
+                        value={form.staff_id}
+                        onChange={v => setForm({ ...form, staff_id: v })}
+                        required
+                        inputClassName="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    />
                     <Field label="Action">
                         <select value={form.capability} onChange={event => setForm({ ...form, capability: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
                             <option value="charge:create">Add category charge</option>
@@ -642,12 +651,15 @@ function OpeningBalanceSection({ students, categories, onRefresh }: { students: 
                     <Input type="date" required value={form.as_of_date} onChange={event => updateForm({ as_of_date: event.target.value })} />
                 </Field>
                 <div className="hidden lg:block" />
-                <Field label="Student">
-                    <select required={staged.length === 0} value={form.student_id} onChange={event => updateForm({ student_id: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900">
-                        <option value="">Choose student</option>
-                        {students.map(student => { const id = studentFinanceId(student); return <option key={id} value={id}>{student.name} ({id})</option> })}
-                    </select>
-                </Field>
+                <SearchableSelect
+                    label="Student"
+                    placeholder="Choose student"
+                    searchPlaceholder="Search by name or ID..."
+                    items={students.map(student => { const id = studentFinanceId(student); return { id, label: `${student.name} (${id})` } })}
+                    value={form.student_id}
+                    onChange={v => updateForm({ student_id: v })}
+                    inputClassName="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                />
                 <Field label="Pending amount"><Input type="number" min="0.01" step="0.01" required={staged.length === 0} value={form.amount} onChange={event => updateForm({ amount: event.target.value })} /></Field>
                 <Field label="Known due month (optional)"><Input type="month" value={form.month} onChange={event => updateForm({ month: event.target.value })} /></Field>
                 <Field label="Category (optional)">

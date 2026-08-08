@@ -21,6 +21,7 @@ import {
     type StudentFinanceAccount,
 } from "@/lib/finance-api"
 import { allocateOldestFirst, money, shortDate, todayValue } from "./finance-utils"
+import { SearchableSelect } from "./searchable-select"
 
 function useResponsiveSheetSide() {
     const [isDesktop, setIsDesktop] = useState(false)
@@ -43,24 +44,20 @@ function ActionStudentSelect({
     value: string
     onChange: (value: string) => void
 }) {
+    const items = useMemo(() => students.map(student => {
+        const id = studentFinanceId(student)
+        return { id, label: `${student.name} (${id}${student.standard ? ` · ${student.standard}` : ""})` }
+    }), [students])
+
     return (
-        <div className="space-y-2">
-            <Label htmlFor="finance-student">Student</Label>
-            <select
-                id="finance-student"
-                required
-                value={value}
-                onChange={event => onChange(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-blue-950"
-            >
-                <option value="">Choose a student</option>
-                {students.map(student => {
-                    const id = studentFinanceId(student)
-                    return <option key={id} value={id}>{student.name} ({id}{student.standard ? ` · ${student.standard}` : ""})</option>
-                })}
-            </select>
-            <p className="text-xs text-slate-500">Use the workspace search first if the student is not in this list.</p>
-        </div>
+        <SearchableSelect
+            label="Student"
+            placeholder="Choose a student"
+            searchPlaceholder="Search by name or ID..."
+            items={items}
+            value={value}
+            onChange={onChange}
+        />
     )
 }
 
