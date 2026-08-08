@@ -58,7 +58,7 @@ export function OnCampusLeavesTab() {
 
             // Then apply tab filter
             if (activeTab === "ongoing") {
-                return l.status === "outside" || l.status === "pending"
+                return l.status === "approved" || l.status === "outside" || l.status === "pending"
             } else {
                 return l.status === "returned" || l.status === "completed" || l.status === "cancelled"
             }
@@ -167,9 +167,11 @@ export function OnCampusLeavesTab() {
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono whitespace-nowrap">
-                                            {leave.actual_return_datetime 
+                                            {leave.actual_return_datetime
                                                 ? format(new Date(leave.actual_return_datetime), "dd MMM, h:mm a")
-                                                : format(new Date(leave.end_datetime), "dd MMM, h:mm a")
+                                                : leave.end_datetime
+                                                    ? format(new Date(leave.end_datetime), "dd MMM, h:mm a")
+                                                    : "Open-ended"
                                             }
                                         </div>
                                     </TableCell>
@@ -194,7 +196,7 @@ export function OnCampusLeavesTab() {
                                                 onClick={() => setLeaveForRecord({ id: leave.id, type: 'personal' })}
                                                 className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
                                             >
-                                                Mark Returned
+                                                End leave
                                             </Button>
                                         </TableCell>
                                     )}
@@ -276,6 +278,7 @@ export function OnCampusLeavesTab() {
             {leaveForRecord && (
                 <RecordReturnModal
                     leaveId={leaveForRecord.id} type={leaveForRecord.type}
+                    purpose="end-on-campus"
                     open={!!leaveForRecord} onOpenChange={(op: boolean) => !op && setLeaveForRecord(null)}
                     onSuccess={() => fetchLeaves(true)}
                 />

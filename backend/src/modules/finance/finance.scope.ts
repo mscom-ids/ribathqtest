@@ -3,18 +3,14 @@ import type { FinancePermission } from './finance.types';
 export type FinanceAccessProfile = {
     fullLedger: boolean;
     fullLedgerAllStudents: boolean;
-    allStudentCategoryIds: string[];
-    assignedStudentCategoryIds: string[];
+    allStudentChargeAccess: boolean;
+    assignedStudentChargeAccess: boolean;
 };
 
-function unique(values: Array<string | null>) {
-    return [...new Set(values.filter((value): value is string => Boolean(value)))];
-}
-
 /**
- * Converts individual grants into independent data scopes. Keeping ledger
- * grants separate from charge-category grants prevents an all-student medical
- * grant from accidentally expanding an assigned-only ledger grant.
+ * Converts individual grants into independent data scopes. Charge access is
+ * category-agnostic: a staff member who can add a charge can use any active
+ * charge category within their student scope.
  */
 export function buildFinanceAccessProfile(
     permissions: FinancePermission[],
@@ -28,12 +24,8 @@ export function buildFinanceAccessProfile(
         fullLedger: roleCanReadAll || ledgerPermissions.length > 0,
         fullLedgerAllStudents: roleCanReadAll
             || ledgerPermissions.some(permission => permission.student_scope === 'all'),
-        allStudentCategoryIds: unique(chargePermissions
-            .filter(permission => permission.student_scope === 'all')
-            .map(permission => permission.category_id)),
-        assignedStudentCategoryIds: unique(chargePermissions
-            .filter(permission => permission.student_scope === 'assigned')
-            .map(permission => permission.category_id)),
+        allStudentChargeAccess: roleCanReadAll || chargePermissions.some(permission => permission.student_scope === 'all'),
+        assignedStudentChargeAccess: roleCanReadAll || chargePermissions.some(permission => permission.student_scope === 'assigned'),
     };
 }
 
@@ -49,11 +41,4 @@ export function buildLedgerViewAccessProfile(
         permissions.filter(permission => permission.capability === 'ledger:view'),
         roleCanReadAll,
     );
-}
-
-export function visibleCategoryIds(profile: FinanceAccessProfile, isAssigned: boolean) {
-    return unique([
-        ...profile.allStudentCategoryIds,
-        ...(isAssigned ? profile.assignedStudentCategoryIds : []),
-    ]);
 }

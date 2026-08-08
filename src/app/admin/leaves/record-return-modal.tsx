@@ -29,7 +29,7 @@ function getErrorMessage(error: unknown, fallback: string) {
     return maybeError.response?.data?.error || fallback
 }
 
-export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChange, onSuccess }: { leaveId: string, type?: 'personal' | 'institutional' | 'group', open: boolean, onOpenChange: (open: boolean) => void, onSuccess: () => void }) {
+export function RecordReturnModal({ leaveId, type = 'personal', purpose = 'return', open, onOpenChange, onSuccess }: { leaveId: string, type?: 'personal' | 'institutional' | 'group', purpose?: 'return' | 'end-on-campus', open: boolean, onOpenChange: (open: boolean) => void, onSuccess: () => void }) {
     const [loading, setLoading] = useState(false)
     const [fetching, setFetching] = useState(false)
     const [students, setStudents] = useState<ReturnStudent[]>([])
@@ -123,7 +123,7 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                 })
                 
                 if (res.data.success) {
-                    toast.success("Return recorded successfully!")
+                    toast.success(purpose === 'end-on-campus' ? "On-campus leave ended successfully!" : "Return recorded successfully!")
                     onSuccess()
                     
                     if (students.length > 1) {
@@ -168,9 +168,11 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
         <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Record Entry</DialogTitle>
+                    <DialogTitle>{purpose === 'end-on-campus' ? 'End On-Campus Leave' : 'Record Entry'}</DialogTitle>
                     <DialogDescription>
-                        Log a student returning from leave. Time outside expected bounds will be flagged as LATE.
+                        {purpose === 'end-on-campus'
+                            ? 'Record when the student returned to normal campus activities and classes.'
+                            : 'Log a student returning from leave. Time outside expected bounds will be flagged as LATE.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -256,7 +258,7 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                         )) : null}
 
                         <div className="space-y-2">
-                            <Label>Return Date & Time</Label>
+                            <Label>{purpose === 'end-on-campus' ? 'Leave End Date & Time' : 'Return Date & Time'}</Label>
                             {mounted && (
                                 <Input 
                                     type="datetime-local" 
@@ -271,7 +273,11 @@ export function RecordReturnModal({ leaveId, type = 'personal', open, onOpenChan
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
                             <Button type="submit" disabled={loading || (type !== 'personal' && students.length === 0) || (type !== 'personal' && !isBulkReturn && selectedLeaveIds.length === 0) || (type === 'personal' && !selectedLeaveId)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {type !== 'personal' && !isBulkReturn && selectedLeaveIds.length > 1 ? `Record ${selectedLeaveIds.length} Inbound Moves` : isBulkReturn ? "Bulk Apply Inbound Move" : "Record Inbound Move"}
+                                {purpose === 'end-on-campus'
+                                    ? 'End Leave'
+                                    : type !== 'personal' && !isBulkReturn && selectedLeaveIds.length > 1
+                                        ? `Record ${selectedLeaveIds.length} Inbound Moves`
+                                        : isBulkReturn ? "Bulk Apply Inbound Move" : "Record Inbound Move"}
                             </Button>
                         </DialogFooter>
                     </form>

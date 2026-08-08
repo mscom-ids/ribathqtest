@@ -84,7 +84,9 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!startDatetime || !endDatetime || !reasonCategory) return toast.error("Please fill required fields")
+        if (!startDatetime || !reasonCategory || (type === 'out-campus' && !endDatetime)) {
+            return toast.error("Please fill required fields")
+        }
         if (reasonCategory === "Other" && !remarks) return toast.error("Please enter remarks for 'Other' reason")
         if (type === 'out-campus' && (!companionName.trim() || !companionRelationship.trim())) {
             return toast.error("Please enter who the student is going with and their relationship")
@@ -98,7 +100,7 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                     student_id: studentId,
                     leave_type: type,
                     start_datetime: new Date(startDatetime).toISOString(),
-                    end_datetime: new Date(endDatetime).toISOString(),
+                    end_datetime: type === 'on-campus' ? null : new Date(endDatetime).toISOString(),
                     reason: reasonCategory === "Other" ? remarks : reasonCategory,
                     reason_category: reasonCategory,
                     remarks: remarks,
@@ -112,7 +114,7 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                     group_value: groupValue,
                     leave_type: type,
                     start_datetime: new Date(startDatetime).toISOString(),
-                    end_datetime: new Date(endDatetime).toISOString(),
+                    end_datetime: type === 'on-campus' ? null : new Date(endDatetime).toISOString(),
                     reason_category: reasonCategory,
                     remarks: remarks,
                     companion_name: companionName,
@@ -311,16 +313,24 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={type === 'on-campus' ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
                         <div className="space-y-2">
                             <Label>Start Date & Time</Label>
                             <Input type="datetime-local" value={startDatetime} onChange={e => setStartDatetime(e.target.value)} required />
                         </div>
-                        <div className="space-y-2">
-                            <Label>Expected Return</Label>
-                            <Input type="datetime-local" value={endDatetime} onChange={e => setEndDatetime(e.target.value)} required />
-                        </div>
+                        {type === 'out-campus' && (
+                            <div className="space-y-2">
+                                <Label>Expected Return</Label>
+                                <Input type="datetime-local" value={endDatetime} onChange={e => setEndDatetime(e.target.value)} required />
+                            </div>
+                        )}
                     </div>
+
+                    {type === 'on-campus' && (
+                        <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
+                            This leave remains active until an authorized user selects End leave and records the actual date and time.
+                        </p>
+                    )}
 
                     <DialogFooter className="mt-6">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

@@ -131,7 +131,11 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <ArrowRightLeft className="h-3.5 w-3.5" />
-                                                    {leave.end_datetime ? format(new Date(leave.end_datetime), "MMM d, h:mm a") : "Open"}
+                                                    {leave.actual_return_datetime
+                                                        ? format(new Date(leave.actual_return_datetime), "MMM d, h:mm a")
+                                                        : leave.end_datetime
+                                                            ? format(new Date(leave.end_datetime), "MMM d, h:mm a")
+                                                            : "Open-ended"}
                                                 </div>
                                             </div>
                                         </TableCell>
@@ -186,9 +190,9 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                                         )}
                                         {showReturnAction && (
                                             <TableCell className="text-right">
-                                                {(leave.status === 'approved' || leave.status === 'pending') && onMarkReturn && (
+                                                {leave.status === 'approved' && onMarkReturn && (
                                                     <Button size="sm" variant="outline" onClick={() => onMarkReturn(leave)} className="border-emerald-200 hover:bg-emerald-50 dark:border-emerald-900/50 dark:hover:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
-                                                        Mark Returned
+                                                        {leave.leave_type === 'on-campus' || leave.leave_type === 'internal' ? 'End leave' : 'Mark Returned'}
                                                     </Button>
                                                 )}
                                                 {(leave.status === 'completed' || leave.status === 'returned') && (
@@ -271,9 +275,13 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                                         </p>
                                     </div>
                                     <div className={`rounded-lg p-2 ${isOverdue ? 'bg-red-100 dark:bg-red-900/30' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-                                        <p className="text-slate-400 mb-0.5">Expected Return</p>
+                                        <p className="text-slate-400 mb-0.5">{leave.leave_type === 'on-campus' || leave.leave_type === 'internal' ? 'Leave End' : 'Expected Return'}</p>
                                         <p className={`font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {leave.end_datetime ? format(new Date(leave.end_datetime), 'dd MMM, h:mm a') : 'Open'}
+                                            {leave.actual_return_datetime
+                                                ? format(new Date(leave.actual_return_datetime), 'dd MMM, h:mm a')
+                                                : leave.end_datetime
+                                                    ? format(new Date(leave.end_datetime), 'dd MMM, h:mm a')
+                                                    : 'Open-ended'}
                                         </p>
                                     </div>
                                 </div>
@@ -297,9 +305,9 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
                                                 {onApprove && <Button size="sm" onClick={() => onApprove(leave)} className="bg-emerald-600 hover:bg-emerald-700 text-white">Approve</Button>}
                                             </div>
                                         )}
-                                        {showReturnAction && (leave.status === 'approved' || leave.status === 'pending') && onMarkReturn && (
+                                        {showReturnAction && leave.status === 'approved' && onMarkReturn && (
                                             <Button size="sm" variant="outline" onClick={() => onMarkReturn(leave)} className="w-full border-emerald-200 text-emerald-600">
-                                                Mark Returned
+                                                {leave.leave_type === 'on-campus' || leave.leave_type === 'internal' ? 'End leave' : 'Mark Returned'}
                                             </Button>
                                         )}
                                         {showReturnAction && (leave.status === 'completed' || leave.status === 'returned') && (

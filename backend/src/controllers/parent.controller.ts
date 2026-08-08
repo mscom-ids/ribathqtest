@@ -659,7 +659,7 @@ export const submitLeaveRequest = async (req: Request, res: Response) => {
             return res.status(403).json({ success: false, error: 'Not authorized to submit leave for this student' });
         }
 
-        if (!student_id || !leave_type || !start_datetime || !end_datetime) {
+        if (!student_id || !leave_type || !start_datetime || (leave_type === 'out-campus' && !end_datetime)) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
@@ -671,7 +671,7 @@ export const submitLeaveRequest = async (req: Request, res: Response) => {
         const result = await db.query(
             `INSERT INTO student_leaves (student_id, leave_type, start_datetime, end_datetime, reason, status)
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [student_id, leave_type, start_datetime, end_datetime, reason || null, 'pending']
+            [student_id, leave_type, start_datetime, leave_type === 'on-campus' ? null : end_datetime, reason || null, 'pending']
         );
 
         res.json({ success: true, leave: result.rows[0] });

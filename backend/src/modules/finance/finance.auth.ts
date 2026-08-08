@@ -129,22 +129,16 @@ export async function findPermission(
     }
 
     const params: unknown[] = [actor.staffId, capability];
-    let categorySql = 'AND category_id IS NULL';
-    if (categoryId) {
-        params.push(categoryId);
-        categorySql = `AND (category_id = $${params.length} OR category_id IS NULL)`;
-    }
     const result = await db.query(
         `SELECT id, staff_id, capability, category_id, student_scope, amount_limit,
                 valid_from, valid_until, granted_by, revoked_at
          FROM finance_staff_permissions
          WHERE staff_id = $1
            AND capability = $2
-           ${categorySql}
            AND revoked_at IS NULL
            AND (valid_from IS NULL OR valid_from <= CURRENT_DATE)
            AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
-         ORDER BY (category_id IS NOT NULL) DESC, created_at DESC
+         ORDER BY CASE WHEN student_scope = 'all' THEN 0 ELSE 1 END, created_at DESC
          LIMIT 1`,
         params as any[],
     );
@@ -164,10 +158,6 @@ export async function requireFinanceCapability(
     const permission = await findPermission(actor, capability, options.categoryId);
     if (!permission) {
         throw new FinanceError(403, 'You are not authorized for this finance action.', 'FINANCE_FORBIDDEN');
-    }
-
-    if (options.categoryId && permission.category_id && permission.category_id !== options.categoryId) {
-        throw new FinanceError(403, 'You are not authorized for this charge category.', 'CATEGORY_FORBIDDEN');
     }
 
     if (options.amountPaise !== undefined && permission.amount_limit !== null) {
@@ -213,4 +203,3 @@ export function requireFinanceManager(actor: FinanceActor) {
         throw new FinanceError(403, 'Only finance administrators can perform this action.', 'FINANCE_MANAGER_REQUIRED');
     }
 }
-

@@ -166,6 +166,7 @@ async function getLeavesOverlappingSession(
                    sl.start_datetime,
                    sl.end_datetime,
                    sl.actual_return_datetime,
+                   COALESCE(sl.leave_type, 'out-campus') AS leave_type,
                    COALESCE(sl.status, 'outside') AS status,
                    0 AS source_priority
             FROM student_current_presence scp
@@ -178,6 +179,7 @@ async function getLeavesOverlappingSession(
                    sl.start_datetime,
                    sl.end_datetime,
                    sl.actual_return_datetime,
+                   sl.leave_type,
                    sl.status,
                    1 AS source_priority
             FROM student_leaves sl
@@ -200,6 +202,7 @@ async function getLeavesOverlappingSession(
                start_datetime,
                end_datetime,
                actual_return_datetime,
+               leave_type,
                status
         FROM (
             SELECT * FROM outside_presence
@@ -212,6 +215,7 @@ async function getLeavesOverlappingSession(
                sl.start_datetime,
                sl.end_datetime,
                sl.actual_return_datetime,
+               sl.leave_type,
                sl.status
            FROM student_leaves sl
            WHERE sl.student_id = ANY($1::text[])
@@ -1976,14 +1980,16 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
                 studentsWithLeave = students.map((student: any) => {
                     const leave = leaveByStudent.get(student.adm_no);
-                    const isLockedOutside = !!leave;
+                    const isOnCampusLeave = ['on-campus', 'internal'].includes(String(leave?.leave_type || '').toLowerCase());
+                    const isUnavailable = !!leave;
                     return {
                         ...student,
-                        is_locked_outside: isLockedOutside,
+                        is_locked_outside: isUnavailable,
                         went_outside_later: false,
                         leave_start_time: leave?.start_datetime || null,
-                        is_on_leave: isLockedOutside,
-                        attendance_status: isLockedOutside ? 'outside' : 'pending',
+                        is_on_leave: isOnCampusLeave,
+                        leave_type: leave?.leave_type || null,
+                        attendance_status: isOnCampusLeave ? 'on_leave' : isUnavailable ? 'outside' : 'pending',
                     };
                 });
             } catch (leaveErr: any) {
@@ -2060,16 +2066,22 @@ export const markAttendance = async (req: Request, res: Response) => {
             ...submittedMarks.map((mark: any) => mark.student_id),
             ...existingMarks.rows.map((mark: any) => mark.student_id),
         ].filter(Boolean)));
-        const outsideLeaves = await getLeavesOverlappingSession(
+        const unavailableLeaves = await getLeavesOverlappingSession(
             leaveCandidateIds,
             date,
             schedule.start_time,
             schedule.end_time,
         );
-        const outsideStudentIds = new Set(outsideLeaves.map((leave: any) => leave.student_id));
+        const unavailableByStudent = new Map(
+            unavailableLeaves.map((leave: any) => [leave.student_id, leave]),
+        );
         const marksToPersist = submittedMarks.map((mark: any) => ({
             ...mark,
-            status: outsideStudentIds.has(mark.student_id) ? 'Outside' : mark.status,
+            status: unavailableByStudent.has(mark.student_id)
+                ? ['on-campus', 'internal'].includes(String(unavailableByStudent.get(mark.student_id)?.leave_type || '').toLowerCase())
+                    ? 'Leave'
+                    : 'Outside'
+                : mark.status,
         }));
         const submittedIds: string[] = marksToPersist.map((mark: any) => mark.student_id);
         const linkedGroups = parseLinkedGroups(schedule.attendance_groups);

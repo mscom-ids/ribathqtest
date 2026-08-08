@@ -35,10 +35,14 @@ import api from "@/lib/api"
 import { toast } from "sonner"
 
 const leaveRequestSchema = z.object({
-    leave_type: z.enum(["personal", "internal"]),
+    leave_type: z.enum(["out-campus", "on-campus"]),
     start_datetime: z.string().min(1, "Start time is required"),
-    end_datetime: z.string().min(1, "End time is required"),
+    end_datetime: z.string().optional(),
     reason: z.string().min(1, "Reason is required"),
+}).superRefine((values, ctx) => {
+    if (values.leave_type === 'out-campus' && !values.end_datetime) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['end_datetime'], message: 'Expected return is required' })
+    }
 })
 
 type LeaveRequestValues = z.infer<typeof leaveRequestSchema>
@@ -56,7 +60,7 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
     const form = useForm<LeaveRequestValues>({
         resolver: zodResolver(leaveRequestSchema),
         defaultValues: {
-            leave_type: "personal",
+            leave_type: "out-campus",
             start_datetime: "",
             end_datetime: "",
             reason: "",
@@ -67,7 +71,7 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
         setLoading(true)
         
         const start = new Date(values.start_datetime).toISOString()
-        const end = new Date(values.end_datetime).toISOString()
+        const end = values.leave_type === 'on-campus' ? null : new Date(values.end_datetime!).toISOString()
 
         try {
             const res = await api.post('/parent/leaves', {
@@ -116,8 +120,8 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="personal">Personal / Family Reason</SelectItem>
-                                            <SelectItem value="internal">Medical / Emergency</SelectItem>
+                                            <SelectItem value="out-campus">Out-Campus / Family Reason</SelectItem>
+                                            <SelectItem value="on-campus">On-Campus / Medical Recovery</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <FormMessage />
@@ -125,8 +129,8 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
                             )}
                         />
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <FormField
+                        <div className={form.watch('leave_type') === 'on-campus' ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
+                            {form.watch('leave_type') === 'out-campus' && <FormField
                                 control={form.control}
                                 name="start_datetime"
                                 render={({ field }) => (
@@ -159,8 +163,14 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
                                         <FormMessage />
                                     </FormItem>
                                 )}
-                            />
+                            />}
                         </div>
+
+                        {form.watch('leave_type') === 'on-campus' && (
+                            <p className="rounded-md bg-violet-50 px-3 py-2 text-xs text-violet-700">
+                                No expected return is needed. The leave stays active until an authorized staff member records the actual end time.
+                            </p>
+                        )}
 
                         <FormField
                             control={form.control}

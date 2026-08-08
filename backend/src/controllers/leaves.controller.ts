@@ -813,7 +813,7 @@ export const createPersonalLeave = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Student, leave type, and start datetime are required' });
         }
 
-        if (leave_type !== 'outdoor' && !end_datetime) {
+        if (leave_type === 'out-campus' && !end_datetime) {
             return res.status(400).json({ success: false, error: 'Expected return is required' });
         }
 
@@ -864,7 +864,11 @@ export const createPersonalLeave = async (req: Request, res: Response) => {
 
             // on-campus leaves are directly authorized (status='approved'); outside movements start 'outside'
             const initialStatus = (leave_type === 'out-campus' || leave_type === 'outdoor') ? 'outside' : 'approved';
-            const finalEndDatetime = leave_type === 'outdoor' ? null : end_datetime;
+            // On-campus leave is intentionally open-ended. It is closed later
+            // with the actual return-to-routine timestamp.
+            const finalEndDatetime = leave_type === 'on-campus' || leave_type === 'outdoor'
+                ? null
+                : end_datetime;
             const finalReason = leave_type === 'outdoor' ? 'Outdoor' : reason;
             const finalReasonCategory = leave_type === 'outdoor' ? 'Outdoor' : reason_category;
 
@@ -916,8 +920,20 @@ export const createGroupLeave = async (req: Request, res: Response) => {
         const { group_type, group_value, leave_type, start_datetime, end_datetime, reason_category, remarks, exceptions, companion_name, companion_relationship } = req.body;
         const user = (req as any).user;
 
-        if (new Date(end_datetime) <= new Date(start_datetime)) {
+        if (!group_type || !group_value || !leave_type || !start_datetime || !reason_category) {
+            return res.status(400).json({ success: false, error: 'Group, leave type, start datetime, and reason are required' });
+        }
+
+        if (leave_type === 'out-campus' && !end_datetime) {
+            return res.status(400).json({ success: false, error: 'Expected return is required' });
+        }
+
+        if (end_datetime && new Date(end_datetime) <= new Date(start_datetime)) {
             return res.status(400).json({ success: false, error: 'End datetime must be after start datetime' });
+        }
+
+        if (!['out-campus', 'on-campus'].includes(leave_type)) {
+            return res.status(400).json({ success: false, error: 'Invalid group leave type' });
         }
 
         if (leave_type === 'out-campus' && (!companion_name?.trim() || !companion_relationship?.trim())) {
@@ -954,25 +970,29 @@ export const createGroupLeave = async (req: Request, res: Response) => {
 
             // Bulk insert student_leaves + paired student_movements in 2 round trips
             // (was 2N round trips for groups of any size).
+            const initialStatus = leave_type === 'on-campus' ? 'approved' : 'outside';
+            const finalEndDatetime = leave_type === 'on-campus' ? null : end_datetime;
             const slBulk = await client.query(
                 `INSERT INTO student_leaves
                      (student_id, leave_type, start_datetime, end_datetime, reason_category, remarks, companion_name, companion_relationship, status, group_id, group_type, group_value, created_by)
-                 SELECT sid, $2, $3, $4, $5, $6, $7, $8, 'outside', $9, $10, $11, $12
+                 SELECT sid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
                  FROM unnest($1::text[]) AS t(sid)
                  RETURNING id, student_id`,
-                [targetStudents, leave_type, start_datetime, end_datetime, reason_category, remarks,
-                 companion_name || null, companion_relationship || null, group_id, group_type, String(group_value), user.id]
+                [targetStudents, leave_type, start_datetime, finalEndDatetime, reason_category, remarks,
+                 companion_name || null, companion_relationship || null, initialStatus, group_id, group_type, String(group_value), user.id]
             );
 
-            const movStudentIds = slBulk.rows.map((r: any) => r.student_id);
-            const movLeaveIds   = slBulk.rows.map((r: any) => r.id);
+            if (initialStatus === 'outside') {
+                const movStudentIds = slBulk.rows.map((r: any) => r.student_id);
+                const movLeaveIds = slBulk.rows.map((r: any) => r.id);
 
-            await client.query(
-                `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
-                 SELECT sid, lid, 'out', $1, $2
-                 FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
-                [start_datetime, user.id, movStudentIds, movLeaveIds]
-            );
+                await client.query(
+                    `INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
+                     SELECT sid, lid, 'out', $1, $2
+                     FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
+                    [start_datetime, user.id, movStudentIds, movLeaveIds]
+                );
+            }
 
             await client.query('COMMIT');
             invalidateLeaveCaches();
@@ -1112,6 +1132,10 @@ export const recordReturn = async (req: Request, res: Response) => {
     try {
         const { leave_id, return_datetime } = req.body;
         const user = (req as any).user;
+
+        if (!leave_id || !return_datetime || Number.isNaN(new Date(return_datetime).getTime())) {
+            return res.status(400).json({ success: false, error: 'A valid leave and end date/time are required' });
+        }
 
         const client = await db.getClient();
         try {

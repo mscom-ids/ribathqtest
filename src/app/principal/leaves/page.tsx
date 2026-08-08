@@ -19,6 +19,7 @@ import {
 } from "../_components/principal-ui"
 import { Plus, X, User, Calendar, Clock, Check, AlertCircle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
+import { RecordReturnModal } from "@/app/admin/leaves/record-return-modal"
 
 type ActiveStudentOption = {
     adm_no: string
@@ -51,6 +52,7 @@ export default function PrincipalLeavesPage() {
     const [companionName, setCompanionName] = useState("")
     const [companionRelationship, setCompanionRelationship] = useState("")
     const [submitting, setSubmitting] = useState(false)
+    const [leaveForReturn, setLeaveForReturn] = useState<LeaveRecord | null>(null)
 
     const fetchLeaves = async (silent = false) => {
         if (!silent) setLoading(true)
@@ -106,19 +108,6 @@ export default function PrincipalLeavesPage() {
         return studentsList.filter(s => s.name.toLowerCase().includes(q) || s.adm_no.toLowerCase().includes(q)).slice(0, 10)
     }, [studentsList, studentSearch])
 
-    const handleRecordReturn = async (leaveId: string) => {
-        try {
-            await api.post("/leaves/record-return", {
-                leave_id: leaveId,
-                return_datetime: new Date().toISOString()
-            })
-            toast.success("Student return recorded successfully")
-            void fetchLeaves(true)
-        } catch (e: any) {
-            toast.error(e.response?.data?.error || "Failed to record return")
-        }
-    }
-
     const resetForm = () => {
         setSelectedStudent(null)
         setStudentSearch("")
@@ -142,7 +131,7 @@ export default function PrincipalLeavesPage() {
             toast.error("Please enter a departure date & time")
             return
         }
-        if (leaveType !== "outdoor" && !endDatetime) {
+        if (leaveType === "out-campus" && !endDatetime) {
             toast.error("Please enter expected return date & time")
             return
         }
@@ -296,14 +285,14 @@ export default function PrincipalLeavesPage() {
                                                 <td className="px-5 py-4 text-right">
                                                     <div className="flex justify-end items-center gap-3">
                                                         <Link href={`/principal/students/${row.student?.adm_no}`} className="text-[10px] font-black uppercase text-teal-600 hover:text-teal-800 tracking-wider">Profile</Link>
-                                                        {row.status === "outside" && (
+                                                        {(row.status === "outside" || (row.leave_type === 'on-campus' && row.status === 'approved')) && (
                                                             <button
                                                                 suppressHydrationWarning
-                                                                onClick={() => handleRecordReturn(row.id)}
+                                                                onClick={() => setLeaveForReturn(row)}
                                                                 className="inline-flex h-7 items-center justify-center gap-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 text-[9px] font-black text-emerald-700 uppercase tracking-wider transition"
                                                             >
                                                                 <Check className="h-3 w-3" />
-                                                                Return
+                                                                {row.leave_type === 'on-campus' ? 'End leave' : 'Return'}
                                                             </button>
                                                         )}
                                                     </div>
@@ -485,7 +474,7 @@ export default function PrincipalLeavesPage() {
                                         className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 font-bold text-slate-700 outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-100/50"
                                     />
                                 </div>
-                                {leaveType !== "outdoor" && (
+                                {leaveType === "out-campus" && (
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
                                             <Clock className="h-3 w-3" /> Expected Return
@@ -499,6 +488,12 @@ export default function PrincipalLeavesPage() {
                                     </div>
                                 )}
                             </div>
+
+                            {leaveType === 'on-campus' && (
+                                <p className="rounded-xl bg-violet-50 px-3 py-2 text-[10px] font-bold text-violet-700">
+                                    Open-ended leave: record the actual end date and time when the student returns to normal campus activities.
+                                </p>
+                            )}
 
                             {/* Companion Fields (Only for out-campus or outdoor) */}
                             {(leaveType === "out-campus" || leaveType === "outdoor") && (
@@ -575,6 +570,16 @@ export default function PrincipalLeavesPage() {
                         </form>
                     </div>
                 </div>
+            )}
+            {leaveForReturn && (
+                <RecordReturnModal
+                    leaveId={leaveForReturn.id}
+                    type="personal"
+                    purpose={leaveForReturn.leave_type === 'on-campus' ? 'end-on-campus' : 'return'}
+                    open={!!leaveForReturn}
+                    onOpenChange={(open) => !open && setLeaveForReturn(null)}
+                    onSuccess={() => void fetchLeaves(true)}
+                />
             )}
         </PrincipalFrame>
     )

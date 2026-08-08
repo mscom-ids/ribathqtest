@@ -11,6 +11,7 @@ import { PersonalLeaveModal } from "@/app/admin/leaves/personal-modal"
 import { InstitutionalExitModal } from "@/app/admin/leaves/institutional-exit-modal"
 import { OutsideStudentsPanel } from "@/app/admin/leaves/tabs/outside-students-panel"
 import { LeaveTable } from "@/app/admin/leaves/tabs/leave-table"
+import { RecordReturnModal } from "@/app/admin/leaves/record-return-modal"
 
 export interface StudentLeave {
     id: string
@@ -43,11 +44,6 @@ type InstitutionalLeave = {
     created_at: string
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-    const maybeError = error as { response?: { data?: { error?: string } } }
-    return maybeError.response?.data?.error || fallback
-}
-
 type TabKey = "outside" | "institutional" | "internal"
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
@@ -67,6 +63,7 @@ export default function StaffLeavesPage() {
     // null = closed, 'out-campus' or 'on-campus' = which modal is open
     const [leaveModalType, setLeaveModalType] = useState<'out-campus' | 'on-campus' | null>(null)
     const [leaveForExit, setLeaveForExit] = useState<InstitutionalLeave | null>(null)
+    const [leaveForEnd, setLeaveForEnd] = useState<StudentLeave | null>(null)
 
     const fetchLeaves = async () => {
         setLoading(true)
@@ -107,19 +104,6 @@ export default function StaffLeavesPage() {
 
     const internalLeaves = filtered.filter(l => l.leave_type === "internal" || l.leave_type === "on-campus")
     const institutionalLeaves = filtered.filter(l => l.leave_type === "institutional")
-
-    const handleOnCampusReturn = async (leave: StudentLeave) => {
-        try {
-            await api.post('/leaves/record-return', {
-                leave_id: leave.id,
-                return_datetime: new Date().toISOString(),
-            })
-            await fetchLeaves()
-        } catch (err: unknown) {
-            console.error('Failed to record return:', err)
-            alert(getErrorMessage(err, 'Failed to record return'))
-        }
-    }
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-[#020617]">
@@ -274,7 +258,7 @@ export default function StaffLeavesPage() {
                             leaves={internalLeaves}
                             isLoading={loading}
                             showReturnAction
-                            onMarkReturn={handleOnCampusReturn}
+                            onMarkReturn={setLeaveForEnd}
                         />
                     </div>
                 )}
@@ -300,6 +284,16 @@ export default function StaffLeavesPage() {
                 onOpenChange={(open) => !open && setLeaveForExit(null)}
                 onSuccess={fetchLeaves}
             />
+            {leaveForEnd && (
+                <RecordReturnModal
+                    leaveId={leaveForEnd.id}
+                    type="personal"
+                    purpose="end-on-campus"
+                    open={!!leaveForEnd}
+                    onOpenChange={(open) => !open && setLeaveForEnd(null)}
+                    onSuccess={fetchLeaves}
+                />
+            )}
         </div>
     )
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { db } from '../config/db';
 import { allocateOldestFirst, moneyToPaise, paiseToMoney } from '../utils/finance-money';
-import { buildFinanceAccessProfile, buildLedgerViewAccessProfile, visibleCategoryIds } from '../modules/finance/finance.scope';
+import { buildFinanceAccessProfile, buildLedgerViewAccessProfile } from '../modules/finance/finance.scope';
 import { currentMonthlyFees, workspace } from '../modules/finance/finance.service';
 import type { FinanceActor, FinancePermission } from '../modules/finance/finance.types';
 
@@ -52,8 +52,8 @@ const mixed = buildFinanceAccessProfile([
 ], false);
 assert.equal(mixed.fullLedger, true);
 assert.equal(mixed.fullLedgerAllStudents, false);
-assert.deepEqual(visibleCategoryIds(mixed, false), [medical]);
-assert.deepEqual(visibleCategoryIds(mixed, true), [medical, store]);
+assert.equal(mixed.allStudentChargeAccess, true);
+assert.equal(mixed.assignedStudentChargeAccess, true);
 
 const ledgerOnly = buildLedgerViewAccessProfile([
     permission('ledger:view', 'assigned'),

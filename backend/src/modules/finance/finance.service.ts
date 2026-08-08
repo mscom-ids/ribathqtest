@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { db } from '../../config/db';
 import { allocateOldestFirst, moneyToPaise, paiseToMoney } from '../../utils/finance-money';
 import { findPermission, listCurrentPermissions, requireFinanceCapability, requireFinanceManager } from './finance.auth';
-import { buildFinanceAccessProfile, buildLedgerViewAccessProfile, visibleCategoryIds } from './finance.scope';
+import { buildFinanceAccessProfile, buildLedgerViewAccessProfile } from './finance.scope';
 import { FinanceActor, FinanceError, FinancePermission, isFinanceManager, isFinanceReadRole } from './finance.types';
 import {
     boundedLimit,
@@ -72,12 +72,13 @@ async function audit(
     );
 }
 
-function categoriesForPermissions(permissions: FinancePermission[]) {
-    return [...new Set(
-        permissions
-            .filter(permission => permission.capability === 'charge:create' && permission.category_id)
-            .map(permission => String(permission.category_id)),
-    )];
+function hasChargePermission(permissions: FinancePermission[]) {
+    return permissions.some(permission => permission.capability === 'charge:create');
+}
+
+async function activeChargeCategoryIds() {
+    const result = await db.query(`SELECT id FROM charge_categories WHERE is_active = true ORDER BY name`);
+    return result.rows.map(category => String(category.id));
 }
 
 function assignedExpression(actorParameter: string, snapshotAlias = 'snapshot', studentAlias = 's') {
@@ -109,14 +110,15 @@ export async function financeCapabilities(actor: FinanceActor, providedPermissio
     const manager = isFinanceManager(actor.role);
     const reader = isFinanceReadRole(actor.role);
     const has = (value: string) => manager || permissions.some(permission => permission.capability === value);
+    const canAddCharge = has('charge:create');
     return {
         can_view_overview: reader || permissions.length > 0,
         can_view_dues: reader || permissions.length > 0,
         can_view_transactions: reader || has('payment:collect'),
-        can_add_charge: has('charge:create'),
+        can_add_charge: canAddCharge,
         can_collect_payment: has('payment:collect'),
         can_manage_setup: manager,
-        allowed_category_ids: manager ? [] : categoriesForPermissions(permissions),
+        allowed_category_ids: manager || canAddCharge ? await activeChargeCategoryIds() : [],
         amount_limit: manager
             ? null
             : permissions
@@ -151,7 +153,11 @@ async function accountVisibility(actor: FinanceActor, studentId: string) {
     const profile = buildFinanceAccessProfile(permissions, isFinanceReadRole(actor.role));
     const assigned = profile.fullLedgerAllStudents ? false : await isStudentAssigned(actor, studentId);
     const fullLedgerForStudent = profile.fullLedger && (profile.fullLedgerAllStudents || assigned);
-    const categoryIds = fullLedgerForStudent ? [] : visibleCategoryIds(profile, assigned);
+    const canViewChargesForStudent = profile.allStudentChargeAccess
+        || (assigned && profile.assignedStudentChargeAccess);
+    const categoryIds = fullLedgerForStudent || !canViewChargesForStudent
+        ? []
+        : await activeChargeCategoryIds();
     if (!fullLedgerForStudent && !categoryIds.length) {
         throw new FinanceError(403, 'You are not authorized for this student.', 'STUDENT_SCOPE_FORBIDDEN');
     }
@@ -822,7 +828,6 @@ export async function addOpeningBalances(actor: FinanceActor, body: any) {
 export async function grantPermissions(actor: FinanceActor, body: any) {
     requireFinanceManager(actor);
     const staffId = requiredUuid(body?.staff_id, 'Staff');
-    const categoryId = optionalUuid(body?.category_id, 'Charge category');
     const scope = studentScope(body?.student_scope || body?.scope_type);
     const limit = body?.amount_limit ?? body?.max_amount;
     const amountLimit = limit === undefined || limit === null || String(limit).trim() === ''
@@ -839,10 +844,6 @@ export async function grantPermissions(actor: FinanceActor, body: any) {
     if (body?.can_add_charge) requested.add('charge:create');
     if (body?.can_collect_payment) requested.add('payment:collect');
     if (!requested.size) throw new FinanceError(400, 'At least one permission capability is required.', 'VALIDATION_ERROR');
-    if (requested.has('charge:create') && !categoryId) {
-        throw new FinanceError(400, 'A charge category is required for charge-entry permission.', 'VALIDATION_ERROR');
-    }
-
     const client = await db.getClient();
     try {
         await client.query('BEGIN');
@@ -850,14 +851,12 @@ export async function grantPermissions(actor: FinanceActor, body: any) {
         if (!staff.rows[0]) throw new FinanceError(404, 'Active staff member not found.', 'STAFF_NOT_FOUND');
         const created: any[] = [];
         for (const item of requested) {
-            const itemCategory = item === 'charge:create' ? categoryId : null;
             const existing = await client.query(
                 `SELECT id FROM finance_staff_permissions
                  WHERE staff_id = $1 AND capability = $2
-                   AND category_id IS NOT DISTINCT FROM $3::uuid
                    AND revoked_at IS NULL
                  FOR UPDATE`,
-                [staffId, item, itemCategory],
+                [staffId, item],
             );
             if (existing.rows[0]) {
                 throw new FinanceError(409, 'An active matching permission already exists.', 'PERMISSION_EXISTS');
@@ -868,14 +867,14 @@ export async function grantPermissions(actor: FinanceActor, body: any) {
                      valid_from, valid_until, granted_by)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING *`,
-                [staffId, item, itemCategory, scope, amountLimit, validFrom, validUntil, actor.staffId],
+                [staffId, item, null, scope, amountLimit, validFrom, validUntil, actor.staffId],
             );
             created.push(result.rows[0]);
             await audit(client, actor, {
                 action: 'permission_granted',
                 entityType: 'staff_permission',
                 entityId: result.rows[0].id,
-                metadata: { staff_id: staffId, capability: item, category_id: itemCategory, student_scope: scope, amount_limit: amountLimit },
+                metadata: { staff_id: staffId, capability: item, student_scope: scope, amount_limit: amountLimit },
             });
         }
         await client.query('COMMIT');
@@ -907,8 +906,11 @@ export async function revokePermission(actor: FinanceActor, permissionIdInput: u
             return { permission: current.rows[0], duplicate: true };
         }
         const updated = await client.query(
-            `UPDATE finance_staff_permissions SET revoked_at = NOW() WHERE id = $1 RETURNING *`,
-            [permissionId],
+            `UPDATE finance_staff_permissions
+             SET revoked_at = NOW()
+             WHERE staff_id = $1 AND capability = $2 AND revoked_at IS NULL
+             RETURNING *`,
+            [current.rows[0].staff_id, current.rows[0].capability],
         );
         await audit(client, actor, {
             action: 'permission_revoked',
@@ -1075,8 +1077,9 @@ export async function workspace(actor: FinanceActor, query: any) {
 
     const capabilities = await financeCapabilities(actor, permissions);
     const profile = buildFinanceAccessProfile(permissions, isFinanceReadRole(actor.role));
-    const allCategoryIds = profile.allStudentCategoryIds;
-    const assignedCategoryIds = profile.assignedStudentCategoryIds;
+    const activeCategoryIds = hasChargePermission(permissions) ? await activeChargeCategoryIds() : [];
+    const allCategoryIds = profile.allStudentChargeAccess ? activeCategoryIds : [];
+    const assignedCategoryIds = profile.assignedStudentChargeAccess ? activeCategoryIds : [];
     const accessParams = [
         actor.staffId,
         serviceMonth,
@@ -1231,11 +1234,10 @@ export async function workspace(actor: FinanceActor, query: any) {
         summaryAccessParams,
     );
 
-    const categoryIds = categoriesForPermissions(permissions);
     const categoriesPromise = isFinanceManager(actor.role)
         ? db.query(`SELECT * FROM charge_categories WHERE is_active = true ORDER BY name`)
-        : categoryIds.length
-            ? db.query(`SELECT * FROM charge_categories WHERE is_active = true AND id = ANY($1::uuid[]) ORDER BY name`, [categoryIds])
+        : capabilities.can_add_charge
+            ? db.query(`SELECT * FROM charge_categories WHERE is_active = true ORDER BY name`)
             : Promise.resolve({ rows: [] });
     const accountsPromise = capabilities.can_collect_payment || isFinanceReadRole(actor.role)
         ? db.query(`SELECT id, account_holder, account_type, details, is_active,
@@ -1298,7 +1300,8 @@ export async function workspace(actor: FinanceActor, query: any) {
                              status, (status = 'active') AS is_active
                       FROM finance_fee_schedules ORDER BY effective_from DESC, created_at DESC`),
             db.query(`SELECT id, name, role, photo_url FROM staff WHERE is_active = true ORDER BY name`),
-            db.query(`SELECT p.*, s.name AS staff_name, c.name AS category_name,
+            db.query(`SELECT DISTINCT ON (p.staff_id, p.capability)
+                             p.*, s.name AS staff_name, c.name AS category_name,
                              (p.capability = 'charge:create') AS can_add_charge,
                              (p.capability = 'payment:collect') AS can_collect_payment,
                              p.amount_limit AS max_amount,
@@ -1307,13 +1310,11 @@ export async function workspace(actor: FinanceActor, query: any) {
                       FROM finance_staff_permissions p
                       JOIN staff s ON s.id = p.staff_id
                       LEFT JOIN charge_categories c ON c.id = p.category_id
-                      ORDER BY p.created_at DESC`),
-            db.query(`SELECT c.*,
-                             COUNT(p.id) FILTER (WHERE p.revoked_at IS NULL) AS authorized_staff_count
-                      FROM charge_categories c
-                      LEFT JOIN finance_staff_permissions p
-                        ON p.category_id = c.id AND p.capability = 'charge:create'
-                      GROUP BY c.id ORDER BY c.name`),
+                      WHERE p.revoked_at IS NULL
+                      ORDER BY p.staff_id, p.capability,
+                               CASE WHEN p.student_scope = 'all' THEN 0 ELSE 1 END,
+                               p.created_at DESC`),
+            db.query(`SELECT * FROM charge_categories ORDER BY name`),
             db.query(`SELECT id, account_holder, account_type, details, is_active,
                              account_holder || ' (' || upper(account_type) || ')' AS account_name
                       FROM payment_accounts ORDER BY account_holder`),
@@ -1350,10 +1351,9 @@ export async function workspace(actor: FinanceActor, query: any) {
 }
 export async function listCategories(actor: FinanceActor) {
     const permissions = await listCurrentPermissions(actor);
-    const categoryIds = categoriesForPermissions(permissions);
     if (isFinanceReadRole(actor.role)) return (await db.query('SELECT * FROM charge_categories ORDER BY name')).rows;
-    if (!categoryIds.length) return [];
-    return (await db.query('SELECT * FROM charge_categories WHERE id = ANY($1::uuid[]) ORDER BY name', [categoryIds])).rows;
+    if (!hasChargePermission(permissions)) return [];
+    return (await db.query('SELECT * FROM charge_categories ORDER BY name')).rows;
 }
 
 export async function createCategory(actor: FinanceActor, body: any) {
@@ -1489,7 +1489,7 @@ export async function activeStudents(actor: FinanceActor) {
         throw new FinanceError(403, 'No finance access has been assigned to you.', 'FINANCE_FORBIDDEN');
     }
     const profile = buildFinanceAccessProfile(permissions, isFinanceReadRole(actor.role));
-    const canAccessAll = profile.fullLedgerAllStudents || profile.allStudentCategoryIds.length > 0;
+    const canAccessAll = profile.fullLedgerAllStudents || profile.allStudentChargeAccess;
 
     return (await db.query(
         `SELECT s.adm_no, s.adm_no AS id, s.adm_no AS admission_number, s.name,

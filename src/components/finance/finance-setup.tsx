@@ -336,7 +336,7 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
 
 function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: () => Promise<void> | void }) {
     const categories = setup.categories || []
-    const [form, setForm] = useState({ staff_id: "", capability: "charge:create", category_id: "", student_scope: "assigned", max_amount: "" })
+    const [form, setForm] = useState({ staff_id: "", capability: "charge:create", student_scope: "assigned", max_amount: "" })
     const [saving, setSaving] = useState(false)
     const [revoking, setRevoking] = useState<string | null>(null)
     const [categoryForm, setCategoryForm] = useState({ name: "", description: "" })
@@ -350,11 +350,9 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
         event.preventDefault()
         setSaving(true)
         try {
-            const isCharge = form.capability === "charge:create"
             const result = await financeApi.grantPermission({
                 staff_id: form.staff_id,
                 capability: form.capability,
-                category_id: isCharge ? form.category_id || undefined : undefined,
                 student_scope: form.student_scope,
                 amount_limit: form.max_amount ? decimalMoney(form.max_amount) : undefined,
             })
@@ -454,7 +452,7 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
 
     return (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,.75fr)]">
-            <SetupCard icon={ShieldCheck} title="Staff finance access" description="Grant only the category or collection action each staff member needs. The backend enforces every grant.">
+            <SetupCard icon={ShieldCheck} title="Staff finance access" description="Grant each action once. A grant applies to every active charge category; student scope controls which students the staff member can handle.">
                 <form onSubmit={grant} className="grid gap-3 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900 sm:grid-cols-2">
                     <SearchableSelect
                         label="Staff"
@@ -468,19 +466,11 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
                     />
                     <Field label="Action">
                         <select value={form.capability} onChange={event => setForm({ ...form, capability: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
-                            <option value="charge:create">Add category charge</option>
+                            <option value="charge:create">Add charge</option>
                             <option value="payment:collect">Collect payment</option>
                             <option value="ledger:view">View student ledger</option>
                         </select>
                     </Field>
-                    {form.capability === "charge:create" && (
-                        <Field label="Category">
-                            <select required value={form.category_id} onChange={event => setForm({ ...form, category_id: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
-                                <option value="">Choose category</option>
-                                {categories.filter(category => category.is_active !== false).map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-                            </select>
-                        </Field>
-                    )}
                     <Field label="Student scope">
                         <select value={form.student_scope} onChange={event => setForm({ ...form, student_scope: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950">
                             <option value="assigned">Assigned students only</option>
@@ -488,7 +478,7 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
                         </select>
                     </Field>
                     <Field label="Maximum per entry (optional)"><Input type="number" min="0.01" step="0.01" value={form.max_amount} onChange={event => setForm({ ...form, max_amount: event.target.value })} /></Field>
-                    <div className="flex items-end sm:justify-end"><Button type="submit" disabled={saving || !form.staff_id || (form.capability === "charge:create" && !form.category_id)} className="w-full gap-2 sm:w-auto">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Grant access</Button></div>
+                    <div className="flex items-end sm:justify-end"><Button type="submit" disabled={saving || !form.staff_id} className="w-full gap-2 sm:w-auto">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Grant access</Button></div>
                 </form>
 
                 <div className="mt-5 space-y-2">
@@ -497,7 +487,7 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{permission.staff_name || setup.staff?.find(staff => staff.id === permission.staff_id)?.name || "Staff"}</p>
                                 <p className="mt-0.5 text-xs text-slate-500">
-                                    {permission.capability || (permission.can_collect_payment ? "Collect payment" : `Add ${permission.category_name || "charge"}`)} · {permission.scope_type || permission.student_scope || "assigned"}
+                                    {permission.capability || (permission.can_collect_payment ? "Collect payment" : "Add charge")} · {permission.scope_type || permission.student_scope || "assigned"}
                                 </p>
                             </div>
                             <Button size="icon" variant="ghost" aria-label="Revoke finance access" disabled={revoking === permission.id} onClick={() => revoke(permission)} className="shrink-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/30">
@@ -525,7 +515,7 @@ function AccessSection({ setup, onRefresh }: { setup: FinanceSetup; onRefresh: (
                             <div key={category.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 dark:border-slate-800">
                                 <div className="min-w-0">
                                     <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{category.name}</p>
-                                    <p className="text-xs text-slate-500">{Number(category.authorized_staff_count || 0)} authorized staff</p>
+                                    <p className="text-xs text-slate-500">Available to staff with charge access</p>
                                 </div>
                                 <Button
                                     type="button"

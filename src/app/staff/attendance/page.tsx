@@ -51,19 +51,25 @@ type Student = {
     is_locked_outside?: boolean
     attendance_status?: string
     status?: string
+    leave_type?: string | null
     went_outside_later?: boolean
     leave_start_time?: string | null
 }
 
-type AttendanceStatus = "Present" | "Absent" | "Late" | "Outside"
+type AttendanceStatus = "Present" | "Absent" | "Late" | "Outside" | "On Leave"
+
+function lockedAttendanceStatus(student: Student): 'on_leave' | 'outside' | null {
+    const status = String(student.attendance_status || student.status || '').toLowerCase()
+    const leaveType = String(student.leave_type || '').toLowerCase()
+    if (student.is_on_leave || status === 'on_leave' || status === 'leave' || leaveType === 'on-campus' || leaveType === 'internal') {
+        return 'on_leave'
+    }
+    if (student.is_locked_outside || status === 'outside') return 'outside'
+    return null
+}
 
 function isOutsideStudent(student: Student) {
-    return Boolean(
-        student.is_locked_outside ||
-        student.is_on_leave ||
-        student.attendance_status?.toLowerCase() === "outside" ||
-        student.status?.toLowerCase() === "outside"
-    )
+    return lockedAttendanceStatus(student) !== null
 }
 
 type CalendarPolicy = {
@@ -333,9 +339,8 @@ export default function StaffAttendancePage() {
             const locks: Record<string, string> = {}
             const futures: Record<string, string> = {}
             scheduleStudents.forEach((s: Student) => {
-                if (isOutsideStudent(s)) {
-                    locks[s.adm_no] = 'outside'
-                }
+                const lockedStatus = lockedAttendanceStatus(s)
+                if (lockedStatus) locks[s.adm_no] = lockedStatus
                 if (s.went_outside_later) {
                     const timeStr = s.leave_start_time ? new Date(s.leave_start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later';
                     futures[s.adm_no] = timeStr;
@@ -344,10 +349,10 @@ export default function StaffAttendancePage() {
             setLockedLeaves(locks)
             setFutureLeaves(futures)
 
-            // Outside is a persisted, immutable attendance status.
+            // Leave/outside states are persisted and immutable in attendance.
             const map: Record<string, AttendanceStatus> = {}
             scheduleStudents.forEach((s: Student) => {
-                map[s.adm_no] = locks[s.adm_no] ? "Outside" : "Present"
+                map[s.adm_no] = locks[s.adm_no] === 'on_leave' ? "On Leave" : locks[s.adm_no] ? "Outside" : "Present"
             })
 
             // Override with any existing saved marks (but not for leave-locked students).
@@ -360,6 +365,7 @@ export default function StaffAttendancePage() {
                     else if (savedStatus === "absent") map[a.student_id] = "Absent"
                     else if (savedStatus === "late") map[a.student_id] = "Late"
                     else if (savedStatus === "outside") map[a.student_id] = "Outside"
+                    else if (savedStatus === "leave" || savedStatus === "on leave" || savedStatus === "on_leave") map[a.student_id] = "On Leave"
                 }
             })
 
@@ -395,7 +401,7 @@ export default function StaffAttendancePage() {
 
         const student_marks = sessionStudents.map(s => ({
             student_id: s.adm_no,
-            status: lockedLeaves[s.adm_no] ? "Outside" : (attendanceMap[s.adm_no] || "Present"),
+            status: lockedLeaves[s.adm_no] === 'on_leave' ? "Leave" : lockedLeaves[s.adm_no] ? "Outside" : (attendanceMap[s.adm_no] || "Present"),
         }))
 
         try {
@@ -455,7 +461,7 @@ export default function StaffAttendancePage() {
         const map: Record<string, AttendanceStatus> = {}
         sessionStudents.forEach(s => { 
             if (lockedLeaves[s.adm_no]) {
-                map[s.adm_no] = "Outside"
+                map[s.adm_no] = lockedLeaves[s.adm_no] === 'on_leave' ? "On Leave" : "Outside"
             } else {
                 map[s.adm_no] = status 
             }
@@ -505,6 +511,7 @@ export default function StaffAttendancePage() {
     const absentCount = Object.values(attendanceMap).filter(s => s === "Absent").length
     const lateCount = Object.values(attendanceMap).filter(s => s === "Late").length
     const outsideCount = Object.values(attendanceMap).filter(s => s === "Outside").length
+    const onLeaveCount = Object.values(attendanceMap).filter(s => s === "On Leave").length
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
@@ -795,6 +802,9 @@ export default function StaffAttendancePage() {
                             {outsideCount > 0 && (
                                 <span className="flex items-center gap-1 text-orange-500"><Lock className="h-3.5 w-3.5" /> {outsideCount}</span>
                             )}
+                            {onLeaveCount > 0 && (
+                                <span className="flex items-center gap-1 text-violet-500"><Lock className="h-3.5 w-3.5" /> On leave: {onLeaveCount}</span>
+                            )}
                         </div>
                         <div className="flex gap-1.5">
                             <Button variant="outline" size="sm" className="text-xs h-7 border-emerald-700 text-emerald-400 hover:bg-emerald-950"
@@ -850,9 +860,9 @@ export default function StaffAttendancePage() {
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {lockedLeaves[student.adm_no] ? (
-                                                    <Badge variant="outline" className="w-24 h-8 justify-center border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50 shadow-sm flex items-center gap-1.5 cursor-not-allowed mx-auto">
+                                                    <Badge variant="outline" className={cn("w-24 h-8 justify-center shadow-sm flex items-center gap-1.5 cursor-not-allowed mx-auto", lockedLeaves[student.adm_no] === 'on_leave' ? "border-violet-500/30 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/50" : "border-orange-500/30 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/50")}>
                                                         <Lock className="h-3 w-3" />
-                                                        OUTSIDE
+                                                        {lockedLeaves[student.adm_no] === 'on_leave' ? 'ON LEAVE' : 'OUTSIDE'}
                                                     </Badge>
                                                 ) : (
                                                     <div className="flex flex-col items-center gap-1">
