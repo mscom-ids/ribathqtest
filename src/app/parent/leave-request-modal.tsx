@@ -130,7 +130,7 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
                         />
 
                         <div className={form.watch('leave_type') === 'on-campus' ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
-                            {form.watch('leave_type') === 'out-campus' && <FormField
+                            <FormField
                                 control={form.control}
                                 name="start_datetime"
                                 render={({ field }) => (
@@ -147,7 +147,7 @@ export function LeaveRequestModal({ open, onOpenChange, studentId, studentName }
                                     </FormItem>
                                 )}
                             />
-                            <FormField
+                            {form.watch('leave_type') === 'out-campus' && <FormField
                                 control={form.control}
                                 name="end_datetime"
                                 render={({ field }) => (

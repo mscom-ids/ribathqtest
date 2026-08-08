@@ -1171,6 +1171,14 @@ export const recordReturn = async (req: Request, res: Response) => {
 
             if (leave.status === 'returned' || leave.status === 'completed') throw new Error('Leave has already been closed');
 
+            const isOnCampusLeave = ['on-campus', 'internal'].includes(String(leave.leave_type || '').toLowerCase());
+            if (isOnCampusLeave && leave.status !== 'approved') {
+                throw new Error('Only an active on-campus leave can be ended');
+            }
+            if (!isOnCampusLeave && leave.status !== 'outside') {
+                throw new Error('The student is not currently outside campus');
+            }
+
             // on-campus leaves transition approved→completed; out-campus leaves transition outside→returned
 
             const actualReturn = new Date(return_datetime);
@@ -1181,7 +1189,7 @@ export const recordReturn = async (req: Request, res: Response) => {
 
             const returnStatus = leave.end_datetime && actualReturn > new Date(leave.end_datetime) ? 'late' : 'normal';
             // on-campus leaves close as 'completed', out-campus close as 'returned'
-            const closedStatus = leave.leave_type === 'on-campus' ? 'completed' : 'returned';
+            const closedStatus = isOnCampusLeave ? 'completed' : 'returned';
 
             await client.query(`
                 INSERT INTO student_movements (student_id, leave_id, direction, timestamp, is_late, recorded_by)
@@ -1276,7 +1284,11 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
             result = await db.query(query, params);
         } catch (presenceErr: any) {
             if (presenceErr?.code !== '42P01') throw presenceErr;
-            let fallbackQuery = `SELECT sl.* FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'`;
+            let fallbackQuery = `SELECT sl.*
+                                 FROM student_leaves sl
+                                 JOIN students s ON sl.student_id = s.adm_no
+                                 WHERE (sl.status = 'outside' OR (sl.status = 'approved' AND sl.leave_type IN ('on-campus', 'internal')))
+                                   AND s.status = 'active'`;
             const fallbackParams: any[] = [];
             if (student_ids && typeof student_ids === 'string') {
                 const ids = student_ids.split(',');

@@ -854,31 +854,19 @@ export const getMyLeaves = async (req: Request, res: Response) => {
         }
         const staffId = staffResult.rows[0].id;
 
-        // Run both queries in parallel:
-        // 1. Out-campus/personal leaves only for this mentor's assigned students
-        // 2. ALL on-campus/internal leaves (campus-wide visibility for mentors)
-        const [assignedLeavesRes, oncampusLeavesRes] = await Promise.all([
-            db.query(
-                `SELECT sl.*, s.name as student_name, s.standard, s.adm_no
-                 FROM student_leaves sl
-                 JOIN students s ON sl.student_id = s.adm_no
-                 WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
-                   AND sl.leave_type NOT IN ('on-campus', 'internal', 'outdoor')
-                 ORDER BY sl.created_at DESC`,
-                [staffId]
-            ),
-            db.query(
-                `SELECT sl.*, s.name as student_name, s.standard, s.adm_no
-                 FROM student_leaves sl
-                 JOIN students s ON sl.student_id = s.adm_no
-                 WHERE sl.leave_type IN ('on-campus', 'internal')
-                 ORDER BY sl.created_at DESC`,
-                []
-            ),
-        ]);
+        // Mentors can view and close leaves only for their assigned students.
+        // This matches the authorization enforced by recordReturn.
+        const assignedLeavesRes = await db.query(
+            `SELECT sl.*, s.name as student_name, s.standard, s.adm_no
+             FROM student_leaves sl
+             JOIN students s ON sl.student_id = s.adm_no
+             WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
+               AND sl.leave_type <> 'outdoor'
+             ORDER BY sl.created_at DESC`,
+            [staffId]
+        );
 
-        const allRows = [...assignedLeavesRes.rows, ...oncampusLeavesRes.rows]
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const allRows = assignedLeavesRes.rows;
 
         const leaves = allRows.map((row: any) => ({
             ...row,

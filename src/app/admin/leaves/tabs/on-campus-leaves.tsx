@@ -190,14 +190,18 @@ export function OnCampusLeavesTab() {
                                     </TableCell>
                                     {activeTab === "ongoing" && (
                                         <TableCell className="text-right">
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                onClick={() => setLeaveForRecord({ id: leave.id, type: 'personal' })}
-                                                className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-                                            >
-                                                End leave
-                                            </Button>
+                                            {leave.status === 'approved' ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setLeaveForRecord({ id: leave.id, type: 'personal' })}
+                                                    className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                                >
+                                                    End leave
+                                                </Button>
+                                            ) : (
+                                                <span className="text-xs text-amber-600">Awaiting approval</span>
+                                            )}
                                         </TableCell>
                                     )}
                                 </TableRow>
