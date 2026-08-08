@@ -7,7 +7,7 @@ import {
     CalendarDays, ChevronLeft, ChevronRight,
     Bell, FileText, DollarSign, BarChart2,
     CheckCircle2, Clock, AlertCircle,
-    UserCheck, CalendarCheck, TrendingUp,
+    UserCheck, CalendarCheck,
     MoreHorizontal, GraduationCap, X, Plus,
     Edit2, Trash2, Loader2, UserCog, ShieldCheck
 } from "lucide-react"
@@ -119,17 +119,15 @@ function DashboardUpdatedDate() {
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({
-    label, value, active, inactive, percent, icon: Icon, iconBg, iconColor, badgeStyle, activeLabel, inactiveLabel
+    label, value, active, inactive, icon: Icon, iconBg, iconColor, activeLabel, inactiveLabel
 }: {
     label: string
     value: number
     active: number
     inactive: number
-    percent: string
     icon: React.ElementType
     iconBg: string
     iconColor: string
-    badgeStyle: string
     activeLabel?: string
     inactiveLabel?: string
 }) {
@@ -143,10 +141,7 @@ function StatCard({
 
                 {/* Content (right aligned) */}
                 <div className="flex flex-col items-end pt-1">
-                    <span className={`text-[12px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${badgeStyle}`}>
-                        <TrendingUp className="h-3 w-3" /> {percent}
-                    </span>
-                    <span className="text-[32px] font-black text-slate-800 dark:text-white mt-1.5 leading-none">
+                    <span className="text-[32px] font-black text-slate-800 dark:text-white leading-none">
                         {fmt(value)}
                     </span>
                     <p className="text-[14px] font-semibold text-slate-500 dark:text-slate-400 mt-1">{label}</p>
@@ -397,24 +392,24 @@ export default function AdminDashboardPage() {
 
             {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
+                <StatCard
                     label="Total Students" value={loading ? 0 : students.total} active={loading ? 0 : students.onCampus} inactive={loading ? 0 : students.outCampus}
                     activeLabel="On Campus" inactiveLabel="Out Campus"
-                    percent="1.2%" icon={Users} iconBg="bg-pink-50" iconColor="text-pink-500" badgeStyle="bg-green-50 text-green-600"
+                    icon={Users} iconBg="bg-pink-50" iconColor="text-pink-500"
                 />
-                <StatCard 
+                <StatCard
                     label="Total Staff" value={loading ? 0 : staff.total} active={loading ? 0 : staff.active} inactive={loading ? 0 : staff.inactive}
-                    percent="1.2%" icon={UserCheck} iconBg="bg-blue-50" iconColor="text-blue-500" badgeStyle="bg-blue-50 text-blue-600"
+                    icon={UserCheck} iconBg="bg-blue-50" iconColor="text-blue-500"
                 />
-                <StatCard 
+                <StatCard
                     label="Total Alumni" value={loading ? 0 : alumni.total} active={loading ? 0 : alumni.completed} inactive={loading ? 0 : alumni.dropout}
                     activeLabel="Completed" inactiveLabel="Dropout"
-                    percent="1.2%" icon={GraduationCap} iconBg="bg-orange-50" iconColor="text-orange-500" badgeStyle="bg-orange-50 text-orange-600"
+                    icon={GraduationCap} iconBg="bg-orange-50" iconColor="text-orange-500"
                 />
-                <StatCard 
+                <StatCard
                     label="Fee Collection" value={0} active={0} inactive={0}
                     activeLabel="Cleared" inactiveLabel="Pending"
-                    percent="1.2%" icon={DollarSign} iconBg="bg-green-50" iconColor="text-green-500" badgeStyle="bg-green-50 text-green-600"
+                    icon={DollarSign} iconBg="bg-green-50" iconColor="text-green-500"
                 />
             </div>
 
