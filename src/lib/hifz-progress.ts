@@ -285,6 +285,74 @@ export function toGlobalVerseIndex(surah: number, verse: number): number {
     return GLOBAL_VERSE_OFFSETS[surah - 1] + verse;
 }
 
+/**
+ * Counts the number of mushaf pages a set of "New Verses" logs actually covers,
+ * by merging overlapping/adjacent verse ranges and checking mushaf page boundaries.
+ *
+ * This is the SAME algorithm the backend's `calculateCoveredPagesFromLogs` uses,
+ * so any UI showing "pages" from logs must call this (not a verse-count/15 heuristic)
+ * to stay consistent with backend-computed totals.
+ *
+ * Callers should pre-filter logs to `mode === 'New Verses'` — the function itself
+ * does not filter by mode.
+ */
+export function calculateCoveredPagesFromLogs(
+    logs: { surah_name?: string | null; start_v?: number | null; end_v?: number | null; start_page?: number | null; end_page?: number | null }[]
+): number {
+    let fallbackPages = 0;
+    const ranges: { start: number; end: number }[] = [];
+
+    for (const log of logs) {
+        const surahId = getSurahId(log.surah_name || "");
+        if (surahId && log.start_v && log.end_v) {
+            const startGlobal = toGlobalVerseIndex(surahId, log.start_v);
+            const endGlobal = toGlobalVerseIndex(surahId, log.end_v);
+            if (startGlobal >= 0 && endGlobal >= 0) {
+                ranges.push({
+                    start: Math.min(startGlobal, endGlobal),
+                    end: Math.max(startGlobal, endGlobal),
+                });
+            }
+            continue;
+        }
+        if (log.start_page && log.end_page) {
+            fallbackPages += Math.max((log.end_page - log.start_page) + 1, 0);
+        }
+    }
+
+    if (ranges.length === 0) return fallbackPages;
+
+    ranges.sort((a, b) => a.start - b.start);
+    const merged = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+        const current = merged[merged.length - 1];
+        const next = ranges[i];
+        if (next.start <= current.end + 1) {
+            if (next.end > current.end) current.end = next.end;
+        } else {
+            merged.push({ ...next });
+        }
+    }
+
+    let coveredPages = fallbackPages;
+    for (let i = 0; i < MUSHAF_PAGES.length; i++) {
+        const pageStart = MUSHAF_PAGES[i];
+        const startGlobal = toGlobalVerseIndex(pageStart.surah, pageStart.ayah);
+        const endGlobal = i + 1 < MUSHAF_PAGES.length
+            ? toGlobalVerseIndex(MUSHAF_PAGES[i + 1].surah, MUSHAF_PAGES[i + 1].ayah) - 1
+            : toGlobalVerseIndex(114, 6);
+
+        for (const range of merged) {
+            if (range.start <= endGlobal && range.end >= endGlobal) {
+                coveredPages++;
+                break;
+            }
+        }
+    }
+
+    return coveredPages;
+}
+
 // --- CORE LOGIC ---
 
 /**

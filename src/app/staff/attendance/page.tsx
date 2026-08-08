@@ -55,7 +55,7 @@ type Student = {
     leave_start_time?: string | null
 }
 
-type AttendanceStatus = "Present" | "Absent" | "Leave" | "Outside"
+type AttendanceStatus = "Present" | "Absent" | "Late" | "Outside"
 
 function isOutsideStudent(student: Student) {
     return Boolean(
@@ -358,7 +358,7 @@ export default function StaffAttendancePage() {
                     const savedStatus = String(a.status || "").toLowerCase()
                     if (savedStatus === "present") map[a.student_id] = "Present"
                     else if (savedStatus === "absent") map[a.student_id] = "Absent"
-                    else if (savedStatus === "leave") map[a.student_id] = "Leave"
+                    else if (savedStatus === "late") map[a.student_id] = "Late"
                     else if (savedStatus === "outside") map[a.student_id] = "Outside"
                 }
             })
@@ -373,16 +373,16 @@ export default function StaffAttendancePage() {
         }
     }
 
-    // Toggle student status
+    // Toggle student status — Present → Absent → Late → Present.
+    // "Leave" (approved-leave OUTSIDE state) stays auto-managed by the leaves
+    // module and cannot be selected manually from this toggle.
     const toggleStatus = (admNo: string) => {
         if (lockedLeaves[admNo]) return // Prevent toggling if locked by active leave
         setAttendanceMap(prev => {
             const current = prev[admNo]
             let next: AttendanceStatus = "Present"
             if (current === "Present") next = "Absent"
-            else if (current === "Absent") {
-                next = futureLeaves[admNo] ? "Present" : "Leave"
-            }
+            else if (current === "Absent") next = "Late"
             else next = "Present"
             return { ...prev, [admNo]: next }
         })
@@ -451,7 +451,7 @@ export default function StaffAttendancePage() {
     }
 
     // Mark all students with a status
-    const markAll = (status: "Present" | "Absent" | "Leave") => {
+    const markAll = (status: "Present" | "Absent" | "Late") => {
         const map: Record<string, AttendanceStatus> = {}
         sessionStudents.forEach(s => { 
             if (lockedLeaves[s.adm_no]) {
@@ -484,7 +484,7 @@ export default function StaffAttendancePage() {
         switch (status) {
             case "Present": return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-700"
             case "Absent": return "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-400 dark:border-red-700"
-            case "Leave": return "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700"
+            case "Late": return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400 dark:border-amber-700"
             default: return "bg-slate-100 text-slate-700"
         }
     }
@@ -503,7 +503,8 @@ export default function StaffAttendancePage() {
     // Count stats
     const presentCount = Object.values(attendanceMap).filter(s => s === "Present").length
     const absentCount = Object.values(attendanceMap).filter(s => s === "Absent").length
-    const leaveCount = Object.values(attendanceMap).filter(s => s === "Leave" || s === "Outside").length
+    const lateCount = Object.values(attendanceMap).filter(s => s === "Late").length
+    const outsideCount = Object.values(attendanceMap).filter(s => s === "Outside").length
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
@@ -790,7 +791,10 @@ export default function StaffAttendancePage() {
                         <div className="flex items-center gap-2 text-xs">
                             <span className="flex items-center gap-1 text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" /> {presentCount}</span>
                             <span className="flex items-center gap-1 text-red-500"><XCircle className="h-3.5 w-3.5" /> {absentCount}</span>
-                            <span className="flex items-center gap-1 text-blue-500"><Ban className="h-3.5 w-3.5" /> {leaveCount}</span>
+                            <span className="flex items-center gap-1 text-amber-500"><Clock className="h-3.5 w-3.5" /> {lateCount}</span>
+                            {outsideCount > 0 && (
+                                <span className="flex items-center gap-1 text-orange-500"><Lock className="h-3.5 w-3.5" /> {outsideCount}</span>
+                            )}
                         </div>
                         <div className="flex gap-1.5">
                             <Button variant="outline" size="sm" className="text-xs h-7 border-emerald-700 text-emerald-400 hover:bg-emerald-950"

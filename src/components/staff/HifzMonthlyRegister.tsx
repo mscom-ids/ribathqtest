@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import api from "@/lib/api"
 import { cn, resolveBackendUrl } from "@/lib/utils"
 import { SURAH_LIST } from "@/lib/data/surah-list"
-import { getArabic, toArabicNum, getSurahId, SURAH_VERSE_COUNTS } from "@/lib/hifz-progress"
+import { getArabic, toArabicNum, getSurahId, SURAH_VERSE_COUNTS, calculateCoveredPagesFromLogs } from "@/lib/hifz-progress"
 
 type Stage = "MEMORIZING" | "HAFIZ_REVISION"
 type Activity = "newHifz" | "recentRevision" | "juzRevision" | "newJuzRevision" | "oldJuzRevision"
@@ -265,10 +265,9 @@ function buildWeek(index: number, days: Day[]): Week {
   const newHifz = allEntries.filter((entry) => entry.mode === "New Verses")
   const recent = allEntries.filter((entry) => entry.mode === "Recent Revision")
   const juz = allEntries.filter((entry) => entry.mode.startsWith("Juz Revision"))
-  const pages = newHifz.reduce((total, entry) => {
-    const span = (entry.end_v || 0) - (entry.start_v || 0)
-    return total + (span > 0 ? Math.max(1, Math.round(span / 15)) : entry.start_v ? 1 : 0)
-  }, 0)
+  // Use the same mushaf-page algorithm the backend/top card use so weekly and
+  // monthly page counts agree instead of drifting from a verse-count/15 heuristic.
+  const pages = calculateCoveredPagesFromLogs(newHifz)
   const revisionDays = new Set(recent.map((entry) => entry.entry_date.slice(0, 10))).size
   const juzTotal = juz.reduce((total, entry) => total + (entry.juz_portion ? portionValue(entry.juz_portion) : 0), 0)
   return { index, days, summary: { pages, revisionDays, juz: juzTotal } }
@@ -317,7 +316,19 @@ function SurahCombobox({
           }}
         >
           <CommandInput placeholder="Search Surah (Arabic or English)…" className="h-9" />
-          <CommandList className="max-h-[300px] overscroll-contain [touch-action:pan-y] [-webkit-overflow-scrolling:touch]">
+          <CommandList
+            className="max-h-[300px] overscroll-contain [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
+            // Radix Dialog's RemoveScroll layer blocks wheel/touch events outside
+            // the DialogContent DOM subtree — and this Popover portals to body.
+            // Scroll manually so the surah list is usable inside the register modal.
+            onWheel={(event) => {
+              event.currentTarget.scrollTop += event.deltaY
+              event.stopPropagation()
+            }}
+            onTouchMove={(event) => {
+              event.stopPropagation()
+            }}
+          >
             <CommandEmpty>No Surah found.</CommandEmpty>
             <CommandGroup>
               {SURAHS.map((surah) => (
@@ -699,10 +710,7 @@ function ColumnHeader({ activity }: { activity: Activity }) {
 function getColumnSummary(days: Day[], activity: Activity): string {
   const entries = days.flatMap((day) => day.entries[activity] || [])
   if (activity === "newHifz") {
-    const pages = entries.reduce((total, entry) => {
-      const span = (entry.end_v || 0) - (entry.start_v || 0)
-      return total + (span > 0 ? Math.max(1, Math.round(span / 15)) : entry.start_v ? 1 : 0)
-    }, 0)
+    const pages = calculateCoveredPagesFromLogs(entries)
     return `${pages} pages`
   }
   if (activity === "recentRevision") {

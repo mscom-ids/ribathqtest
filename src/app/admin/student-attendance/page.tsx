@@ -7,6 +7,8 @@ import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
+import { GroupedAttendanceSessionCards } from "@/components/admin/grouped-attendance-session-cards"
+import { getAttendanceGroupState, groupAttendanceSessionSchedules } from "@/lib/attendance-session-groups"
 
 type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; is_locked_outside?: boolean; attendance_status?: string }
 type StaffMember = { id: string; name: string; role: string; photo_url?: string }
@@ -186,6 +188,14 @@ export default function StudentAttendancePage() {
 
     // ── Slot status ─────────────────────────────────────────────────────────────
     const getSlotStatus = (sched: any) => {
+        const marksForSchedule = dashboardData.marks?.filter(
+            (mark: any) => mark.schedule_id === sched.id && mark.date?.split('T')[0] === viewDateStr,
+        ) || []
+        const expected = Array.isArray(sched.expected_mentors) ? sched.expected_mentors : []
+        const markedBy = new Set(marksForSchedule.map((mark: any) => mark.marked_by).filter(Boolean))
+        const markedExpected = expected.filter((mentor: any) => markedBy.has(mentor.id))
+        const pendingExpected = expected.filter((mentor: any) => !markedBy.has(mentor.id))
+        const mentorTracking = { expected, markedExpected, pendingExpected }
         const serverStatus = dashboardData.class_statuses?.find(
             (s: any) => s.schedule_id === sched.id && s.date?.split('T')[0] === viewDateStr
         )
@@ -193,7 +203,7 @@ export default function StudentAttendancePage() {
             const state = serverStatus.status === 'in_progress' || serverStatus.status === 'pending'
                 ? 'active'
                 : serverStatus.status
-            return { ...serverStatus, state }
+            return { ...serverStatus, state, ...mentorTracking }
         }
 
         const cancelled = dashboardData.cancellations?.find(
@@ -207,40 +217,48 @@ export default function StudentAttendancePage() {
             (scheduleStandards.length > 0 && scheduleStandards.every((std: string) => cancelledStandards.includes(std)))
         )
         const partialCancellation = !!cancelled && !isFullyCancelled ? cancelled : null
-        if (isFullyCancelled) return { state: 'cancelled' as const, cancellation: cancelled }
+        if (isFullyCancelled) return { state: 'cancelled' as const, cancellation: cancelled, ...mentorTracking }
 
-        const marked = dashboardData.marks?.find(
-            (m: any) => m.schedule_id === sched.id && m.date?.split('T')[0] === viewDateStr
-        )
-        if (marked) return { state: 'completed' as const, partialCancellation }
+        if (marksForSchedule.length > 0) return { state: 'completed' as const, partialCancellation, ...mentorTracking }
 
-        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation }
+        if (diffFromToday > effectiveMaxDays) return { state: 'locked' as const, partialCancellation, ...mentorTracking }
 
         if (diffFromToday === 0) {
             const classStart = new Date(`${viewDateStr}T${sched.start_time}`)
-            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation }
+            if (now < classStart) return { state: 'upcoming' as const, startTime: formatTime(sched.start_time), partialCancellation, ...mentorTracking }
         }
 
-        return { state: 'active' as const, partialCancellation }
+        return { state: 'active' as const, partialCancellation, ...mentorTracking }
     }
 
     // ── Roster ──────────────────────────────────────────────────────────────────
-    const openRoster = async (sched: any) => {
+    const openRoster = async (sched: any, rosterMentorId?: string) => {
         try {
-            const mentorParam = selectedMentorId !== 'all' ? `&mentor_id=${selectedMentorId}` : ''
+            const effectiveMentorId = rosterMentorId || (selectedMentorId !== 'all' ? selectedMentorId : sched.mentor_id)
+            const mentorParam = effectiveMentorId ? `&mentor_id=${effectiveMentorId}` : ''
             const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}`)
             if (res.data.success) {
+                const savedStatuses = new Map<string, string>(
+                    (res.data.marks || []).map((mark: any) => [
+                        mark.student_id,
+                        String(mark.status || '').toLowerCase(),
+                    ]),
+                )
                 const students: StudentMark[] = res.data.students.map((st: any) => {
                     const isOutside = Boolean(st.is_locked_outside || st.is_on_leave || st.attendance_status === 'outside')
+                    const savedStatus = savedStatuses.get(st.adm_no)
+                    const status = ['present', 'absent', 'late'].includes(savedStatus || '')
+                        ? savedStatus!
+                        : 'present'
                     return {
                         ...st,
-                        status: isOutside ? 'outside' : 'present',
+                        status: isOutside ? 'outside' : status,
                         is_on_leave: isOutside,
                         is_locked_outside: isOutside,
                         attendance_status: isOutside ? 'outside' : (st.attendance_status || 'pending')
                     }
                 })
-                setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: selectedMentorId })
+                setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: effectiveMentorId || 'all' })
             }
         } catch (e: any) {
             alert(e.response?.data?.error || "Error fetching students")
@@ -315,19 +333,15 @@ export default function StudentAttendancePage() {
         return <XCircle className="w-3.5 h-3.5" />
     }
 
-    const visibleStatusItems = dashboardData.class_statuses?.filter(
-        (s: any) => s.date?.split('T')[0] === viewDateStr && daySchedules.some(ds => ds.id === s.schedule_id)
-    ) || []
-    const totalCount = visibleStatusItems.length > 0 ? visibleStatusItems.length : daySchedules.length
-    const completedCount = visibleStatusItems.length > 0
-        ? visibleStatusItems.filter((s: any) => s.status === 'completed').length
-        : daySchedules.filter(s => getSlotStatus(s).state === 'completed').length
-    const cancelledCount = visibleStatusItems.length > 0
-        ? visibleStatusItems.filter((s: any) => s.status === 'cancelled').length
-        : daySchedules.filter(s => getSlotStatus(s).state === 'cancelled').length
-    const pendingCount = visibleStatusItems.length > 0
-        ? visibleStatusItems.filter((s: any) => ['pending', 'in_progress', 'upcoming'].includes(s.status)).length
-        : daySchedules.filter(s => ['active', 'upcoming'].includes(getSlotStatus(s).state)).length
+    // The dashboard counts visible subject/time session blocks, not each
+    // parallel mentor timetable row. The child rows still retain their IDs.
+    const groupedDaySessions = groupAttendanceSessionSchedules(daySchedules)
+    const getGroupedState = (group: typeof groupedDaySessions[number]) =>
+        getAttendanceGroupState(group.schedules.map(schedule => getSlotStatus(schedule).state))
+    const totalCount = groupedDaySessions.length
+    const completedCount = groupedDaySessions.filter(group => getGroupedState(group) === 'completed').length
+    const cancelledCount = groupedDaySessions.filter(group => getGroupedState(group) === 'cancelled').length
+    const pendingCount = groupedDaySessions.filter(group => ['pending', 'upcoming', 'partial'].includes(getGroupedState(group))).length
 
     const dateLabel = isToday ? "Today" : isYesterday ? "Yesterday" : viewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
@@ -564,102 +578,27 @@ export default function StudentAttendancePage() {
                             </p>
                         )}
                     </div>
-                    <span className="text-[12px] font-bold text-slate-400">{daySchedules.length} slot{daySchedules.length !== 1 ? 's' : ''}</span>
+                    <span className="text-[12px] font-bold text-slate-400">{groupedDaySessions.length} session{groupedDaySessions.length !== 1 ? 's' : ''}</span>
                 </div>
 
                 {loading ? (
                     <div className="py-20">
                         <ThreeBallLoader label="Loading classes..." />
                     </div>
-                ) : daySchedules.length === 0 ? (
+                ) : groupedDaySessions.length === 0 ? (
                     <div className="text-center py-20">
                         <Calendar className="h-10 w-10 text-slate-300 mx-auto mb-3" />
                         <p className="text-[14px] text-slate-500 font-medium">No classes scheduled for this day</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-5">
-                        {daySchedules.map(sched => {
-                            const color = getClassColor(sched.class_type)
-                            const status = getSlotStatus(sched)
-                            const stds = typeof sched.standards === 'string' ? JSON.parse(sched.standards || '[]') : (sched.standards || [])
-                            const isCancelled = status.state === 'cancelled'
-                            const isCompleted = status.state === 'completed'
-                            const isActive = status.state === 'active'
-                            const isPartiallyCancelled = status.state === 'partial_cancelled' || !!(status as any).partialCancellation
-                            const isUpcoming = status.state === 'upcoming'
-                            const isLocked = status.state === 'locked'
-                            const isClickable = isActive || isCompleted || isPartiallyCancelled
-
-                            return (
-                                <div
-                                    key={sched.id}
-                                    onClick={() => isClickable && openRoster(sched)}
-                                    className={cn(
-                                        "rounded-xl border-2 p-4 transition-all relative group overflow-hidden select-none",
-                                        color.bg, color.border,
-                                        isClickable && "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
-                                        (isCancelled || isLocked) && "opacity-60 grayscale-[40%]"
-                                    )}
-                                >
-                                    {/* Top row */}
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div className="flex flex-col gap-1.5">
-                                            <span className={cn("w-max text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full text-white", color.badge)}>
-                                                {sched.class_type}
-                                            </span>
-                                            {sched.name && <span className="text-[15px] font-bold text-slate-800 dark:text-white leading-tight">{sched.name}</span>}
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            {isCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Cancelled</span>}
-                                            {isPartiallyCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Some standards cancelled</span>}
-                                            {isLocked && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="h-2.5 w-2.5"/>Locked</span>}
-                                            {isCompleted && <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />}
-                                            {isUpcoming && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Upcoming</span>}
-                                            {isActive && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4f46e5] opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-[#4f46e5]"></span></span>}
-                                        </div>
-                                    </div>
-
-                                    {/* Time */}
-                                    <div className={cn("flex items-center gap-1.5 text-[13px] font-semibold mb-2", color.text, isCancelled && "line-through opacity-50")}>
-                                        <Clock className="h-4 w-4" />
-                                        {formatTime(sched.start_time)} – {formatTime(sched.end_time)}
-                                    </div>
-
-                                    {/* Standards */}
-                                    <div className="flex items-start gap-1.5 flex-wrap mt-2">
-                                        <Users className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                        <div className="flex flex-wrap gap-1">
-                                            {stds.slice(0, 3).map((std: string, i: number) => (
-                                                <span key={i} className="bg-white/80 dark:bg-black/30 rounded px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
-                                                    {std}
-                                                </span>
-                                            ))}
-                                            {stds.length > 3 && <span className="text-[11px] text-slate-500">+{stds.length - 3} more</span>}
-                                        </div>
-                                    </div>
-
-                                    {/* Footer hint */}
-                                    <div className="mt-3 pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
-                                        {isActive && <p className="text-[11px] font-bold text-[#4f46e5] dark:text-[#818cf8]">Click to Mark Attendance →</p>}
-                                        {isCompleted && <p className="text-[11px] font-bold text-[#22c55e]">✓ Submitted — Click to Review</p>}
-                                        {isUpcoming && (
-                                            <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                                                <Clock className="h-3 w-3" />
-                                                Starts at {(status as any).startTime} — not available yet
-                                            </p>
-                                        )}
-                                        {isLocked && <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1"><Lock className="h-3 w-3"/>Outside edit window</p>}
-                                        {isPartiallyCancelled && (status as any).cancelledStandards?.length > 0 && <p className="text-[11px] text-slate-500">Cancelled: {(status as any).cancelledStandards.join(', ')}</p>}
-                                        {isPartiallyCancelled && (status as any).activeStandards?.length > 0 && <p className="text-[11px] text-slate-500">Active: {(status as any).activeStandards.join(', ')}</p>}
-                                        {isCancelled && (status as any).statusLabel && <p className="text-[11px] font-bold text-rose-500">{(status as any).statusLabel}</p>}
-                                        {isCancelled && (status as any).cancelReason && <p className="text-[11px] text-slate-500">Reason: {(status as any).cancelReason}</p>}
-                                        {isCancelled && <p className="text-[11px] font-medium text-rose-400">Class cancelled</p>}
-                                        {isPartiallyCancelled && <p className="text-[11px] font-medium text-rose-400">Selected standards cancelled</p>}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                    <GroupedAttendanceSessionCards
+                        schedules={daySchedules}
+                        getSlotStatus={getSlotStatus}
+                        getClassColor={getClassColor}
+                        formatTime={formatTime}
+                        parseStandards={(schedule) => typeof schedule.standards === 'string' ? JSON.parse(schedule.standards || '[]') : (schedule.standards || [])}
+                        onOpenRoster={openRoster}
+                    />
                 )}
             </div>
 

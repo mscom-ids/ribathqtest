@@ -6,6 +6,8 @@ import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
+import { GroupedAttendanceSessionCards } from "@/components/admin/grouped-attendance-session-cards"
+import { getAttendanceGroupState, groupAttendanceSessionSchedules } from "@/lib/attendance-session-groups"
 
 type StudentMark = { adm_no: string; name: string; standard: string; photo_url?: string; status: string; is_on_leave?: boolean; is_locked_outside?: boolean; attendance_status?: string }
 type StaffMember = { id: string; name: string; role: string; photo_url?: string }
@@ -276,23 +278,34 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
     }
 
     // ── Roster ──────────────────────────────────────────────────────────────────
-    const openRoster = async (sched: any) => {
+    const openRoster = async (sched: any, rosterMentorId?: string) => {
         try {
-            const mentorParam = selectedMentorId !== 'all' ? `&mentor_id=${selectedMentorId}` : ''
+            const effectiveMentorId = rosterMentorId || (selectedMentorId !== 'all' ? selectedMentorId : sched.mentor_id)
+            const mentorParam = effectiveMentorId ? `&mentor_id=${effectiveMentorId}` : ''
             const yearParam = selectedYearId ? `&academic_year_id=${selectedYearId}` : ''
             const res = await api.get(`/attendance/students?schedule_id=${sched.id}&date=${viewDateStr}${mentorParam}${yearParam}`)
             if (res.data.success) {
+                const savedStatuses = new Map<string, string>(
+                    (res.data.marks || []).map((mark: any) => [
+                        mark.student_id,
+                        String(mark.status || '').toLowerCase(),
+                    ]),
+                )
                 const students: StudentMark[] = res.data.students.map((st: any) => {
                     const isOutside = Boolean(st.is_locked_outside || st.is_on_leave || st.attendance_status === 'outside')
+                    const savedStatus = savedStatuses.get(st.adm_no)
+                    const status = ['present', 'absent', 'late'].includes(savedStatus || '')
+                        ? savedStatus!
+                        : 'present'
                     return {
                         ...st,
-                        status: isOutside ? 'outside' : 'present',
+                        status: isOutside ? 'outside' : status,
                         is_on_leave: isOutside,
                         is_locked_outside: isOutside,
                         attendance_status: isOutside ? 'outside' : (st.attendance_status || 'pending')
                     }
                 })
-                setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: selectedMentorId })
+                setRosterModal({ isOpen: true, schedule: sched, dateStr: viewDateStr, students, mentorId: effectiveMentorId || 'all' })
             }
         } catch (e: any) {
             alert(e.response?.data?.error || "Error fetching students")
@@ -452,10 +465,15 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         )
     }
 
-    const totalCount = daySchedules.length
-    const completedCount = daySchedules.filter(s => getSlotStatus(s).state === 'completed').length
-    const cancelledCount = daySchedules.filter(s => getSlotStatus(s).state === 'cancelled').length
-    const pendingCount = daySchedules.filter(s => ['active', 'upcoming', 'partial'].includes(getSlotStatus(s).state)).length
+    // Parallel mentor timetable rows are one visible session block. The child
+    // rows inside that block keep their original schedule IDs and status.
+    const groupedDaySessions = groupAttendanceSessionSchedules(daySchedules)
+    const getGroupedState = (group: typeof groupedDaySessions[number]) =>
+        getAttendanceGroupState(group.schedules.map(schedule => getSlotStatus(schedule).state))
+    const totalCount = groupedDaySessions.length
+    const completedCount = groupedDaySessions.filter(group => getGroupedState(group) === 'completed').length
+    const cancelledCount = groupedDaySessions.filter(group => getGroupedState(group) === 'cancelled').length
+    const pendingCount = groupedDaySessions.filter(group => ['pending', 'upcoming', 'partial'].includes(getGroupedState(group))).length
 
     const dateLabel = isToday ? "Today" : isYesterday ? "Yesterday" : viewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
@@ -675,250 +693,54 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
                             </p>
                         )}
                     </div>
-                    <span className="text-[12px] font-bold text-slate-400">{daySchedules.length} slot{daySchedules.length !== 1 ? 's' : ''}</span>
+                    <span className="text-[12px] font-bold text-slate-400">{groupedDaySessions.length} session{groupedDaySessions.length !== 1 ? 's' : ''}</span>
                 </div>
 
                 {loading ? (
                     <div className="py-20">
                         <ThreeBallLoader label="Loading classes..." />
                     </div>
-                ) : daySchedules.length === 0 ? (
+                ) : groupedDaySessions.length === 0 ? (
                     <div className="text-center py-20">
                         <Calendar className="h-10 w-10 text-slate-300 mx-auto mb-3" />
                         <p className="text-[14px] text-slate-500 font-medium">No classes scheduled for this day</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-5">
-                        {daySchedules.map(sched => {
-                            const color = getClassColor(sched.class_type)
-                            const status = getSlotStatus(sched)
-                            const stds = parseScheduleStandards(sched)
-                            const isCancelled = status.state === 'cancelled'
-                            const partialCancellation = (status as any).partialCancellation
-                            const activeCancellation = (status as any).cancellation || partialCancellation
-                            const isPartiallyCancelled = !!partialCancellation && !isCancelled
-                            const cancelledStdLabels = getCancelledStandards(activeCancellation)
-                            const isCompleted = status.state === 'completed'
-                            const isPartial = status.state === 'partial'
-                            const isActive = status.state === 'active'
-                            const isUpcoming = status.state === 'upcoming'
-                            const isLocked = status.state === 'locked'
-                            const isClickable = isActive || isCompleted || isPartial
-
+                    <GroupedAttendanceSessionCards
+                        schedules={daySchedules}
+                        getSlotStatus={getSlotStatus}
+                        getClassColor={getClassColor}
+                        formatTime={formatTime}
+                        parseStandards={parseScheduleStandards}
+                        onOpenRoster={openRoster}
+                        renderScheduleTools={(schedule, slotStatus) => {
+                            const cancellation = (slotStatus as any).cancellation || (slotStatus as any).partialCancellation
+                            const isPartial = Boolean((slotStatus as any).partialCancellation) && slotStatus.state !== 'cancelled'
                             return (
-                                <div
-                                    key={sched.id}
-                                    onClick={() => isClickable && openRoster(sched)}
-                                    className={cn(
-                                        "rounded-xl border-2 p-4 transition-all relative group overflow-hidden select-none",
-                                        color.bg, color.border,
-                                        isClickable && "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]",
-                                        (isCancelled || isLocked) && "opacity-60 grayscale-[40%]"
+                                <>
+                                    {isPartial && (
+                                        <button type="button" onClick={(event) => { event.stopPropagation(); openCancelModal(schedule, "cancel", getCancelledStandards(cancellation)) }} className="rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50">
+                                            Edit cancel
+                                        </button>
                                     )}
-                                >
-                                    {/* Top row */}
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div className="flex flex-col gap-1.5">
-                                            <span className={cn("w-max text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full text-white", color.badge)}>
-                                                {sched.class_type}
-                                            </span>
-                                            {sched.name && <span className="text-[15px] font-bold text-slate-800 dark:text-white leading-tight">{sched.name}</span>}
-                                        </div>
-                                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                            {isCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Cancelled</span>}
-                                            {isPartiallyCancelled && <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/30 px-2 py-0.5 rounded-full border border-rose-200">Some standards cancelled</span>}
-                                            {isLocked && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full flex items-center gap-1"><Lock className="h-2.5 w-2.5"/>Locked</span>}
-                                            {isCompleted && <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />}
-                                            {isPartial && <AlertCircle className="h-5 w-5 text-amber-500" />}
-                                            {isUpcoming && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Upcoming</span>}
-                                            {isActive && <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4f46e5] opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-[#4f46e5]"></span></span>}
-                                            {canManageCancellations && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(event) => {
-                                                        event.stopPropagation()
-                                                        openCancelModal(sched, activeCancellation ? "restore" : "cancel")
-                                                    }}
-                                                    className={cn(
-                                                        "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black transition",
-                                                        activeCancellation
-                                                            ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
-                                                            : "border-rose-200 bg-white text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900/70"
-                                                    )}
-                                                    title={activeCancellation ? "Restore cancelled class or standards" : "Cancel this class or selected standards"}
-                                                >
-                                                    {activeCancellation ? <Undo2 className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
-                                                    {activeCancellation ? "Restore" : "Cancel"}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Time */}
-                                    <div className={cn("flex items-center gap-1.5 text-[13px] font-semibold mb-2", color.text, isCancelled && "line-through opacity-50")}>
-                                        <Clock className="h-4 w-4" />
-                                        {formatTime(sched.start_time)} – {formatTime(sched.end_time)}
-                                    </div>
-
-                                    {/* Standards */}
-                                    <div className="flex items-start gap-1.5 flex-wrap mt-2">
-                                        <Users className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                        <div className="flex flex-wrap gap-1">
-                                            {(() => {
-                                                const mentorStdLabels = mentorStandards.map(normalizeStandardLabel)
-                                                const displayStds = selectedMentorId !== 'all' && mentorStandards.length > 0
-                                                    ? stds.filter((s: string) => mentorStdLabels.includes(normalizeStandardLabel(s)))
-                                                    : stds
-                                                return (
-                                                    <>
-                                                        {displayStds.slice(0, 3).map((std: string, i: number) => {
-                                                            const stdCancelled = cancelledStdLabels.includes(normalizeStandardLabel(std))
-                                                            return (
-                                                                <span
-                                                                    key={i}
-                                                                    className={cn(
-                                                                        "rounded px-2 py-0.5 text-[11px] font-medium border",
-                                                                        stdCancelled
-                                                                            ? "border-rose-200 bg-rose-50/90 text-rose-600 line-through dark:border-rose-900/50 dark:bg-rose-950/20"
-                                                                            : "bg-white/80 dark:bg-black/30 text-slate-600 dark:text-slate-300 border-slate-200/50 dark:border-slate-700/50"
-                                                                    )}
-                                                                    title={stdCancelled ? "Cancelled for this class" : undefined}
-                                                                >
-                                                                    {std}
-                                                                </span>
-                                                            )
-                                                        })}
-                                                        {displayStds.length > 3 && <span className="text-[11px] text-slate-500">+{displayStds.length - 3} more</span>}
-                                                    </>
-                                                )
-                                            })()}
-                                        </div>
-                                    </div>
-
-                                    {/* Footer hint */}
-                                    <div className="mt-3 pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
-                                        {isActive && <p className="text-[11px] font-bold text-[#4f46e5] dark:text-[#818cf8]">Click to Mark Attendance →</p>}
-                                        {isCompleted && (
-                                            <div className="flex flex-col gap-0.5">
-                                                <p className="text-[11px] font-bold text-[#22c55e]">✓ Submitted — Click to Review</p>
-                                                {false && selectedMentorId === 'all' && (
-                                                    <>
-                                                        {(status as any).unexpectedMarks?.length > 0 && (
-                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                                                                Marked by: {(status as any).unexpectedMarks.map((m: any) => staffList.find(s => s.id === m.marked_by)?.name.split(' ')[0] || 'Admin').join(', ')}
-                                                            </p>
-                                                        )}
-                                                        {(status as any).markedExpected?.length > 0 && (status as any).unexpectedMarks?.length === 0 && (
-                                                            <p className="text-[10px] text-slate-500 truncate mt-0.5" title={(status as any).markedExpected.map((m: any) => m.name).join(', ')}>
-                                                                By: {(status as any).markedExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
-                                                            </p>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
-                                        {isPartial && (
-                                            <div className="flex flex-col gap-1">
-                                                <p className="text-[11px] font-bold text-amber-500">⚠ Partially Submitted</p>
-                                                {false && selectedMentorId === 'all' && (status as any).expected?.length > 0 && (
-                                                    <>
-                                                        <p className="text-[10px] text-[#22c55e] truncate" title={(status as any).markedExpected.map((m: any) => m.name).join(', ')}>
-                                                            ✓ {(status as any).markedExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
-                                                        </p>
-                                                        <p className="text-[10px] text-rose-500 truncate" title={(status as any).pendingExpected.map((m: any) => m.name).join(', ')}>
-                                                            ✗ {(status as any).pendingExpected.map((m: any) => m.name.split(' ')[0]).join(', ')}
-                                                        </p>
-                                                    </>
-                                                )}
-                                            </div>
-                                        )}
-                                        {selectedMentorId === 'all' && (isCompleted || isPartial) && (
-                                            <div className="mt-2">
-                                                {isCompleted && (status as any).unexpectedMarks?.length > 0 && (
-                                                    <div>
-                                                        <p className="text-[10px] font-semibold text-slate-500">Marked by</p>
-                                                        {renderMentorNameList(getMarkedByNames((status as any).unexpectedMarks), "neutral")}
-                                                    </div>
-                                                )}
-                                                {isCompleted && (status as any).markedExpected?.length > 0 && (status as any).unexpectedMarks?.length === 0 && (
-                                                    <div>
-                                                        <p className="text-[10px] font-semibold text-slate-500">Marked</p>
-                                                        {renderMentorNameList((status as any).markedExpected.map((m: any) => getDisplayName(m)), "success")}
-                                                    </div>
-                                                )}
-                                                {isPartial && (status as any).expected?.length > 0 && (
-                                                    <div className="space-y-2">
-                                                        <div>
-                                                            <p className="text-[10px] font-semibold text-[#15803d]">Marked</p>
-                                                            {renderMentorNameList((status as any).markedExpected.map((m: any) => getDisplayName(m)), "success")}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[10px] font-semibold text-rose-500">Not marked</p>
-                                                            {renderMentorNameList((status as any).pendingExpected.map((m: any) => getDisplayName(m)), "danger")}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {selectedMentorId === 'all' && !isCompleted && !isPartial && (status as any).expected?.length > 0 && (
-                                            <div className="mt-2">
-                                                <p className="text-[10px] font-semibold text-rose-500">Not marked</p>
-                                                {renderMentorNameList((status as any).pendingExpected.map((m: any) => getDisplayName(m)), "danger")}
-                                            </div>
-                                        )}
-                                        {isUpcoming && (
-                                            <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
-                                                <Clock className="h-3 w-3" />
-                                                Starts at {(status as any).startTime} — not available yet
-                                            </p>
-                                        )}
-                                        {isLocked && <p className="text-[11px] font-medium text-slate-400 flex items-center gap-1"><Lock className="h-3 w-3"/>Outside edit window</p>}
-                                        {isPartiallyCancelled && (
-                                            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[11px] text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
-                                                <p className="font-bold">Cancelled standards: {getCancellationLabel(partialCancellation)}</p>
-                                                <p className="mt-0.5 text-rose-500/80">Those students are hidden from attendance and report totals.</p>
-                                            </div>
-                                        )}
-                                        {isCancelled && (
-                                            <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[11px] text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
-                                                <p className="font-bold">Class cancelled - attendance closed</p>
-                                                <p className="mt-0.5 text-rose-500/80">Cancelled standards: {getCancellationLabel(activeCancellation)}</p>
-                                                {(status as any).cancellation?.reason && (
-                                                    <p className="mt-0.5 text-rose-500/80">{(status as any).cancellation.reason}</p>
-                                                )}
-                                            </div>
-                                        )}
-                                        {canManageCancellations && !isCancelled && (
-                                            <button
-                                                type="button"
-                                                onClick={(event) => {
-                                                    event.stopPropagation()
-                                                    openCancelModal(sched, "cancel", isPartiallyCancelled ? getCancelledStandards(partialCancellation) : undefined)
-                                                }}
-                                                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white/80 px-3 py-2 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900/40 dark:hover:bg-rose-950/20"
-                                            >
-                                                <Ban className="h-3.5 w-3.5" />
-                                                {isPartiallyCancelled ? "Edit cancelled standards" : "Cancel standards / class"}
-                                            </button>
-                                        )}
-                                        {canManageCancellations && activeCancellation && (
-                                            <button
-                                                type="button"
-                                                onClick={(event) => {
-                                                    event.stopPropagation()
-                                                    openCancelModal(sched, "restore")
-                                                }}
-                                                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
-                                            >
-                                                <Undo2 className="h-3.5 w-3.5" />
-                                                Restore cancellation
-                                            </button>
-                                        )}
-                                    </div>
+                                    <button type="button" onClick={(event) => { event.stopPropagation(); openCancelModal(schedule, cancellation ? "restore" : "cancel") }} className="rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50">
+                                        {cancellation ? "Restore" : "Cancel"}
+                                    </button>
+                                </>
+                            )
+                        }}
+                        renderScheduleDetails={(_schedule, slotStatus) => {
+                            const cancellation = (slotStatus as any).cancellation || (slotStatus as any).partialCancellation
+                            if (!cancellation) return null
+                            return (
+                                <div className="rounded border border-rose-200 bg-rose-50/80 px-2 py-1.5 text-[10px] text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/20">
+                                    <span className="font-bold">{slotStatus.state === 'cancelled' ? 'Cancelled' : 'Some standards cancelled'}</span>
+                                    {getCancelledStandards(cancellation).length > 0 && <>: {getCancellationLabel(cancellation)}</>}
+                                    {(cancellation as any).reason && <span className="block mt-0.5 text-rose-500/80">{(cancellation as any).reason}</span>}
                                 </div>
                             )
-                        })}
-                    </div>
+                        }}
+                    />
                 )}
             </div>
 
