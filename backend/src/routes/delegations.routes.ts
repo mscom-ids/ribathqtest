@@ -8,7 +8,9 @@ import {
     getAdminAllRequests,
     updateDelegationStatus,
     revokeDelegation,
-    issueDelegationToken
+    issueDelegationToken,
+    getFocusableMentors,
+    issueSupervisorFocusToken
 } from '../controllers/delegations.controller';
 
 const router = Router();
@@ -23,6 +25,11 @@ router.delete('/revoke/:id', verifyToken, requireRole(staffRoles), revokeDelegat
 
 // Issue a server-signed delegation token
 router.post('/token', verifyToken, requireRole(staffRoles), issueDelegationToken);
+
+// Supervisor "Mentor Focus" routes (Principal / Vice Principal / Admin)
+const supervisorRoles = ['admin', 'principal', 'vice_principal'];
+router.get('/focusable-mentors', verifyToken, requireRole(supervisorRoles), getFocusableMentors);
+router.post('/supervisor-focus', verifyToken, requireRole(supervisorRoles), issueSupervisorFocusToken);
 
 // Admin routes
 router.get('/admin/all', verifyToken, requireRole(['admin', 'principal', 'vice_principal']), getAdminAllRequests);

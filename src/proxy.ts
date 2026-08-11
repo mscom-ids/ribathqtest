@@ -42,7 +42,9 @@ function decodeTokenRole(tokenValue: string): string | null {
 
 function getPortalForRole(role: string): string {
   if (ADMIN_ROLES.includes(role)) return '/admin';
-  if (PRINCIPAL_ROLES.includes(role)) return '/principal';
+  // Principal / Vice Principal now supervise from the Mentor Portal (/staff),
+  // where the "Mentor Focus" feature lets them operate as any mentor.
+  if (PRINCIPAL_ROLES.includes(role)) return '/staff';
   if (STAFF_ROLES.includes(role)) return '/staff';
   if (role === 'parent') return '/parent';
   return '/staff';
@@ -178,7 +180,8 @@ export async function proxy(request: NextRequest) {
   if (currentPath.startsWith('/admin') && !ADMIN_ROLES.includes(role)) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
-  if (currentPath.startsWith('/principal') && !PRINCIPAL_ROLES.includes(role)) {
+  // /principal portal was retired — anyone landing there is sent to their portal.
+  if (currentPath.startsWith('/principal')) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
   }
   if (

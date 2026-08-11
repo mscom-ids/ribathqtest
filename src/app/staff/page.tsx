@@ -16,9 +16,14 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
+import { getUserRole } from "@/lib/auth"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
+import { MentorFocus } from "@/components/staff/MentorFocus"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
+
+// Roles that supervise every mentor via Mentor Focus (Principal / Vice Principal).
+const SUPERVISOR_ROLES = ["principal", "vice_principal", "admin"]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Student = {
@@ -212,6 +217,14 @@ export default function StaffDashboard() {
     const [mounted, setMounted] = useState(false)
     const router = useRouter()
 
+    // Supervisor (Principal / Vice Principal) support. `userRole` is the REAL
+    // logged-in role from /auth/me — NOT /staff/me, which returns the focused
+    // mentor's role while Mentor Focus is active.
+    const [userRole, setUserRole] = useState("")
+    const [isFocusMode, setIsFocusMode] = useState(false)
+    const supervisorDefaultApplied = useRef(false)
+    const isSupervisor = SUPERVISOR_ROLES.includes(userRole)
+
     // Chart modal
     type ChartStudent = { adm_no: string; name: string; standard: string | null; photo_url?: string | null }
     const [chartStudent, setChartStudent] = useState<ChartStudent | null>(null)
@@ -239,7 +252,20 @@ export default function StaffDashboard() {
         setTodayStr(format(now, "yyyy-MM-dd"))
         setTodayLabel(format(now, "EEEE, MMMM d, yyyy"))
         setSelectedMonth(format(now, "yyyy-MM"))
+        setIsFocusMode(sessionStorage.getItem("mentorFocus") === "1")
+        // Real role — decides whether the Mentor Focus control is shown.
+        getUserRole().then((r) => { if (r) setUserRole(r) }).catch(() => {})
     }, [])
+
+    // A supervisor who hasn't focused on a mentor has no students of their own,
+    // so show every active student by default instead of an empty "My Students".
+    useEffect(() => {
+        if (supervisorDefaultApplied.current) return
+        if (isSupervisor && !isFocusMode) {
+            supervisorDefaultApplied.current = true
+            setStudentMode("all")
+        }
+    }, [isSupervisor, isFocusMode])
 
     // Clock tick
     useEffect(() => {
@@ -644,6 +670,9 @@ export default function StaffDashboard() {
                 </div>
             </div>
 
+            {/* ── Mentor Focus — Principal / Vice Principal only ── */}
+            {mounted && <MentorFocus role={userRole} />}
+
             <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-4">
 
                 {/* ── Stat strip — replaces the 4 stacked donut cards ─ */}
@@ -728,8 +757,10 @@ export default function StaffDashboard() {
                                     />
                                 </div>
 
-                                {/* Assign — the one quick action without a nav link */}
-                                {mounted && (
+                                {/* Assign — the one quick action without a nav link.
+                                    Hidden for a supervisor who hasn't focused on a
+                                    mentor (they have no class to assign into). */}
+                                {mounted && !(isSupervisor && !isFocusMode) && (
                                     <AssignStudentsModal
                                         currentStaffId={staffId}
                                         students={myStudents}

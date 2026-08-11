@@ -358,3 +358,96 @@ export const issueDelegationToken = async (req: Request, res: Response) => {
         res.status(500).json({ success: false, error: e.message });
     }
 };
+
+// ─── Mentor Focus (Supervisor) ──────────────────────────────────────────────
+// Principal / Vice Principal supervise every mentor, so they don't need the
+// request→approve delegation handshake. These two endpoints let a supervisor
+// list mentors and "focus" on one — the whole Mentor Portal then operates as
+// that mentor via the same signed-token pipeline used for delegations.
+
+const SUPERVISOR_FOCUS_ROLES = ['principal', 'vice_principal', 'admin'];
+const FOCUSABLE_MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
+
+// GET /api/delegations/focusable-mentors
+// Active mentors + a combined count of students assigned to them (any track).
+export const getFocusableMentors = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (!SUPERVISOR_FOCUS_ROLES.includes(user?.role)) {
+            return res.status(403).json({ success: false, error: 'Forbidden. Supervisor role required.' });
+        }
+
+        const result = await db.query(`
+            SELECT s.id, s.name, s.photo_url, s.role, s.place,
+                   COUNT(DISTINCT st.adm_no)::int AS student_count
+            FROM staff s
+            LEFT JOIN students st
+              ON COALESCE(st.status, 'active') = 'active'
+             AND (st.hifz_mentor_id = s.id OR st.school_mentor_id = s.id OR st.madrasa_mentor_id = s.id)
+            WHERE COALESCE(s.is_active, true) = true
+              AND s.role = ANY($1::text[])
+            GROUP BY s.id, s.name, s.photo_url, s.role, s.place
+            ORDER BY s.name ASC
+        `, [FOCUSABLE_MENTOR_ROLES]);
+
+        res.json({ success: true, mentors: result.rows });
+    } catch (e: any) {
+        console.error('Focusable mentors error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+};
+
+// POST /api/delegations/supervisor-focus  { mentorId }
+// Issues a signed token that makes the caller act as the chosen mentor for the
+// rest of their session (no approval needed — the caller is a supervisor).
+export const issueSupervisorFocusToken = async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (!SUPERVISOR_FOCUS_ROLES.includes(user?.role)) {
+            return res.status(403).json({ success: false, error: 'Forbidden. Supervisor role required.' });
+        }
+
+        const { mentorId } = req.body;
+        if (!mentorId) {
+            return res.status(400).json({ success: false, error: 'mentorId is required.' });
+        }
+
+        // Resolve the supervisor's own staff id (for the audit trail on the token)
+        const staffRes = await db.query(
+            'SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1',
+            [user.id, user.email]
+        );
+        const supervisorStaffId = staffRes.rows[0]?.id || user.id;
+
+        // Validate the target is a real, active mentor
+        const mentorRes = await db.query(
+            `SELECT id, name FROM staff
+             WHERE id = $1 AND COALESCE(is_active, true) = true AND role = ANY($2::text[]) LIMIT 1`,
+            [mentorId, FOCUSABLE_MENTOR_ROLES]
+        );
+        if (mentorRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Mentor not found.' });
+        }
+        const mentor = mentorRes.rows[0];
+
+        // Same token shape verifyDelegation already understands — supervisorFocus
+        // flag is informational. Longer expiry so a working session doesn't drop.
+        const delegationToken = jwt.sign(
+            {
+                type: 'delegation',
+                actingAs: mentor.id,
+                studentId: null,
+                issuedBy: supervisorStaffId,
+                issuedTo: user.id,
+                supervisorFocus: true
+            },
+            JWT_SECRET!,
+            { expiresIn: '12h' }
+        );
+
+        res.json({ success: true, delegationToken, mentor: { id: mentor.id, name: mentor.name } });
+    } catch (e: any) {
+        console.error('Supervisor focus token error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+};

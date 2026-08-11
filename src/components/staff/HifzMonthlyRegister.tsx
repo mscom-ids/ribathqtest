@@ -767,6 +767,9 @@ function DesktopWeeklyRegister({ weeks, columns, renderCell }: {
                       {day.attendance?.status === "PRESENT" && (
                         <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" title="Present" />
                       )}
+                      {day.attendance?.status === "LATE" && (
+                        <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" title="Late" />
+                      )}
                     </td>
                     {columns.map((activity) => (
                       <td key={activity} className="min-w-0 px-1 py-0.5 align-middle sm:px-2">
@@ -821,7 +824,10 @@ function MobileDayCardRegister({ weeks, columns, onOpen }: {
               <div key={day.date} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-slate-800">{format(dayObj(day.date), "d EEE")}</span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", day.attendance?.status === "PRESENT" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    day.attendance?.status === "PRESENT" ? "bg-emerald-50 text-emerald-700"
+                      : day.attendance?.status === "LATE" ? "bg-amber-50 text-amber-700"
+                        : "bg-slate-100 text-slate-600")}>
                     {attendanceLabel(day)}{day.attendance ? ` · ${day.attendance.sessionName}` : ""}
                   </span>
                 </div>

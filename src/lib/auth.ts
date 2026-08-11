@@ -18,7 +18,7 @@ export const getRedirectPathForRole = (role: string) => {
             return '/admin'
         case 'principal':
         case 'vice_principal':
-            return '/principal'
+            return '/staff'
         case 'controller':
             return '/admin'
         case 'staff':

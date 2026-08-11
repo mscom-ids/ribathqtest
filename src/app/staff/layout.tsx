@@ -26,7 +26,9 @@ export default function StaffLayout({
     
     const [actingAsMentorName, setActingAsMentorName] = useState<string | null>(null)
     const [actingAsStudentName, setActingAsStudentName] = useState<string | null>(null)
-    
+    // Mentor Focus (supervisor) vs regular mentor delegation — different banner.
+    const [isFocusMode, setIsFocusMode] = useState(false)
+
     useEffect(() => {
         setMounted(true)
         const delegationToken = sessionStorage.getItem('delegationToken')
@@ -35,6 +37,7 @@ export default function StaffLayout({
         if (delegationToken && mentorName) {
             setActingAsMentorName(mentorName)
             setActingAsStudentName(studentName)
+            setIsFocusMode(sessionStorage.getItem('mentorFocus') === '1')
         }
     }, [])
 
@@ -67,6 +70,7 @@ export default function StaffLayout({
         sessionStorage.removeItem('delegationToken')
         sessionStorage.removeItem('delegationMentorName')
         sessionStorage.removeItem('delegationStudentName')
+        sessionStorage.removeItem('mentorFocus')
         router.push("/login")
     }
 
@@ -74,8 +78,10 @@ export default function StaffLayout({
         sessionStorage.removeItem('delegationToken')
         sessionStorage.removeItem('delegationMentorName')
         sessionStorage.removeItem('delegationStudentName')
+        sessionStorage.removeItem('mentorFocus')
         setActingAsMentorName(null)
         setActingAsStudentName(null)
+        setIsFocusMode(false)
         window.location.href = "/staff"
     }
 
@@ -108,14 +114,26 @@ export default function StaffLayout({
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
-            {/* Delegation Banner */}
-            {actingAsMentorName && (
+            {/* Mentor Focus Banner (supervisor) */}
+            {actingAsMentorName && isFocusMode && (
+                <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 px-4 py-2 flex items-center justify-between text-sm shadow-sm border-b border-indigo-200 dark:border-indigo-800/50 z-50">
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold">Mentor Focus:</span>
+                        <span>You are viewing and managing {actingAsMentorName}&apos;s class</span>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={exitDelegationMode} className="h-7 text-indigo-700 border-indigo-300 hover:bg-indigo-50 dark:text-indigo-200 dark:border-indigo-700">
+                        Exit Focus
+                    </Button>
+                </div>
+            )}
+            {/* Delegation Banner (mentor-to-mentor) */}
+            {actingAsMentorName && !isFocusMode && (
                 <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-4 py-2 flex items-center justify-between text-sm shadow-sm border-b border-amber-200 dark:border-amber-800/50 z-50">
                     <div className="flex items-center gap-2">
                         <span className="font-semibold">Delegation Mode Active:</span>
                         <span>
-                            {actingAsStudentName 
-                                ? `You are managing ${actingAsStudentName} for ${actingAsMentorName}` 
+                            {actingAsStudentName
+                                ? `You are managing ${actingAsStudentName} for ${actingAsMentorName}`
                                 : `You are managing students for ${actingAsMentorName}`}
                         </span>
                     </div>
