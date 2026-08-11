@@ -7,7 +7,7 @@ import { format, getDay } from "date-fns"
 import {
     BookOpen, ChevronRight, Clock,
     TrendingUp, Award, Search, Camera, Loader2, BarChart2,
-    CheckCircle2, ClipboardCheck, DoorOpen, UserPlus,
+    CheckCircle2, ClipboardCheck, DoorOpen, UserPlus, Gem,
     type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -540,7 +540,9 @@ export default function StaffDashboard() {
                                 <div className="relative flex items-center gap-3">
                                     <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/25">
                                         <Award className="h-6 w-6" />
-                                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-50 bg-white text-[9px] font-black text-amber-600 dark:border-slate-900 dark:bg-slate-800">1</span>
+                                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-50 bg-gradient-to-br from-cyan-300 to-blue-500 shadow-sm dark:border-slate-900">
+                                            <Gem className="h-2.5 w-2.5 text-white" />
+                                        </span>
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Champion</span>
@@ -569,10 +571,10 @@ export default function StaffDashboard() {
                                 {monthlyTopPerformers.slice(1).map((stu, index) => {
                                     const rank = index + 2
                                     const medalClasses = rank === 2
-                                        ? "bg-slate-200 text-slate-600 ring-slate-300/70 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600"
+                                        ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white ring-amber-300/70 dark:ring-amber-500/40"
                                         : rank === 3
-                                            ? "bg-orange-100 text-orange-600 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/20"
-                                            : "bg-slate-100 text-slate-500 ring-transparent dark:bg-slate-800 dark:text-slate-400"
+                                            ? "bg-gradient-to-br from-slate-300 to-slate-400 text-white ring-slate-300/70 dark:from-slate-400 dark:to-slate-500 dark:ring-slate-400/40"
+                                            : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700"
                                     return (
                                         <div
                                             key={stu.adm_no}
@@ -580,8 +582,8 @@ export default function StaffDashboard() {
                                                 ? "border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
                                                 : "border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60")}
                                         >
-                                            <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[10px] font-black ring-1 " + medalClasses}>
-                                                #{rank}
+                                            <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black ring-1 " + medalClasses}>
+                                                {rank}
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" title={stu.name}>{stu.name}</p>

@@ -135,16 +135,13 @@ export const login = async (req: Request, res: Response) => {
         }
     }
 
-    // Get role from profiles if profile_id exists, otherwise use staff.role
-    let role = staff.role;
-    if (staff.profile_id) {
-      try {
-        const profileResult = await db.query('SELECT role FROM profiles WHERE id = $1', [staff.profile_id]);
-        if (profileResult.rows.length > 0) {
-          role = profileResult.rows[0].role;
-        }
-      } catch (_) { /* profiles table may not be accessible, use staff.role */ }
-    }
+    // `staff.role` is the authoritative, admin-managed role (edited via the
+    // Mentors admin UI) and is what GET /auth/me and every backend requireRole
+    // check against. The legacy `profiles.role` (Supabase) is NOT kept in sync
+    // when an admin changes a role, so preferring it here made the JWT disagree
+    // with /auth/me — e.g. a promoted Vice Principal still carried `usthad` in
+    // their token and was denied supervisor access. Always trust staff.role.
+    const role = staff.role;
 
     // Generate JWT with 7-day expiry (not 365d)
     const token = jwt.sign(

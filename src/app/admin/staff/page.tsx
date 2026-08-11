@@ -535,9 +535,25 @@ export default function StaffPage() {
                                             <p className="truncate font-bold text-slate-900 dark:text-white">{leader.name}</p>
                                             <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-300">{leader.role_label || roleLabel(leader.role)}</p>
                                         </div>
-                                        <Badge className={leader.is_active === false ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}>
-                                            {leader.is_active === false ? "Inactive" : "Active"}
-                                        </Badge>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                            <Badge className={leader.is_active === false ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700"}>
+                                                {leader.is_active === false ? "Inactive" : "Active"}
+                                            </Badge>
+                                            {/* Principals / VPs can be edited (e.g. change their role when they
+                                                leave the position) — same edit dialog as mentors. Admins are
+                                                intentionally not editable here. */}
+                                            {!isPrincipalPortal && leader.role !== "admin" && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:border-slate-700"
+                                                    onClick={() => openEditDialog(leader)}
+                                                    aria-label={`Edit ${leader.name}`}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="mt-4 grid gap-2 text-sm">
                                         <div className="flex items-center justify-between gap-3">

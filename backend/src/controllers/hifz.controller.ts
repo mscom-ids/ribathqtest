@@ -1029,6 +1029,26 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     ? [academicContext.academicYearId, mentor_id]
                     : [academicContext.academicYearId];
 
+                // When a mentor is in scope, restrict the (otherwise institution-wide)
+                // hifz_logs reads to that mentor's active roster. The per-student
+                // grouping below only ever reads logs for students in studentsResult,
+                // so this yields identical output while turning full-table scans into
+                // ~10-student lookups. Uses the SAME mentor resolution as the roster
+                // query above so the two never disagree. When no mentor_id (admin
+                // "all" view) the clause is empty and behaviour is unchanged.
+                const mentorLogScope = (ayParamIdx: number, mentorParamIdx: number) => (
+                    mentor_id
+                        ? ` AND hifz_logs.student_id IN (
+                                SELECT s.adm_no FROM students s
+                                LEFT JOIN student_year_snapshots sys
+                                  ON sys.student_id = s.adm_no
+                                 AND sys.academic_year_id = $${ayParamIdx}
+                                WHERE s.status = 'active'
+                                  AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $${mentorParamIdx}
+                           )`
+                        : ''
+                );
+
                 const [studentsResult, logsResult, lifetimeNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
                     db.query(
                         `SELECT s.adm_no, s.name,
@@ -1054,8 +1074,11 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                          start_page, end_page, juz_number, juz_portion
                          FROM hifz_logs
                          WHERE entry_date >= $1::date AND entry_date <= $2::date
-                           AND deleted_at IS NULL`,
-                        [startDate, endDate]
+                           AND deleted_at IS NULL
+                           ${mentorLogScope(3, 4)}`,
+                        mentor_id
+                            ? [startDate, endDate, academicContext.academicYearId, mentor_id]
+                            : [startDate, endDate]
                     ),
                     // Lifetime New Verses logs support the first-Juz milestone and
                     // the existing start-of-month Hafiz-stage calculation.
@@ -1064,7 +1087,11 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                          FROM hifz_logs
                          WHERE mode = 'New Verses'
                            AND deleted_at IS NULL
-                         ORDER BY entry_date ASC, created_at ASC`
+                           ${mentorLogScope(1, 2)}
+                         ORDER BY entry_date ASC, created_at ASC`,
+                        mentor_id
+                            ? [academicContext.academicYearId, mentor_id]
+                            : []
                     ),
                     db.query(
                         `SELECT * FROM monthly_reports WHERE report_month = $1::date`,

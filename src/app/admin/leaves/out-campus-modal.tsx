@@ -273,6 +273,21 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                 </Select>
                             </div>
 
+                            {/* Remark – shown for every reason category. Required only
+                                when 'Other' is selected; optional otherwise. */}
+                            <div className="space-y-2">
+                                <Label>
+                                    Remark {reasonCategory === "Other" && <span className="text-red-500">*</span>}
+                                </Label>
+                                <Textarea
+                                    placeholder="Please describe the reason..."
+                                    value={otherRemark}
+                                    onChange={(e) => setOtherRemark(e.target.value)}
+                                    className="bg-white dark:bg-slate-950"
+                                    rows={3}
+                                />
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label>Going With <span className="text-red-500">*</span></Label>
@@ -293,20 +308,6 @@ export function OutCampusModal({ open, onOpenChange, onSuccess }: { open: boolea
                                     />
                                 </div>
                             </div>
-
-                            {/* Remark – only required if 'Other' */}
-                            {reasonCategory === "Other" && (
-                                <div className="space-y-2">
-                                    <Label>Remark <span className="text-red-500">*</span></Label>
-                                    <Textarea
-                                        placeholder="Please describe the reason..."
-                                        value={otherRemark}
-                                        onChange={(e) => setOtherRemark(e.target.value)}
-                                        className="bg-white dark:bg-slate-950"
-                                        rows={3}
-                                    />
-                                </div>
-                            )}
                         </div>
                     )}
 
