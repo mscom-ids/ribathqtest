@@ -109,7 +109,9 @@ function MonthlyBillingSection({ month, onRefresh }: { month: string; onRefresh:
             const raw = result.preview ?? result.data ?? result
             setPreview(typeof raw === "object" && raw ? raw as Record<string, unknown> : {})
             setConfirmingPublish(false)
-            publishKey.current = createIdempotencyKey("monthly-fees")
+            // Keep a billing run's retry key tied to its month. This prevents
+            // a stale preview from ever colliding with a different month.
+            publishKey.current = createIdempotencyKey(`monthly-fees:${month}`)
         } catch (error) {
             toast.error(financeErrorMessage(error, "Could not preview monthly fees"))
         } finally {
@@ -121,7 +123,9 @@ function MonthlyBillingSection({ month, onRefresh }: { month: string; onRefresh:
         if (!preview) return
         setPublishing(true)
         try {
-            const result = await financeApi.publishMonthlyFees(month, dueDate, publishKey.current || createIdempotencyKey("monthly-fees"))
+            const key = publishKey.current || createIdempotencyKey(`monthly-fees:${month}`)
+            publishKey.current = key
+            const result = await financeApi.publishMonthlyFees(month, dueDate, key)
             if (!result.success) throw new Error(result.error || "Could not publish monthly fees")
             toast.success(result.message || "Monthly fees published")
             setPreview(null)

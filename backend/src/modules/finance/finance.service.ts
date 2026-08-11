@@ -430,25 +430,29 @@ export async function createCharge(actor: FinanceActor, body: any) {
     }
 }
 
-function compareSubmittedAllocations(
+function manualAllocation(
     submitted: unknown,
-    computed: Array<{ obligation_id: string; amount: string }>,
+    obligations: Array<{ id: string; balance: string | number }>,
+    paymentPaise: number,
 ) {
-    if (submitted === undefined || submitted === null) return;
-    if (!Array.isArray(submitted)) throw new FinanceError(400, 'Payment allocations must be a list.', 'VALIDATION_ERROR');
-    const normalized = submitted.map((allocation: any) => ({
-        obligation_id: requiredUuid(allocation?.item_id || allocation?.obligation_id, 'Allocation item'),
-        amount: money(allocation?.amount, 'Allocation amount').value,
-    }));
-    if (normalized.length !== computed.length) {
-        throw new FinanceError(409, 'Outstanding items changed. Please review the payment allocation again.', 'ALLOCATION_STALE');
-    }
-    for (let index = 0; index < computed.length; index += 1) {
-        if (normalized[index].obligation_id !== computed[index].obligation_id
-            || normalized[index].amount !== computed[index].amount) {
-            throw new FinanceError(409, 'Outstanding items changed. Please review the payment allocation again.', 'ALLOCATION_STALE');
-        }
-    }
+    if (!Array.isArray(submitted)) throw new FinanceError(400, 'Choose the due items to allocate this payment.', 'ALLOCATION_REQUIRED');
+
+    const openBalances = new Map(obligations.map(item => [item.id, moneyToPaise(item.balance, { allowZero: true, field: 'Outstanding balance' })]));
+    const seen = new Set<string>();
+    let allocatedPaise = 0;
+    const allocations = submitted.map((item: any) => {
+        const obligationId = requiredUuid(item?.item_id || item?.obligation_id, 'Allocation item');
+        if (seen.has(obligationId)) throw new FinanceError(400, 'A due item can only be selected once.', 'DUPLICATE_ALLOCATION');
+        seen.add(obligationId);
+        const balance = openBalances.get(obligationId);
+        if (balance === undefined) throw new FinanceError(409, 'One of the selected due items is no longer outstanding. Please review the allocation.', 'ALLOCATION_STALE');
+        const amount = money(item?.amount, 'Allocation amount');
+        if (amount.paise > balance) throw new FinanceError(400, 'An allocation cannot exceed the outstanding balance of that item.', 'ALLOCATION_EXCEEDS_BALANCE');
+        allocatedPaise += amount.paise;
+        return { obligation_id: obligationId, amount: amount.value, amountPaise: amount.paise };
+    });
+    if (allocatedPaise !== paymentPaise) throw new FinanceError(400, 'Allocate the full payment amount before recording it.', 'ALLOCATION_TOTAL_MISMATCH');
+    return { allocations, allocated: paiseToMoney(allocatedPaise), unapplied: '0.00', allocatedPaise, unappliedPaise: 0 };
 }
 
 export async function recordPayment(actor: FinanceActor, body: any) {
@@ -519,8 +523,9 @@ export async function recordPayment(actor: FinanceActor, body: any) {
              FOR UPDATE`,
             [studentId],
         );
-        const allocation = allocateOldestFirst(obligations.rows, parsedAmount.paise);
-        compareSubmittedAllocations(body?.allocations, allocation.allocations);
+        const allocation = body?.allocations === undefined || body?.allocations === null
+            ? allocateOldestFirst(obligations.rows, parsedAmount.paise)
+            : manualAllocation(body.allocations, obligations.rows, parsedAmount.paise);
 
         const paymentResult = await client.query(
             `INSERT INTO finance_payments

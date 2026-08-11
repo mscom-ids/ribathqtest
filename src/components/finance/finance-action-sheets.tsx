@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CheckCircle2, CreditCard, Loader2, Plus, ReceiptText } from "lucide-react"
+import { CheckCircle2, CreditCard, Loader2, Plus, ReceiptText } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,7 @@ import {
     type PaymentAccount,
     type StudentFinanceAccount,
 } from "@/lib/finance-api"
-import { allocateOldestFirst, money, shortDate, todayValue } from "./finance-utils"
+import { money, shortDate, todayValue } from "./finance-utils"
 import { SearchableSelect } from "./searchable-select"
 
 function useResponsiveSheetSide() {
@@ -325,6 +325,7 @@ export function CollectPaymentSheet({
     const [paymentAccountId, setPaymentAccountId] = useState("")
     const [reference, setReference] = useState("")
     const [notes, setNotes] = useState("")
+    const [allocationAmounts, setAllocationAmounts] = useState<Record<string, string>>({})
     const [saving, setSaving] = useState(false)
     const operationKey = useRef("")
 
@@ -338,6 +339,7 @@ export function CollectPaymentSheet({
         setPaymentAccountId("")
         setReference("")
         setNotes("")
+        setAllocationAmounts({})
         setStudentAccount(studentFinanceId(initialAccount?.student) === nextStudent ? initialAccount || null : null)
         operationKey.current = createIdempotencyKey("payment")
     }, [open, initialStudentId, initialAccount])
@@ -363,10 +365,20 @@ export function CollectPaymentSheet({
         return () => { active = false }
     }, [open, studentId, studentAccount])
 
-    const preview = useMemo(
-        () => allocateOldestFirst(studentAccount?.open_items || [], Number(amount) || 0),
-        [studentAccount?.open_items, amount],
+    const allocationEntries = useMemo(
+        () => (studentAccount?.open_items || []).map(item => ({
+            item,
+            obligationId: item.obligation_id || item.id,
+            amount: Number(allocationAmounts[item.obligation_id || item.id] || 0),
+        })).filter(entry => entry.amount > 0),
+        [studentAccount?.open_items, allocationAmounts],
     )
+    const allocatedAmount = useMemo(
+        () => allocationEntries.reduce((total, entry) => total + entry.amount, 0),
+        [allocationEntries],
+    )
+    const paymentAmount = Number(amount) || 0
+    const allocationComplete = paymentAmount > 0 && Math.abs(allocatedAmount - paymentAmount) < 0.005
 
     async function submit(event: React.FormEvent) {
         event.preventDefault()
@@ -382,8 +394,8 @@ export function CollectPaymentSheet({
                 payment_account_id: method === "cash" ? undefined : paymentAccountId,
                 reference_number: reference.trim() || undefined,
                 notes: notes.trim() || undefined,
-                allocations: preview.allocations.map(({ item, amount: allocationAmount }) => ({
-                    obligation_id: item.obligation_id || item.id,
+                allocations: allocationEntries.map(({ obligationId, amount: allocationAmount }) => ({
+                    obligation_id: obligationId,
                     amount: decimalMoney(allocationAmount),
                 })),
                 idempotency_key: operationKey.current || (operationKey.current = createIdempotencyKey("payment")),
@@ -405,11 +417,11 @@ export function CollectPaymentSheet({
             <SheetContent side={side} className={actionSheetClass(side)}>
                 <SheetHeader className="border-b border-slate-200 px-5 pb-4 pt-6 text-left dark:border-slate-800">
                     <SheetTitle>Collect payment</SheetTitle>
-                    <SheetDescription>Payment is previewed against the oldest due items. The server verifies the final allocation.</SheetDescription>
+                    <SheetDescription>Choose which due items receive this payment. The server verifies the final allocation.</SheetDescription>
                 </SheetHeader>
                 <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                        <ActionStudentSelect students={students} value={studentId} onChange={value => { setStudentId(value); setStudentAccount(null) }} />
+                        <ActionStudentSelect students={students} value={studentId} onChange={value => { setStudentId(value); setStudentAccount(null); setAllocationAmounts({}) }} />
                         <div className="grid gap-4 sm:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="payment-amount">Amount received</Label>
@@ -453,44 +465,50 @@ export function CollectPaymentSheet({
                         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/70">
                             <div className="flex items-center justify-between gap-3">
                                 <div>
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white">Oldest-due allocation preview</p>
-                                    <p className="text-xs text-slate-500">Due date first, then item priority.</p>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">Manual payment allocation</p>
+                                    <p className="text-xs text-slate-500">Enter the amount to apply to each due item.</p>
                                 </div>
                                 {accountLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
                             </div>
                             {!studentId ? (
-                                <p className="mt-4 text-sm text-slate-500">Choose a student to preview allocation.</p>
-                            ) : !preview.allocations.length && preview.credit <= 0 ? (
-                                <p className="mt-4 text-sm text-slate-500">Enter an amount to preview allocation.</p>
+                                <p className="mt-4 text-sm text-slate-500">Choose a student to allocate their payment.</p>
+                            ) : !(studentAccount?.open_items || []).length ? (
+                                <p className="mt-4 text-sm text-slate-500">This student has no outstanding due items.</p>
                             ) : (
                                 <div className="mt-4 space-y-2">
-                                    {preview.allocations.map(({ item, amount: allocated }) => (
+                                    {(studentAccount?.open_items || []).map(item => {
+                                        const obligationId = item.obligation_id || item.id
+                                        return (
                                         <div key={item.id} className="flex items-center justify-between gap-4 rounded-xl bg-white px-3 py-2.5 text-sm dark:bg-slate-950">
                                             <div className="min-w-0">
                                                 <p className="truncate font-semibold text-slate-800 dark:text-slate-200">{item.description}</p>
                                                 <p className="text-xs text-slate-500">Due {shortDate(item.due_date || item.month)} · balance {money(item.balance)}</p>
                                             </div>
-                                            <p className="shrink-0 font-black text-emerald-600">{money(allocated)}</p>
+                                            <Input
+                                                aria-label={`Amount for ${item.description}`}
+                                                className="h-9 w-28 shrink-0 text-right"
+                                                inputMode="decimal"
+                                                type="number"
+                                                min="0"
+                                                max={item.balance}
+                                                step="0.01"
+                                                value={allocationAmounts[obligationId] || ""}
+                                                onChange={event => setAllocationAmounts(current => ({ ...current, [obligationId]: event.target.value }))}
+                                                placeholder="0.00"
+                                            />
                                         </div>
-                                    ))}
-                                    {preview.credit > 0 && (
-                                        <div className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                                            {money(preview.credit)} exceeds open dues and will become student credit.
-                                        </div>
-                                    )}
-                                    {preview.credit === 0 && preview.allocations.length > 0 && (
-                                        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                                            <CheckCircle2 className="h-4 w-4" /> {money(preview.applied)} allocated
-                                        </div>
-                                    )}
+                                    )})}
+                                    <div className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${allocationComplete ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200"}`}>
+                                        <span className="flex items-center gap-2">{allocationComplete && <CheckCircle2 className="h-4 w-4" />} Allocated</span>
+                                        <span>{money(allocatedAmount)} of {money(paymentAmount)}</span>
+                                    </div>
                                 </div>
                             )}
                         </section>
                     </div>
                     <SheetFooter className="border-t border-slate-200 p-4 dark:border-slate-800">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                        <Button type="submit" disabled={saving || accountLoading || !studentId || Number(amount) <= 0 || (method !== "cash" && !paymentAccountId)} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+                        <Button type="submit" disabled={saving || accountLoading || !studentId || !allocationComplete || (method !== "cash" && !paymentAccountId)} className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
                             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
                             {saving ? "Recording…" : "Record payment"}
                         </Button>
