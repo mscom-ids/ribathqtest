@@ -581,7 +581,7 @@ export const getParentDashboard = async (req: Request, res: Response) => {
 
         const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
             expectedClassDaysOverride: hifzMonthTarget?.pointClassDays || hifzMonthTarget?.effectiveClasses || null,
-            attendedClasses: hifzAttendance?.attendedClasses || 0,
+            attendedClasses: hifzAttendance?.weightedAttendedClasses ?? hifzAttendance?.attendedClasses ?? 0,
             countedClasses: hifzMonthTarget?.effectiveClasses || 0,
             isHafiz,
             firstJuzCompletionDate,

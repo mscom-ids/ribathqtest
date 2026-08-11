@@ -35,6 +35,7 @@ export type StudentAttendanceSummary = {
     pointClassDays: number;
     pointDayWeights: Record<string, number>;
     attendedClasses: number;
+    weightedAttendedClasses: number;
     notAttendedClasses: number;
     presentClasses: number;
     lateClasses: number;
@@ -51,6 +52,7 @@ const emptySummary = (): StudentAttendanceSummary => ({
     pointClassDays: 0,
     pointDayWeights: {},
     attendedClasses: 0,
+    weightedAttendedClasses: 0,
     notAttendedClasses: 0,
     presentClasses: 0,
     lateClasses: 0,
@@ -444,11 +446,16 @@ async function computeStudentAttendanceSummaries(
                 if (status === 'present') {
                     summary.presentClasses += 1;
                     summary.attendedClasses += 1;
+                    summary.weightedAttendedClasses += 1;
                     session.present += 1;
                     session.attended += 1;
                 } else if (status === 'late') {
+                    // A "late" mark earns only half the attendance point of a
+                    // full "present" mark; still counted as attended for the
+                    // raw display counts (attendedClasses / attendanceLabel).
                     summary.lateClasses += 1;
                     summary.attendedClasses += 1;
+                    summary.weightedAttendedClasses += 0.5;
                     session.late += 1;
                     session.attended += 1;
                 } else if (status === 'absent' || status === 'outside') {

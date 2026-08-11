@@ -90,7 +90,12 @@ export function FinanceWorkspace({ mode, initialView = "overview" }: { mode: Fin
                 month,
                 search: debouncedSearch || undefined,
                 status: status || undefined,
-                limit: 100,
+                // High enough to cover the whole active roster (not just the
+                // students with the largest outstanding balance) — the Setup
+                // tab's "Choose student" pickers rely on this same list and
+                // need every active student to be selectable, including
+                // students with zero dues.
+                limit: 1000,
             })
             if (requestId !== workspaceRequest.current) return
             if (!result.success) throw new Error(result.error || "Finance workspace could not be loaded")

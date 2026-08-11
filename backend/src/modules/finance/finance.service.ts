@@ -1069,7 +1069,12 @@ export async function workspace(actor: FinanceActor, query: any) {
     const serviceMonth = query?.month ? month(query.month) : currentMonth();
     const search = String(query?.search || '').trim().slice(0, 100);
     const status = String(query?.status || '').trim().toLowerCase();
-    const limit = boundedLimit(query?.limit, 60, 100);
+    // Setup-tab student pickers (fee agreements, opening balances) draw from
+    // this same list and need the full active roster, not just the students
+    // with the highest outstanding balance — a zero-due student (e.g. newly
+    // admitted, no obligations yet) would otherwise never appear there since
+    // the list is ordered by outstanding balance DESC and then truncated.
+    const limit = boundedLimit(query?.limit, 60, 1000);
     const permissions = await listCurrentPermissions(actor);
     if (!isFinanceReadRole(actor.role) && permissions.length === 0) {
         throw new FinanceError(403, 'No finance access has been assigned to you.', 'FINANCE_FORBIDDEN');

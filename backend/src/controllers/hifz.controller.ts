@@ -123,7 +123,7 @@ const enforceHifzStudentAccess = async (req: Request, requests: HifzStudentAcces
                        JOIN attendance_schedules schedule ON schedule.id = mark.schedule_id
                        WHERE mark.student_id = request.student_id
                          AND mark.date = request.entry_date
-                         AND UPPER(mark.status) = 'PRESENT'
+                         AND UPPER(mark.status) IN ('PRESENT', 'LATE')
                          AND mark.marked_by = COALESCE(sys.hifz_mentor_id, hp.mentor_id, s.hifz_mentor_id)
                          AND LOWER(schedule.class_type) = 'hifz'
                          AND (request.session_id IS NULL OR mark.schedule_id::text = request.session_id)
@@ -148,7 +148,7 @@ const enforceHifzStudentAccess = async (req: Request, requests: HifzStudentAcces
     ));
     if (hasUnauthorizedRequest) {
         const err: any = new Error(
-            "Another mentor can record this student's Hifz progress only after the assigned mentor marks the student PRESENT.",
+            "Another mentor can record this student's Hifz progress only after the assigned mentor marks the student PRESENT or LATE.",
         );
         err.statusCode = 403;
         throw err;
@@ -974,7 +974,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
         const firstJuzCompletionDate = getFirstJuzCompletionDate(lifetimeNewLogsResult.rows);
         const calculations = calculateHifzReportPoints(logsResult.rows, [], {
             expectedClassDaysOverride: effectiveClassDays,
-            attendedClasses: attendanceSummary?.attendedClasses || 0,
+            attendedClasses: attendanceSummary?.weightedAttendedClasses ?? attendanceSummary?.attendedClasses ?? 0,
             countedClasses: targetSummary?.effectiveClasses || 0,
             isHafiz,
             firstJuzCompletionDate,
@@ -1188,7 +1188,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
                     const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
                         expectedClassDaysOverride: effectiveClassDays,
-                        attendedClasses: attendanceSummary?.attendedClasses || 0,
+                        attendedClasses: attendanceSummary?.weightedAttendedClasses ?? attendanceSummary?.attendedClasses ?? 0,
                         countedClasses: targetSummary?.effectiveClasses || 0,
                         isHafiz,
                         firstJuzCompletionDate: firstJuzCompletionByStudent[student.adm_no],

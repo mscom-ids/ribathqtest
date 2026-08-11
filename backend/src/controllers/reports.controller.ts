@@ -342,7 +342,7 @@ export const getMentorReports = async (req: Request, res: Response) => {
        makeCacheKey('reports:mentors', { startDate, endDate, academic_year_id: academicContext.academicYearId || 'legacy' }),
        5 * 60_000,
        async () => {
-     const [mentorsRes, schedulesRes, studentsRes, cancellationsRes, marksRes, institutionalLeavesRes] = await Promise.all([
+     const [mentorsRes, attendanceRangeRes, studentsRes, institutionalLeavesRes] = await Promise.all([
        db.query(
          `WITH responsibility_counts AS (
             SELECT mentor_id,
@@ -378,12 +378,38 @@ export const getMentorReports = async (req: Request, res: Response) => {
           ,
          [TEACHING_STAFF_ROLES]
        ),
+       // Keep the range data in one database snapshot and one pool checkout.
+       // The cancellation and mark subqueries intentionally remain unscoped by
+       // schedule so historical/orphaned records are never dropped from the
+       // report merely because a schedule was later edited or deactivated.
        db.query(
-         `SELECT id, class_type, name, standards, day_of_week, start_time, end_time, effective_from, effective_until
-          FROM attendance_schedules
-          WHERE effective_from <= $2::date
-            AND (effective_until IS NULL OR effective_until >= $1::date)
-          ORDER BY day_of_week, start_time`,
+         `SELECT
+            COALESCE((
+              SELECT jsonb_agg(to_jsonb(schedule_row) ORDER BY schedule_row.day_of_week, schedule_row.start_time)
+              FROM (
+                SELECT id, class_type, name, standards, day_of_week, start_time, end_time,
+                       effective_from, effective_until
+                FROM attendance_schedules
+                WHERE effective_from <= $2::date
+                  AND (effective_until IS NULL OR effective_until >= $1::date)
+              ) schedule_row
+            ), '[]'::jsonb) AS schedules,
+            COALESCE((
+              SELECT jsonb_agg(to_jsonb(cancellation_row))
+              FROM (
+                SELECT schedule_id, date, cancelled_standards
+                FROM attendance_cancellations
+                WHERE date >= $1::date AND date <= $2::date
+              ) cancellation_row
+            ), '[]'::jsonb) AS cancellations,
+            COALESCE((
+              SELECT jsonb_agg(to_jsonb(mark_row))
+              FROM (
+                SELECT schedule_id, date, marked_by
+                FROM attendance_marks
+                WHERE date >= $1::date AND date <= $2::date
+              ) mark_row
+            ), '[]'::jsonb) AS marks`,
          [startDate, endDate]
        ),
        db.query(
@@ -393,18 +419,6 @@ export const getMentorReports = async (req: Request, res: Response) => {
             AND standard IS NOT NULL`
        ),
        db.query(
-         `SELECT schedule_id, date, cancelled_standards
-          FROM attendance_cancellations
-          WHERE date >= $1 AND date <= $2`,
-         [startDate, endDate]
-       ),
-       db.query(
-         `SELECT schedule_id, date, marked_by
-          FROM attendance_marks
-          WHERE date >= $1 AND date <= $2`,
-         [startDate, endDate]
-       ),
-       db.query(
          `SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution
           FROM institutional_leaves
           WHERE start_datetime < ($2::date + 1)
@@ -412,6 +426,11 @@ export const getMentorReports = async (req: Request, res: Response) => {
          [startDate, endDate]
        ),
      ]);
+
+     const attendanceRange = attendanceRangeRes.rows[0] || {};
+     const schedules = Array.isArray(attendanceRange.schedules) ? attendanceRange.schedules : [];
+     const cancellations = Array.isArray(attendanceRange.cancellations) ? attendanceRange.cancellations : [];
+     const marks = Array.isArray(attendanceRange.marks) ? attendanceRange.marks : [];
 
      const mentorStats = new Map<string, any>();
      for (const mentor of mentorsRes.rows) {
@@ -435,24 +454,24 @@ export const getMentorReports = async (req: Request, res: Response) => {
      }
 
      const cancellationMap = new Map<string, any>();
-     cancellationsRes.rows.forEach((row: any) => {
+     cancellations.forEach((row: any) => {
        cancellationMap.set(`${row.schedule_id}|${toDateKey(row.date)}`, row);
      });
 
      const markedSet = new Set<string>();
-     marksRes.rows.forEach((row: any) => {
+     marks.forEach((row: any) => {
        markedSet.add(`${row.schedule_id}|${toDateKey(row.date)}|${row.marked_by}`);
      });
 
      const resolvedHifzBySchedule = new Map<string, any>();
-     await Promise.all(schedulesRes.rows.map(async (schedule: any) => {
+     await Promise.all(schedules.map(async (schedule: any) => {
        if (String(schedule.class_type || '').toLowerCase() !== 'hifz') return;
        const resolved = await resolveHifzStandardsForSchedule(schedule, academicContext.academicYearId, startDate);
        resolvedHifzBySchedule.set(String(schedule.id), resolved);
      }));
 
      const mentorStandardsBySchedule = new Map<string, Map<string, Set<string>>>();
-     for (const schedule of schedulesRes.rows) {
+     for (const schedule of schedules) {
        const classType = String(schedule.class_type || '').toLowerCase();
        const normalizedClassType = classType === 'madrassa' ? 'madrasa' : classType;
        const mentorCol = MENTOR_COL_MAP[normalizedClassType];
@@ -481,7 +500,7 @@ export const getMentorReports = async (req: Request, res: Response) => {
 
      const dates = dateRange(startDate, endDate);
      for (const date of dates) {
-       for (const schedule of schedulesRes.rows) {
+       for (const schedule of schedules) {
          if (!scheduleAppliesToDate(schedule, date)) continue;
 
          const scheduleId = String(schedule.id);
@@ -772,7 +791,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             expectedClassDaysOverride: type === 'Monthly' && savedPointDays !== null && savedPointDays !== undefined
                 ? Number(savedPointDays)
                 : attendanceSummary?.pointClassDays || attendanceSummary?.effectiveClasses || 0,
-            attendedClasses: attendanceSummary?.attendedClasses || 0,
+            attendedClasses: attendanceSummary?.weightedAttendedClasses ?? attendanceSummary?.attendedClasses ?? 0,
             countedClasses: attendanceSummary?.effectiveClasses || 0,
             isHafiz,
             firstJuzCompletionDate,
