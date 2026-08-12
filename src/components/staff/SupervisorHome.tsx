@@ -4,14 +4,14 @@ import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
-    Target, ChevronRight, Trophy, Star, type LucideIcon,
+    Target, ChevronRight, Trophy, Star, Medal, type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
-import { MentorFocus } from "@/components/staff/MentorFocus"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
@@ -57,12 +57,27 @@ function getGreeting(h: number) {
     return "Good Evening"
 }
 
+// Rank badge: gold/silver/bronze for top 3, plain number after
+function RankBadge({ rank }: { rank: number }) {
+    if (rank === 1) return (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-black text-xs">1</span>
+    )
+    if (rank === 2) return (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs">2</span>
+    )
+    if (rank === 3) return (
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 font-black text-xs">3</span>
+    )
+    return <span className="text-[12px] text-slate-400 dark:text-gray-500 font-medium w-7 text-center">{rank}</span>
+}
+
 /**
  * Leadership home for Principal / Vice Principal when NO Mentor Focus is set.
  * Shows a school-wide overview of every student (not a single mentor's class),
- * in the same visual language as the mentor portal. Choosing a mentor via
- * Mentor Focus (or the Mentors panel) switches the whole portal into that
- * mentor's class — handled by the parent page once the focus token is set.
+ * in the same visual language as the mentor portal.
+ *
+ * - No "Mentor Focus" card inline — the Mentors side panel handles that.
+ * - Top Performance opens as a slide-in sheet via the floating Trophy button.
  */
 export function SupervisorHome({ role }: { role: string }) {
     const [name, setName] = useState("")
@@ -74,6 +89,9 @@ export function SupervisorHome({ role }: { role: string }) {
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [focusingId, setFocusingId] = useState<string | null>(null)
+
+    // Leaderboard sheet
+    const [lbOpen, setLbOpen] = useState(false)
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
     const [lbLoading, setLbLoading] = useState(true)
 
@@ -121,7 +139,7 @@ export function SupervisorHome({ role }: { role: string }) {
             }
             setLoading(false)
 
-            // Load leaderboard separately (slightly heavier query)
+            // Leaderboard — loaded once in the background; displayed on demand via sheet
             try {
                 const lb = await cachedGet("/reports/leaderboard", { limit: 20 }, 120_000)
                 if (!cancelled && lb.data?.data) setLeaderboard(lb.data.data)
@@ -171,6 +189,109 @@ export function SupervisorHome({ role }: { role: string }) {
         )
     }
 
+    // ── Leaderboard sheet content ────────────────────────────────
+    const leaderboardSheet = (
+        <Sheet open={lbOpen} onOpenChange={setLbOpen}>
+            <SheetContent side="right" className="p-0 flex flex-col w-[92vw] sm:max-w-lg">
+                <SheetTitle className="sr-only">Top Performance</SheetTitle>
+
+                {/* Sheet header */}
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-gray-800 shrink-0">
+                    <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">Top Performance</p>
+                        <p className="text-[11px] text-slate-400">
+                            {now ? format(now, "MMMM yyyy") : "This month"} · attendance + hifz activity
+                        </p>
+                    </div>
+                </div>
+
+                {/* Sheet body */}
+                <div className="flex-1 overflow-y-auto">
+                    {lbLoading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
+                        </div>
+                    ) : leaderboard.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                            <Medal className="h-10 w-10 text-slate-200 dark:text-slate-700 mb-3" />
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No performance data yet</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Data will appear once attendance and hifz logs are recorded this month.</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Top 3 podium */}
+                            {leaderboard.length >= 1 && (
+                                <div className="px-5 pt-5 pb-4 space-y-3">
+                                    {leaderboard.slice(0, 3).map(entry => (
+                                        <button
+                                            key={entry.adm_no}
+                                            onClick={() => { setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard }); setLbOpen(false) }}
+                                            className={`w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] ${
+                                                entry.rank === 1
+                                                    ? "bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800/40"
+                                                    : entry.rank === 2
+                                                    ? "bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"
+                                                    : "bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-800/30"
+                                            }`}
+                                        >
+                                            <RankBadge rank={entry.rank} />
+                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
+                                                {entry.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{entry.name}</p>
+                                                <p className="text-[11px] text-slate-400">{entry.adm_no}{entry.standard ? ` · ${entry.standard}` : ""}</p>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                                                    <span className="text-base font-black text-slate-800 dark:text-white">{entry.score}</span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400">{entry.attendance_pct}% att · {entry.recited_days}d hifz</p>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Rest of the list */}
+                            {leaderboard.length > 3 && (
+                                <div className="border-t border-slate-100 dark:border-gray-800">
+                                    <p className="px-5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Leaderboard</p>
+                                    <div className="divide-y divide-slate-100 dark:divide-gray-800/50">
+                                        {leaderboard.slice(3).map(entry => (
+                                            <button
+                                                key={entry.adm_no}
+                                                onClick={() => { setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard }); setLbOpen(false) }}
+                                                className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-left"
+                                            >
+                                                <RankBadge rank={entry.rank} />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{entry.name}</p>
+                                                    <p className="text-[11px] text-slate-400">{entry.standard ?? entry.adm_no}</p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{entry.score}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-400">{entry.attendance_pct}%</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
+    )
+
     return (
         <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
 
@@ -215,9 +336,6 @@ export function SupervisorHome({ role }: { role: string }) {
                 </div>
             </div>
 
-            {/* ── Mentor Focus (optional) ── */}
-            <MentorFocus role={role} />
-
             <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-4">
 
                 {/* ── School-wide stat strip ── */}
@@ -228,101 +346,11 @@ export function SupervisorHome({ role }: { role: string }) {
                     <StatTile icon={GraduationCap} color="indigo" label="Active Mentors" value={String(counts?.mentors ?? 0)} sub="teaching & leadership" pct={100} />
                 </div>
 
-                {/* ── Top Performance leaderboard ── */}
-                <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
-                                <Trophy className="h-4 w-4 text-amber-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm font-bold text-slate-900 dark:text-white">Top Performance</p>
-                                <p className="text-[11px] text-slate-400">This month · ranked by attendance + hifz activity</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {lbLoading ? (
-                        <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-                    ) : leaderboard.length === 0 ? (
-                        <div className="text-center py-8 text-sm text-slate-400">No performance data yet this month.</div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-slate-50 dark:bg-slate-800/60">
-                                        <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 w-10">#</th>
-                                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Student</th>
-                                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden sm:table-cell">Class</th>
-                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Attendance</th>
-                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden md:table-cell">Hifz Days</th>
-                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden md:table-cell">New Verses</th>
-                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Score</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-gray-800/50">
-                                    {leaderboard.map(entry => (
-                                        <tr key={entry.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                            <td className="px-4 py-3 text-center">
-                                                {entry.rank <= 3 ? (
-                                                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                                                        entry.rank === 1 ? "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400" :
-                                                        entry.rank === 2 ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300" :
-                                                        "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
-                                                    }`}>{entry.rank}</span>
-                                                ) : (
-                                                    <span className="text-[11px] text-slate-400 dark:text-gray-500 font-medium">{entry.rank}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-3">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="h-8 w-8 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-xs shrink-0">
-                                                        {entry.name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <button
-                                                            onClick={() => setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard })}
-                                                            className="font-semibold text-sm text-slate-900 dark:text-white truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
-                                                        >{entry.name}</button>
-                                                        <p className="text-[11px] text-slate-400">{entry.adm_no}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-3 hidden sm:table-cell text-[12px] text-slate-500 dark:text-gray-400">
-                                                {entry.standard ?? "—"}
-                                            </td>
-                                            <td className="px-3 py-3 text-center">
-                                                <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                                    entry.attendance_pct >= 90 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
-                                                    entry.attendance_pct >= 75 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
-                                                    "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
-                                                }`}>{entry.attendance_pct}%</span>
-                                            </td>
-                                            <td className="px-3 py-3 text-center hidden md:table-cell text-[12px] font-medium text-slate-700 dark:text-slate-300">
-                                                {entry.recited_days}
-                                            </td>
-                                            <td className="px-3 py-3 text-center hidden md:table-cell text-[12px] font-medium text-slate-700 dark:text-slate-300">
-                                                {entry.new_entries}
-                                            </td>
-                                            <td className="px-3 py-3 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Star className="h-3 w-3 text-amber-400 fill-amber-400 shrink-0" />
-                                                    <span className="text-xs font-bold text-slate-800 dark:text-white">{entry.score}</span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-
                 {/* ── Main: all students | mentors panel ── */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
                     {/* Left: All students */}
-                    <div className="lg:col-span-2 space-y-4">
+                    <div className="lg:col-span-2">
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex flex-wrap items-center gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="flex items-center gap-2 shrink-0">
@@ -367,16 +395,16 @@ export function SupervisorHome({ role }: { role: string }) {
                         </div>
                     </div>
 
-                    {/* Right: Mentors panel */}
-                    <div className="lg:col-span-1 space-y-4">
+                    {/* Right: Mentors panel — click any mentor to focus */}
+                    <div className="lg:col-span-1">
                         <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex items-center gap-2 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center">
                                     <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white">Mentors</p>
-                                    <p className="text-[11px] text-slate-400">Open a mentor&apos;s class</p>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">Mentor Focus</p>
+                                    <p className="text-[11px] text-slate-400">Tap to open a mentor&apos;s class</p>
                                 </div>
                             </div>
                             {mentors.length === 0 ? (
@@ -415,12 +443,26 @@ export function SupervisorHome({ role }: { role: string }) {
                 </div>
             </div>
 
-            {/* Hifz register modal — opens any student's monthly progress */}
+            {/* ── Floating Trophy button — opens Top Performance sheet ── */}
+            <div className="fixed bottom-24 right-4 z-40">
+                <button
+                    onClick={() => setLbOpen(true)}
+                    aria-label="Open top performance"
+                    className="h-14 w-14 rounded-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white shadow-lg shadow-amber-500/30 flex items-center justify-center transition-all active:scale-95"
+                >
+                    <Trophy className="h-6 w-6" />
+                </button>
+            </div>
+
+            {/* ── Top Performance slide-in sheet ── */}
+            {leaderboardSheet}
+
+            {/* Hifz register modal */}
             <HifzMonthlyRegister
                 open={!!chartStudent}
                 onClose={() => setChartStudent(null)}
                 student={chartStudent}
-                onChange={() => { /* read-oriented supervisor view; no dashboard refresh needed */ }}
+                onChange={() => { }}
             />
         </div>
     )
