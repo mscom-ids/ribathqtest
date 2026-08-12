@@ -319,7 +319,7 @@ export function SupervisorHome({ role }: { role: string }) {
                 <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
                 <div className="relative flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20">
                             <Award className="h-5 w-5 text-amber-300" />
                         </div>
                         <div className="min-w-0">
@@ -331,7 +331,7 @@ export function SupervisorHome({ role }: { role: string }) {
                         value={selectedMonth}
                         onChange={(e) => setSelectedMonth(e.target.value)}
                         aria-label="Select month"
-                        className="min-w-[100px] cursor-pointer rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-xs font-medium text-white outline-none backdrop-blur-sm transition hover:bg-white/20 focus:ring-2 focus:ring-white/60 [&>option]:text-slate-900"
+                        className="min-w-[100px] cursor-pointer rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-xs font-medium text-white outline-none transition hover:bg-white/20 focus:ring-2 focus:ring-white/60 [&>option]:text-slate-900"
                     >
                         {monthOptions.map((m) => (
                             <option key={m.value} value={m.value}>{m.label}</option>
@@ -443,7 +443,7 @@ export function SupervisorHome({ role }: { role: string }) {
     )
 
     return (
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
+        <div className="min-h-full bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
 
             {/* ── Welcome banner ── */}
             <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
@@ -463,22 +463,22 @@ export function SupervisorHome({ role }: { role: string }) {
                                 {getGreeting(now ? now.getHours() : 12)}, {name || roleLabel} 👋
                             </h1>
                             <p className="text-blue-100 text-xs">{now ? format(now, "EEEE, MMMM d, yyyy") : ""}</p>
-                            <div className="flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-full px-3 py-1 w-fit text-xs">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                            <div className="flex items-center gap-2 bg-white/15 rounded-full px-3 py-1 w-fit text-xs">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
                                 Full access to every student and mentor
                             </div>
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-3">
-                        <div className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-2.5 text-center min-w-[76px]">
+                        <div className="bg-white/15 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
                             <div className="text-xl font-bold">{counts?.active ?? "—"}</div>
                             <div className="text-blue-200 text-[11px]">Students</div>
                         </div>
-                        <div className="bg-white/15 backdrop-blur-sm rounded-xl px-4 py-2.5 text-center min-w-[76px]">
+                        <div className="bg-white/15 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
                             <div className="text-xl font-bold">{counts?.on_campus ?? "—"}</div>
                             <div className="text-blue-200 text-[11px]">On Campus</div>
                         </div>
-                        <div className="bg-amber-500/30 backdrop-blur-sm rounded-xl px-4 py-2.5 text-center min-w-[76px]">
+                        <div className="bg-amber-500/30 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
                             <div className="text-xl font-bold">{counts?.out_campus ?? "—"}</div>
                             <div className="text-amber-100 text-[11px]">Outside</div>
                         </div>
@@ -600,12 +600,7 @@ export function SupervisorHome({ role }: { role: string }) {
                     aria-label="Open top performers"
                     className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-lg flex items-center justify-center transition-all active:scale-95"
                 >
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                        <style>{`@keyframes mpLiveBar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }`}</style>
-                        <rect x="2" y="8" width="3.5" height="10" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite" }} />
-                        <rect x="8.25" y="2" width="3.5" height="16" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite 0.15s" }} />
-                        <rect x="14.5" y="11" width="3.5" height="7" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite 0.3s" }} />
-                    </svg>
+                    <Trophy className="h-5 w-5" aria-hidden="true" />
                 </button>
             </div>
 

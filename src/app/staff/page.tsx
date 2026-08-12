@@ -26,6 +26,19 @@ import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 // Roles that supervise every mentor via Mentor Focus (Principal / Vice Principal).
 const SUPERVISOR_ROLES = ["principal", "vice_principal", "admin"]
 
+// Effects do not run during SSR, so this stays false for the hydration-safe
+// server render. Once the client has mounted the dashboard, later client-side
+// returns can render immediately instead of flashing the loader for one frame.
+let hasMountedStaffDashboard = false
+
+function getMentorFocusSync() {
+    try {
+        return typeof window !== "undefined" && sessionStorage.getItem("mentorFocus") === "1"
+    } catch {
+        return false
+    }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Student = {
     adm_no: string
@@ -215,7 +228,7 @@ export default function StaffDashboard() {
     const [currentTime, setCurrentTime] = useState<Date | null>(null)
     // "my" = assigned only, "all" = every active student
     const [studentMode, setStudentMode] = useState<"my" | "all">("my")
-    const [mounted, setMounted] = useState(false)
+    const [mounted, setMounted] = useState(hasMountedStaffDashboard)
     const router = useRouter()
 
     // Supervisor (Principal / Vice Principal) support. `userRole` is the REAL
@@ -225,7 +238,7 @@ export default function StaffDashboard() {
     // paint without waiting for /auth/me — eliminates the blink.
     const [userRole, setUserRole] = useState(() => getUserRoleSync() ?? "")
     const [roleResolved, setRoleResolved] = useState(() => !!getUserRoleSync())
-    const [isFocusMode, setIsFocusMode] = useState(false)
+    const [isFocusMode, setIsFocusMode] = useState(getMentorFocusSync)
     const isSupervisor = SUPERVISOR_ROLES.includes(userRole)
 
     // Chart modal
@@ -249,6 +262,7 @@ export default function StaffDashboard() {
     const hifzRegisterDirtyRef = useRef(false)
 
     useEffect(() => {
+        hasMountedStaffDashboard = true
         setMounted(true)
         const now = new Date()
         setCurrentTime(now)
