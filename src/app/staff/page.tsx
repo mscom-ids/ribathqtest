@@ -20,6 +20,7 @@ import { getUserRole } from "@/lib/auth"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
 import { MentorFocus } from "@/components/staff/MentorFocus"
+import { SupervisorHome } from "@/components/staff/SupervisorHome"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 // Roles that supervise every mentor via Mentor Focus (Principal / Vice Principal).
@@ -221,8 +222,8 @@ export default function StaffDashboard() {
     // logged-in role from /auth/me — NOT /staff/me, which returns the focused
     // mentor's role while Mentor Focus is active.
     const [userRole, setUserRole] = useState("")
+    const [roleResolved, setRoleResolved] = useState(false)
     const [isFocusMode, setIsFocusMode] = useState(false)
-    const supervisorDefaultApplied = useRef(false)
     const isSupervisor = SUPERVISOR_ROLES.includes(userRole)
 
     // Chart modal
@@ -253,19 +254,14 @@ export default function StaffDashboard() {
         setTodayLabel(format(now, "EEEE, MMMM d, yyyy"))
         setSelectedMonth(format(now, "yyyy-MM"))
         setIsFocusMode(sessionStorage.getItem("mentorFocus") === "1")
-        // Real role — decides whether the Mentor Focus control is shown.
-        getUserRole().then((r) => { if (r) setUserRole(r) }).catch(() => {})
+        // Real role — decides whether this is the mentor view or the supervisor
+        // (Leadership) home. Resolve before first paint to avoid a flash of the
+        // wrong layout for a Principal / Vice Principal.
+        getUserRole()
+            .then((r) => { if (r) setUserRole(r) })
+            .catch(() => {})
+            .finally(() => setRoleResolved(true))
     }, [])
-
-    // A supervisor who hasn't focused on a mentor has no students of their own,
-    // so show every active student by default instead of an empty "My Students".
-    useEffect(() => {
-        if (supervisorDefaultApplied.current) return
-        if (isSupervisor && !isFocusMode) {
-            supervisorDefaultApplied.current = true
-            setStudentMode("all")
-        }
-    }, [isSupervisor, isFocusMode])
 
     // Clock tick
     useEffect(() => {
@@ -470,7 +466,8 @@ export default function StaffDashboard() {
     }, [studentMode, myStudents, allStudents, search])
 
     // ── Loading placeholder ───────────────────────────────────────
-    if (loading || !mounted) {
+    // Wait for the real role too, so a supervisor never flashes the mentor view.
+    if (!mounted || !roleResolved || (loading && !(isSupervisor && !isFocusMode))) {
         return (
             <div className="flex items-center justify-center h-full min-h-[60vh]">
                 <div className="flex flex-col items-center gap-3 text-slate-500">
@@ -479,6 +476,14 @@ export default function StaffDashboard() {
                 </div>
             </div>
         )
+    }
+
+    // ── Supervisor (Leadership) home ──────────────────────────────
+    // A Principal / Vice Principal who hasn't focused on a mentor gets a
+    // school-wide overview of every student — NOT the empty mentor "My Class"
+    // view. Mentor Focus takes over only once they set it (isFocusMode).
+    if (isSupervisor && !isFocusMode) {
+        return <SupervisorHome role={userRole} />
     }
 
     // Shared body for Top Performers — rendered inline on desktop, and inside
@@ -759,10 +764,8 @@ export default function StaffDashboard() {
                                     />
                                 </div>
 
-                                {/* Assign — the one quick action without a nav link.
-                                    Hidden for a supervisor who hasn't focused on a
-                                    mentor (they have no class to assign into). */}
-                                {mounted && !(isSupervisor && !isFocusMode) && (
+                                {/* Assign — the one quick action without a nav link */}
+                                {mounted && (
                                     <AssignStudentsModal
                                         currentStaffId={staffId}
                                         students={myStudents}

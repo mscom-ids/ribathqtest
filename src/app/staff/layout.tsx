@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
+import { getUserRole } from "@/lib/auth"
 import { ModeToggle } from "@/components/mode-toggle"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
@@ -28,6 +29,9 @@ export default function StaffLayout({
     const [actingAsStudentName, setActingAsStudentName] = useState<string | null>(null)
     // Mentor Focus (supervisor) vs regular mentor delegation — different banner.
     const [isFocusMode, setIsFocusMode] = useState(false)
+    // Role-aware branding: leaders see "Leadership Portal", mentors "Mentor Portal".
+    // Uses the REAL role (/auth/me), which stays correct even while focused.
+    const [brand, setBrand] = useState("Mentor Portal")
 
     useEffect(() => {
         setMounted(true)
@@ -39,6 +43,9 @@ export default function StaffLayout({
             setActingAsStudentName(studentName)
             setIsFocusMode(sessionStorage.getItem('mentorFocus') === '1')
         }
+        getUserRole()
+            .then((r) => { if (r === 'principal' || r === 'vice_principal') setBrand('Leadership Portal') })
+            .catch(() => {})
     }, [])
 
     useEffect(() => {
@@ -163,7 +170,7 @@ export default function StaffLayout({
                             className="h-8 w-8 object-contain drop-shadow-sm rounded-md"
                         />
                         <span className="hidden md:inline-block text-base lg:text-lg bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent whitespace-nowrap">
-                            Mentor Portal
+                            {brand}
                         </span>
                     </div>
 
