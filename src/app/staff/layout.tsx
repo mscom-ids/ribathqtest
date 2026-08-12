@@ -32,6 +32,9 @@ export default function StaffLayout({
     // Role-aware branding: leaders see "Leadership Portal", mentors "Mentor Portal".
     // Uses the REAL role (/auth/me), which stays correct even while focused.
     const [brand, setBrand] = useState("Mentor Portal")
+    // Leaders (Principal / VP) don't request delegation — they use Mentor Focus —
+    // so the "Assigned" (delegation requests) nav item is hidden for them.
+    const [isLeader, setIsLeader] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -44,7 +47,12 @@ export default function StaffLayout({
             setIsFocusMode(sessionStorage.getItem('mentorFocus') === '1')
         }
         getUserRole()
-            .then((r) => { if (r === 'principal' || r === 'vice_principal') setBrand('Leadership Portal') })
+            .then((r) => {
+                if (r === 'principal' || r === 'vice_principal') {
+                    setBrand('Leadership Portal')
+                    setIsLeader(true)
+                }
+            })
             .catch(() => {})
     }, [])
 
@@ -97,7 +105,7 @@ export default function StaffLayout({
         { href: "/staff/attendance", label: "Attendance", icon: CalendarCheck },
         { href: "/staff/leaves", label: "Leaves", icon: DoorOpen },
         { href: "/staff/reports", label: "Reports", icon: FileText },
-        { href: "/staff/assigned", label: "Assigned", icon: Users },
+        ...(isLeader ? [] : [{ href: "/staff/assigned", label: "Assigned", icon: Users }]),
         { href: "/staff/chat", label: "Chat", icon: MessageCircle },
         { href: "/staff/finance", label: "Finance", icon: Landmark },
     ]
@@ -111,7 +119,7 @@ export default function StaffLayout({
 
     const mobileMoreItems = [
         { href: "/staff/reports", label: "Reports", description: "Student progress reports", icon: FileText },
-        { href: "/staff/assigned", label: "Assigned", description: "Assigned students", icon: Users },
+        ...(isLeader ? [] : [{ href: "/staff/assigned", label: "Assigned", description: "Assigned students", icon: Users }]),
         { href: "/staff/finance", label: "Finance", description: "Finance module", icon: Landmark },
     ]
 

@@ -39,6 +39,12 @@ type SessionInfo = {
     effective_from: string
     effective_until: string | null
     is_deleted: boolean
+    // Present on schedules for admin/leadership viewers — which mentor owns this
+    // schedule row. Lets a supervisor tell duplicate sessions apart and attribute
+    // their marking to the right mentor.
+    mentor_id?: string | null
+    mentor_name?: string | null
+    mentor_photo?: string | null
 }
 
 type Student = {
@@ -172,6 +178,15 @@ export default function StaffAttendancePage() {
     const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
     const isMentorRole = ["staff", "usthad", "mentor"].includes(userRole)
+    // A supervisor NOT focused on a mentor sees every mentor's schedule rows, so
+    // each row is labelled with its owning mentor (and marking is attributed to
+    // that mentor). While focused, the view is already scoped to one mentor.
+    const isSupervisorRole = ["admin", "principal", "vice_principal", "controller"].includes(userRole)
+    const [isFocusMode, setIsFocusMode] = useState(false)
+    useEffect(() => {
+        if (typeof window !== "undefined") setIsFocusMode(sessionStorage.getItem("mentorFocus") === "1")
+    }, [])
+    const showMentorColumn = isSupervisorRole && !isFocusMode
     const maxEditDays = isMentorRole ? (accessPolicy?.default_window_days || 7) : 30
     const isUnlockedRange =
         !!accessPolicy?.unlock_start_date &&
@@ -405,10 +420,15 @@ export default function StaffAttendancePage() {
         }))
 
         try {
+            // A supervisor marking an unfocused mentor's schedule attributes the
+            // marks to that schedule's mentor (so it shows as "Marked" in the
+            // mentor's own portal), mirroring the admin on_behalf_of flow.
+            const onBehalfOf = showMentorColumn && activeSession.mentor_id ? activeSession.mentor_id : undefined
             const { data } = await api.post("/attendance/mark", {
                 schedule_id: activeSession.id,
                 date: dateStr,
-                student_marks
+                student_marks,
+                ...(onBehalfOf ? { on_behalf_of: onBehalfOf } : {}),
             });
             if (!data.success) throw new Error(data.error);
             
@@ -525,7 +545,9 @@ export default function StaffAttendancePage() {
                         Attendance Marking
                     </h1>
                     <p className="text-sm text-blue-100 mt-1">
-                        {assignedStudentCount} students available for attendance today
+                        {showMentorColumn
+                            ? `${sessionRows.length} session${sessionRows.length !== 1 ? "s" : ""} across all mentors`
+                            : `${assignedStudentCount} students available for attendance today`}
                     </p>
                 </div>
 
@@ -611,6 +633,7 @@ export default function StaffAttendancePage() {
                                     <TableHead className="w-[50px] pl-4 font-semibold">#</TableHead>
                                     <TableHead className="font-semibold">Time</TableHead>
                                     <TableHead className="font-semibold">Session</TableHead>
+                                    {showMentorColumn && <TableHead className="font-semibold">Mentor</TableHead>}
                                     <TableHead className="text-center font-semibold">Students</TableHead>
                                     <TableHead className="text-center font-semibold">Status</TableHead>
                                     <TableHead className="text-right pr-4 font-semibold">Action</TableHead>
@@ -619,7 +642,7 @@ export default function StaffAttendancePage() {
                             <TableBody>
                                 {loadingSessions && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center h-32">
+                                        <TableCell colSpan={showMentorColumn ? 7 : 6} className="text-center h-32">
                                             <div className="flex items-center justify-center gap-2">
                                                 <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
                                                 Loading sessions...
@@ -630,7 +653,7 @@ export default function StaffAttendancePage() {
 
                                 {!loadingSessions && sessionRows.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center h-32 text-slate-500">
+                                        <TableCell colSpan={showMentorColumn ? 7 : 6} className="text-center h-32 text-slate-500">
                                             <Users className="h-8 w-8 mx-auto mb-2 text-slate-400" />
                                             No sessions scheduled for this date.
                                         </TableCell>
@@ -659,6 +682,21 @@ export default function StaffAttendancePage() {
                                                 )}>{row.session.class_type}</Badge>
                                             </div>
                                         </TableCell>
+                                        {showMentorColumn && (
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Avatar className="h-6 w-6 border shrink-0">
+                                                        <AvatarImage src={row.session.mentor_photo || ""} />
+                                                        <AvatarFallback className="text-[9px]">
+                                                            {(row.session.mentor_name || "—").substring(0, 2).toUpperCase()}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[160px]">
+                                                        {row.session.mentor_name || <span className="text-slate-400 italic">Unassigned</span>}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                        )}
                                         <TableCell className="text-center">
                                             <span className="text-sm font-medium">
                                                 {row.status === "marked" ? `${row.markedCount}/${row.studentCount}` : row.studentCount}
@@ -743,6 +781,12 @@ export default function StaffAttendancePage() {
                                     <h3 className="text-base font-bold text-slate-900 dark:text-white">{row.session.name}</h3>
                                     {getStatusBadge(row.status)}
                                 </div>
+                                {showMentorColumn && (
+                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 -mt-1">
+                                        <Users className="h-3.5 w-3.5" />
+                                        {row.session.mentor_name || "Unassigned"}
+                                    </div>
+                                )}
                                 <div className="flex items-center text-sm text-slate-600 dark:text-slate-300">
                                     <Users className="h-4 w-4 mr-2" />
                                     Students: <span className="font-semibold ml-1">{row.status === "marked" ? `${row.markedCount}/${row.studentCount}` : row.studentCount}</span>

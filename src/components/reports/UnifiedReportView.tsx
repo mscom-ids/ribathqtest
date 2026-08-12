@@ -3,15 +3,17 @@
 
 import React, { useState, useEffect } from "react"
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subDays } from "date-fns"
-import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle, User, CalendarCheck2, LineChart, GraduationCap } from "lucide-react"
+import { FileText, Calendar as CalendarIcon, Download, Loader2, AlertCircle, MessageCircle, User, CalendarCheck2, LineChart, GraduationCap, Check, ChevronsUpDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
+import { getUserRole } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 export default function UnifiedReportView() {
@@ -27,26 +29,38 @@ export default function UnifiedReportView() {
     const [loading, setLoading] = useState(false)
     const [reportData, setReportData] = useState<any | null>(null)
     const [errorMsg, setErrorMsg] = useState("")
+    const [studentPickerOpen, setStudentPickerOpen] = useState(false)
 
     useEffect(() => {
         let mounted = true
-        // Load students dropdown
-        cachedGet('/staff/me/students')
-           .then(res => {
-               if (!mounted) return
-               if (res.data?.students) {
-                   setStudents(res.data.students)
-                   if (res.data.students.length === 1) { // Auto-select if only 1 student
-                       setSelectedStudent(String(res.data.students[0].adm_no))
-                   } else if (res.data.students.length > 0) {
-                       setSelectedStudent(String(res.data.students[0].adm_no)) // Smart default
-                   }
-               }
-           })
-           .catch(() => {})
-           
+        async function loadStudents() {
+            // A supervisor (Principal / VP) not focused on a mentor picks from
+            // EVERY student; a mentor (or a focused supervisor) picks from their
+            // own roster. Same {adm_no, name} shape either way.
+            const focused = typeof window !== "undefined" && sessionStorage.getItem("mentorFocus") === "1"
+            let role = ""
+            try { role = await getUserRole() } catch { /* fall back to mentor roster */ }
+            const isSupervisor = ["admin", "principal", "vice_principal", "controller"].includes(role)
+
+            try {
+                const res = isSupervisor && !focused
+                    ? await cachedGet("/students", { scope: "all", light: "true", status: "active", limit: 1000, count: "false", sort: "name" }, 60_000)
+                    : await cachedGet("/staff/me/students")
+                if (!mounted || !res.data?.students) return
+                const list = res.data.students
+                setStudents(list)
+                // Mentors get a smart default (small roster); supervisors search
+                // instead of defaulting into an arbitrary first-of-hundreds.
+                if (!(isSupervisor && !focused) && list.length > 0) {
+                    setSelectedStudent(String(list[0].adm_no))
+                }
+            } catch { /* leave empty */ }
+        }
+        loadStudents()
         return () => { mounted = false }
     }, [])
+
+    const selectedStudentName = students.find(s => String(s.adm_no) === selectedStudent)?.name || ""
 
     const handleTypeChange = (val: string) => {
         const type = val as any
@@ -215,18 +229,47 @@ export default function UnifiedReportView() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div className="space-y-2">
                             <Label>Student</Label>
-                            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-                                <SelectTrigger className="bg-white w-full">
-                                    <SelectValue placeholder="Select Student" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {students.map(s => (
-                                        <SelectItem key={s.adm_no} value={String(s.adm_no)}>
-                                            {s.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={studentPickerOpen}
+                                        className="bg-white w-full justify-between font-normal"
+                                    >
+                                        <span className={cn("truncate", !selectedStudentName && "text-muted-foreground")}>
+                                            {selectedStudentName || "Select Student"}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                                    <Command
+                                        filter={(value, search) => value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0}
+                                    >
+                                        <CommandInput placeholder="Search name or ID…" />
+                                        <CommandList>
+                                            <CommandEmpty>No student found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {students.map(s => (
+                                                    <CommandItem
+                                                        key={s.adm_no}
+                                                        value={`${s.name} ${s.adm_no}`}
+                                                        onSelect={() => {
+                                                            setSelectedStudent(String(s.adm_no))
+                                                            setStudentPickerOpen(false)
+                                                        }}
+                                                    >
+                                                        <Check className={cn("mr-2 h-4 w-4", String(s.adm_no) === selectedStudent ? "opacity-100" : "opacity-0")} />
+                                                        <span className="flex-1 truncate">{s.name}</span>
+                                                        <span className="ml-2 text-xs text-muted-foreground">{s.adm_no}{s.standard ? ` · ${s.standard}` : ""}</span>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                             {errorMsg && !selectedStudent && (
                                 <p className="text-xs text-red-500 mt-1 flex items-center">
                                     <AlertCircle className="h-3 w-3 mr-1" /> {errorMsg}
