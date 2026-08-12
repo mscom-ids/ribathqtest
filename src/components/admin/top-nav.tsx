@@ -7,6 +7,7 @@ import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type Notification = {
@@ -245,6 +246,8 @@ function NotificationBell() {
 
 // ── Main TopNav ─────────────────────────────────────────────────────────────
 export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
+    const pathname = usePathname()
+    const isDashboard = pathname === "/admin"
     const [user, setUser] = useState({ name: 'Admin User', role: 'Administrator', email: '' })
     const { theme, setTheme } = useTheme()
     const [mounted, setMounted] = useState(false)
@@ -269,7 +272,8 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
     const isDark = mounted && theme === 'dark'
 
     return (
-        <header suppressHydrationWarning className="fixed top-0 lg:left-[260px] left-0 right-0 z-30 h-[60px] bg-white dark:bg-[#1a1f2e] border-b border-[#e8ede9] dark:border-[#2a2f3e] flex items-center px-4 lg:px-6 gap-3 transition-colors">
+        <header suppressHydrationWarning className={`fixed left-0 right-0 top-0 z-30 border-b border-[#e8ede9] bg-white px-4 transition-colors dark:border-[#2a2f3e] dark:bg-[#1a1f2e] lg:left-[260px] lg:px-6 ${isDashboard ? "h-[76px]" : "h-[60px]"}`}>
+            <div className="flex h-full items-center gap-3">
             {/* Mobile Menu Button */}
             <button
                 onClick={onOpenSidebar}
@@ -278,10 +282,29 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
                 <Menu className="h-4 w-4" />
             </button>
 
+            {isDashboard && (
+                <div className="min-w-0">
+                    <h1 className="truncate text-[17px] font-black leading-tight text-slate-900 dark:text-white sm:text-xl">Admin Dashboard</h1>
+                    <p className="hidden text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:block">Dashboard / Admin Dashboard</p>
+                </div>
+            )}
+
             {/* Spacer — pushes actions to the right */}
             <div className="flex-1" />
 
             <div className="flex items-center gap-3">
+                {isDashboard && (
+                    <div className="mr-1 flex shrink-0 items-center gap-2">
+                        <Link href="/admin/students/create" className="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:px-4 sm:text-[12px]">
+                            + Add New Student
+                        </Link>
+                        <Link href="/admin/finance/dashboard" className="hidden rounded-lg border border-slate-200 bg-white px-4 py-2 text-[12px] font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 md:block">
+                            Fees Details
+                        </Link>
+                        <div className="hidden h-6 w-px bg-[#e8ede9] dark:bg-[#2a2f3e] sm:block" />
+                    </div>
+                )}
+
                 {/* Notification Bell */}
                 <NotificationBell />
 
@@ -308,6 +331,8 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
                     </div>
                 </div>
             </div>
+            </div>
+
         </header>
     )
 }

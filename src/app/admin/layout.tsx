@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 isCollapsed ? "lg:pl-[80px]" : "lg:pl-[260px]"
             )}>
                 <TopNav onOpenSidebar={() => setSidebarOpen(true)} />
-                <main className={`flex-1 pt-[60px] min-h-0 ${isChatPage ? 'h-[calc(100vh-60px)] overflow-hidden flex flex-col' : ''}`}>
+                <main className={`flex-1 min-h-0 ${pathname === '/admin' ? 'pt-[76px]' : 'pt-[60px]'} ${isChatPage ? 'h-[calc(100vh-60px)] overflow-hidden flex flex-col' : ''}`}>
                     {isChatPage ? (
                         children
                     ) : (

@@ -6,16 +6,16 @@ import {
     Users, BookOpen,
     CalendarDays, ChevronLeft, ChevronRight,
     Bell, FileText, DollarSign, BarChart2,
-    CheckCircle2, Clock, AlertCircle,
     UserCheck, CalendarCheck,
-    MoreHorizontal, GraduationCap, X, Plus,
-    Edit2, Trash2, Loader2, UserCog, ShieldCheck
+    GraduationCap, X, Plus,
+    Edit2, Trash2, UserCog, ShieldCheck
 } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { cn } from "@/lib/utils"
 import {
-    PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+    Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
+    ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
 import EventModal from "@/components/shared/EventModal"
 
@@ -44,7 +44,7 @@ function MiniCalendar({ events = [] }: { events?: any[] }) {
     }, [])
 
     if (!today || year === null || month === null) {
-        return <div className="h-[330px] animate-pulse rounded-md bg-slate-50 dark:bg-slate-800/50" />
+        return <div className="h-[270px] animate-pulse rounded-md bg-slate-50 dark:bg-slate-800/50" />
     }
 
     const firstDay = new Date(year, month, 1).getDay()
@@ -63,7 +63,7 @@ function MiniCalendar({ events = [] }: { events?: any[] }) {
 
     return (
         <div>
-            <div className="flex items-center justify-between mb-4 mt-2">
+            <div className="mb-3 mt-1 flex items-center justify-between">
                 <button onClick={prev} className="h-8 w-8 rounded-full border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                     <ChevronLeft className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                 </button>
@@ -77,13 +77,13 @@ function MiniCalendar({ events = [] }: { events?: any[] }) {
                     <div key={d} className="text-center text-[12px] font-bold text-slate-800 dark:text-slate-200 py-1">{d}</div>
                 ))}
             </div>
-            <div className="grid grid-cols-7 gap-y-1">
+            <div className="grid grid-cols-7 gap-y-0.5">
                 {cells.map((day, i) => {
                     const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
                     const hasEvent = day ? eventDates.includes(`${year}-${month}-${day}`) : false
 
                     return (
-                        <div key={i} className="flex flex-col items-center justify-center relative h-10">
+                        <div key={i} className="relative flex h-9 flex-col items-center justify-center">
                             {day ? (
                                 <>
                                     <span className={cn(
@@ -132,29 +132,27 @@ function StatCard({
     inactiveLabel?: string
 }) {
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-200/60 dark:border-slate-700 flex flex-col justify-between group h-full">
-            <div className="flex items-start justify-between mb-4">
-                {/* Image / Icon container (left) */}
-                <div className={`h-[68px] w-[68px] rounded-2xl flex items-center justify-center flex-shrink-0 ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
-                    <Icon className={`h-8 w-8 ${iconColor}`} />
+        <div className="group flex h-full flex-col justify-between rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ${iconBg} transition-transform duration-300 group-hover:scale-105`}>
+                    <Icon className={`h-6 w-6 ${iconColor}`} />
                 </div>
 
-                {/* Content (right aligned) */}
-                <div className="flex flex-col items-end pt-1">
-                    <span className="text-[32px] font-black text-slate-800 dark:text-white leading-none">
+                <div className="flex min-w-0 flex-col items-end">
+                    <span className="text-[28px] font-black leading-none text-slate-900 dark:text-white">
                         {fmt(value)}
                     </span>
-                    <p className="text-[14px] font-semibold text-slate-500 dark:text-slate-400 mt-1">{label}</p>
+                    <p className="mt-1 text-right text-[12px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
                 </div>
             </div>
 
-            <div className="border-t border-slate-100 dark:border-slate-700 w-full mb-3" />
+            <div className="mb-2.5 w-full border-t border-slate-100 dark:border-slate-700" />
 
-            <div className="flex items-center justify-between text-[13px] font-semibold text-slate-500 dark:text-slate-400">
-                <div>
+            <div className="flex items-center justify-between gap-2 text-[12px] font-semibold text-slate-500 dark:text-slate-400">
+                <div className="truncate">
                     {activeLabel || 'Active'} : <span className="text-slate-800 dark:text-slate-200 pl-1">{fmt(active)}</span>
                 </div>
-                <div>
+                <div className="truncate text-right">
                     {inactiveLabel || 'Inactive'} : <span className="text-slate-800 dark:text-slate-200 pl-1">{fmt(inactive).padStart(2, '0')}</span>
                 </div>
             </div>
@@ -168,13 +166,14 @@ function QuickLink({ href, label, icon: Icon, bg, iconBg, onClick }: {
 }) {
     const inner = (
         <>
-            <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center ${iconBg} text-white shadow-sm mb-3 transition-transform group-hover:scale-110`}>
-                <Icon className="h-5 w-5" />
+            <div className={`h-9 w-9 shrink-0 rounded-lg flex items-center justify-center ${iconBg} text-white shadow-sm transition-transform group-hover:scale-105`}>
+                <Icon className="h-4 w-4" />
             </div>
-            <span className="text-[13px] font-bold text-slate-700 dark:text-gray-900 text-center">{label}</span>
+            <span className="min-w-0 flex-1 text-left text-[13px] font-bold text-slate-700 dark:text-slate-200">{label}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
         </>
     )
-    const cls = `group flex flex-col items-center justify-center py-5 rounded-xl border border-transparent dark:border-white/10 ${bg} hover:shadow-lg transition-all duration-200`
+    const cls = `group flex items-center gap-3 rounded-xl border border-transparent px-3 py-3 dark:border-white/10 ${bg} hover:shadow-md transition-all duration-200`
     if (onClick) {
         return <button onClick={onClick} className={cls}>{inner}</button>
     }
@@ -189,6 +188,7 @@ export default function AdminDashboardPage() {
     const [students, setStudents] = useState({ total: 0, onCampus: 0, outCampus: 0 })
     const [staff, setStaff] = useState({ total: 0, active: 0, inactive: 0 })
     const [alumni, setAlumni] = useState({ total: 0, completed: 0, dropout: 0 })
+    const [hifzMilestones, setHifzMilestones] = useState(() => [0, 5, 10, 15, 20, 25, 30].map(milestone => ({ milestone, count: 0 })))
     const [events, setEvents] = useState<any[]>([])
     const [showEventModal, setShowEventModal] = useState(false)
     const [isSavingEvent, setIsSavingEvent] = useState(false)
@@ -235,12 +235,18 @@ export default function AdminDashboardPage() {
                         inactive: summary.staff.inactive 
                     })
                 }
+                if (Array.isArray(summary.hifz_milestones)) {
+                    setHifzMilestones([0, 5, 10, 15, 20, 25, 30].map(milestone => {
+                        const item = summary.hifz_milestones.find((entry: any) => Number(entry.milestone) === milestone)
+                        return { milestone, count: Number(item?.count || 0) }
+                    }))
+                }
                 
                 setEvents(summary.events || [])
                 setPendingDelegationsCount(summary.pending_delegations || 0)
             }
-        } catch (err) {
-            console.error("Failed to load admin summary", err)
+        } catch {
+            // Keep the dashboard usable when the summary API is temporarily unavailable.
         }
         setLoading(false)
     }, [])
@@ -344,54 +350,40 @@ export default function AdminDashboardPage() {
         fetchAttendance()
     }, [timeframe])
 
-    // Mock data for display
-    const attData = [{ name: "Present", value: 98.8 }, { name: "Absent",  value: 1.2 }]
-    const PIE_COLORS = ["#3b82f6", "#e5e7eb"]
+    const hifzChartData = hifzMilestones.map(({ milestone, count }) => ({
+        label: milestone === 30 ? "Hafiz (30)" : `${milestone}-${milestone + 4} Juz`,
+        students: count,
+        milestone,
+    }))
+    const totalHifzStudents = hifzChartData.reduce((sum, item) => sum + item.students, 0)
+    const completedHifzStudents = hifzChartData.find(item => item.milestone === 30)?.students || 0
+    const HIFZ_COLORS = ["#60a5fa", "#3b82f6", "#2563eb", "#4f46e5", "#7c3aed", "#9333ea", "#059669"]
 
     return (
-        <div className="space-y-6 pb-12 w-full max-w-[1600px] mx-auto">
+        <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-8">
 
-            {/* Title Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-[24px] font-black text-slate-800 dark:text-white">Admin Dashboard</h1>
-                    <p className="text-[13px] text-slate-500 font-medium">Dashboard / Admin Dashboard</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <Link href="/admin/students/create"
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-[14px] font-bold px-5 py-2.5 rounded-lg shadow-sm transition-colors">
-                        + Add New Student
-                    </Link>
-                    <Link href="/admin/finance/dashboard"
-                        className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-[14px] font-bold px-5 py-2.5 rounded-lg shadow-sm transition-colors">
-                        Fees Details
-                    </Link>
-                </div>
-            </div>
-
-            {/* Welcome Banner - Exact Match */}
-            <div className="relative rounded-2xl overflow-hidden bg-[#21293B] px-8 py-7 text-white shadow-sm flex items-center justify-between flex-wrap gap-4">
-                <div className="absolute right-0 top-0 bottom-0 w-1/3 pointer-events-none select-none overflow-hidden flex items-center justify-end pr-8">
-                    {/* Abstract circles / shapes mimicking the reference design */}
-                    <div className="h-40 w-40 rounded-full border-[12px] border-[#2A344A] opacity-50 absolute -right-8" />
-                    <div className="h-20 w-20 rounded-full bg-[#2A344A] opacity-50 absolute right-16 top-2" />
+            <div className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white shadow-sm sm:px-6">
+                <div className="pointer-events-none absolute inset-0 opacity-15" style={{ backgroundImage: "linear-gradient(to right, rgba(255,255,255,.5) 1px, transparent 1px)", backgroundSize: "76px 100%" }} />
+                <div className="pointer-events-none absolute bottom-0 right-0 top-0 flex w-1/4 select-none items-center justify-end overflow-hidden pr-8">
+                    <div className="absolute -right-8 h-28 w-28 rounded-full border-[10px] border-white/20" />
+                    <div className="absolute right-10 top-1 h-12 w-12 rounded-full bg-white/10" />
                 </div>
                 
                 <div className="z-10">
-                    <h2 className="text-[28px] font-bold tracking-tight">
+                    <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
                         Welcome Back, Admin <span className="ml-1 inline-block animate-wave origin-bottom-right">👋</span>
                     </h2>
-                    <p className="text-[14px] text-slate-400 font-medium mt-1">Have a good day at work</p>
+                    <p className="mt-0.5 text-[13px] font-medium text-blue-100">Your institution's performance and operations for today.</p>
                 </div>
                 
-                <div className="z-10 flex items-center gap-2 text-[13px] font-medium text-slate-300 bg-white/5 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/10">
+                <div className="z-10 flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-blue-50 backdrop-blur-sm">
                     <CalendarDays className="h-4 w-4" />
                     <DashboardUpdatedDate />
                 </div>
             </div>
 
             {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                     label="Total Students" value={loading ? 0 : students.total} active={loading ? 0 : students.onCampus} inactive={loading ? 0 : students.outCampus}
                     activeLabel="On Campus" inactiveLabel="Out Campus"
@@ -413,25 +405,28 @@ export default function AdminDashboardPage() {
                 />
             </div>
 
-            {/* Main Content Grid (3 Columns) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Balanced dashboard rows: Attendance + Hifz, then Schedule + Quick Links */}
+            <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
 
                 {/* Left Column */}
-                <div className="space-y-6">
+                <div className="h-full xl:order-3 xl:col-span-8">
                     {/* Schedules inside a bordered card */}
-                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
+                    <div className="h-full rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <div className="flex items-center justify-between mb-2">
                             <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Schedules</h3>
                             <button onClick={() => { setNewEvent(defaultEventState); setEditingEventId(null); setShowEventModal(true) }} className="text-[13px] font-bold text-blue-600 flex items-center gap-1 hover:underline">
                                 <Plus className="h-4 w-4" /> Add New
                             </button>
                         </div>
-                        <MiniCalendar events={events} />
+                        <div className="grid gap-5 md:grid-cols-[minmax(0,1.15fr)_minmax(230px,.85fr)]">
+                            <div className="min-w-0 rounded-xl bg-slate-50/70 px-4 py-2 dark:bg-slate-900/50">
+                                <MiniCalendar events={events} />
+                            </div>
 
                         {/* Upcoming Events Area */}
-                        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-700">
+                        <div className="border-t border-slate-100 pt-4 dark:border-slate-700 md:border-l md:border-t-0 md:pl-5 md:pt-1">
                             <h4 className="text-[14px] font-extrabold text-[#1F2937] dark:text-white mb-4">Upcoming Events</h4>
-                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                            <div className="max-h-[280px] space-y-4 overflow-y-auto pr-2">
                                 {events.length === 0 ? (
                                     <p className="text-[13px] text-slate-500">No upcoming events.</p>
                                 ) : (
@@ -462,13 +457,14 @@ export default function AdminDashboardPage() {
                                 )}
                             </div>
                         </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* Middle Column */}
-                <div className="space-y-6">
+                <div className="h-full xl:order-1 xl:col-span-4">
                     {/* Attendance Card */}
-                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
+                    <div className="h-full rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Attendance</h3>
                             <div className="relative">
@@ -552,12 +548,13 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Right Column */}
-                <div className="space-y-6">
+                <div className="contents">
                     {/* Quick Links Blocks */}
-                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700 p-6 shadow-sm">
-                        <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white mb-5">Quick Links</h3>
+                    <div className="h-full rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 xl:order-4 xl:col-span-4">
+                        <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Quick Links</h3>
+                        <p className="mb-4 mt-0.5 text-xs text-slate-500">Frequently used admin actions</p>
                         
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                             <QuickLink href="/admin/calendar"           label="Calendar"    icon={CalendarDays} bg="bg-[#E8F8F0]" iconBg="bg-[#22C55E]" />
                             <QuickLink label="Exam Result"              onClick={() => setExamPopupOpen(true)} icon={BarChart2}    bg="bg-[#EBF2FF]" iconBg="bg-[#3B82F6]" />
                             <QuickLink href="/admin/student-attendance" label="Attendance"  icon={UserCheck}    bg="bg-[#FFF8E1]" iconBg="bg-[#F59E0B]" />
@@ -565,17 +562,58 @@ export default function AdminDashboardPage() {
                             <QuickLink label="Reports"                 onClick={() => setReportsPopupOpen(true)} icon={FileText}     bg="bg-[#E0F2FE]" iconBg="bg-[#0EA5E9]" />
                             <QuickLink href="/admin/mentor-access"      label="Mentor Locks" icon={ShieldCheck}  bg="bg-[#EEF2FF]" iconBg="bg-[#6366F1]" />
 
-                            <Link href="/admin/delegations" className="group flex flex-col items-center justify-center py-5 rounded-xl bg-purple-50 hover:shadow-lg transition-all duration-200 relative">
+                            <Link href="/admin/delegations" className="group relative flex items-center gap-3 rounded-xl bg-purple-50 px-3 py-3 transition-all duration-200 hover:shadow-md">
                                 {pendingDelegationsCount > 0 && (
                                     <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
                                         {pendingDelegationsCount}
                                     </span>
                                 )}
-                                <div className="h-[42px] w-[42px] rounded-full flex items-center justify-center bg-purple-600 text-white shadow-sm mb-3 transition-transform group-hover:scale-110">
-                                    <Bell className="h-5 w-5" />
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-white shadow-sm transition-transform group-hover:scale-105">
+                                    <Bell className="h-4 w-4" />
                                 </div>
-                                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200 text-center">Requests</span>
+                                <span className="flex-1 text-[13px] font-bold text-slate-700 dark:text-slate-200">Requests</span>
+                                <ChevronRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
                             </Link>
+                        </div>
+                    </div>
+
+                    <div className="h-full min-w-0 rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 xl:order-2 xl:col-span-8">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Hifz Progress Distribution</h3>
+                                <p className="mt-0.5 text-xs text-slate-500">Active students grouped by completed Juz.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-lg bg-blue-50 px-3 py-2 text-right dark:bg-blue-950/30">
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Active Hifz</p>
+                                    <p className="text-lg font-black leading-none text-blue-700 dark:text-blue-300">{loading ? "-" : totalHifzStudents}</p>
+                                </div>
+                                <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-950/30">
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Hafiz</p>
+                                    <p className="text-lg font-black leading-none text-emerald-700 dark:text-emerald-300">{loading ? "-" : completedHifzStudents}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="relative h-[250px] min-w-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={hifzChartData} layout="vertical" margin={{ top: 8, right: 14, left: 2, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                                    <YAxis type="category" dataKey="label" width={76} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                                    <Tooltip cursor={{ fill: "#f8fafc" }} contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", boxShadow: "0 8px 24px rgba(15,23,42,.08)" }} />
+                                    <Bar dataKey="students" name="Students" radius={[0, 6, 6, 0]} maxBarSize={18}>
+                                        {hifzChartData.map((item, index) => <Cell key={item.label} fill={HIFZ_COLORS[index]} />)}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                            {!loading && totalHifzStudents === 0 && (
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                    <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/90">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">No Hifz progress recorded yet</p>
+                                        <p className="mt-0.5 text-xs text-slate-500">The chart will fill as students complete Juz.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -591,27 +629,6 @@ export default function AdminDashboardPage() {
                 editingEventId={editingEventId}
                 initialData={newEvent}
             />
-
-            {/* Bottom Rectangle Action Tiles as shown in Screenshot 2647 */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-6">
-                {[
-                    { href: "/admin/student-attendance", label: "View Attendance",    icon: CalendarDays, bg: "bg-[#FFF9E5]", iconBg: "bg-[#F59E0B]", text: "text-[#F59E0B]" },
-                    { href: "/admin/calendar",           label: "New Events",         icon: Bell,         bg: "bg-[#E8F8F0]", iconBg: "bg-[#22C55E]", text: "text-[#22C55E]" },
-                    { href: "/admin/finance/dashboard",  label: "Finance & Accounts", icon: UserCheck,    bg: "bg-[#E0F7FA]", iconBg: "bg-[#06B6D4]", text: "text-[#06B6D4]" },
-                ].map((tile, i) => (
-                    <Link key={i} href={tile.href} className={`${tile.bg} rounded-xl p-5 flex items-center justify-between group`}>
-                        <div className="flex items-center gap-4">
-                            <div className={`h-12 w-12 rounded-lg ${tile.iconBg} flex items-center justify-center shadow-sm`}>
-                                <tile.icon className="h-6 w-6 text-white" />
-                            </div>
-                            <span className="text-[14px] font-bold text-slate-800">{tile.label}</span>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center group-hover:bg-slate-50 transition-colors">
-                            <ChevronRight className={`h-4 w-4 ${tile.text}`} />
-                        </div>
-                    </Link>
-                ))}
-            </div>
 
             {/* ── Exam Router Modal ──────────────────────────────────────────────────────── */}
             {examPopupOpen && (

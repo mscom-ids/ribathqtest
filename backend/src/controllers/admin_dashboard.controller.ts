@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { cachedResult } from '../utils/server-cache';
+import { countCompletedJuz } from '../utils/quran-juz';
 
 export const getAdminSummary = async (req: Request, res: Response) => {
   try {
@@ -14,6 +15,20 @@ export const getAdminSummary = async (req: Request, res: Response) => {
       const eventsPromise = db.query(`SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50`);
 
       const delegationsPromise = db.query(`SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'`);
+
+      const hifzProgressPromise = db.query(
+        `SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v
+         FROM students s
+         LEFT JOIN hifz_logs h
+           ON h.student_id = s.adm_no
+          AND h.mode = 'New Verses'
+          AND h.deleted_at IS NULL
+         WHERE (s.status = 'active' OR s.status IS NULL)
+           AND (
+             s.hifz_mentor_id IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.hifz_standard, '')), '') IS NOT NULL
+           )`
+      );
 
       const studentsPromise = db.query(
           `SELECT
@@ -31,9 +46,26 @@ export const getAdminSummary = async (req: Request, res: Response) => {
         ? db.query(`SELECT COUNT(*) FILTER (WHERE scp.status = 'outside') AS out_campus FROM student_current_presence scp JOIN students s ON scp.student_id = s.adm_no WHERE s.status = 'active'`)
         : db.query(`SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'`);
 
-      const [staffRes, eventsRes, delRes, studentsRes, presenceRes] = await Promise.all([
-        staffPromise, eventsPromise, delegationsPromise, studentsPromise, presencePromise
+      const [staffRes, eventsRes, delRes, studentsRes, presenceRes, hifzProgressRes] = await Promise.all([
+        staffPromise, eventsPromise, delegationsPromise, studentsPromise, presencePromise, hifzProgressPromise
       ]);
+
+      const hifzStudentIds = new Set<string>();
+      const hifzLogsByStudent = new Map<string, Array<{ surah_name: string | null; start_v: number | null; end_v: number | null }>>();
+      for (const row of hifzProgressRes.rows) {
+        const studentId = String(row.student_id);
+        hifzStudentIds.add(studentId);
+        if (!row.surah_name || row.start_v == null || row.end_v == null) continue;
+        const logs = hifzLogsByStudent.get(studentId) || [];
+        logs.push(row);
+        hifzLogsByStudent.set(studentId, logs);
+      }
+      const hifzMilestones = [0, 5, 10, 15, 20, 25, 30].map(milestone => ({ milestone, count: 0 }));
+      for (const studentId of hifzStudentIds) {
+        const completedJuz = countCompletedJuz(hifzLogsByStudent.get(studentId) || []);
+        const milestoneIndex = completedJuz >= 30 ? 6 : Math.floor(completedJuz / 5);
+        hifzMilestones[milestoneIndex].count += 1;
+      }
 
       const c = studentsRes.rows[0];
       const active = parseInt(c.active, 10) || 0;
@@ -58,6 +90,7 @@ export const getAdminSummary = async (req: Request, res: Response) => {
         },
         events: eventsRes.rows,
         pending_delegations: delRes.rows[0].count,
+        hifz_milestones: hifzMilestones,
       };
     });
 
