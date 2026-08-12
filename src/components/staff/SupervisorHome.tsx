@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
-    Target, ChevronRight, type LucideIcon,
+    Target, ChevronRight, Trophy, Star, type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,11 @@ import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 type AllStudent = { adm_no: string; name: string; standard: string | null; status?: string }
 type Mentor = { id: string; name: string; photo_url: string | null; place: string | null; student_count: number }
+type LeaderboardEntry = {
+    rank: number; adm_no: string; name: string; photo_url: string | null
+    standard: string | null; attendance_pct: number; recited_days: number
+    new_entries: number; score: number
+}
 
 const STAT_COLORS = {
     blue: { bg: "bg-blue-50 dark:bg-blue-950/40", text: "text-blue-600 dark:text-blue-400", bar: "bg-blue-500" },
@@ -69,6 +74,8 @@ export function SupervisorHome({ role }: { role: string }) {
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState("")
     const [focusingId, setFocusingId] = useState<string | null>(null)
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+    const [lbLoading, setLbLoading] = useState(true)
 
     type ChartStudent = { adm_no: string; name: string; standard: string | null }
     const [chartStudent, setChartStudent] = useState<ChartStudent | null>(null)
@@ -113,6 +120,14 @@ export function SupervisorHome({ role }: { role: string }) {
                 setStudents(studentList.value.data.students)
             }
             setLoading(false)
+
+            // Load leaderboard separately (slightly heavier query)
+            try {
+                const lb = await cachedGet("/reports/leaderboard", { limit: 20 }, 120_000)
+                if (!cancelled && lb.data?.data) setLeaderboard(lb.data.data)
+            } catch { /* non-critical */ } finally {
+                if (!cancelled) setLbLoading(false)
+            }
         }
         load()
         return () => { cancelled = true }
@@ -211,6 +226,96 @@ export function SupervisorHome({ role }: { role: string }) {
                     <StatTile icon={CheckCircle2} color="emerald" label="Attendance Today" value={`${attendancePct}%`} sub={attendance ? `${attendance.present} of ${attendance.total} marks` : "No marks yet"} pct={attendancePct} />
                     <StatTile icon={DoorOpen} color="amber" label="Currently Outside" value={String(counts?.out_campus ?? 0)} sub={`of ${counts?.active ?? 0} students`} pct={counts && counts.active ? (counts.out_campus / counts.active) * 100 : 0} />
                     <StatTile icon={GraduationCap} color="indigo" label="Active Mentors" value={String(counts?.mentors ?? 0)} sub="teaching & leadership" pct={100} />
+                </div>
+
+                {/* ── Top Performance leaderboard ── */}
+                <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
+                                <Trophy className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">Top Performance</p>
+                                <p className="text-[11px] text-slate-400">This month · ranked by attendance + hifz activity</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {lbLoading ? (
+                        <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
+                    ) : leaderboard.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-slate-400">No performance data yet this month.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 dark:bg-slate-800/60">
+                                        <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 w-10">#</th>
+                                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Student</th>
+                                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden sm:table-cell">Class</th>
+                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Attendance</th>
+                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden md:table-cell">Hifz Days</th>
+                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400 hidden md:table-cell">New Verses</th>
+                                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 dark:text-gray-400">Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-gray-800/50">
+                                    {leaderboard.map(entry => (
+                                        <tr key={entry.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                            <td className="px-4 py-3 text-center">
+                                                {entry.rank <= 3 ? (
+                                                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                                        entry.rank === 1 ? "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400" :
+                                                        entry.rank === 2 ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300" :
+                                                        "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+                                                    }`}>{entry.rank}</span>
+                                                ) : (
+                                                    <span className="text-[11px] text-slate-400 dark:text-gray-500 font-medium">{entry.rank}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="h-8 w-8 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-xs shrink-0">
+                                                        {entry.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <button
+                                                            onClick={() => setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard })}
+                                                            className="font-semibold text-sm text-slate-900 dark:text-white truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                                                        >{entry.name}</button>
+                                                        <p className="text-[11px] text-slate-400">{entry.adm_no}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-3 hidden sm:table-cell text-[12px] text-slate-500 dark:text-gray-400">
+                                                {entry.standard ?? "—"}
+                                            </td>
+                                            <td className="px-3 py-3 text-center">
+                                                <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                                    entry.attendance_pct >= 90 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
+                                                    entry.attendance_pct >= 75 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" :
+                                                    "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
+                                                }`}>{entry.attendance_pct}%</span>
+                                            </td>
+                                            <td className="px-3 py-3 text-center hidden md:table-cell text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                                                {entry.recited_days}
+                                            </td>
+                                            <td className="px-3 py-3 text-center hidden md:table-cell text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                                                {entry.new_entries}
+                                            </td>
+                                            <td className="px-3 py-3 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <Star className="h-3 w-3 text-amber-400 fill-amber-400 shrink-0" />
+                                                    <span className="text-xs font-bold text-slate-800 dark:text-white">{entry.score}</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Main: all students | mentors panel ── */}

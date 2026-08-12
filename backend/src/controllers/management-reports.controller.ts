@@ -539,6 +539,101 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
         return res.status(message.includes('required') || message.includes('exceed') ? 400 : 500).json({ success: false, error: message });
     }
 };
+/**
+ * GET /reports/leaderboard
+ * Top-performing students for the leadership portal home.
+ * Returns top N students ranked by a composite score:
+ *   score = attendance_pct * 0.5 + min(recited_days / 25, 1) * 50
+ * Period: current calendar month (or ?start_date / ?end_date override).
+ * Leadership roles only.
+ */
+export const getTopPerformanceLeaderboard = async (req: Request, res: Response) => {
+    try {
+        const now = new Date();
+        const defaultStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const defaultEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        const startDate: string = typeof req.query.start_date === 'string' ? req.query.start_date : defaultStart;
+        const endDate: string = typeof req.query.end_date === 'string' ? req.query.end_date : defaultEnd;
+        const limit = Math.min(50, Math.max(5, parseInt(String(req.query.limit ?? '20'), 10)));
+
+        const cacheKey = makeCacheKey('reports:leaderboard:v1', { startDate, endDate, limit });
+        const result = await cachedResult(cacheKey, 120000, async () => {
+            // Single SQL: join students with attendance marks and hifz logs, compute score
+            const sql = `
+                WITH att AS (
+                    SELECT
+                        sam.student_id,
+                        COUNT(*) FILTER (WHERE sam.status = 'Present')::numeric AS present_classes,
+                        COUNT(*) FILTER (WHERE sam.status IN ('Present','Absent'))::numeric AS marked_classes
+                    FROM student_attendance_marks sam
+                    JOIN attendance_schedules sch ON sch.id = sam.schedule_id
+                    WHERE sam.date BETWEEN $1::date AND $2::date
+                      AND sch.deleted_at IS NULL
+                    GROUP BY sam.student_id
+                ),
+                hifz AS (
+                    SELECT
+                        student_id,
+                        COUNT(DISTINCT entry_date)::int AS recited_days,
+                        COUNT(*) FILTER (WHERE mode = 'New Verses')::int AS new_entries
+                    FROM hifz_logs
+                    WHERE entry_date BETWEEN $1::date AND $2::date
+                      AND deleted_at IS NULL
+                    GROUP BY student_id
+                )
+                SELECT
+                    s.adm_no,
+                    s.name,
+                    s.photo_url,
+                    s.standard,
+                    s.division,
+                    COALESCE(att.present_classes, 0) AS present,
+                    COALESCE(att.marked_classes, 0) AS marked,
+                    CASE WHEN COALESCE(att.marked_classes, 0) > 0
+                         THEN ROUND(COALESCE(att.present_classes, 0) / att.marked_classes * 100, 1)
+                         ELSE 0 END AS attendance_pct,
+                    COALESCE(hifz.recited_days, 0) AS recited_days,
+                    COALESCE(hifz.new_entries, 0) AS new_entries,
+                    ROUND(
+                        CASE WHEN COALESCE(att.marked_classes, 0) > 0
+                             THEN COALESCE(att.present_classes, 0) / att.marked_classes * 100
+                             ELSE 0 END * 0.5
+                        + LEAST(COALESCE(hifz.recited_days, 0)::numeric / 25, 1) * 50
+                    , 1) AS score
+                FROM students s
+                LEFT JOIN att ON att.student_id = s.adm_no
+                LEFT JOIN hifz ON hifz.student_id = s.adm_no
+                WHERE s.status = 'active'
+                ORDER BY score DESC, s.name ASC
+                LIMIT $3
+            `;
+            const { rows } = await db.query(sql, [startDate, endDate, limit]);
+            return {
+                period: { start_date: startDate, end_date: endDate },
+                data: rows.map((r: any, i: number) => ({
+                    rank: i + 1,
+                    adm_no: r.adm_no,
+                    name: r.name,
+                    photo_url: r.photo_url,
+                    standard: r.standard,
+                    division: r.division,
+                    present: Number(r.present),
+                    marked: Number(r.marked),
+                    attendance_pct: Number(r.attendance_pct),
+                    recited_days: Number(r.recited_days),
+                    new_entries: Number(r.new_entries),
+                    score: Number(r.score),
+                })),
+            };
+        });
+        return res.json({ success: true, ...result });
+    } catch (error: any) {
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to load leaderboard.' });
+    }
+};
+
 export const getManagementProgressReport = async (req: Request, res: Response) => {
     try {
         const options = await resolveOptions(req);

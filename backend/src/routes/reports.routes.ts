@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getStudentReports, getMentorReports, getUnifiedStudentProgressReport } from '../controllers/reports.controller';
-import { getManagementAttendanceReport, getManagementProgressReport } from '../controllers/management-reports.controller';
+import { getManagementAttendanceReport, getManagementProgressReport, getTopPerformanceLeaderboard } from '../controllers/management-reports.controller';
 import { verifyToken, verifyDelegation, requireRole } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -17,5 +17,6 @@ router.get('/student-progress', getUnifiedStudentProgressReport);
 router.get('/management/attendance', getManagementAttendanceReport);
 router.get('/management/progress', getManagementProgressReport);
 router.get('/management/faculty', getMentorReports);
+router.get('/leaderboard', requireRole(['admin', 'principal', 'vice_principal', 'controller']), getTopPerformanceLeaderboard);
 
 export default router;
