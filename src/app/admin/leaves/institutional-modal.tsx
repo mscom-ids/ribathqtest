@@ -28,8 +28,11 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
     const [name, setName] = useState("Monthly Leave")
     const [startDatetime, setStartDatetime] = useState("")
     const [endDatetime, setEndDatetime] = useState("")
+    const [campusLocation, setCampusLocation] = useState<"inside" | "outside">("outside")
+    const [targetMode, setTargetMode] = useState<"classes" | "individuals">("classes")
     const [isEntireInstitution, setIsEntireInstitution] = useState(false)
     const [targetClasses, setTargetClasses] = useState<string[]>([])
+    const [targetStudentIds, setTargetStudentIds] = useState<string[]>([])
     const [exceptions, setExceptions] = useState<string[]>([])
 
     const [allStudents, setAllStudents] = useState<EligibleStudent[]>([])
@@ -66,8 +69,11 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
             setName("Monthly Leave")
             setStartDatetime("")
             setEndDatetime("")
+            setCampusLocation("outside")
+            setTargetMode("classes")
             setIsEntireInstitution(false)
             setTargetClasses([])
+            setTargetStudentIds([])
             setExceptions([])
             setSearchQuery("")
         }
@@ -79,12 +85,16 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
     const toggleException = (id: string) => {
         setExceptions(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     }
+    const toggleTargetStudent = (id: string) => {
+        setTargetStudentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!name || !startDatetime || !endDatetime) return toast.error("Please fill all required fields")
         if (new Date(startDatetime) >= new Date(endDatetime)) return toast.error("End Date & Time must be after Start Date & Time")
-        if (!isEntireInstitution && targetClasses.length === 0) return toast.error("Please select at least one target class")
+        if (targetMode === "classes" && !isEntireInstitution && targetClasses.length === 0) return toast.error("Please select at least one target class")
+        if (targetMode === "individuals" && targetStudentIds.length === 0) return toast.error("Please select at least one student")
 
         setLoading(true)
         try {
@@ -93,8 +103,10 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                 start_datetime: new Date(startDatetime).toISOString(),
                 end_datetime: new Date(endDatetime).toISOString(),
                 is_entire_institution: isEntireInstitution,
-                target_classes: targetClasses,
-                exceptions
+                target_classes: targetMode === "classes" ? targetClasses : [],
+                target_student_ids: targetMode === "individuals" ? targetStudentIds : [],
+                campus_location: campusLocation,
+                exceptions: targetMode === "classes" ? exceptions : []
             }
             const res = await api.post('/leaves/institutional', payload)
             if (res.data.success) {
@@ -129,7 +141,9 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                 <DialogHeader>
                     <DialogTitle>Create Institutional Leave</DialogTitle>
                     <DialogDescription>
-                        This defines the permission window only. Students are marked outside later when their actual exit is recorded.
+                        {campusLocation === "inside"
+                            ? "Students remain on campus while selected classes and sessions are excused."
+                            : "This defines an exit window. Students are marked outside only when their actual exit is recorded."}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -150,7 +164,32 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                         </div>
                     </div>
 
-                    <div className="space-y-4 rounded-lg border p-4 bg-slate-50 dark:bg-slate-900/50">
+                    <div className="space-y-2">
+                        <Label>Student Location During Leave</Label>
+                        <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 dark:bg-slate-900">
+                            {(["inside", "outside"] as const).map(location => (
+                                <button key={location} type="button" onClick={() => setCampusLocation(location)}
+                                    className={`rounded-md px-3 py-2 text-sm font-medium ${campusLocation === location ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800 dark:text-blue-300" : "text-slate-500"}`}>
+                                    {location === "inside" ? "Inside Campus" : "Outside Campus"}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                            {campusLocation === "inside"
+                                ? "Students remain on campus, but their applicable classes and sessions are excused."
+                                : "Creates an institutional exit window; actual exits are recorded separately."}
+                        </p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Apply Leave To</Label>
+                        <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 dark:bg-slate-900">
+                            <button type="button" onClick={() => setTargetMode("classes")} className={`rounded-md px-3 py-2 text-sm font-medium ${targetMode === "classes" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800" : "text-slate-500"}`}>Standards / Institution</button>
+                            <button type="button" onClick={() => { setTargetMode("individuals"); setIsEntireInstitution(false) }} className={`rounded-md px-3 py-2 text-sm font-medium ${targetMode === "individuals" ? "bg-white text-blue-700 shadow-sm dark:bg-slate-800" : "text-slate-500"}`}>Selected Students</button>
+                        </div>
+                    </div>
+
+                    {targetMode === "classes" && <div className="space-y-4 rounded-lg border p-4 bg-slate-50 dark:bg-slate-900/50">
                         <div className="flex items-center justify-between">
                             <Label className="font-semibold text-base">Select Applicable Classes</Label>
                             <div className="flex items-center space-x-2">
@@ -182,9 +221,9 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                                 ))}
                             </div>
                         )}
-                    </div>
+                    </div>}
 
-                    <div className="space-y-2">
+                    {targetMode === "classes" ? <div className="space-y-2">
                         <Label className="font-semibold text-base">Exceptions (Stay in Campus)</Label>
                         <p className="text-xs text-slate-500 pb-1">Students selected here cannot be released under this institutional leave.</p>
 
@@ -231,7 +270,19 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                                 </p>
                             </>
                         )}
-                    </div>
+                    </div> : <div className="space-y-2">
+                        <Label className="font-semibold text-base">Select Students</Label>
+                        <Input placeholder="Search by name or admission ID..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                        <div className="max-h-52 overflow-y-auto rounded-md border bg-white p-1 dark:bg-slate-950">
+                            {allStudents.filter(student => !searchQuery.trim() || student.name.toLowerCase().includes(searchQuery.toLowerCase()) || student.adm_no.toLowerCase().includes(searchQuery.toLowerCase())).map(student => (
+                                <label key={student.adm_no} className="flex cursor-pointer items-center gap-3 rounded px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800">
+                                    <input type="checkbox" checked={targetStudentIds.includes(student.adm_no)} onChange={() => toggleTargetStudent(student.adm_no)} />
+                                    <span className="flex-1 text-sm font-medium">{student.name} <span className="text-xs font-normal text-slate-500">{student.adm_no} · {student.standard}</span></span>
+                                </label>
+                            ))}
+                        </div>
+                        <p className="text-xs font-medium text-blue-600">{targetStudentIds.length} student(s) selected</p>
+                    </div>}
 
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

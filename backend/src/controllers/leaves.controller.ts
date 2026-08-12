@@ -113,6 +113,7 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
     start_datetime: string;
     end_datetime: string;
     target_classes?: any[];
+    target_student_ids?: any[];
     is_entire_institution: boolean;
     created_by: string;
 }) {
@@ -120,7 +121,8 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
     if (dateKeys.length === 0) return 0;
 
     const targetClasses = normalizeStandardList(parseStandardList(leave.target_classes));
-    if (!leave.is_entire_institution && targetClasses.length === 0) return 0;
+    const targetStudentIds = Array.from(new Set(parseStandardList(leave.target_student_ids).map(String).filter(Boolean)));
+    if (!leave.is_entire_institution && targetClasses.length === 0 && targetStudentIds.length === 0) return 0;
 
     const schedulesRes = await client.query(
         `SELECT id, standards, day_of_week, start_time, end_time, effective_from, effective_until
@@ -146,7 +148,11 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
             if (!doRangesOverlap(scheduleStart, scheduleEnd, leaveStart, leaveEnd)) continue;
 
             let cancelledStandards: string[] | null = null;
-            if (!leave.is_entire_institution) {
+            let cancelledStudents: string[] = [];
+            if (targetStudentIds.length > 0) {
+                cancelledStandards = [];
+                cancelledStudents = targetStudentIds;
+            } else if (!leave.is_entire_institution) {
                 const scheduleStandards = normalizeStandardList(parseStandardList(schedule.standards));
                 const affectedStandards = scheduleStandards.length > 0
                     ? targetClasses.filter(standard => scheduleStandards.includes(standard))
@@ -164,6 +170,7 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
                 reason: institutionalCancellationReason(leave.id),
                 cancelled_by: leave.created_by,
                 cancelled_standards: cancelledStandards,
+                cancelled_students: cancelledStudents,
             });
         }
     }
@@ -171,14 +178,15 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
     if (rows.length === 0) return 0;
 
     await client.query(
-        `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards)
-         SELECT schedule_id, date, reason, cancelled_by, cancelled_standards
+        `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards, cancelled_students)
+         SELECT schedule_id, date, reason, cancelled_by, cancelled_standards, cancelled_students
          FROM jsonb_to_recordset($1::jsonb) AS x(
              schedule_id uuid,
              date date,
              reason text,
              cancelled_by uuid,
-             cancelled_standards jsonb
+             cancelled_standards jsonb,
+             cancelled_students jsonb
          )
          ON CONFLICT (schedule_id, date) DO UPDATE SET
              reason = CASE
@@ -198,7 +206,15 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
                          SELECT jsonb_array_elements_text(EXCLUDED.cancelled_standards) AS value
                      ) merged
                  )
-             END`,
+             END,
+             cancelled_students = (
+                 SELECT jsonb_agg(DISTINCT value)
+                 FROM (
+                     SELECT jsonb_array_elements_text(COALESCE(attendance_cancellations.cancelled_students, '[]'::jsonb)) AS value
+                     UNION
+                     SELECT jsonb_array_elements_text(COALESCE(EXCLUDED.cancelled_students, '[]'::jsonb)) AS value
+                 ) merged_students
+             )`,
         [JSON.stringify(rows)]
     );
 
@@ -262,11 +278,18 @@ export const getEligibleStudents = async (req: Request, res: Response) => {
 
 export const createInstitutionalLeave = async (req: Request, res: Response) => {
     try {
-        const { name, start_datetime, end_datetime, target_classes, is_entire_institution, exceptions } = req.body;
+        const { name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location = 'outside', is_entire_institution, exceptions } = req.body;
         const user = (req as any).user;
 
         if (new Date(end_datetime) <= new Date(start_datetime)) {
             return res.status(400).json({ success: false, error: 'End datetime must be after start datetime' });
+        }
+        if (!['inside', 'outside'].includes(campus_location)) {
+            return res.status(400).json({ success: false, error: 'Invalid campus location' });
+        }
+        const targetStudentIds = Array.from(new Set((Array.isArray(target_student_ids) ? target_student_ids : []).map(String).filter(Boolean)));
+        if (!is_entire_institution && (!Array.isArray(target_classes) || target_classes.length === 0) && targetStudentIds.length === 0) {
+            return res.status(400).json({ success: false, error: 'Select standards or individual students' });
         }
 
         const client = await db.getClient();
@@ -275,10 +298,11 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
 
             // 1. Create the main record
             const instLeaveRes = await client.query(`
-                INSERT INTO institutional_leaves (name, start_datetime, end_datetime, target_classes, is_entire_institution, created_by)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO institutional_leaves
+                    (name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location, is_entire_institution, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING id
-            `, [name, start_datetime, end_datetime, JSON.stringify(target_classes), is_entire_institution, user.id]);
+            `, [name, start_datetime, end_datetime, JSON.stringify(target_classes || []), JSON.stringify(targetStudentIds), campus_location, is_entire_institution, user.id]);
             const inst_id = instLeaveRes.rows[0].id;
 
             // 2. Bulk-insert exceptions in ONE round trip (was N+1)
@@ -295,6 +319,7 @@ export const createInstitutionalLeave = async (req: Request, res: Response) => {
                 start_datetime,
                 end_datetime,
                 target_classes,
+                target_student_ids: targetStudentIds,
                 is_entire_institution,
                 created_by: user.id,
             });
@@ -330,7 +355,11 @@ export const getInstitutionalEligibleStudents = async (req: Request, res: Respon
         }
 
         const leave = leaveRes.rows[0];
+        if (leave.campus_location === 'inside') {
+            return res.status(400).json({ success: false, error: 'Inside-campus institutional leave does not create student exits' });
+        }
         const targetClasses = Array.isArray(leave.target_classes) ? leave.target_classes : [];
+        const targetStudentIds = parseStandardList(leave.target_student_ids).map(String);
         const params: any[] = [id];
         let query = `
             SELECT s.adm_no, s.name,
@@ -351,7 +380,10 @@ export const getInstitutionalEligibleStudents = async (req: Request, res: Respon
               )
         `;
 
-        if (!leave.is_entire_institution) {
+        if (targetStudentIds.length > 0) {
+            params.push(targetStudentIds);
+            query += ` AND s.adm_no = ANY($${params.length}::text[])`;
+        } else if (!leave.is_entire_institution) {
             params.push(targetClasses);
             query += ` AND (
                 s.standard = ANY($2::text[])
@@ -407,12 +439,16 @@ export const markInstitutionalExit = async (req: Request, res: Response) => {
             }
 
             const inst = leaveRes.rows[0];
+            if (inst.campus_location === 'inside') {
+                throw new Error('Inside-campus institutional leave does not create student exits');
+            }
             const exitTime = new Date(exit_datetime);
             if (exitTime < new Date(inst.start_datetime) || exitTime > new Date(inst.end_datetime)) {
                 throw new Error('Exit time must be within the institutional leave window');
             }
 
             const targetClasses = Array.isArray(inst.target_classes) ? inst.target_classes : [];
+            const targetStudentIds = parseStandardList(inst.target_student_ids).map(String);
             const params: any[] = [requestedIds, id];
             let studentQuery = `
                 SELECT s.adm_no
@@ -425,7 +461,10 @@ export const markInstitutionalExit = async (req: Request, res: Response) => {
                   )
             `;
 
-            if (!inst.is_entire_institution) {
+            if (targetStudentIds.length > 0) {
+                params.push(targetStudentIds);
+                studentQuery += ` AND s.adm_no = ANY($${params.length}::text[])`;
+            } else if (!inst.is_entire_institution) {
                 params.push(targetClasses);
                 studentQuery += ` AND (
                     s.standard = ANY($3::text[])
@@ -934,6 +973,9 @@ export const createGroupLeave = async (req: Request, res: Response) => {
 
         if (!['out-campus', 'on-campus'].includes(leave_type)) {
             return res.status(400).json({ success: false, error: 'Invalid group leave type' });
+        }
+        if (leave_type === 'on-campus') {
+            return res.status(400).json({ success: false, error: 'On-campus leave is available for individual students only' });
         }
 
         if (leave_type === 'out-campus' && (!companion_name?.trim() || !companion_relationship?.trim())) {

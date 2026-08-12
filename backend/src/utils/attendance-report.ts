@@ -139,10 +139,16 @@ function cancellationStandards(row: any): string[] {
         .filter(Boolean);
 }
 
-function isStandardCancelled(row: any, standard: string) {
+function cancellationStudents(row: any): string[] {
+    return parseStandards(row?.cancelled_students).map(String).filter(Boolean);
+}
+
+function isStandardCancelled(row: any, standard: string, studentId?: string) {
     if (!row) return false;
     const standards = cancellationStandards(row);
-    if (standards.length === 0) return true;
+    const students = cancellationStudents(row);
+    if (studentId && students.includes(studentId)) return true;
+    if (standards.length === 0) return students.length === 0;
     return standards.includes(normalizeScheduleStandard(standard));
 }
 
@@ -161,12 +167,19 @@ function institutionalLeaveCancellationForStudent(schedule: any, student: Studen
         const leaveEnd = new Date(leave.end_datetime);
         if (!(scheduleStart < leaveEnd && scheduleEnd > leaveStart)) continue;
 
+        const targetStudents = parseStandards(leave.target_student_ids).map(String);
+        if (targetStudents.length > 0 && !targetStudents.includes(student.adm_no)) continue;
+
         if (leave.is_entire_institution) {
             return {
                 schedule_id: schedule.id,
                 date: dateKey,
                 cancelled_standards: null,
             };
+        }
+
+        if (targetStudents.includes(student.adm_no)) {
+            return { schedule_id: schedule.id, date: dateKey, cancelled_standards: [], cancelled_students: targetStudents };
         }
 
         const targetStandards = parseStandards(leave.target_classes).map(normalizeScheduleStandard);
@@ -294,7 +307,7 @@ async function computeStudentAttendanceSummaries(
             [students.map(student => student.adm_no), academicYearId || null, endDate, startDate]
         ),
         db.query(
-            `SELECT schedule_id, date, cancelled_standards
+            `SELECT schedule_id, date, cancelled_standards, cancelled_students
              FROM attendance_cancellations
              WHERE date >= $1::date AND date <= $2::date`,
             [startDate, endDate]
@@ -308,7 +321,7 @@ async function computeStudentAttendanceSummaries(
             [startDate, endDate, students.map(student => student.adm_no)]
         ),
         db.query(
-            `SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution
+            `SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution
              FROM institutional_leaves
              WHERE start_datetime < ($2::date + 1)
                AND end_datetime >= $1::date`,
@@ -423,7 +436,7 @@ async function computeStudentAttendanceSummaries(
 
                 const cancellation = cancellationsByScheduleDate.get(`${schedule.id}|${dateStr}`)
                     || institutionalLeaveCancellationForStudent(schedule, student, dateStr, institutionalLeavesRes.rows);
-                if (isStandardCancelled(cancellation, student.attendance_standard || student.standard || '')) {
+                if (isStandardCancelled(cancellation, student.attendance_standard || student.standard || '', student.adm_no)) {
                     summary.cancelledClasses += 1;
                     session.cancelled += 1;
                     summaries.set(studentId, summary);

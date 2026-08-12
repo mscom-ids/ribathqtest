@@ -131,7 +131,8 @@ function scheduleAppliesToStudent(schedule: Schedule, student: RegisterStudent) 
 function isCancellationForStudent(cancellation: any, student: RegisterStudent) {
     if (!cancellation) return false;
     const cancelled = parseList(cancellation.cancelled_standards).map(normalizeStandard);
-    return cancelled.length === 0 || cancelled.includes(normalizeStandard(student.standard));
+    const students = parseList(cancellation.cancelled_students).map(String);
+    return students.includes(student.adm_no) || (cancelled.length === 0 ? students.length === 0 : cancelled.includes(normalizeStandard(student.standard)));
 }
 
 function portionValue(portion: string | null | undefined) {
@@ -325,7 +326,7 @@ export async function resolveHifzEntryEligibility(options: {
     const [marks, cancellations] = await Promise.all([
         Promise.resolve({ rows: dayMarks.rows.filter((mark) => String(mark.schedule_id) === String(schedule.id)) }),
         options.db.query(
-            `SELECT cancelled_standards
+            `SELECT cancelled_standards, cancelled_students
              FROM attendance_cancellations
              WHERE schedule_id = $1 AND date = $2::date
              LIMIT 1`,
@@ -442,7 +443,7 @@ export async function getHifzStudentMonthRegister(options: {
             [options.studentId, start, end],
         ),
         options.db.query(
-            `SELECT schedule_id, date, cancelled_standards
+            `SELECT schedule_id, date, cancelled_standards, cancelled_students
              FROM attendance_cancellations
              WHERE date BETWEEN $1::date AND $2::date`,
             [start, end],

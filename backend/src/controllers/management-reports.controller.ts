@@ -81,10 +81,11 @@ function studentMatchesSchedule(student: any, schedule: any) {
     return !standards.length || standards.includes(normalizeStandard(student.standard));
 }
 
-function cancellationApplies(row: any, studentStandard: string) {
+function cancellationApplies(row: any, studentStandard: string, studentId?: string) {
     if (!row) return false;
     const standards = parseList(row.cancelled_standards).map(normalizeStandard);
-    return !standards.length || standards.includes(normalizeStandard(studentStandard));
+    const students = parseList(row.cancelled_students).map(String);
+    return (!!studentId && students.includes(studentId)) || (standards.length === 0 ? students.length === 0 : standards.includes(normalizeStandard(studentStandard)));
 }
 
 function leaveApplies(leave: any, schedule: any, day: string, studentStandard: string) {
@@ -340,7 +341,7 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
                 loadFilters(options.academicYearId),
                 loadRoster(options),
                 db.query(scheduleSql, [options.academicYearId, options.department, options.startDate, options.endDate]),
-                db.query('SELECT schedule_id, date, cancelled_standards FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date', [options.startDate, options.endDate]),
+                db.query('SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date', [options.startDate, options.endDate]),
                 db.query('SELECT start_datetime, end_datetime, target_classes, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date', [options.startDate, options.endDate]),
                 db.query('SELECT schedule_id, date FROM attendance_marks WHERE date BETWEEN $1::date AND $2::date', [options.startDate, options.endDate]),
                 db.query(`SELECT student_id, start_datetime, COALESCE(actual_return_datetime, end_datetime, 'infinity'::timestamptz) as effective_end_datetime 
@@ -478,7 +479,7 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
                             
                             const dayCodes: string[] = [];
                             for (const schedule of studentSchedules) {
-                                const cancelled = cancellationApplies(cancellations.get(schedule.id + '|' + day), student.standard)
+                                const cancelled = cancellationApplies(cancellations.get(schedule.id + '|' + day), student.standard, student.adm_no)
                                     || leavesResult.rows.some((leave: any) => leaveApplies(leave, schedule, day, student.standard));
                                 if (cancelled) {
                                     dayCodes.push('C');

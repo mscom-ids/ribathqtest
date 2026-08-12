@@ -59,6 +59,7 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
     
     useEffect(() => {
         if (open) {
+            if (type === 'on-campus') setMode('individual')
             const getStuds = async () => {
                 try {
                     const res = await api.get('/leaves/eligible-students')
@@ -154,13 +155,15 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                     </DialogDescription>
                 </DialogHeader>
 
-                <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-full">
-                    <TabsList className="grid grid-cols-3 w-full mb-4">
-                        <TabsTrigger value="individual">Individual</TabsTrigger>
-                        <TabsTrigger value="class">Class</TabsTrigger>
-                        <TabsTrigger value="batch">Batch</TabsTrigger>
-                    </TabsList>
-                </Tabs>
+                {type === 'out-campus' && (
+                    <Tabs value={mode} onValueChange={(v: any) => setMode(v)} className="w-full">
+                        <TabsList className="grid grid-cols-3 w-full mb-4">
+                            <TabsTrigger value="individual">Individual</TabsTrigger>
+                            <TabsTrigger value="class">Class</TabsTrigger>
+                            <TabsTrigger value="batch">Batch</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-2">
                     {mode === "individual" ? (
@@ -336,7 +339,7 @@ export function PersonalLeaveModal({ type, open, onOpenChange, onSuccess }: { ty
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
                         <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]">
                             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Authorize {mode === 'individual' ? 'Leave' : `${mode} Leave`}
+                            Authorize {type === 'on-campus' || mode === 'individual' ? 'Leave' : `${mode} Leave`}
                         </Button>
                     </DialogFooter>
                 </form>

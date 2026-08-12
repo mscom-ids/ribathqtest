@@ -217,8 +217,9 @@ export default function StudentAttendancePage() {
         const cancelledStandards = parseCancelledStandards(cancelled?.cancelled_standards)
         const scheduleStandards = (typeof sched.standards === 'string' ? JSON.parse(sched.standards || '[]') : (sched.standards || []))
             .map(normalizeStandardLabel)
+        const cancelledStudents = Array.isArray(cancelled?.cancelled_students) ? cancelled.cancelled_students : []
         const isFullyCancelled = !!cancelled && (
-            cancelledStandards.length === 0 ||
+            (cancelledStandards.length === 0 && cancelledStudents.length === 0) ||
             (scheduleStandards.length > 0 && scheduleStandards.every((std: string) => cancelledStandards.includes(std)))
         )
         const partialCancellation = !!cancelled && !isFullyCancelled ? cancelled : null

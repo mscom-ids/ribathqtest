@@ -139,7 +139,8 @@ function parseSessionStandards(value: any): string[] {
 }
 
 function isFullAttendanceCancellation(cancellation: any) {
-    return !!cancellation && parseCancelledStandards(cancellation.cancelled_standards).length === 0
+    const cancelledStudents = Array.isArray(cancellation?.cancelled_students) ? cancellation.cancelled_students : []
+    return !!cancellation && parseCancelledStandards(cancellation.cancelled_standards).length === 0 && cancelledStudents.length === 0
 }
 
 export default function StaffAttendancePage() {

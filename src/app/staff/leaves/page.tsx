@@ -38,6 +38,8 @@ type InstitutionalLeave = {
     start_datetime: string
     end_datetime: string
     target_classes: string[]
+    target_student_ids: string[]
+    campus_location: "inside" | "outside"
     is_entire_institution: boolean
     total_students: string
     returned_students: string
@@ -217,17 +219,18 @@ export default function StaffLeavesPage() {
                                                 {format(new Date(leave.start_datetime), "MMM d, h:mm a")} to {format(new Date(leave.end_datetime), "MMM d, h:mm a")}
                                             </p>
                                         </div>
-                                        <Button
+                                        {leave.campus_location !== "inside" && <Button
                                             size="sm"
                                             onClick={() => setLeaveForExit(leave)}
                                             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0"
                                         >
                                             <LogOut className="h-3.5 w-3.5" />
                                             Mark Exit
-                                        </Button>
+                                        </Button>}
                                     </div>
                                     <div className="text-xs text-slate-500 dark:text-slate-400">
-                                        {leave.is_entire_institution ? "Entire Institution" : `Classes: ${leave.target_classes?.join(", ") || "N/A"}`}
+                                        {leave.campus_location === "inside" ? "Inside Campus · " : "Outside Campus · "}
+                                        {leave.is_entire_institution ? "Entire Institution" : leave.target_student_ids?.length ? `${leave.target_student_ids.length} selected student(s)` : `Classes: ${leave.target_classes?.join(", ") || "N/A"}`}
                                     </div>
                                 </div>
                             )

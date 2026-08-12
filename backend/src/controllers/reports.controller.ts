@@ -107,7 +107,7 @@ function cancellationStandards(row: any): string[] {
 }
 
 function isFullCancellation(row: any) {
-  return !!row && cancellationStandards(row).length === 0;
+  return !!row && cancellationStandards(row).length === 0 && parseStandardList(row?.cancelled_students).length === 0;
 }
 
 function scheduleAppliesToDate(schedule: any, dateStr: string) {
@@ -397,7 +397,7 @@ export const getMentorReports = async (req: Request, res: Response) => {
             COALESCE((
               SELECT jsonb_agg(to_jsonb(cancellation_row))
               FROM (
-                SELECT schedule_id, date, cancelled_standards
+                SELECT schedule_id, date, cancelled_standards, cancelled_students
                 FROM attendance_cancellations
                 WHERE date >= $1::date AND date <= $2::date
               ) cancellation_row

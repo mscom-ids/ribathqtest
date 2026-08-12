@@ -198,7 +198,9 @@ export function DepartmentAttendance({ department }: { department: "hifz" | "sch
         return []
     }
 
-    const isFullCancellation = (cancellation: any) => !!cancellation && getCancelledStandards(cancellation).length === 0
+    const isFullCancellation = (cancellation: any) => !!cancellation
+        && getCancelledStandards(cancellation).length === 0
+        && (!Array.isArray(cancellation?.cancelled_students) || cancellation.cancelled_students.length === 0)
 
     const getCancellationLabel = (cancellation: any) => {
         const cancelledStandards = getCancelledStandards(cancellation)

@@ -32,6 +32,8 @@ type InstitutionalLeave = {
     start_datetime: string
     end_datetime: string
     target_classes: string[]
+    target_student_ids: string[]
+    campus_location: "inside" | "outside"
     is_entire_institution: boolean
     total_students: string
     returned_students: string
@@ -148,8 +150,13 @@ export function InstitutionalLeavesTab() {
                                         </div>
                                     </TableCell>
                                     <TableCell>
+                                        <Badge variant="outline" className={leave.campus_location === "inside" ? "mb-1 border-violet-300 text-violet-700" : "mb-1 border-amber-300 text-amber-700"}>
+                                            {leave.campus_location === "inside" ? "Inside Campus" : "Outside Campus"}
+                                        </Badge>
                                         {leave.is_entire_institution ? (
                                             <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200">Entire Institution</Badge>
+                                        ) : leave.target_student_ids?.length ? (
+                                            <Badge variant="secondary">{leave.target_student_ids.length} selected student(s)</Badge>
                                         ) : (
                                             <div className="flex flex-wrap gap-1">
                                                 {leave.target_classes?.map(c => (
@@ -184,7 +191,7 @@ export function InstitutionalLeavesTab() {
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
-                                            <Button
+                                            {leave.campus_location !== "inside" && <Button
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={() => setLeaveForExit(leave)}
@@ -192,8 +199,8 @@ export function InstitutionalLeavesTab() {
                                             >
                                                 <LogOut className="h-4 w-4 mr-1.5" />
                                                 Mark Exit
-                                            </Button>
-                                            <Button 
+                                            </Button>}
+                                            {leave.campus_location !== "inside" && <Button
                                                 variant="outline" 
                                                 size="sm" 
                                                 onClick={() => setLeaveForRecord(leave.id)}
@@ -201,7 +208,7 @@ export function InstitutionalLeavesTab() {
                                             >
                                                 <History className="h-4 w-4 mr-1.5" />
                                                 Record Entry
-                                            </Button>
+                                            </Button>}
                                             <Button
                                                 variant="ghost"
                                                 size="sm"

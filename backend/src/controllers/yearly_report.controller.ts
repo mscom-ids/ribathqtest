@@ -103,7 +103,7 @@ async function fetchStudentYearlyData(
     ),
     // Cancellations in window
     db.query(
-      `SELECT schedule_id, date, cancelled_standards
+      `SELECT schedule_id, date, cancelled_standards, cancelled_students
        FROM attendance_cancellations
        WHERE date >= $1 AND date <= $2`,
       [reportStart, reportEnd]
@@ -173,7 +173,7 @@ async function fetchStudentYearlyData(
     ).catch(() => ({ rows: [] as any[] })), // graceful if table doesn't exist yet
     // Institutional leaves (for computing cancelled classes)
     db.query(
-      `SELECT id, start_datetime, end_datetime, target_classes, is_entire_institution
+      `SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution
        FROM institutional_leaves
        WHERE start_datetime <= $2::timestamptz
          AND end_datetime >= $1::timestamptz`,
@@ -260,6 +260,8 @@ function computeAttendanceBreakdowns(
       const lEnd = new Date(leave.end_datetime);
       if (!(schedStart < lEnd && schedEnd > lStart)) continue;
       if (leave.is_entire_institution) return true;
+      const targetStudents = parseJsonArray(leave.target_student_ids).map(String);
+      if (targetStudents.includes(String(student.adm_no))) return true;
       const targets = parseJsonArray(leave.target_classes).map(normalizeStd);
       const type = String(schedule.class_type || '').toLowerCase();
       const compareTo = (type === 'school') ? studentStd : (type === 'madrasa' || type === 'madrassa') ? madrasaStd : studentStd;
@@ -294,7 +296,9 @@ function computeAttendanceBreakdowns(
         if (!persistedCancellation && !isInstLeaveCancellation(schedule, day)) return false;
         if (persistedCancellation) {
           const cs = parseJsonArray(persistedCancellation.cancelled_standards).map(normalizeStd);
-          if (cs.length === 0) return true; // full cancellation
+          const cancelledStudents = parseJsonArray(persistedCancellation.cancelled_students).map(String);
+          if (cancelledStudents.includes(String(student.adm_no))) return true;
+          if (cs.length === 0) return cancelledStudents.length === 0; // full cancellation
           const type = String(schedule.class_type || '').toLowerCase();
           const compareTo = (type === 'school') ? studentStd : (type === 'madrasa' || type === 'madrassa') ? madrasaStd : studentStd;
           return cs.includes(compareTo);

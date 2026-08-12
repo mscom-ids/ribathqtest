@@ -92,8 +92,12 @@ function cancellationStandards(row: any): string[] {
     return normalizeStandardList(parseStandardList(row?.cancelled_standards));
 }
 
+function cancellationStudents(row: any): string[] {
+    return parseStandardList(row?.cancelled_students).map(String).filter(Boolean);
+}
+
 function isFullCancellation(row: any) {
-    return !!row && cancellationStandards(row).length === 0;
+    return !!row && cancellationStandards(row).length === 0 && cancellationStudents(row).length === 0;
 }
 
 function isStandardCancelled(row: any, standard: string) {
@@ -248,6 +252,11 @@ function cancellationMeta(row: any) {
 }
 
 function computeClassStatus(schedule: any, dateKey: string, cancellation: any, marked: any, now = new Date()) {
+    // Individual exemptions affect only those students, not the class/session
+    // status shown on dashboards.
+    if (cancellation && cancellationStudents(cancellation).length > 0 && cancellationStandards(cancellation).length === 0) {
+        cancellation = null;
+    }
     const rawStandards = parseStandardList(schedule.standards);
     const scheduleStandards = normalizeStandardList(rawStandards);
     const cancelledStandards = cancellationStandards(cancellation);
@@ -336,7 +345,10 @@ function institutionalLeaveCancellationForSlot(schedule: any, dateKey: string, l
         if (!(scheduleStart < leaveEnd && scheduleEnd > leaveStart)) continue;
 
         let cancelledStandards: string[] | null = null;
-        if (!leave.is_entire_institution) {
+        const cancelledStudents = parseStandardList(leave.target_student_ids).map(String).filter(Boolean);
+        if (cancelledStudents.length > 0) {
+            cancelledStandards = [];
+        } else if (!leave.is_entire_institution) {
             const targetStandards = normalizeStandardList(parseStandardList(leave.target_classes));
             const affectedStandards = scheduleStandards.length > 0
                 ? targetStandards.filter(std => scheduleStandards.includes(std))
@@ -355,6 +367,7 @@ function institutionalLeaveCancellationForSlot(schedule: any, dateKey: string, l
             reason: `Institutional Leave:${leave.id}`,
             resolved_reason: leave.name || 'Institutional Leave',
             cancelled_standards: cancelledStandards,
+            cancelled_students: cancelledStudents,
         };
     }
 
@@ -1540,7 +1553,7 @@ export const getDashboardData = async (req: Request, res: Response) => {
         }
         const schedulesPromise = db.query(scheduleQuery, scheduleParams);
         const institutionalLeavesPromise = db.query(
-            `SELECT id, name, start_datetime, end_datetime, target_classes, is_entire_institution
+            `SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution
              FROM institutional_leaves
              WHERE start_datetime < ($2::date + 1)
                AND end_datetime >= $1::date`,
@@ -2075,9 +2088,12 @@ export const markAttendance = async (req: Request, res: Response) => {
         const unavailableByStudent = new Map(
             unavailableLeaves.map((leave: any) => [leave.student_id, leave]),
         );
+        const cancelledStudentIds = new Set(cancellationStudents(cancellation));
         const marksToPersist = submittedMarks.map((mark: any) => ({
             ...mark,
-            status: unavailableByStudent.has(mark.student_id)
+            status: cancelledStudentIds.has(mark.student_id)
+                ? 'Leave'
+                : unavailableByStudent.has(mark.student_id)
                 ? ['on-campus', 'internal'].includes(String(unavailableByStudent.get(mark.student_id)?.leave_type || '').toLowerCase())
                     ? 'Leave'
                     : 'Outside'
