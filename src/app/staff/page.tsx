@@ -295,7 +295,10 @@ export default function StaffDashboard() {
 
     // Load aggregated staff dashboard summary (profile, assigned students, sessions, top performers).
     useEffect(() => {
-        if (!todayStr) return
+        // The unfocused Leadership home has its own school-wide loader. Avoid
+        // starting the mentor-only dashboard request behind it: the unused
+        // request caused extra contention and state churn on every visit.
+        if (!todayStr || !roleResolved || (isSupervisor && !isFocusMode)) return
         async function load() {
             setLoading(true)
             setTopPerformersLoading(true)
@@ -338,7 +341,7 @@ export default function StaffDashboard() {
             setLoading(false)
         }
         load()
-    }, [router, todayStr, refreshTrigger])
+    }, [router, todayStr, refreshTrigger, roleResolved, isSupervisor, isFocusMode])
 
     // ─── Top Performers: build ranking for the selected month ──────────────────
     // Current month → reuse dashboardReports (already fetched). Other months →

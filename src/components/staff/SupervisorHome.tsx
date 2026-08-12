@@ -17,6 +17,39 @@ import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 type AllStudent = { adm_no: string; name: string; standard: string | null; status?: string }
 type Mentor = { id: string; name: string; photo_url: string | null; place: string | null; student_count: number }
+type SupervisorCounts = { active: number; on_campus: number; out_campus: number; mentors: number }
+type SupervisorAttendance = { present: number; total: number }
+type SupervisorSnapshot = {
+    savedAt: number
+    name: string
+    photo: string
+    counts: SupervisorCounts | null
+    attendance: SupervisorAttendance | null
+    students: AllStudent[]
+    mentors: Mentor[]
+}
+
+const SUPERVISOR_SNAPSHOT_KEY = "__supervisor_home_snapshot"
+const SUPERVISOR_SNAPSHOT_MAX_AGE_MS = 5 * 60_000
+
+function readSupervisorSnapshot(): SupervisorSnapshot | null {
+    try {
+        if (typeof window === "undefined") return null
+        const raw = sessionStorage.getItem(SUPERVISOR_SNAPSHOT_KEY)
+        if (!raw) return null
+        const snapshot = JSON.parse(raw) as SupervisorSnapshot
+        if (!snapshot.savedAt || Date.now() - snapshot.savedAt > SUPERVISOR_SNAPSHOT_MAX_AGE_MS) return null
+        return snapshot
+    } catch {
+        return null
+    }
+}
+
+function saveSupervisorSnapshot(snapshot: SupervisorSnapshot) {
+    try {
+        sessionStorage.setItem(SUPERVISOR_SNAPSHOT_KEY, JSON.stringify(snapshot))
+    } catch { /* A fresh network load remains the fallback. */ }
+}
 
 type MonthlyReportRow = {
     adm_no: string
@@ -111,13 +144,14 @@ function buildMonthOptions(anchor: Date): { value: string; label: string }[] {
  * Leadership home for Principal / Vice Principal when NO Mentor Focus is set.
  */
 export function SupervisorHome({ role }: { role: string }) {
-    const [name, setName] = useState("")
-    const [photo, setPhoto] = useState("")
-    const [counts, setCounts] = useState<{ active: number; on_campus: number; out_campus: number; mentors: number } | null>(null)
-    const [attendance, setAttendance] = useState<{ present: number; total: number } | null>(null)
-    const [students, setStudents] = useState<AllStudent[]>([])
-    const [mentors, setMentors] = useState<Mentor[]>([])
-    const [loading, setLoading] = useState(true)
+    const [initialSnapshot] = useState(readSupervisorSnapshot)
+    const [name, setName] = useState(initialSnapshot?.name || "")
+    const [photo, setPhoto] = useState(initialSnapshot?.photo || "")
+    const [counts, setCounts] = useState<SupervisorCounts | null>(initialSnapshot?.counts || null)
+    const [attendance, setAttendance] = useState<SupervisorAttendance | null>(initialSnapshot?.attendance || null)
+    const [students, setStudents] = useState<AllStudent[]>(initialSnapshot?.students || [])
+    const [mentors, setMentors] = useState<Mentor[]>(initialSnapshot?.mentors || [])
+    const [loading, setLoading] = useState(!initialSnapshot)
     const [search, setSearch] = useState("")
     const [focusingId, setFocusingId] = useState<string | null>(null)
 
@@ -147,7 +181,9 @@ export function SupervisorHome({ role }: { role: string }) {
     useEffect(() => {
         let cancelled = false
         async function load() {
-            setLoading(true)
+            // Keep a recent snapshot painted while revalidating. This avoids a
+            // full-page spinner every time leadership returns to the dashboard.
+            if (!initialSnapshot) setLoading(true)
             const today = format(new Date(), "yyyy-MM-dd")
             const [me, admin, daily, mentorList, studentList] = await Promise.allSettled([
                 cachedGet("/staff/me", undefined, 60_000),
@@ -158,27 +194,51 @@ export function SupervisorHome({ role }: { role: string }) {
             ])
             if (cancelled) return
 
-            if (me.status === "fulfilled" && me.value.data?.staff) {
-                setName(me.value.data.staff.name || "")
-                setPhoto(me.value.data.staff.photo_url || "")
-            }
+            const nextName = me.status === "fulfilled" && me.value.data?.staff
+                ? me.value.data.staff.name || ""
+                : initialSnapshot?.name || ""
+            const nextPhoto = me.status === "fulfilled" && me.value.data?.staff
+                ? me.value.data.staff.photo_url || ""
+                : initialSnapshot?.photo || ""
+            let nextCounts = initialSnapshot?.counts || null
             if (admin.status === "fulfilled" && admin.value.data?.summary) {
                 const s = admin.value.data.summary
-                setCounts({
+                nextCounts = {
                     active: s.students?.active ?? 0,
                     on_campus: s.students?.on_campus ?? 0,
                     out_campus: s.students?.out_campus ?? 0,
                     mentors: s.staff?.active ?? 0,
-                })
+                }
             }
+            let nextAttendance = initialSnapshot?.attendance || null
             if (daily.status === "fulfilled" && daily.value.data?.students) {
-                setAttendance({ present: daily.value.data.students.present ?? 0, total: daily.value.data.students.total ?? 0 })
+                nextAttendance = { present: daily.value.data.students.present ?? 0, total: daily.value.data.students.total ?? 0 }
             }
-            if (mentorList.status === "fulfilled" && mentorList.value.data?.mentors) {
-                setMentors(mentorList.value.data.mentors)
-            }
-            if (studentList.status === "fulfilled" && studentList.value.data?.students) {
-                setStudents(studentList.value.data.students)
+            const nextMentors = mentorList.status === "fulfilled" && mentorList.value.data?.mentors
+                ? mentorList.value.data.mentors
+                : initialSnapshot?.mentors || []
+            const nextStudents = studentList.status === "fulfilled" && studentList.value.data?.students
+                ? studentList.value.data.students
+                : initialSnapshot?.students || []
+
+            setName(nextName)
+            setPhoto(nextPhoto)
+            setCounts(nextCounts)
+            setAttendance(nextAttendance)
+            setMentors(nextMentors)
+            setStudents(nextStudents)
+            // Only persist a usable overview. A failed cold load must not turn
+            // into a fresh-looking empty snapshot on the next visit.
+            if (nextCounts) {
+                saveSupervisorSnapshot({
+                    savedAt: Date.now(),
+                    name: nextName,
+                    photo: nextPhoto,
+                    counts: nextCounts,
+                    attendance: nextAttendance,
+                    students: nextStudents,
+                    mentors: nextMentors,
+                })
             }
             setLoading(false)
         }
