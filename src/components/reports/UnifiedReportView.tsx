@@ -39,7 +39,7 @@ export default function UnifiedReportView() {
             // own roster. Same {adm_no, name} shape either way.
             const focused = typeof window !== "undefined" && sessionStorage.getItem("mentorFocus") === "1"
             let role = ""
-            try { role = await getUserRole() } catch { /* fall back to mentor roster */ }
+            try { role = (await getUserRole()) ?? "" } catch { /* fall back to mentor roster */ }
             const isSupervisor = ["admin", "principal", "vice_principal", "controller"].includes(role)
 
             try {

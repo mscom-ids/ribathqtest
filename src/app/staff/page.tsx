@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
-import { getUserRole } from "@/lib/auth"
+import { getUserRole, getUserRoleSync } from "@/lib/auth"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
 import { MentorFocus } from "@/components/staff/MentorFocus"
@@ -221,8 +221,10 @@ export default function StaffDashboard() {
     // Supervisor (Principal / Vice Principal) support. `userRole` is the REAL
     // logged-in role from /auth/me — NOT /staff/me, which returns the focused
     // mentor's role while Mentor Focus is active.
-    const [userRole, setUserRole] = useState("")
-    const [roleResolved, setRoleResolved] = useState(false)
+    // Seeded from sessionStorage cache so VP sees SupervisorHome on the first
+    // paint without waiting for /auth/me — eliminates the blink.
+    const [userRole, setUserRole] = useState(() => getUserRoleSync() ?? "")
+    const [roleResolved, setRoleResolved] = useState(() => !!getUserRoleSync())
     const [isFocusMode, setIsFocusMode] = useState(false)
     const isSupervisor = SUPERVISOR_ROLES.includes(userRole)
 

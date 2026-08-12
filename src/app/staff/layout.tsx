@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
-import { getUserRole } from "@/lib/auth"
+import { getUserRole, getUserRoleSync, clearRoleCache } from "@/lib/auth"
 import { ModeToggle } from "@/components/mode-toggle"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
@@ -30,11 +30,18 @@ export default function StaffLayout({
     // Mentor Focus (supervisor) vs regular mentor delegation — different banner.
     const [isFocusMode, setIsFocusMode] = useState(false)
     // Role-aware branding: leaders see "Leadership Portal", mentors "Mentor Portal".
-    // Uses the REAL role (/auth/me), which stays correct even while focused.
-    const [brand, setBrand] = useState("Mentor Portal")
+    // Seeded from sessionStorage cache so the header renders correctly on the
+    // first paint — no flicker from "Mentor Portal" → "Leadership Portal".
+    const [brand, setBrand] = useState(() => {
+        const r = getUserRoleSync()
+        return (r === 'principal' || r === 'vice_principal') ? 'Leadership Portal' : 'Mentor Portal'
+    })
     // Leaders (Principal / VP) don't request delegation — they use Mentor Focus —
     // so the "Assigned" (delegation requests) nav item is hidden for them.
-    const [isLeader, setIsLeader] = useState(false)
+    const [isLeader, setIsLeader] = useState(() => {
+        const r = getUserRoleSync()
+        return r === 'principal' || r === 'vice_principal'
+    })
 
     useEffect(() => {
         setMounted(true)
@@ -86,6 +93,7 @@ export default function StaffLayout({
         sessionStorage.removeItem('delegationMentorName')
         sessionStorage.removeItem('delegationStudentName')
         sessionStorage.removeItem('mentorFocus')
+        clearRoleCache()
         router.push("/login")
     }
 
