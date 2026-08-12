@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
-    Target, ChevronRight, Trophy, Star, Medal, type LucideIcon,
+    Target, ChevronRight, Trophy, Star, Award, Gem, type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -17,10 +17,22 @@ import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
 type AllStudent = { adm_no: string; name: string; standard: string | null; status?: string }
 type Mentor = { id: string; name: string; photo_url: string | null; place: string | null; student_count: number }
-type LeaderboardEntry = {
-    rank: number; adm_no: string; name: string; photo_url: string | null
-    standard: string | null; attendance_pct: number; recited_days: number
-    new_entries: number; score: number
+
+type MonthlyReportRow = {
+    adm_no: string
+    name?: string
+    standard?: string
+    totalPoints?: number | string | null
+    total_points?: number | string | null
+    points?: number | string | null
+    percentage?: number | string | null
+}
+
+type TopPerformer = {
+    adm_no: string
+    name: string
+    standard: string
+    totalPoints: number
 }
 
 const STAT_COLORS = {
@@ -57,27 +69,46 @@ function getGreeting(h: number) {
     return "Good Evening"
 }
 
-// Rank badge: gold/silver/bronze for top 3, plain number after
-function RankBadge({ rank }: { rank: number }) {
-    if (rank === 1) return (
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 font-black text-xs">1</span>
-    )
-    if (rank === 2) return (
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-black text-xs">2</span>
-    )
-    if (rank === 3) return (
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 font-black text-xs">3</span>
-    )
-    return <span className="text-[12px] text-slate-400 dark:text-gray-500 font-medium w-7 text-center">{rank}</span>
+// ─── Build ranked top performers from a monthly-report payload ───────────────
+// Same logic as the mentor portal's page.tsx `buildPerformers`
+function buildPerformers(reports: MonthlyReportRow[]): TopPerformer[] {
+    return reports
+        .map((r) => {
+            const rawPoints = r.totalPoints ?? r.total_points ?? r.points
+            const rawPercentage = r.percentage
+            const percentage = Number(rawPercentage)
+            const legacyPoints = Number(rawPoints)
+
+            const totalPoints = rawPercentage !== undefined
+                && rawPercentage !== null
+                && Number.isFinite(percentage)
+                ? Math.round((percentage * 0.7 + Number.EPSILON) * 100) / 100
+                : legacyPoints
+            if (!Number.isFinite(totalPoints)) return null
+            return {
+                adm_no: r.adm_no,
+                name: r.name || r.adm_no,
+                standard: r.standard || "",
+                totalPoints,
+            }
+        })
+        .filter((p): p is TopPerformer => p !== null && p.totalPoints > 0)
+        .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
+}
+
+// ─── Month options from Jun 2026 back ──────────────────────────────────────
+function buildMonthOptions(anchor: Date): { value: string; label: string }[] {
+    const opts: { value: string; label: string }[] = []
+    const start = new Date(2026, 5, 1)
+    const cur = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    for (let d = new Date(cur); d >= start; d.setMonth(d.getMonth() - 1)) {
+        opts.push({ value: format(d, "yyyy-MM"), label: format(d, "MMM yyyy") })
+    }
+    return opts
 }
 
 /**
  * Leadership home for Principal / Vice Principal when NO Mentor Focus is set.
- * Shows a school-wide overview of every student (not a single mentor's class),
- * in the same visual language as the mentor portal.
- *
- * - No "Mentor Focus" card inline — the Mentors side panel handles that.
- * - Top Performance opens as a slide-in sheet via the floating Trophy button.
  */
 export function SupervisorHome({ role }: { role: string }) {
     const [name, setName] = useState("")
@@ -90,17 +121,29 @@ export function SupervisorHome({ role }: { role: string }) {
     const [search, setSearch] = useState("")
     const [focusingId, setFocusingId] = useState<string | null>(null)
 
-    // Leaderboard sheet
+    // Top Performers — same data as mentor portal, but for ALL students
     const [lbOpen, setLbOpen] = useState(false)
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
-    const [lbLoading, setLbLoading] = useState(true)
+    const [performers, setPerformers] = useState<TopPerformer[]>([])
+    const [perfLoading, setPerfLoading] = useState(true)
+    const [perfError, setPerfError] = useState<string | null>(null)
+    const [selectedMonth, setSelectedMonth] = useState("")
 
     type ChartStudent = { adm_no: string; name: string; standard: string | null }
     const [chartStudent, setChartStudent] = useState<ChartStudent | null>(null)
 
     const [now, setNow] = useState<Date | null>(null)
-    useEffect(() => { setNow(new Date()) }, [])
+    useEffect(() => {
+        const d = new Date()
+        setNow(d)
+        setSelectedMonth(format(d, "yyyy-MM"))
+    }, [])
 
+    const monthOptions = useMemo(
+        () => (now ? buildMonthOptions(now) : []),
+        [now]
+    )
+
+    // ── Load main data ──────────────────────────────────────────────
     useEffect(() => {
         let cancelled = false
         async function load() {
@@ -138,18 +181,37 @@ export function SupervisorHome({ role }: { role: string }) {
                 setStudents(studentList.value.data.students)
             }
             setLoading(false)
-
-            // Leaderboard — loaded once in the background; displayed on demand via sheet
-            try {
-                const lb = await cachedGet("/reports/leaderboard", { limit: 20 }, 120_000)
-                if (!cancelled && lb.data?.data) setLeaderboard(lb.data.data)
-            } catch { /* non-critical */ } finally {
-                if (!cancelled) setLbLoading(false)
-            }
         }
         load()
         return () => { cancelled = true }
     }, [])
+
+    // ── Load top performers for the selected month ──────────────────
+    // Uses the SAME endpoint as the mentor portal: /hifz/monthly-reports/calculate
+    // Without mentor_id → returns ALL students.
+    useEffect(() => {
+        if (!selectedMonth) return
+        let cancelled = false
+        setPerfLoading(true)
+        setPerfError(null)
+
+        cachedGet("/hifz/monthly-reports/calculate", { month: selectedMonth }, 120_000)
+            .then((res) => {
+                if (cancelled) return
+                const reports: MonthlyReportRow[] = Array.isArray(res.data?.reports) ? res.data.reports : []
+                setPerformers(buildPerformers(reports))
+            })
+            .catch((err) => {
+                if (cancelled) return
+                console.warn("[VP TOP PERFORMERS] load error:", err)
+                setPerformers([])
+                setPerfError("Could not load monthly points")
+            })
+            .finally(() => {
+                if (!cancelled) setPerfLoading(false)
+            })
+        return () => { cancelled = true }
+    }, [selectedMonth])
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase()
@@ -189,107 +251,135 @@ export function SupervisorHome({ role }: { role: string }) {
         )
     }
 
-    // ── Leaderboard sheet content ────────────────────────────────
-    const leaderboardSheet = (
-        <Sheet open={lbOpen} onOpenChange={setLbOpen}>
-            <SheetContent side="right" className="p-0 flex flex-col w-[92vw] sm:max-w-lg">
-                <SheetTitle className="sr-only">Top Performance</SheetTitle>
-
-                {/* Sheet header */}
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-gray-800 shrink-0">
-                    <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
-                        <Trophy className="h-5 w-5 text-amber-500" />
+    // ── Top Performers sheet content (same visual as mentor portal) ──
+    const topPerformersContent = (
+        <>
+            <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
+                <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
+                <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
+                <div className="relative flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                            <Award className="h-5 w-5 text-amber-300" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="truncate text-base font-bold">Top Performers</h3>
+                            <p className="text-[11px] text-indigo-100">All students · Monthly leaderboard</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">Top Performance</p>
-                        <p className="text-[11px] text-slate-400">
-                            {now ? format(now, "MMMM yyyy") : "This month"} · attendance + hifz activity
-                        </p>
-                    </div>
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        aria-label="Select month"
+                        className="min-w-[100px] cursor-pointer rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-xs font-medium text-white outline-none backdrop-blur-sm transition hover:bg-white/20 focus:ring-2 focus:ring-white/60 [&>option]:text-slate-900"
+                    >
+                        {monthOptions.map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
                 </div>
+            </div>
 
-                {/* Sheet body */}
-                <div className="flex-1 overflow-y-auto">
-                    {lbLoading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="h-6 w-6 animate-spin text-amber-400" />
-                        </div>
-                    ) : leaderboard.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                            <Medal className="h-10 w-10 text-slate-200 dark:text-slate-700 mb-3" />
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No performance data yet</p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Data will appear once attendance and hifz logs are recorded this month.</p>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Top 3 podium */}
-                            {leaderboard.length >= 1 && (
-                                <div className="px-5 pt-5 pb-4 space-y-3">
-                                    {leaderboard.slice(0, 3).map(entry => (
-                                        <button
-                                            key={entry.adm_no}
-                                            onClick={() => { setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard }); setLbOpen(false) }}
-                                            className={`w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] ${
-                                                entry.rank === 1
-                                                    ? "bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200 dark:border-amber-800/40"
-                                                    : entry.rank === 2
-                                                    ? "bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700"
-                                                    : "bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-800/30"
-                                            }`}
-                                        >
-                                            <RankBadge rank={entry.rank} />
-                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
-                                                {entry.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{entry.name}</p>
-                                                <p className="text-[11px] text-slate-400">{entry.adm_no}{entry.standard ? ` · ${entry.standard}` : ""}</p>
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                                                    <span className="text-base font-black text-slate-800 dark:text-white">{entry.score}</span>
-                                                </div>
-                                                <p className="text-[10px] text-slate-400">{entry.attendance_pct}% att · {entry.recited_days}d hifz</p>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Rest of the list */}
-                            {leaderboard.length > 3 && (
-                                <div className="border-t border-slate-100 dark:border-gray-800">
-                                    <p className="px-5 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Leaderboard</p>
-                                    <div className="divide-y divide-slate-100 dark:divide-gray-800/50">
-                                        {leaderboard.slice(3).map(entry => (
-                                            <button
-                                                key={entry.adm_no}
-                                                onClick={() => { setChartStudent({ adm_no: entry.adm_no, name: entry.name, standard: entry.standard }); setLbOpen(false) }}
-                                                className="w-full flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors text-left"
-                                            >
-                                                <RankBadge rank={entry.rank} />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">{entry.name}</p>
-                                                    <p className="text-[11px] text-slate-400">{entry.standard ?? entry.adm_no}</p>
-                                                </div>
-                                                <div className="text-right shrink-0">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{entry.score}</span>
-                                                    </div>
-                                                    <p className="text-[10px] text-slate-400">{entry.attendance_pct}%</p>
-                                                </div>
-                                            </button>
-                                        ))}
+            {perfLoading ? (
+                <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-slate-800">
+                        <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                    </div>
+                    Loading monthly points...
+                </div>
+            ) : perfError ? (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-8 text-center text-sm text-red-500 dark:border-red-900/40 dark:bg-red-950/20">
+                    {perfError}
+                </div>
+            ) : performers.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
+                    <Award className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No points recorded</p>
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Try selecting another month.</p>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {/* Champion card */}
+                    {performers[0] && (() => {
+                        const winner = performers[0]
+                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / 70) * 100))
+                        return (
+                            <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-4 shadow-sm dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/5 dark:to-slate-900">
+                                <div className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-amber-300/15" />
+                                <div className="relative flex items-center gap-3">
+                                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/25">
+                                        <Award className="h-6 w-6" />
+                                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-50 bg-gradient-to-br from-cyan-300 to-blue-500 shadow-sm dark:border-slate-900">
+                                            <Gem className="h-2.5 w-2.5 text-white" />
+                                        </span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Champion</span>
+                                        <p className="mt-1 truncate text-sm font-bold text-slate-900 dark:text-white" title={winner.name}>{winner.name}</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{winner.standard}</p>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                        <p className="text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{winner.totalPoints.toFixed(2)}</p>
+                                        <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">points</p>
                                     </div>
                                 </div>
-                            )}
-                        </>
+                                <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-slate-800">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: String(progress) + "%" }} />
+                                </div>
+                            </div>
+                        )
+                    })()}
+
+                    {/* Rest of leaderboard */}
+                    {performers.length > 1 && (
+                        <div>
+                            <div className="mb-2 flex items-center justify-between px-1">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Leaderboard</p>
+                                <p className="text-[10px] text-slate-400">Score</p>
+                            </div>
+                            <div className="space-y-1.5">
+                                {performers.slice(1).map((stu, index) => {
+                                    const rank = index + 2
+                                    const medalClasses = rank === 2
+                                        ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white ring-amber-300/70 dark:ring-amber-500/40"
+                                        : rank === 3
+                                            ? "bg-gradient-to-br from-slate-300 to-slate-400 text-white ring-slate-300/70 dark:from-slate-400 dark:to-slate-500 dark:ring-slate-400/40"
+                                            : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700"
+                                    return (
+                                        <button
+                                            key={stu.adm_no}
+                                            type="button"
+                                            onClick={() => { setChartStudent({ adm_no: stu.adm_no, name: stu.name, standard: stu.standard }); setLbOpen(false) }}
+                                            className={"w-full group flex items-center gap-3 rounded-xl border px-2.5 py-2.5 transition-all text-left " + (rank <= 3
+                                                ? "border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                                                : "border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60")}
+                                        >
+                                            <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black ring-1 " + medalClasses}>
+                                                {rank}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" title={stu.name}>{stu.name}</p>
+                                                <p className="mt-0.5 text-[10px] text-slate-400">{stu.standard}</p>
+                                            </div>
+                                            <div className={"shrink-0 rounded-lg px-2.5 py-1.5 text-right " + (rank <= 3
+                                                ? "bg-indigo-50 dark:bg-indigo-500/10"
+                                                : "bg-emerald-50 dark:bg-emerald-500/10")}>
+                                                <p className={"text-xs font-bold tabular-nums " + (rank <= 3
+                                                    ? "text-indigo-600 dark:text-indigo-400"
+                                                    : "text-emerald-600 dark:text-emerald-400")}>
+                                                    {stu.totalPoints.toFixed(2)}
+                                                </p>
+                                                <p className="text-[8px] uppercase tracking-wide text-slate-400">pts</p>
+                                            </div>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     )}
                 </div>
-            </SheetContent>
-        </Sheet>
+            )}
+        </>
     )
 
     return (
@@ -443,19 +533,31 @@ export function SupervisorHome({ role }: { role: string }) {
                 </div>
             </div>
 
-            {/* ── Floating Trophy button — opens Top Performance sheet ── */}
+            {/* ── Floating Trophy button — opens Top Performers sheet ── */}
             <div className="fixed bottom-24 right-4 z-40">
                 <button
                     onClick={() => setLbOpen(true)}
-                    aria-label="Open top performance"
-                    className="h-14 w-14 rounded-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white shadow-lg shadow-amber-500/30 flex items-center justify-center transition-all active:scale-95"
+                    aria-label="Open top performers"
+                    className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-lg flex items-center justify-center transition-all active:scale-95"
                 >
-                    <Trophy className="h-6 w-6" />
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <style>{`@keyframes mpLiveBar { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }`}</style>
+                        <rect x="2" y="8" width="3.5" height="10" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite" }} />
+                        <rect x="8.25" y="2" width="3.5" height="16" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite 0.15s" }} />
+                        <rect x="14.5" y="11" width="3.5" height="7" rx="1" className="fill-current" style={{ transformOrigin: "bottom", transformBox: "fill-box", animation: "mpLiveBar 1s ease-in-out infinite 0.3s" }} />
+                    </svg>
                 </button>
             </div>
 
-            {/* ── Top Performance slide-in sheet ── */}
-            {leaderboardSheet}
+            {/* ── Top Performers slide-in sheet ── */}
+            <Sheet open={lbOpen} onOpenChange={setLbOpen}>
+                <SheetContent side="right" className="p-0 flex flex-col w-[85vw] sm:max-w-sm">
+                    <SheetTitle className="sr-only">Top Performers</SheetTitle>
+                    <div className="flex-1 overflow-y-auto px-5 pt-12 pb-6">
+                        {topPerformersContent}
+                    </div>
+                </SheetContent>
+            </Sheet>
 
             {/* Hifz register modal */}
             <HifzMonthlyRegister

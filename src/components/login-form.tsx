@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getRedirectPathForRole } from "@/lib/auth"
+import { getRedirectPathForRole, clearRoleCache } from "@/lib/auth"
 
 function getApiUrl() {
     return "/api"
@@ -126,6 +126,12 @@ export default function LoginForm({ parentOnly = false }: LoginFormProps) {
                 throw new Error("This login is only for parent accounts.")
             }
 
+            // Cache the role in sessionStorage so the staff layout/page can
+            // read it synchronously on first paint — eliminates the VP blink.
+            clearRoleCache()
+            if (profile.role) {
+                try { sessionStorage.setItem('__urole', profile.role) } catch { /* ignore */ }
+            }
             window.location.href = parentOnly ? "/home" : getRedirectPathForRole(profile.role)
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error("Failed to login")
