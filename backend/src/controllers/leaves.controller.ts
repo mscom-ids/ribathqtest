@@ -3,6 +3,7 @@ import { db } from '../config/db';
 import crypto from 'crypto';
 import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
+import { lockAttendanceSessions } from '../services/attendance-session-lock.service';
 
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -176,6 +177,11 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
     }
 
     if (rows.length === 0) return 0;
+
+    await lockAttendanceSessions(
+        client,
+        rows.map((row: any) => ({ scheduleId: String(row.schedule_id), date: String(row.date) })),
+    );
 
     await client.query(
         `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards, cancelled_students)
@@ -615,6 +621,17 @@ export const deleteInstitutionalLeave = async (req: Request, res: Response) => {
             await client.query('DELETE FROM leave_exceptions WHERE institutional_leave_id = $1', [id]);
 
             // Delete attendance cancellations generated directly by this leave.
+            const cancellationRows = await client.query(
+                'SELECT schedule_id, date::text FROM attendance_cancellations WHERE reason = $1',
+                [institutionalCancellationReason(id)],
+            );
+            await lockAttendanceSessions(
+                client,
+                cancellationRows.rows.map((row: any) => ({
+                    scheduleId: String(row.schedule_id),
+                    date: String(row.date).slice(0, 10),
+                })),
+            );
             await client.query('DELETE FROM attendance_cancellations WHERE reason = $1', [institutionalCancellationReason(id)]);
 
             // Delete main record

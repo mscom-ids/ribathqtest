@@ -8,9 +8,9 @@ export type FinanceAccessProfile = {
 };
 
 /**
- * Converts individual grants into independent data scopes. Charge access is
- * category-agnostic: a staff member who can add a charge can use any active
- * charge category within their student scope.
+ * Converts individual grants into independent student scopes. Charge category
+ * IDs are intentionally enforced separately by the authorization and service
+ * layers so a grant never widens to unrelated categories.
  */
 export function buildFinanceAccessProfile(
     permissions: FinancePermission[],

@@ -45,9 +45,28 @@ export default function EventModal({ isOpen, onClose, onSaveSuccess, editingEven
         }
     }, [isOpen, initialData])
 
+    const todayStr = new Date().toISOString().split("T")[0]
+
     const handleSaveEvent = async (e: React.FormEvent) => {
         e.preventDefault()
         if (isSaving) return
+
+        // Logical Validations
+        if (!editingEventId && formData.start_date < todayStr) {
+            toast({ title: "Invalid Date", description: "Cannot schedule events in the past.", variant: "destructive" })
+            return
+        }
+
+        if (formData.end_date < formData.start_date) {
+            toast({ title: "Invalid Date Range", description: "End date cannot be before start date.", variant: "destructive" })
+            return
+        }
+
+        if (formData.start_date === formData.end_date && formData.end_time <= formData.start_time) {
+            toast({ title: "Invalid Time Range", description: "End time must be after start time.", variant: "destructive" })
+            return
+        }
+
         setIsSaving(true)
         try {
             let res;
@@ -57,6 +76,7 @@ export default function EventModal({ isOpen, onClose, onSaveSuccess, editingEven
                 res = await api.post('/events', formData)
             }
             if (res.data.success) {
+                toast({ title: "Success", description: editingEventId ? "Event updated successfully" : "Event created & mentors notified" })
                 onSaveSuccess()
                 onClose()
             }
@@ -141,12 +161,30 @@ export default function EventModal({ isOpen, onClose, onSaveSuccess, editingEven
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[13px] font-bold text-[#1F2937] dark:text-slate-300 mb-1">Start Date</label>
-                                <input type="date" required value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})}
+                                <input 
+                                    type="date" 
+                                    required 
+                                    min={editingEventId ? undefined : todayStr}
+                                    value={formData.start_date} 
+                                    onChange={e => {
+                                        const newStart = e.target.value;
+                                        setFormData(prev => ({
+                                            ...prev, 
+                                            start_date: newStart,
+                                            // Automatically push end_date forward if it is before the new start_date
+                                            end_date: prev.end_date && prev.end_date < newStart ? newStart : prev.end_date || newStart
+                                        }))
+                                    }}
                                     className="w-full h-11 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[14px] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                             </div>
                             <div>
                                 <label className="block text-[13px] font-bold text-[#1F2937] dark:text-slate-300 mb-1">End Date</label>
-                                <input type="date" required value={formData.end_date} onChange={e => setFormData({...formData, end_date: e.target.value})}
+                                <input 
+                                    type="date" 
+                                    required 
+                                    min={formData.start_date || (editingEventId ? undefined : todayStr)}
+                                    value={formData.end_date} 
+                                    onChange={e => setFormData({...formData, end_date: e.target.value})}
                                     className="w-full h-11 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[14px] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                             </div>
                         </div>

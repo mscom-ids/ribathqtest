@@ -160,6 +160,10 @@ export function startDatabaseKeepAlive() {
   return timer;
 }
 
+export function closeDatabasePool() {
+  return pool.end();
+}
+
 export const db = {
   query: async (text: string, params?: any[]) => {
     const startedAt = Date.now();

@@ -1,0 +1,24 @@
+
+> institution-os@0.1.0 dev:staging:backend
+> node scripts/run-with-env.mjs backend/.env.staging.local backend/node_modules/ts-node/dist/bin.js backend/src/index.ts
+
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from backend\.env -- tip: 🛡️ auth for agents: https://vestauth.com
+[DB POOL] 1 connections ready in 1588ms
+[STARTUP] Server is running on port 5001
+[DB POOL] 1 connections ready in 229ms
+[DB POOL] 1 connections ready in 246ms
+[DB POOL] 1 connections ready in 235ms
+[DB POOL] 1 connections ready in 1516ms
+[DB POOL] 1 connections ready in 166ms
+[DB POOL] 1 connections ready in 210ms
+[DB POOL] 1 connections ready in 142ms
+[DB POOL] 1 connections ready in 1272ms
+[DB POOL] 1 connections ready in 159ms
+[DB POOL] 1 connections ready in 146ms
+[DB POOL] 1 connections ready in 170ms
+[DB POOL] 1 connections ready in 1355ms
+[DB POOL] 1 connections ready in 144ms

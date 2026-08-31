@@ -6,6 +6,8 @@ import { getMentorAccessDecision } from '../utils/mentor-access-policy';
 import { getEligibleHifzStudentsForSchedule, isHifzSchedule } from '../utils/hifz-session-eligibility';
 import { getAcademicYearContext, getAcademicYearParam } from '../utils/academic-year';
 import { getActiveMentorStudentIds, getActiveMentorStudents } from '../services/mentor-students.service';
+import { lockAttendanceSessions } from '../services/attendance-session-lock.service';
+import { attendanceRosterStateHash } from '../services/attendance-roster-state.service';
 
 // All roles treated as a mentor (filtered access)
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -617,6 +619,19 @@ export const getSchedules = async (req: Request, res: Response) => {
         }
 
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
+                            COALESCE((
+                                SELECT revision::text
+                                FROM mobile_attendance_session_revisions mobile_revision
+                                WHERE mobile_revision.schedule_id = a.id
+                                  AND mobile_revision.session_date = $2::date
+                            ), '0') AS session_revision,
+                            (
+                                SELECT to_jsonb(cancellation)
+                                FROM attendance_cancellations cancellation
+                                WHERE cancellation.schedule_id = a.id
+                                  AND cancellation.date = $2::date
+                                LIMIT 1
+                            ) AS attendance_cancellation,
                             ${SCHEDULE_GROUPS_SELECT},
                             c.name as class_setup_name, c.standard as class_standard,
                             c.section as class_section, c.type as class_department
@@ -1719,7 +1734,8 @@ export const getMentorSchedules = async (req: Request, res: Response) => {
 
 export const getStudentsForSchedule = async (req: Request, res: Response) => {
     try {
-        const { schedule_id, date, academic_year_id } = req.query;
+        const { date, academic_year_id } = req.query;
+        const schedule_id = req.query.schedule_id || req.params.scheduleId;
         let { mentor_id } = req.query;
         const user = (req as any).user;
 
@@ -1728,7 +1744,14 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const effectiveRequestAcademicYearId = yearContext.academicYearId;
         const scheduleParams: any[] = [schedule_id, date || null];
         let scheduleQuery = `SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time,
-                                    a.academic_year_id, a.mentor_id, ${SCHEDULE_GROUPS_SELECT},
+                                    a.academic_year_id, a.mentor_id, a.mobile_revision,
+                                    COALESCE((
+                                        SELECT revision::text
+                                        FROM mobile_attendance_session_revisions mobile_revision
+                                        WHERE mobile_revision.schedule_id = a.id
+                                          AND mobile_revision.session_date = $2::date
+                                    ), '0') AS session_revision,
+                                    ${SCHEDULE_GROUPS_SELECT},
                                     COALESCE((
                                         SELECT jsonb_agg(jsonb_build_object(
                                             'student_id', sam.student_id,
@@ -1792,6 +1815,11 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                 success: true,
                 students: [],
                 marks: savedMarks,
+                sessionState: {
+                    scheduleRevision: Number(schedule.mobile_revision || 1),
+                    sessionRevision: Number(schedule.session_revision || 0),
+                    rosterStateHash: attendanceRosterStateHash([]),
+                },
                 cancellation: {
                     is_cancelled: true,
                     cancelled_standards: cancellationStandards(cancellation),
@@ -2011,7 +2039,16 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
             }
         }
 
-        res.json({ success: true, students: studentsWithLeave, marks: savedMarks });
+        res.json({
+            success: true,
+            students: studentsWithLeave,
+            marks: savedMarks,
+            sessionState: {
+                scheduleRevision: Number(schedule.mobile_revision || 1),
+                sessionRevision: Number(schedule.session_revision || 0),
+                rosterStateHash: attendanceRosterStateHash(studentsWithLeave),
+            },
+        });
     } catch (e: any) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -2256,6 +2293,51 @@ export const markAttendance = async (req: Request, res: Response) => {
         const client = await db.getClient();
         try {
             await client.query('BEGIN');
+            await lockAttendanceSessions(client, [{ scheduleId: String(schedule_id), date: String(date) }]);
+
+            // Re-check the authoritative state while holding the same lock used
+            // by cancellation/restore writers. This closes the race where a
+            // class was cancelled after the modal loaded but just before save.
+            const lockedState = await client.query(
+                `SELECT a.is_deleted, a.day_of_week, a.effective_from, a.effective_until,
+                        c.cancelled_standards, c.cancelled_students, c.reason
+                 FROM attendance_schedules a
+                 LEFT JOIN attendance_cancellations c
+                   ON c.schedule_id = a.id AND c.date = $2::date
+                 WHERE a.id = $1
+                 FOR UPDATE OF a`,
+                [schedule_id, date],
+            );
+            const currentSchedule = lockedState.rows[0];
+            if (!currentSchedule || currentSchedule.is_deleted) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ success: false, code: 'SESSION_CHANGED', error: 'This class is no longer available.' });
+            }
+            const sessionDate = new Date(`${String(date).slice(0, 10)}T12:00:00Z`);
+            const isWrongDay = Number.isNaN(sessionDate.getTime()) || sessionDate.getUTCDay() !== Number(currentSchedule.day_of_week);
+            const isOutsideWindow = String(date).slice(0, 10) < toDateKey(currentSchedule.effective_from)
+                || (currentSchedule.effective_until && String(date).slice(0, 10) > toDateKey(currentSchedule.effective_until));
+            if (isWrongDay || isOutsideWindow) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ success: false, code: 'SESSION_CHANGED', error: 'This class is not active on the selected date.' });
+            }
+            if (isFullCancellation(currentSchedule)) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ success: false, code: 'SESSION_CANCELLED', error: currentSchedule.reason || 'This class was cancelled.' });
+            }
+            if (currentSchedule.cancelled_standards && marksToPersist.length > 0) {
+                const markedStudents = await client.query(
+                    `SELECT adm_no, standard FROM students WHERE adm_no = ANY($1::text[])`,
+                    [marksToPersist.map((mark: any) => mark.student_id)],
+                );
+                const cancelledStudent = markedStudents.rows.find((student: any) =>
+                    isStandardCancelled(currentSchedule, student.standard)
+                );
+                if (cancelledStudent) {
+                    await client.query('ROLLBACK');
+                    return res.status(409).json({ success: false, code: 'SESSION_CANCELLED', error: `Attendance was cancelled for ${cancelledStudent.standard}.` });
+                }
+            }
             const studentIds = marksToPersist.map((mark: any) => mark.student_id);
             const statuses = marksToPersist.map((mark: any) => mark.status);
 
@@ -2312,6 +2394,7 @@ export const markAttendance = async (req: Request, res: Response) => {
 };
 
 export const cancelSession = async (req: Request, res: Response) => {
+    const client = await db.getClient();
     try {
         const { schedule_id, date, reason, standards } = req.body;
         const userId = (req as any).user.id;
@@ -2321,8 +2404,11 @@ export const cancelSession = async (req: Request, res: Response) => {
             return res.status(403).json({ success: false, error: "Only Authorities can cancel a class." });
         }
 
-        const schedRes = await db.query('SELECT standards FROM attendance_schedules WHERE id = $1', [schedule_id]);
+        await client.query('BEGIN');
+        await lockAttendanceSessions(client, [{ scheduleId: String(schedule_id), date: String(date) }]);
+        const schedRes = await client.query('SELECT standards FROM attendance_schedules WHERE id = $1 FOR UPDATE', [schedule_id]);
         if (schedRes.rows.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(404).json({ success: false, error: "Schedule not found" });
         }
 
@@ -2332,6 +2418,7 @@ export const cancelSession = async (req: Request, res: Response) => {
         const validSelectedStandards = selectedStandards.filter(std => scheduleStandards.includes(std));
 
         if (standardsProvided && scheduleStandards.length > 0 && validSelectedStandards.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ success: false, error: "Select at least one valid standard to cancel." });
         }
 
@@ -2340,7 +2427,7 @@ export const cancelSession = async (req: Request, res: Response) => {
                 ? JSON.stringify(validSelectedStandards)
                 : null;
 
-        const result = await db.query(
+        const result = await client.query(
             `INSERT INTO attendance_cancellations (schedule_id, date, reason, cancelled_by, cancelled_standards)
              VALUES ($1, $2, $3, $4, $5::jsonb)
              ON CONFLICT (schedule_id, date)
@@ -2351,6 +2438,7 @@ export const cancelSession = async (req: Request, res: Response) => {
              RETURNING *`,
             [schedule_id, date, reason, userId, cancelledStandards]
         );
+        await client.query('COMMIT');
 
         invalidateCacheByPrefix('attendance:');
         invalidateCacheByPrefix('reports:management-');
@@ -2359,11 +2447,15 @@ export const cancelSession = async (req: Request, res: Response) => {
         invalidateCacheByPrefix('reports:students');
         res.json({ success: true, data: result.rows[0] });
     } catch (err: any) {
+        await client.query('ROLLBACK').catch(() => undefined);
         res.status(500).json({ success: false, error: err.message });
+    } finally {
+        client.release();
     }
 };
 
 export const restoreSession = async (req: Request, res: Response) => {
+    const client = await db.getClient();
     try {
         const { schedule_id, date } = req.body;
         const userRole = String((req as any).user.role || '').toLowerCase();
@@ -2372,11 +2464,14 @@ export const restoreSession = async (req: Request, res: Response) => {
             return res.status(403).json({ success: false, error: "Only Authorities can restore a class." });
         }
 
-        await db.query(
+        await client.query('BEGIN');
+        await lockAttendanceSessions(client, [{ scheduleId: String(schedule_id), date: String(date) }]);
+        await client.query(
             `DELETE FROM attendance_cancellations
              WHERE schedule_id = $1 AND date = $2`,
             [schedule_id, date]
         );
+        await client.query('COMMIT');
 
         invalidateCacheByPrefix('attendance:');
         invalidateCacheByPrefix('reports:management-');
@@ -2385,7 +2480,10 @@ export const restoreSession = async (req: Request, res: Response) => {
         invalidateCacheByPrefix('reports:students');
         res.json({ success: true });
     } catch (err: any) {
+        await client.query('ROLLBACK').catch(() => undefined);
         res.status(500).json({ success: false, error: err.message });
+    } finally {
+        client.release();
     }
 };
 

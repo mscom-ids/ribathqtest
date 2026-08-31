@@ -1,0 +1,6 @@
+[SLOW API] POST /api/mobile/auth/login 200 1745.6ms
+[SLOW DB] 1432ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[SLOW API] GET /api/mobile/attendance/day 200 2031.8ms
+[SLOW DB] 307ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW API] GET /api/mobile/attendance/sessions/6be91d92-14cb-4df4-85f4-88b523209481 200 1123.9ms
+[SLOW API] POST /api/mobile/mutations/attendance 409 1536.6ms

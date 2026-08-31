@@ -1,0 +1,12 @@
+
+> institution-os@0.1.0 dev:staging:backend
+> node scripts/run-with-env.mjs backend/.env.staging.local backend/node_modules/ts-node/dist/bin.js backend/src/index.ts
+
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  enable debug logging with { debug: true }
+[dotenv@17.3.1] injecting env (0) from backend\.env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[DB POOL] 1 connections ready in 1513ms
+[STARTUP] Server is running on port 5001
+[DB POOL] 1 connections ready in 217ms

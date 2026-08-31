@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { db } from '../config/db';
 import { allocateOldestFirst, moneyToPaise, paiseToMoney } from '../utils/finance-money';
 import { buildFinanceAccessProfile, buildLedgerViewAccessProfile } from '../modules/finance/finance.scope';
+import { findPermission } from '../modules/finance/finance.auth';
 import { currentMonthlyFees, workspace } from '../modules/finance/finance.service';
 import type { FinanceActor, FinancePermission } from '../modules/finance/finance.types';
 
@@ -76,6 +77,17 @@ const actor: FinanceActor = {
 async function runQueryRegressions() {
     const originalQuery = db.query;
     try {
+        let permissionLookupSql = '';
+        let permissionLookupParams: any[] = [];
+        db.query = async (sql: string, params?: any[]) => {
+            permissionLookupSql = sql;
+            permissionLookupParams = params || [];
+            return { rows: [], rowCount: 0 } as any;
+        };
+        await findPermission(actor, 'charge:create', medical);
+        assert.match(permissionLookupSql, /category_id = \$3::uuid/);
+        assert.deepEqual(permissionLookupParams, [actor.staffId, 'charge:create', medical]);
+
         const assignedLedgerPermission = permission('ledger:view', 'assigned');
         let currentFeesSql = '';
         let currentFeesParams: any[] = [];

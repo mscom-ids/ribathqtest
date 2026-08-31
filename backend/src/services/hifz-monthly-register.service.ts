@@ -426,7 +426,8 @@ export async function getHifzStudentMonthRegister(options: {
     const [student, logsResult, schedules, marksResult, cancellationsResult, lifetimeNewLogsResult] = await Promise.all([
         loadStudent(options.db, options.studentId, options.academicYearId || null),
         options.db.query(
-            `SELECT hl.*, recorder.name AS recorded_by_name
+            `SELECT hl.*, recorder.name AS recorded_by_name,
+                    (extract(epoch from hl.updated_at) * 1000)::bigint AS entity_version
              FROM hifz_logs hl
              LEFT JOIN staff recorder ON recorder.id = hl.created_by
              WHERE hl.student_id = $1

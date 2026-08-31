@@ -1,0 +1,9 @@
+[SLOW API] POST /api/mobile/auth/login 200 1719.2ms
+[SLOW DB] 1538ms params=1 sql="SELECT id, name, photo_url, role FROM staff WHERE id <> $1 AND COALESCE(is_active, true) = true ORDER BY name, id LIMIT 500"
+[SLOW DB] 1539ms params=1 sql="WITH mine AS ( SELECT participant.conversation_id FROM chat_participants participant WHERE participant.staff_id = $1 ), ranked AS ( SELECT message.*, sender.name AS sender_name, sender.photo_url AS sender_photo, row_numb"
+[SLOW API] GET /api/mobile/chat/workspace 200 1727.9ms
+[SLOW API] POST /api/mobile/chat/conversations/private 201 1634.3ms
+[SLOW DB] 297ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW API] POST /api/mobile/mutations/chat-messages 201 2132.9ms
+[SLOW API] POST /api/mobile/mutations/chat-messages 200 1135.6ms
+[SLOW API] GET /api/mobile/chat/conversations/9f860fd7-599d-49a9-9386-25445824501e/messages 200 610.8ms

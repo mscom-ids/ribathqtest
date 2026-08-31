@@ -1,0 +1,16 @@
+
+> institution-os@0.1.0 dev:staging:backend
+> node scripts/run-with-env.mjs backend/.env.staging.local backend/node_modules/ts-node/dist/bin.js backend/src/index.ts
+
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[dotenv@17.3.1] injecting env (0) from backend\.env -- tip: ⚙️  override existing env vars with { override: true }
+[DB POOL] 1 connections ready in 1685ms
+[STARTUP] Server is running on port 5001
+[DB POOL] 1 connections ready in 215ms
+[DB POOL] 1 connections ready in 229ms
+[DB POOL] 1 connections ready in 144ms
+[DB POOL] 1 connections ready in 1041ms
+[DB POOL] 1 connections ready in 193ms

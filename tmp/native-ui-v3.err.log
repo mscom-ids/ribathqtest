@@ -1,0 +1,22 @@
+[SLOW API] POST /api/mobile/auth/login 200 1782.3ms
+[SLOW DB] 303ms params=6 sql="INSERT INTO students (adm_no, name, dob, standard, gender, phone, status, admission_date) VALUES ($1, $2, $3, $4, $5, $6, 'active', CURRENT_DATE) RETURNING adm_no AS id, adm_no, name, standard, gender, phone, status"
+[SLOW DB] 1304ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW DB] 1338ms params=0 sql="SELECT (SELECT COUNT(*)::int FROM students WHERE LOWER(COALESCE(status, 'active')) = 'active') AS total_students, (SELECT COUNT(*)::int FROM students s WHERE LOWER(COALESCE(s.status, 'active')) = 'active' AND EXISTS (SEL"
+[SLOW API] GET /api/mobile/bootstrap 200 2269.0ms
+[SLOW DB] 250ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[SLOW API] POST /api/mobile/auth/login 200 1891.3ms
+[SLOW API] GET /api/mobile/bootstrap 200 1015.2ms
+[SLOW API] POST /api/mobile/auth/login 200 1322.6ms
+[SLOW DB] 649ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW API] GET /api/mobile/bootstrap 200 1431.6ms
+[SLOW API] POST /api/mobile/auth/refresh 200 1220.7ms
+[SLOW DB] 315ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[SLOW API] POST /api/mobile/auth/login 200 1880.1ms
+[SLOW API] GET /api/mobile/bootstrap 200 1024.7ms
+[SLOW DB] 575ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW DB] 316ms params=3 sql="SELECT sequence_id::text, entity_type, entity_id, operation, entity_version::text, payload, changed_at FROM mobile_sync_changes WHERE audience_staff_id = $1 AND sequence_id > $2 ORDER BY sequence_id ASC LIMIT $3"
+[SLOW API] GET /api/mobile/sync 200 1041.1ms
+[SLOW API] POST /api/mobile/auth/login 200 1524.3ms
+[SLOW API] GET /api/mobile/bootstrap 200 743.5ms
+[SLOW API] POST /api/mobile/auth/login 200 1313.0ms
+[SLOW API] POST /api/mobile/auth/login 200 1810.3ms

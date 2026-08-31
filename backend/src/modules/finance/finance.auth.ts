@@ -128,13 +128,14 @@ export async function findPermission(
         };
     }
 
-    const params: unknown[] = [actor.staffId, capability];
+    const params: unknown[] = [actor.staffId, capability, categoryId || null];
     const result = await db.query(
         `SELECT id, staff_id, capability, category_id, student_scope, amount_limit,
                 valid_from, valid_until, granted_by, revoked_at
          FROM finance_staff_permissions
          WHERE staff_id = $1
            AND capability = $2
+           AND ($2::text <> 'charge:create' OR category_id = $3::uuid)
            AND revoked_at IS NULL
            AND (valid_from IS NULL OR valid_from <= CURRENT_DATE)
            AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)

@@ -1,0 +1,22 @@
+[SLOW DB] 368ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[SLOW API] POST /api/mobile/auth/login 200 2037.7ms
+[SLOW DB] 289ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW DB] 1533ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW API] GET /api/mobile/bootstrap 200 2651.7ms
+[SLOW API] POST /api/mobile/auth/login 200 1323.6ms
+[SLOW DB] 1808ms params=0 sql="SELECT (SELECT COUNT(*)::int FROM students WHERE LOWER(COALESCE(status, 'active')) = 'active') AS total_students, (SELECT COUNT(*)::int FROM students s WHERE LOWER(COALESCE(s.status, 'active')) = 'active' AND EXISTS (SEL"
+[SLOW API] GET /api/mobile/bootstrap 200 2666.1ms
+[SLOW API] POST /api/mobile/auth/refresh 200 1225.7ms
+[SLOW API] POST /api/mobile/auth/login 200 1995.7ms
+[SLOW DB] 418ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW DB] 278ms params=1 sql="SELECT id, email, name, role, photo_url, phone FROM staff WHERE id = $1 LIMIT 1"
+[SLOW DB] 306ms params=0 sql="SELECT adm_no AS id, adm_no, name, photo_url, standard, NULL::text AS division, standard AS attendance_standard FROM students WHERE LOWER(COALESCE(status, 'active')) = 'active' ORDER BY name, adm_no LIMIT 1000"
+[SLOW DB] 306ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW DB] 306ms params=0 sql="SELECT (SELECT COUNT(*)::int FROM students WHERE LOWER(COALESCE(status, 'active')) = 'active') AS total_students, (SELECT COUNT(*)::int FROM students s WHERE LOWER(COALESCE(s.status, 'active')) = 'active' AND EXISTS (SEL"
+[SLOW API] GET /api/mobile/bootstrap 200 1415.0ms
+[SLOW DB] 349ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW API] GET /api/mobile/sync 200 761.2ms
+[SLOW API] POST /api/mobile/auth/login 200 1838.7ms
+[SLOW API] GET /api/mobile/bootstrap 200 1062.0ms
+[SLOW API] POST /api/mobile/auth/login 200 1738.0ms
+[SLOW API] GET /api/mobile/bootstrap 200 962.0ms

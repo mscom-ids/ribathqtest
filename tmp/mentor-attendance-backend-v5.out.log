@@ -1,0 +1,14 @@
+
+> institution-os@0.1.0 dev:staging:backend
+> node scripts/run-with-env.mjs backend/.env.staging.local backend/node_modules/ts-node/dist/bin.js backend/src/index.ts
+
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.3.1] injecting env (0) from backend\.env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[DB POOL] 1 connections ready in 1493ms
+[STARTUP] Server is running on port 5001
+[DB POOL] 1 connections ready in 209ms
+[DB POOL] 1 connections ready in 151ms
+[DB POOL] 1 connections ready in 136ms

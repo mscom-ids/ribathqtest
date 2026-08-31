@@ -1,0 +1,9 @@
+[SLOW API] POST /api/mobile/auth/login 200 1713.7ms
+[SLOW DB] 398ms params=5 sql="WITH recent AS ( SELECT p.id, 'payment'::text AS type, p.student_id, s.name AS student_name, 'Payment received'::text AS description, NULL::text AS category_name, p.amount, p.date, p.created_at, st.name AS recorded_by_na"
+[SLOW DB] 1522ms params=0 sql="SELECT id, account_holder, account_type, details, is_active, account_holder || ' (' || upper(account_type) || ')' AS account_name FROM payment_accounts WHERE is_active = true ORDER BY account_holder"
+[SLOW DB] 1522ms params=1 sql="SELECT * FROM charge_categories WHERE is_active = true AND id = ANY($1::uuid[]) ORDER BY name"
+[SLOW DB] 1522ms params=7 sql="WITH student_access AS ( SELECT s.adm_no, s.name, s.standard AS legacy_standard, s.photo_url, s.status, placement.standard, placement.division, CASE WHEN snapshot.id IS NOT NULL THEN $1::uuid IN (snapshot.hifz_mentor_id,"
+[SLOW API] GET /api/mobile/finance/workspace 200 2344.9ms
+[SLOW API] GET /api/mobile/finance/students/STG-M001/account 200 1216.9ms
+[SLOW DB] 309ms params=3 sql="SELECT id, role, name, email, is_active FROM staff WHERE ($1::text IS NOT NULL AND id::text = $1::text) OR ($2::text IS NOT NULL AND profile_id::text = $2::text) OR ($3::text IS NOT NULL AND lower(email) = lower($3::text"
+[SLOW API] POST /api/mobile/finance/charges 400 507.4ms

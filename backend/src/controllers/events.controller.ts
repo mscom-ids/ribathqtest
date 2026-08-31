@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { cachedResult, invalidateCacheByPrefix } from '../utils/server-cache';
+import { notifyMentorsForEvent } from '../services/whatsapp.service';
 
 export const getEvents = async (req: Request, res: Response) => {
     try {
@@ -27,6 +28,19 @@ export const createEvent = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: "Missing required fields" });
         }
 
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (start_date < todayStr) {
+            return res.status(400).json({ success: false, error: "Cannot create events in past dates." });
+        }
+
+        if (end_date < start_date) {
+            return res.status(400).json({ success: false, error: "End date cannot be before start date." });
+        }
+
+        if (start_date === end_date && end_time <= start_time) {
+            return res.status(400).json({ success: false, error: "End time must be after start time." });
+        }
+
         const rolesJson = event_for === 'Mentors' && target_roles ? JSON.stringify(target_roles) : null;
 
         const query = `
@@ -38,7 +52,13 @@ export const createEvent = async (req: Request, res: Response) => {
 
         const result = await db.query(query, params);
         invalidateCacheByPrefix('events:');
-        res.status(201).json({ success: true, event: result.rows[0] });
+
+        const savedEvent = result.rows[0];
+
+        // Trigger WhatsApp Notification to Mentors in background
+        notifyMentorsForEvent(savedEvent).catch(err => console.error("Error sending WhatsApp notification:", err));
+
+        res.status(201).json({ success: true, event: savedEvent });
     } catch (e: any) {
         console.error("Error creating event:", e);
         res.status(500).json({ success: false, error: e.message || "Failed to create event" });
@@ -52,6 +72,14 @@ export const updateEvent = async (req: Request, res: Response) => {
 
         if (!title || !category || !event_for || !start_date || !end_date || !start_time || !end_time) {
             return res.status(400).json({ success: false, error: "Missing required fields" });
+        }
+
+        if (end_date < start_date) {
+            return res.status(400).json({ success: false, error: "End date cannot be before start date." });
+        }
+
+        if (start_date === end_date && end_time <= start_time) {
+            return res.status(400).json({ success: false, error: "End time must be after start time." });
         }
 
         const rolesJson = event_for === 'Mentors' && target_roles ? JSON.stringify(target_roles) : null;
@@ -68,7 +96,10 @@ export const updateEvent = async (req: Request, res: Response) => {
         if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Event not found" });
         invalidateCacheByPrefix('events:');
 
-        res.status(200).json({ success: true, event: result.rows[0] });
+        const updatedEvent = result.rows[0];
+        notifyMentorsForEvent(updatedEvent).catch(err => console.error("Error sending WhatsApp notification:", err));
+
+        res.status(200).json({ success: true, event: updatedEvent });
     } catch (e: any) {
         console.error("Error updating event:", e);
         res.status(500).json({ success: false, error: e.message || "Failed to update event" });

@@ -1,0 +1,24 @@
+[SLOW API] POST /api/mobile/auth/login 200 2354.0ms
+[MOBILE ADMIN] Create student failed: error: null value in column "dob" of relation "students" violates not-null constraint
+    at D:\NewRQP\backend\node_modules\pg-pool\index.js:45:11
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Object.query (D:\NewRQP\backend\src\config\db.ts:176:18)
+    at async createMobileStudent (D:\NewRQP\backend\src\modules\mobile-sync\mobile-admin.controller.ts:31:20) {
+  length: 467,
+  severity: 'ERROR',
+  code: '23502',
+  detail: 'Failing row contains (STGUI1787262492424, Temporary UI Verification, null, null, null, null, null, null, null, null, null, 7th, 2026-08-20 21:48:15.165409+00, null, null, null, null, active, null, null, null, null, null, 2026-08-20, Indian, null, null, null, null, null, null, null, null, null, null).',
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: 'public',
+  table: 'students',
+  column: 'dob',
+  dataType: undefined,
+  constraint: undefined,
+  file: 'execMain.c',
+  line: '1981',
+  routine: 'ExecConstraints'
+}

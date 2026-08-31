@@ -72,12 +72,24 @@ async function audit(
     );
 }
 
-function hasChargePermission(permissions: FinancePermission[]) {
-    return permissions.some(permission => permission.capability === 'charge:create');
-}
+async function activeChargeCategoryIds(permissions?: FinancePermission[]) {
+    const grantedIds = permissions === undefined
+        ? null
+        : [...new Set(
+            permissions
+                .filter(permission => permission.capability === 'charge:create' && permission.category_id)
+                .map(permission => String(permission.category_id)),
+        )];
+    if (grantedIds?.length === 0) return [];
 
-async function activeChargeCategoryIds() {
-    const result = await db.query(`SELECT id FROM charge_categories WHERE is_active = true ORDER BY name`);
+    const result = await db.query(
+        `SELECT id
+         FROM charge_categories
+         WHERE is_active = true
+           ${grantedIds ? 'AND id = ANY($1::uuid[])' : ''}
+         ORDER BY name`,
+        grantedIds ? [grantedIds] : [],
+    );
     return result.rows.map(category => String(category.id));
 }
 
@@ -118,7 +130,11 @@ export async function financeCapabilities(actor: FinanceActor, providedPermissio
         can_add_charge: canAddCharge,
         can_collect_payment: has('payment:collect'),
         can_manage_setup: manager,
-        allowed_category_ids: manager || canAddCharge ? await activeChargeCategoryIds() : [],
+        allowed_category_ids: manager
+            ? await activeChargeCategoryIds()
+            : canAddCharge
+                ? await activeChargeCategoryIds(permissions)
+                : [],
         amount_limit: manager
             ? null
             : permissions
@@ -153,11 +169,12 @@ async function accountVisibility(actor: FinanceActor, studentId: string) {
     const profile = buildFinanceAccessProfile(permissions, isFinanceReadRole(actor.role));
     const assigned = profile.fullLedgerAllStudents ? false : await isStudentAssigned(actor, studentId);
     const fullLedgerForStudent = profile.fullLedger && (profile.fullLedgerAllStudents || assigned);
-    const canViewChargesForStudent = profile.allStudentChargeAccess
-        || (assigned && profile.assignedStudentChargeAccess);
-    const categoryIds = fullLedgerForStudent || !canViewChargesForStudent
+    const chargePermissionsForStudent = permissions.filter(permission =>
+        permission.capability === 'charge:create'
+        && (permission.student_scope === 'all' || assigned));
+    const categoryIds = fullLedgerForStudent
         ? []
-        : await activeChargeCategoryIds();
+        : await activeChargeCategoryIds(chargePermissionsForStudent);
     if (!fullLedgerForStudent && !categoryIds.length) {
         throw new FinanceError(403, 'You are not authorized for this student.', 'STUDENT_SCOPE_FORBIDDEN');
     }
@@ -1087,9 +1104,19 @@ export async function workspace(actor: FinanceActor, query: any) {
 
     const capabilities = await financeCapabilities(actor, permissions);
     const profile = buildFinanceAccessProfile(permissions, isFinanceReadRole(actor.role));
-    const activeCategoryIds = hasChargePermission(permissions) ? await activeChargeCategoryIds() : [];
-    const allCategoryIds = profile.allStudentChargeAccess ? activeCategoryIds : [];
-    const assignedCategoryIds = profile.assignedStudentChargeAccess ? activeCategoryIds : [];
+    const activeCategoryIds = new Set<string>(capabilities.allowed_category_ids);
+    const categoryIdsForScope = (studentScope: FinancePermission['student_scope']) => [
+        ...new Set(
+            permissions
+                .filter(permission => permission.capability === 'charge:create'
+                    && permission.student_scope === studentScope
+                    && permission.category_id
+                    && activeCategoryIds.has(String(permission.category_id)))
+                .map(permission => String(permission.category_id)),
+        ),
+    ];
+    const allCategoryIds = profile.allStudentChargeAccess ? categoryIdsForScope('all') : [];
+    const assignedCategoryIds = profile.assignedStudentChargeAccess ? categoryIdsForScope('assigned') : [];
     const accessParams = [
         actor.staffId,
         serviceMonth,
@@ -1244,11 +1271,15 @@ export async function workspace(actor: FinanceActor, query: any) {
         summaryAccessParams,
     );
 
-    const categoriesPromise = isFinanceManager(actor.role)
-        ? db.query(`SELECT * FROM charge_categories WHERE is_active = true ORDER BY name`)
-        : capabilities.can_add_charge
-            ? db.query(`SELECT * FROM charge_categories WHERE is_active = true ORDER BY name`)
-            : Promise.resolve({ rows: [] });
+    const allowedCategoryIds = capabilities.allowed_category_ids;
+    const categoriesPromise = allowedCategoryIds.length
+        ? db.query(
+            `SELECT * FROM charge_categories
+             WHERE is_active = true AND id = ANY($1::uuid[])
+             ORDER BY name`,
+            [allowedCategoryIds],
+        )
+        : Promise.resolve({ rows: [] });
     const accountsPromise = capabilities.can_collect_payment || isFinanceReadRole(actor.role)
         ? db.query(`SELECT id, account_holder, account_type, details, is_active,
                                  account_holder || ' (' || upper(account_type) || ')' AS account_name
@@ -1362,8 +1393,14 @@ export async function workspace(actor: FinanceActor, query: any) {
 export async function listCategories(actor: FinanceActor) {
     const permissions = await listCurrentPermissions(actor);
     if (isFinanceReadRole(actor.role)) return (await db.query('SELECT * FROM charge_categories ORDER BY name')).rows;
-    if (!hasChargePermission(permissions)) return [];
-    return (await db.query('SELECT * FROM charge_categories ORDER BY name')).rows;
+    const categoryIds = await activeChargeCategoryIds(permissions);
+    if (!categoryIds.length) return [];
+    return (await db.query(
+        `SELECT * FROM charge_categories
+         WHERE is_active = true AND id = ANY($1::uuid[])
+         ORDER BY name`,
+        [categoryIds],
+    )).rows;
 }
 
 export async function createCategory(actor: FinanceActor, body: any) {

@@ -1,0 +1,17 @@
+
+> institution-os@0.1.0 dev:staging:backend
+> node scripts/run-with-env.mjs backend/.env.staging.local backend/node_modules/ts-node/dist/bin.js backend/src/index.ts
+
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[STARTUP] Environment validated â€” all required variables present.
+[dotenv@17.3.1] injecting env (0) from .env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.3.1] injecting env (0) from backend\.env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[DB POOL] 1 connections ready in 1292ms
+[STARTUP] Server is running on port 5001
+[DB POOL] 1 connections ready in 222ms
+[DB POOL] 1 connections ready in 200ms
+[DB POOL] 1 connections ready in 250ms
+[DB POOL] 1 connections ready in 1398ms
+[DB POOL] 1 connections ready in 173ms
+[DB POOL] 1 connections ready in 200ms

@@ -35,6 +35,16 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+export const verifyMobileAccessToken = (req: Request, res: Response, next: NextFunction) => {
+  return verifyToken(req, res, () => {
+    const user = (req as any).user;
+    if (user?.token_use !== 'mobile_access' || !user?.device_id) {
+      return res.status(401).json({ success: false, error: 'A mobile access token is required.' });
+    }
+    next();
+  });
+};
+
 /**
  * Verify a delegation token from x-delegation-token header.
  * Must run AFTER verifyToken so req.user is available.

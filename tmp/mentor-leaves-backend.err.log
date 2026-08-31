@@ -1,0 +1,50 @@
+[SLOW API] POST /api/mobile/auth/login 200 1646.8ms
+[SLOW DB] 1350ms params=1 sql="SELECT delegation.id, delegation.from_staff_id AS original_mentor_id, mentor.name AS original_mentor_name, mentor.photo_url AS original_mentor_photo, delegation.student_id, student.name AS student_name, delegation.reason"
+[SLOW DB] 2583ms params=0 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location, is_entire_institution, created_at FROM institutional_leaves WHERE end_datetime >= now() - interval '90 days' ORDER BY st"
+[SLOW API] GET /api/mobile/mentor/workspace 200 3167.2ms
+[SLOW API] POST /api/mobile/mutations/leaves 201 2443.6ms
+[SLOW API] POST /api/mobile/mutations/leaves 200 984.1ms
+[SLOW API] POST /api/mobile/mutations/leaves 409 1979.7ms
+[MOBILE MENTOR] Leave mutation failed: error: column "return_status" of relation "student_leaves" does not exist
+    at D:\NewRQP\backend\node_modules\pg\lib\client.js:631:17
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async saveMobileLeave (D:\NewRQP\backend\src\modules\mobile-sync\mobile-leaves.service.ts:260:23)
+    at async mobileLeaveMutation (D:\NewRQP\backend\src\modules\mobile-sync\mobile-leaves.controller.ts:46:20) {
+  length: 142,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '91',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'analyze.c',
+  line: '2528',
+  routine: 'transformUpdateTargetList'
+}
+[SLOW API] POST /api/mobile/mutations/leaves 500 2357.4ms
+[SLOW API] POST /api/mobile/auth/login 200 1647.0ms
+[SLOW DB] 315ms params=0 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location, is_entire_institution, created_at FROM institutional_leaves WHERE end_datetime >= now() - interval '90 days' ORDER BY st"
+[SLOW DB] 317ms params=2 sql="SELECT sl.*, s.name AS student_name, COALESCE(p.standard, s.standard, s.hifz_standard, 'Common') AS standard FROM student_leaves sl JOIN students s ON s.adm_no = sl.student_id LEFT JOIN academic_student_placements p ON p"
+[SLOW DB] 318ms params=1 sql="SELECT delegation.id, delegation.from_staff_id AS original_mentor_id, mentor.name AS original_mentor_name, mentor.photo_url AS original_mentor_photo, delegation.student_id, student.name AS student_name, delegation.reason"
+[SLOW API] GET /api/mobile/mentor/workspace 200 707.4ms
+[SLOW API] POST /api/mobile/mutations/leaves 201 2554.7ms
+[SLOW API] POST /api/mobile/mutations/leaves 200 1123.6ms
+[SLOW API] POST /api/mobile/mutations/leaves 409 2148.4ms
+[SLOW API] POST /api/mobile/mutations/leaves 201 2764.5ms
+[SLOW API] POST /api/mobile/auth/login 200 2010.1ms
+[SLOW DB] 289ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW DB] 260ms params=0 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location, is_entire_institution, created_at FROM institutional_leaves WHERE end_datetime >= now() - interval '90 days' ORDER BY st"
+[SLOW DB] 274ms params=1 sql="SELECT delegation.id, delegation.from_staff_id AS original_mentor_id, mentor.name AS original_mentor_name, mentor.photo_url AS original_mentor_photo, delegation.student_id, student.name AS student_name, delegation.reason"
+[SLOW API] GET /api/mobile/mentor/workspace 200 770.5ms
+[SLOW DB] 254ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW API] POST /api/mobile/mutations/leaves 201 2486.9ms
+[SLOW API] POST /api/mobile/mutations/leaves 200 1017.8ms
+[SLOW API] POST /api/mobile/mutations/leaves 409 2148.1ms
+[SLOW API] POST /api/mobile/mutations/leaves 201 2968.3ms

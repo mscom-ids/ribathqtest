@@ -1,0 +1,7 @@
+[SLOW API] POST /api/mobile/auth/login 200 1887.6ms
+[SLOW DB] 1433ms params=0 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, campus_location, is_entire_institution, created_at FROM institutional_leaves WHERE end_datetime >= now() - interval '90 days' ORDER BY st"
+[SLOW DB] 1434ms params=1 sql="SELECT delegation.id, delegation.from_staff_id AS original_mentor_id, mentor.name AS original_mentor_name, mentor.photo_url AS original_mentor_photo, delegation.student_id, student.name AS student_name, delegation.reason"
+[SLOW API] GET /api/mobile/mentor/workspace 200 2030.0ms
+[SLOW DB] 339ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[SLOW DB] 1359ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[SLOW API] GET /api/mobile/reports/student-progress 200 2262.8ms

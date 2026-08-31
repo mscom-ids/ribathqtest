@@ -1,0 +1,10 @@
+[SLOW API] POST /api/mobile/auth/login 200 1974.8ms
+[SLOW DB] 1536ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW API] GET /api/mobile/bootstrap 200 2549.4ms
+[SLOW API] GET /api/mobile/students/STG-M001/profile 200 602.4ms
+[SLOW DB] 407ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 407ms params=1 sql="SELECT surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL"
+[SLOW DB] 1385ms params=3 sql="SELECT schedule_id, date, status, marked_by FROM student_attendance_marks WHERE student_id = $1 AND date BETWEEN $2::date AND $3::date"
+[SLOW DB] 1389ms params=3 sql="SELECT a.id, a.mentor_id, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uui"
+[SLOW API] GET /api/mobile/students/STG-M001/hifz-month 200 1818.3ms
+[SLOW API] POST /api/mobile/mutations/hifz-register 409 1222.1ms

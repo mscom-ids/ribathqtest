@@ -8,7 +8,8 @@ import {
     Bell, FileText, DollarSign, BarChart2,
     UserCheck, CalendarCheck,
     GraduationCap, X, Plus,
-    Edit2, Trash2, UserCog, ShieldCheck
+    Edit2, Trash2, UserCog, ShieldCheck,
+    ArrowUpRight, TrendingUp
 } from "lucide-react"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
@@ -357,7 +358,35 @@ export default function AdminDashboardPage() {
     }))
     const totalHifzStudents = hifzChartData.reduce((sum, item) => sum + item.students, 0)
     const completedHifzStudents = hifzChartData.find(item => item.milestone === 30)?.students || 0
-    const HIFZ_COLORS = ["#60a5fa", "#3b82f6", "#2563eb", "#4f46e5", "#7c3aed", "#9333ea", "#059669"]
+    const foundationCount = hifzMilestones
+        .filter(m => m.milestone >= 0 && m.milestone < 15)
+        .reduce((sum, m) => sum + m.count, 0)
+    const advancedCount = hifzMilestones
+        .filter(m => m.milestone >= 15 && m.milestone < 30)
+        .reduce((sum, m) => sum + m.count, 0)
+    const completionPct = totalHifzStudents > 0 
+        ? ((completedHifzStudents / totalHifzStudents) * 100).toFixed(1)
+        : "0.0"
+    const HIFZ_COLORS = ["#3b82f6", "#2563eb", "#1d4ed8", "#4f46e5", "#7c3aed", "#9333ea", "#059669"]
+
+    const upcomingEvents = events
+        .filter(ev => {
+            if (!ev?.start_date) return false
+            const endDateStr = ev.end_date || ev.start_date
+            const endTimeStr = (ev.end_time || "23:59").substring(0, 5)
+            const eventEnd = new Date(`${new Date(endDateStr).toISOString().split("T")[0]}T${endTimeStr}:00`)
+            if (isNaN(eventEnd.getTime())) {
+                const todayOnly = new Date()
+                todayOnly.setHours(0, 0, 0, 0)
+                return new Date(endDateStr) >= todayOnly
+            }
+            return eventEnd >= new Date()
+        })
+        .sort((a, b) => {
+            const dateA = new Date(`${new Date(a.start_date).toISOString().split("T")[0]}T${(a.start_time || "00:00").substring(0, 5)}:00`).getTime()
+            const dateB = new Date(`${new Date(b.start_date).toISOString().split("T")[0]}T${(b.start_time || "00:00").substring(0, 5)}:00`).getTime()
+            return dateA - dateB
+        })
 
     return (
         <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-8">
@@ -425,15 +454,25 @@ export default function AdminDashboardPage() {
 
                         {/* Upcoming Events Area */}
                         <div className="border-t border-slate-100 pt-4 dark:border-slate-700 md:border-l md:border-t-0 md:pl-5 md:pt-1">
-                            <h4 className="text-[14px] font-extrabold text-[#1F2937] dark:text-white mb-4">Upcoming Events</h4>
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-[14px] font-extrabold text-[#1F2937] dark:text-white">Upcoming Events</h4>
+                                {upcomingEvents.length > 0 && (
+                                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                                        {upcomingEvents.length} scheduled
+                                    </span>
+                                )}
+                            </div>
                             <div className="max-h-[280px] space-y-4 overflow-y-auto pr-2">
-                                {events.length === 0 ? (
-                                    <p className="text-[13px] text-slate-500">No upcoming events.</p>
+                                {upcomingEvents.length === 0 ? (
+                                    <div className="py-8 text-center">
+                                        <p className="text-[13px] font-medium text-slate-500">No upcoming events.</p>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Click "+ Add New" to schedule an event.</p>
+                                    </div>
                                 ) : (
-                                    events.map((ev, i) => {
+                                    upcomingEvents.map((ev, i) => {
                                         const { border, icon: EvIcon } = getEventStyles(ev.category)
                                         return (
-                                            <div key={i} className={cn("border-l-[3px] pl-4 py-1 relative", border)}>
+                                            <div key={ev.id || i} className={cn("border-l-[3px] pl-4 py-1 relative", border)}>
                                                 <div className="flex items-start justify-between">
                                                     <div>
                                                         <h5 className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{ev.title}</h5>
@@ -577,43 +616,139 @@ export default function AdminDashboardPage() {
                         </div>
                     </div>
 
-                    <div className="h-full min-w-0 rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 xl:order-2 xl:col-span-8">
-                        <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="h-full min-w-0 rounded-xl border border-slate-200/70 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 xl:order-2 xl:col-span-8 flex flex-col justify-between">
+                        {/* Header */}
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-700">
                             <div>
-                                <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Hifz Progress Distribution</h3>
-                                <p className="mt-0.5 text-xs text-slate-500">Active students grouped by completed Juz.</p>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-[16px] font-extrabold text-[#1F2937] dark:text-white">Hifz Progress Distribution</h3>
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-600 dark:bg-blue-900/40 dark:text-blue-300">
+                                        <TrendingUp className="h-3 w-3" /> Live
+                                    </span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-slate-500">Active students grouped by completed Juz milestones.</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="rounded-lg bg-blue-50 px-3 py-2 text-right dark:bg-blue-950/30">
+                                <div className="rounded-lg bg-blue-50/80 px-3 py-1.5 text-right dark:bg-blue-950/40">
                                     <p className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Active Hifz</p>
-                                    <p className="text-lg font-black leading-none text-blue-700 dark:text-blue-300">{loading ? "-" : totalHifzStudents}</p>
+                                    <p className="text-base font-black leading-tight text-blue-700 dark:text-blue-300">{loading ? "-" : totalHifzStudents}</p>
                                 </div>
-                                <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-950/30">
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Hafiz</p>
-                                    <p className="text-lg font-black leading-none text-emerald-700 dark:text-emerald-300">{loading ? "-" : completedHifzStudents}</p>
+                                <div className="rounded-lg bg-emerald-50/80 px-3 py-1.5 text-right dark:bg-emerald-950/40">
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Hafiz (30)</p>
+                                    <p className="text-base font-black leading-tight text-emerald-700 dark:text-emerald-300">{loading ? "-" : completedHifzStudents}</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="relative h-[250px] min-w-0">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={hifzChartData} layout="vertical" margin={{ top: 8, right: 14, left: 2, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                                    <YAxis type="category" dataKey="label" width={76} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                                    <Tooltip cursor={{ fill: "#f8fafc" }} contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", boxShadow: "0 8px 24px rgba(15,23,42,.08)" }} />
-                                    <Bar dataKey="students" name="Students" radius={[0, 6, 6, 0]} maxBarSize={18}>
-                                        {hifzChartData.map((item, index) => <Cell key={item.label} fill={HIFZ_COLORS[index]} />)}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                            {!loading && totalHifzStudents === 0 && (
-                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                    <div className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900/90">
-                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">No Hifz progress recorded yet</p>
-                                        <p className="mt-0.5 text-xs text-slate-500">The chart will fill as students complete Juz.</p>
+
+                        {/* Split Body: Left = Visual Distribution Bars, Right = Insight / Stage Cards */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch flex-1">
+                            {/* Left Column: Polished Horizontal Visualizer (7 cols) */}
+                            <div className="lg:col-span-7 flex flex-col justify-center space-y-2.5">
+                                {hifzMilestones.map((m, idx) => {
+                                    const label = m.milestone === 30 ? "Hafiz (30 Juz)" : `${m.milestone}-${m.milestone + 4} Juz`
+                                    const count = m.count
+                                    const pctOfTotal = totalHifzStudents > 0 ? (count / totalHifzStudents) * 100 : 0
+                                    const isCompleted = m.milestone === 30
+                                    const barColor = HIFZ_COLORS[idx]
+
+                                    return (
+                                        <div key={m.milestone} className="group flex items-center gap-3 text-xs">
+                                            <span className={cn(
+                                                "w-24 shrink-0 font-bold truncate text-right",
+                                                isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-slate-600 dark:text-slate-300"
+                                            )}>
+                                                {label}
+                                            </span>
+                                            
+                                            <div className="relative flex-1 h-5 bg-slate-100 dark:bg-slate-700/60 rounded-md overflow-hidden p-0.5">
+                                                <div 
+                                                    className="h-full rounded transition-all duration-500 ease-out"
+                                                    style={{ 
+                                                        width: `${Math.max(pctOfTotal, count > 0 ? 4 : 0)}%`,
+                                                        backgroundColor: barColor
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <div className="w-16 shrink-0 text-right flex items-center justify-end gap-1">
+                                                <span className="font-extrabold text-slate-800 dark:text-slate-100">{loading ? "-" : count}</span>
+                                                <span className="text-[10px] font-semibold text-slate-400">({pctOfTotal.toFixed(0)}%)</span>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+
+                            {/* Right Column: Stage Summaries & Quick Link (5 cols) */}
+                            <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 rounded-xl bg-slate-50/70 p-3.5 border border-slate-100 dark:bg-slate-900/40 dark:border-slate-700/60">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Stages Breakdown</span>
+                                        <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">{completionPct}% Complete Rate</span>
+                                    </div>
+
+                                    {/* 3 mini cards for Foundation, Advanced, Hafiz */}
+                                    <div className="grid grid-cols-1 gap-2">
+                                        <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 border border-slate-200/60 shadow-xs dark:bg-slate-800 dark:border-slate-700">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                                                <div>
+                                                    <p className="text-[12px] font-bold text-slate-700 dark:text-slate-200">Foundation Stage</p>
+                                                    <p className="text-[10px] text-slate-400">0 - 14 Juz</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[14px] font-black text-slate-800 dark:text-white">{loading ? "-" : foundationCount}</span>
+                                                <span className="text-[10px] text-slate-400 block font-semibold">
+                                                    {totalHifzStudents > 0 ? ((foundationCount / totalHifzStudents) * 100).toFixed(0) : 0}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 border border-slate-200/60 shadow-xs dark:bg-slate-800 dark:border-slate-700">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2.5 w-2.5 rounded-full bg-purple-600" />
+                                                <div>
+                                                    <p className="text-[12px] font-bold text-slate-700 dark:text-slate-200">Advanced Stage</p>
+                                                    <p className="text-[10px] text-slate-400">15 - 29 Juz</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[14px] font-black text-slate-800 dark:text-white">{loading ? "-" : advancedCount}</span>
+                                                <span className="text-[10px] text-slate-400 block font-semibold">
+                                                    {totalHifzStudents > 0 ? ((advancedCount / totalHifzStudents) * 100).toFixed(0) : 0}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between rounded-lg bg-emerald-50/80 px-3 py-2 border border-emerald-200/70 shadow-xs dark:bg-emerald-950/30 dark:border-emerald-800/50">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                                                <div>
+                                                    <p className="text-[12px] font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1">
+                                                        Completed Hafiz
+                                                    </p>
+                                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400">30 Juz Complete</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[14px] font-black text-emerald-700 dark:text-emerald-300">{loading ? "-" : completedHifzStudents}</span>
+                                                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400 block font-semibold">
+                                                    {totalHifzStudents > 0 ? ((completedHifzStudents / totalHifzStudents) * 100).toFixed(0) : 0}%
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
+
+                                {/* Quick Action Link */}
+                                <Link 
+                                    href="/admin/hifz/tracking" 
+                                    className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1.5 text-[12px] font-bold text-slate-700 transition-colors hover:bg-slate-100 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                    View Hifz Tracking <ArrowUpRight className="h-3.5 w-3.5" />
+                                </Link>
+                            </div>
                         </div>
                     </div>
 

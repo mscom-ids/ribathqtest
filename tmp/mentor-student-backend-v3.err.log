@@ -1,0 +1,31 @@
+[SLOW API] POST /api/mobile/auth/login 200 1561.7ms
+[SLOW DB] 306ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[SLOW DB] 1536ms params=1 sql="SELECT COALESCE(MAX(sequence_id), 0)::text AS cursor FROM mobile_sync_changes WHERE audience_staff_id = $1"
+[SLOW API] GET /api/mobile/bootstrap 200 2627.3ms
+[SLOW API] GET /api/mobile/students/STG-M001/profile 200 611.7ms
+[SLOW DB] 382ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 382ms params=1 sql="SELECT surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL"
+[SLOW DB] 1430ms params=3 sql="SELECT schedule_id, date, status, marked_by FROM student_attendance_marks WHERE student_id = $1 AND date BETWEEN $2::date AND $3::date"
+[SLOW DB] 1430ms params=3 sql="SELECT a.id, a.mentor_id, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uui"
+[SLOW API] GET /api/mobile/students/STG-M001/hifz-month 200 1753.2ms
+[SLOW DB] 278ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW API] POST /api/mobile/mutations/hifz-register 409 1712.9ms
+[SLOW API] POST /api/mobile/auth/refresh 200 1321.4ms
+[SLOW API] POST /api/mobile/auth/login 200 1939.3ms
+[SLOW API] GET /api/mobile/bootstrap 200 1019.7ms
+[SLOW DB] 406ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[SLOW API] GET /api/mobile/attendance/day 200 615.9ms
+[SLOW API] GET /api/mobile/attendance/sessions/6be91d92-14cb-4df4-85f4-88b523209481 200 1026.9ms
+[SLOW API] GET /api/mobile/mentor/workspace 200 622.5ms
+[SLOW DB] 299ms params=5 sql="WITH recent AS ( SELECT p.id, 'payment'::text AS type, p.student_id, s.name AS student_name, 'Payment received'::text AS description, NULL::text AS category_name, p.amount, p.date, p.created_at, st.name AS recorded_by_na"
+[SLOW API] GET /api/mobile/finance/workspace 200 938.7ms
+[SLOW API] GET /api/mobile/mentor/workspace 200 616.1ms
+[SLOW DB] 284ms params=2 sql="SELECT id, staff_id, platform, installation_id, last_sync_cursor FROM mobile_devices WHERE id = $1 AND staff_id = $2 AND revoked_at IS NULL LIMIT 1"
+[SLOW API] GET /api/mobile/mentor/workspace 200 697.5ms
+[SLOW DB] 278ms params=3 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW DB] 278ms params=3 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[SLOW DB] 438ms params=1 sql="SELECT surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL"
+[SLOW DB] 439ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date BETWEEN $1::date AND $2::date"
+[SLOW DB] 449ms params=2 sql="SELECT s.adm_no AS id, s.name, s.photo_url, s.status, s.dob, s.gender, s.batch_year, s.admission_date, s.address, s.place, s.local_body, s.pincode, s.post, s.district, s.state, s.nationality, s.country, s.father_name, s."
+[SLOW API] GET /api/mobile/students/STG-M001/profile 200 914.7ms
+[SLOW API] GET /api/mobile/students/STG-M001/hifz-month 200 912.7ms

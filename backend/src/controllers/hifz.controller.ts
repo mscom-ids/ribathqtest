@@ -1354,9 +1354,10 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
     }
 };
 
-const monthlyRegisterError = (message: string, statusCode = 400) => {
+const monthlyRegisterError = (message: string, statusCode = 400, code?: string) => {
     const error = new Error(message) as any;
     error.statusCode = statusCode;
+    if (code) error.code = code;
     return error;
 };
 
@@ -1496,12 +1497,30 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
         const rawCreates = req.body?.creates;
         const rawUpdates = req.body?.updates;
         const rawDeleteIds = req.body?.delete_ids;
+        const rawMutationId = req.body?.mutation_id;
+        const mutationId = rawMutationId ? String(rawMutationId).trim() : null;
+        const rawExpectedVersions = req.body?.expected_versions;
 
         if (!studentId || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate) || !VALID_HIFZ_MODES.has(mode)) {
             throw monthlyRegisterError('student_id, entry_date, and a valid mode are required.');
         }
         if (requestedSessionId && !UUID_PATTERN.test(requestedSessionId)) {
             throw monthlyRegisterError('Invalid Hifz session.');
+        }
+        if (mutationId && !UUID_PATTERN.test(mutationId)) {
+            throw monthlyRegisterError('Invalid Hifz mutation id.');
+        }
+        if (rawExpectedVersions !== undefined
+            && (!rawExpectedVersions || typeof rawExpectedVersions !== 'object' || Array.isArray(rawExpectedVersions))) {
+            throw monthlyRegisterError('expected_versions must be an object.');
+        }
+        const expectedVersions = new Map<string, number>();
+        for (const [id, rawVersion] of Object.entries(rawExpectedVersions || {})) {
+            const version = Number(rawVersion);
+            if (!UUID_PATTERN.test(id) || !Number.isSafeInteger(version) || version < 1) {
+                throw monthlyRegisterError('Invalid expected Hifz entry version.');
+            }
+            expectedVersions.set(id, version);
         }
         if ((rawCreates !== undefined && !Array.isArray(rawCreates))
             || (rawUpdates !== undefined && !Array.isArray(rawUpdates))
@@ -1556,14 +1575,42 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
             getStaffId(req),
             getAcademicYearContext(db, req.query.academic_year_id),
         ]);
+        const deviceId = (req as any).user?.device_id ? String((req as any).user.device_id) : null;
+        if (mutationId && (!staffId || !deviceId || !UUID_PATTERN.test(deviceId))) {
+            throw monthlyRegisterError('A registered mobile session is required for this mutation.', 403, 'MOBILE_DEVICE_REQUIRED');
+        }
 
         client = await db.getClient();
         await client.query('BEGIN');
         transactionOpen = true;
+        if (mutationId) {
+            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${staffId}:${mutationId}`]);
+            const receipt = await client.query(
+                `SELECT status, response
+                 FROM mobile_mutation_receipts
+                 WHERE staff_id = $1 AND mutation_id = $2
+                 LIMIT 1`,
+                [staffId, mutationId],
+            );
+            if (receipt.rows[0]) {
+                await client.query('COMMIT');
+                transactionOpen = false;
+                client.release();
+                client = null;
+                const monthRegister = await getMonthlyRegister(req, studentId, entryDate.slice(0, 7));
+                return res.json({
+                    ...(receipt.rows[0].response || {}),
+                    replayed: true,
+                    day: monthRegister.days.find((day: any) => day.date === entryDate) || null,
+                    summary: monthRegister.summary,
+                    monthRegister,
+                });
+            }
+        }
 
         const existingRows = referencedIds.length > 0
             ? (await client.query(
-                `SELECT *
+                `SELECT *, (extract(epoch from updated_at) * 1000)::bigint AS entity_version
                  FROM hifz_logs
                  WHERE id = ANY($1::uuid[])
                    AND deleted_at IS NULL
@@ -1572,13 +1619,20 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
             )).rows
             : [];
         if (existingRows.length !== referencedIds.length) {
-            throw monthlyRegisterError('One or more Hifz entries no longer exist.', 409);
+            throw monthlyRegisterError('One or more Hifz entries no longer exist.', 409, 'HIFZ_ENTRY_CHANGED');
+        }
+        if (mutationId && referencedIds.some(id => !expectedVersions.has(id))) {
+            throw monthlyRegisterError('The saved entry version is required before editing or deleting offline.', 409, 'HIFZ_ENTRY_CHANGED');
         }
         for (const existing of existingRows) {
             if (String(existing.student_id) !== studentId
                 || toDateKey(existing.entry_date) !== entryDate
                 || String(existing.mode) !== mode) {
                 throw monthlyRegisterError('A Hifz entry cannot be moved to another student, date, or activity.');
+            }
+            const expected = expectedVersions.get(String(existing.id));
+            if (expected !== undefined && Number(existing.entity_version) !== expected) {
+                throw monthlyRegisterError('This Hifz entry changed on another device. Refresh before replacing it.', 409, 'HIFZ_ENTRY_CHANGED');
             }
         }
         if (hasWrites) {
@@ -1599,7 +1653,7 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
                 requestedSessionId: requestedSessionId || fallbackExisting?.session_id || null,
             });
             if (!eligibility.allowed) {
-                throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409);
+                throw monthlyRegisterError(eligibility.reason || 'This Hifz entry is not eligible.', 409, 'HIFZ_ELIGIBILITY_CHANGED');
             }
             effectiveSessionId = eligibility.sessionId;
         }
@@ -1706,6 +1760,54 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
             createdRows = result.rows;
         }
 
+        const appliedResponse = {
+            success: true,
+            mutationId,
+            status: 'applied',
+            replayed: false,
+            entries: [...updatedRows, ...createdRows],
+            deleted_ids: deletedRows.map((row: any) => String(row.id)),
+        };
+        if (mutationId && staffId) {
+            const syncEvents = [
+                ...[...updatedRows, ...createdRows].map((row: any) => ({
+                    id: String(row.id),
+                    operation: 'upsert',
+                    version: Math.max(1, new Date(row.updated_at || Date.now()).getTime()),
+                    payload: {
+                        id: String(row.id), student_id: studentId, entry_date: entryDate, mode,
+                        surah_name: row.surah_name, start_v: row.start_v, end_v: row.end_v,
+                        notes: row.notes || null,
+                        entity_version: Math.max(1, new Date(row.updated_at || Date.now()).getTime()),
+                    },
+                })),
+                ...deletedRows.map((row: any) => ({
+                    id: String(row.id), operation: 'delete', version: Date.now(),
+                    payload: { student_id: studentId, entry_date: entryDate, mode },
+                })),
+            ];
+            if (syncEvents.length > 0) {
+                const values: any[] = [];
+                const tuples = syncEvents.map((event, index) => {
+                    const offset = index * 6;
+                    values.push(staffId, event.id, event.operation, event.version, JSON.stringify(event.payload), 'hifz_log');
+                    return `($${offset + 1}::uuid,$${offset + 6},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5}::jsonb)`;
+                });
+                await client.query(
+                    `INSERT INTO mobile_sync_changes (
+                       audience_staff_id, entity_type, entity_id, operation, entity_version, payload
+                     ) VALUES ${tuples.join(',')}`,
+                    values,
+                );
+            }
+        }
+        if (mutationId) {
+            await client.query(
+                `INSERT INTO mobile_mutation_receipts (staff_id, device_id, mutation_id, status, response)
+                 VALUES ($1, $2, $3, 'applied', $4::jsonb)`,
+                [staffId, deviceId, mutationId, JSON.stringify(appliedResponse)],
+            );
+        }
         await client.query('COMMIT');
         transactionOpen = false;
         client.release();
@@ -1724,9 +1826,7 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
         }
 
         return res.json({
-            success: true,
-            entries: [...updatedRows, ...createdRows],
-            deleted_ids: deletedRows.map((row: any) => String(row.id)),
+            ...appliedResponse,
             day: monthRegister?.days?.find((day: any) => day.date === entryDate) || null,
             summary: monthRegister?.summary || null,
             monthRegister,
@@ -1743,6 +1843,7 @@ export const batchSaveMonthlyHifzEntries = async (req: Request, res: Response) =
         }
         return res.status(error.statusCode || 500).json({
             success: false,
+            code: error.code || (error.statusCode === 409 ? 'HIFZ_CONFLICT' : undefined),
             error: error.statusCode ? error.message : hifzLogErrorMessage(error),
         });
     } finally {
