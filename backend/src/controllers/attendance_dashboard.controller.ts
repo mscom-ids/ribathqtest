@@ -618,20 +618,13 @@ export const getSchedules = async (req: Request, res: Response) => {
             return res.json({ success: true, data: cached });
         }
 
+        // This endpoint returns reusable timetable definitions, not one dated
+        // attendance session. Keep dated cancellation/revision state out of this
+        // query so it neither needs an unbound date parameter nor depends on the
+        // optional mobile-sync schema being installed.
         let query = `SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo,
-                            COALESCE((
-                                SELECT revision::text
-                                FROM mobile_attendance_session_revisions mobile_revision
-                                WHERE mobile_revision.schedule_id = a.id
-                                  AND mobile_revision.session_date = $2::date
-                            ), '0') AS session_revision,
-                            (
-                                SELECT to_jsonb(cancellation)
-                                FROM attendance_cancellations cancellation
-                                WHERE cancellation.schedule_id = a.id
-                                  AND cancellation.date = $2::date
-                                LIMIT 1
-                            ) AS attendance_cancellation,
+                            '0'::text AS session_revision,
+                            NULL::jsonb AS attendance_cancellation,
                             ${SCHEDULE_GROUPS_SELECT},
                             c.name as class_setup_name, c.standard as class_standard,
                             c.section as class_section, c.type as class_department
@@ -1743,14 +1736,13 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const yearContext = await getAcademicYearContext(db, academic_year_id);
         const effectiveRequestAcademicYearId = yearContext.academicYearId;
         const scheduleParams: any[] = [schedule_id, date || null];
+        // Session revisions belong to the native mobile conflict protocol. Web
+        // attendance must remain usable before that optional migration is
+        // deployed, so expose the neutral revision without joining its table.
+        // The mobile sync API performs its own authoritative revision lookup.
         let scheduleQuery = `SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time,
                                     a.academic_year_id, a.mentor_id, a.mobile_revision,
-                                    COALESCE((
-                                        SELECT revision::text
-                                        FROM mobile_attendance_session_revisions mobile_revision
-                                        WHERE mobile_revision.schedule_id = a.id
-                                          AND mobile_revision.session_date = $2::date
-                                    ), '0') AS session_revision,
+                                    '0'::text AS session_revision,
                                     ${SCHEDULE_GROUPS_SELECT},
                                     COALESCE((
                                         SELECT jsonb_agg(jsonb_build_object(
