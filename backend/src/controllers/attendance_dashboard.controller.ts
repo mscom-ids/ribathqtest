@@ -2294,6 +2294,7 @@ export const markAttendance = async (req: Request, res: Response) => {
             // class was cancelled after the modal loaded but just before save.
             const lockedState = await client.query(
                 `SELECT a.is_deleted, a.day_of_week, a.effective_from, a.effective_until,
+                        c.schedule_id AS cancellation_schedule_id,
                         c.cancelled_standards, c.cancelled_students, c.reason
                  FROM attendance_schedules a
                  LEFT JOIN attendance_cancellations c
@@ -2315,7 +2316,12 @@ export const markAttendance = async (req: Request, res: Response) => {
                 await client.query('ROLLBACK');
                 return res.status(409).json({ success: false, code: 'SESSION_CHANGED', error: 'This class is not active on the selected date.' });
             }
-            if (isFullCancellation(currentSchedule)) {
+            // A LEFT JOIN always returns the schedule row. Only treat it as a
+            // cancellation when the joined cancellation record actually exists;
+            // otherwise null cancellation fields look identical to a full
+            // cancellation (whose standards/students arrays are intentionally
+            // empty) and every normal web save is rejected with HTTP 409.
+            if (currentSchedule.cancellation_schedule_id && isFullCancellation(currentSchedule)) {
                 await client.query('ROLLBACK');
                 return res.status(409).json({ success: false, code: 'SESSION_CANCELLED', error: currentSchedule.reason || 'This class was cancelled.' });
             }
