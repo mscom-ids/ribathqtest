@@ -446,7 +446,8 @@ export default function StaffAttendancePage() {
             ))
             setModalOpen(false)
         } catch (error: any) {
-            toast.error(`Failed to save: ${error.message || 'Unknown error'}`)
+            const serverMessage = error?.response?.data?.error || error?.response?.data?.message
+            toast.error(`Failed to save: ${serverMessage || error.message || 'Unknown error'}`)
             console.error(error)
         } finally {
             setSaving(false)

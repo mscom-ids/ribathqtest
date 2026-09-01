@@ -2079,12 +2079,12 @@ export const markAttendance = async (req: Request, res: Response) => {
                 error: 'This timetable slot belongs to another mentor.',
             });
         }
-        if (currentYearContext.academicYearId && schedule.academic_year_id !== currentYearContext.academicYearId) {
-            return res.status(409).json({
-                success: false,
-                error: "This attendance schedule belongs to a previous academic year. Please use the current academic year timetable.",
-            });
-        }
+        // Do not reject an online web save from the globally cached
+        // "current year" pointer. The dated schedules endpoint already scopes
+        // the session shown to the mentor, and the transaction below rechecks
+        // the schedule's effective dates, weekday, deletion and cancellation
+        // state under a lock. Using the cached year pointer here caused valid
+        // production sessions to return a false 409 during year-cache drift.
 
         // Outside status is enforced on the server. This protects against stale
         // attendance modals and removes any earlier mark saved before a leave was
@@ -2383,6 +2383,12 @@ export const markAttendance = async (req: Request, res: Response) => {
             client.release();
         }
     } catch (err: any) {
+        console.error('[markAttendance Error]', {
+            schedule_id: req.body?.schedule_id,
+            date: req.body?.date,
+            code: err?.code,
+            message: err?.message,
+        });
         res.status(500).json({ success: false, error: err.message });
     }
 };
