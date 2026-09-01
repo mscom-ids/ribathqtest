@@ -1736,12 +1736,14 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
         const yearContext = await getAcademicYearContext(db, academic_year_id);
         const effectiveRequestAcademicYearId = yearContext.academicYearId;
         const scheduleParams: any[] = [schedule_id, date || null];
-        // Session revisions belong to the native mobile conflict protocol. Web
-        // attendance must remain usable before that optional migration is
-        // deployed, so expose the neutral revision without joining its table.
-        // The mobile sync API performs its own authoritative revision lookup.
+        // Schedule/session revisions belong to the native mobile conflict
+        // protocol. Web attendance must remain usable before that optional
+        // migration is deployed, so expose neutral revisions without selecting
+        // either its added column or its table. The mobile sync API performs its
+        // own authoritative revision lookup.
         let scheduleQuery = `SELECT a.id, a.name, a.standards, a.class_type, a.start_time, a.end_time,
-                                    a.academic_year_id, a.mentor_id, a.mobile_revision,
+                                    a.academic_year_id, a.mentor_id,
+                                    '1'::text AS mobile_revision,
                                     '0'::text AS session_revision,
                                     ${SCHEDULE_GROUPS_SELECT},
                                     COALESCE((
