@@ -1,365 +1,85 @@
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { use, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Plus, Trash2, ClipboardList, Book, Calendar, Shield, Hash, Search, BookOpen } from "lucide-react"
+import { ArrowLeft, CalendarDays, ChevronRight, GraduationCap, Loader2, Trash2 } from "lucide-react"
 import { format } from "date-fns"
-
+import api from "@/lib/api"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
-import api from "@/lib/api"
 
-type Exam = {
-    id: string
-    title: string
-    department: string
-    start_date: string
-    is_active: boolean
-}
+type Exam = { id: string; title: string; start_date: string; is_active: boolean }
+type Subject = { id: string; max_marks: number; standard: string | null }
+const standards = ["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]
+const accents = [
+    { bar: "bg-blue-500", icon: "bg-blue-50 text-blue-600", hover: "hover:border-blue-200" },
+    { bar: "bg-violet-500", icon: "bg-violet-50 text-violet-600", hover: "hover:border-violet-200" },
+    { bar: "bg-emerald-500", icon: "bg-emerald-50 text-emerald-600", hover: "hover:border-emerald-200" },
+    { bar: "bg-orange-500", icon: "bg-orange-50 text-orange-600", hover: "hover:border-orange-200" },
+]
 
-type Subject = {
-    id: string
-    name: string
-    max_marks: number
-    min_marks: number
-    standard?: string | null
-}
-
-export default function ExamDetailsPage({ params }: { params: Promise<{ id: string, department: string }> }) {
+export default function ExamPage({ params }: { params: Promise<{ id: string; department: string }> }) {
     const { id, department } = use(params)
     const router = useRouter()
-
     const [exam, setExam] = useState<Exam | null>(null)
     const [subjects, setSubjects] = useState<Subject[]>([])
     const [loading, setLoading] = useState(true)
-
-    // New Subject Form
-    const [newSubjectName, setNewSubjectName] = useState("")
-    const [newSubjectMax, setNewSubjectMax] = useState(100)
-    const [newSubjectStandard, setNewSubjectStandard] = useState<string>("All")
-    const [addingSubject, setAddingSubject] = useState(false)
+    const [deleting, setDeleting] = useState(false)
+    const [confirmation, setConfirmation] = useState("")
 
     useEffect(() => {
-        loadData()
+        api.get(`/exams/${id}`).then(response => {
+            setExam(response.data.exam)
+            setSubjects(response.data.subjects || [])
+        }).catch(error => alert(error.response?.data?.error || "Failed to load exam"))
+            .finally(() => setLoading(false))
     }, [id])
 
-    async function loadData() {
-        setLoading(true)
+    async function setStatus(is_active: boolean) {
         try {
-            const res = await api.get(`/exams/${id}`)
-            if (res.data.success) {
-                setExam(res.data.exam)
-                setSubjects(res.data.subjects)
-            }
-        } catch (error) {
-            console.error("Failed to load exam details", error)
-        }
-        setLoading(false)
+            await api.patch(`/exams/${id}/status`, { is_active })
+            setExam(current => current ? { ...current, is_active } : current)
+        } catch (error: any) { alert(error.response?.data?.error || "Failed to update exam") }
     }
 
-    async function handleAddSubject() {
-        if (!newSubjectName) return
-        setAddingSubject(true)
-
-        try {
-            const res = await api.post(`/exams/${id}/subjects`, {
-                name: newSubjectName,
-                max_marks: newSubjectMax,
-                min_marks: Math.round(newSubjectMax * 0.4), // Default 40% pass
-                standard: newSubjectStandard === "All" ? null : newSubjectStandard
-            })
-
-            if (res.data.success) {
-                setNewSubjectName("")
-                setNewSubjectMax(100)
-                loadData()
-            } else {
-                alert("Failed to add subject: " + res.data.error)
-            }
-        } catch (error: any) {
-            alert(error.message)
-        }
-        setAddingSubject(false)
+    async function deleteExam() {
+        if (!exam || confirmation !== exam.title) return
+        setDeleting(true)
+        try { await api.delete(`/exams/${id}`); router.replace(`/admin/${department}/exams`) }
+        catch (error: any) { alert(error.response?.data?.error || "Failed to delete exam"); setDeleting(false) }
     }
 
-    async function handleDeleteSubject(subjectId: string) {
-        if (!confirm("Are you sure? This will delete all marks for this subject.")) return
-
-        try {
-            const res = await api.delete(`/exams/subjects/${subjectId}`)
-            if (res.data.success) {
-                loadData()
-            } else {
-                alert("Failed to delete subject: " + res.data.error)
-            }
-        } catch (error: any) {
-            alert(error.message)
-        }
-    }
-
-    async function toggleStatus(isActive: boolean) {
-        const action = isActive ? "Reopen" : "Complete";
-        if (!confirm(`Are you sure you want to ${action} this exam?`)) return
-
-        try {
-            const res = await api.patch(`/exams/${id}/status`, { is_active: isActive })
-            if (res.data.success) {
-                loadData()
-            } else {
-                alert("Failed to update status: " + res.data.error)
-            }
-        } catch (error: any) {
-            alert("Failed to update status: " + error.message)
-        }
-    }
-
-    if (loading && !exam) return <div className="p-8 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>
+    if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-emerald-600" /></div>
     if (!exam) return <div className="p-8">Exam not found</div>
 
-    return (
-        <div className="max-w-6xl mx-auto space-y-8 pb-20">
-            {/* Elegant Header Section */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 shadow-2xl">
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <Book className="w-64 h-64" />
-                </div>
+    const configuredStandards = standards.filter(value => subjects.some(subject => subject.standard === value)).length
 
-                <div className="relative z-10 flex flex-col md:flex-row justify-between gap-6">
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Link href={`/admin/${department}/exams`}>
-                                <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white hover:bg-white/10 -ml-2">
-                                    <ArrowLeft className="w-4 h-4 mr-2" /> Back to Exams
-                                </Button>
-                            </Link>
-                        </div>
-
-                        <div>
-                            <div className="flex items-center gap-3 mb-2">
-                                <Badge variant="outline" className="bg-white/10 text-white border-none hover:bg-white/20">
-                                    {exam.department}
-                                </Badge>
-                                <Badge variant="secondary" className={exam.is_active ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-slate-500"}>
-                                    {exam.is_active ? "Active" : "Closed"}
-                                </Badge>
-                            </div>
-                            <h1 className="text-4xl font-bold tracking-tight">{exam.title}</h1>
-                            <div className="flex items-center gap-6 mt-4 text-slate-300">
-                                <div className="flex items-center gap-2">
-                                    <Calendar className="w-4 h-4" />
-                                    <span>Starts {format(new Date(exam.start_date), "MMM d, yyyy")}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Shield className="w-4 h-4" />
-                                    <span>Administrator View</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col items-end justify-end gap-3">
-                        <div className="flex gap-2">
-                            {exam.is_active ? (
-                                <Button
-                                    onClick={() => toggleStatus(false)}
-                                    variant="outline"
-                                    className="bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
-                                >
-                                    Complete Exam
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={() => toggleStatus(true)}
-                                    variant="outline"
-                                    className="bg-white/10 text-white border-white/20 hover:bg-white/20 hover:text-white"
-                                >
-                                    Reopen Exam
-                                </Button>
-                            )}
-
-                            <Link href={`/admin/${department}/exams/${id}/marks`}>
-                                <Button size="lg" className="bg-white text-slate-900 hover:bg-slate-100 shadow-lg border-none text-base font-semibold px-8">
-                                    <ClipboardList className="mr-2 h-5 w-5 text-emerald-600" />
-                                    Enter Marks
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
-                </div>
+    return <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-10">
+        <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 px-5 py-4 text-white shadow-sm sm:px-6">
+            <div className="pointer-events-none absolute inset-0 opacity-15" style={{ backgroundImage: "linear-gradient(to right, rgba(255,255,255,.5) 1px, transparent 1px)", backgroundSize: "76px 100%" }} />
+            <div className="absolute -right-8 top-1/2 h-28 w-28 -translate-y-1/2 rounded-full border-[10px] border-white/15" />
+            <div className="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0"><button onClick={() => router.push(`/admin/${department}/exams`)} className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-emerald-100 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" />All exams</button><div className="flex flex-wrap items-center gap-2"><Badge className={exam.is_active ? "bg-lime-400 text-emerald-950 hover:bg-lime-400" : "bg-slate-500 text-white"}>{exam.is_active ? "Active" : "Completed"}</Badge><span className="flex items-center gap-1 text-xs font-medium text-emerald-100"><CalendarDays className="h-3.5 w-3.5" />Starts {format(new Date(exam.start_date), "dd MMM yyyy")}</span></div><h1 className="mt-1.5 truncate text-xl font-bold sm:text-2xl">{exam.title}</h1></div>
+                <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setStatus(!exam.is_active)} className="border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">{exam.is_active ? "Complete exam" : "Reopen exam"}</Button><AlertDialog><AlertDialogTrigger asChild><Button size="sm" variant="outline" className="border-red-100/30 bg-red-500/15 text-white hover:bg-red-500/30 hover:text-white"><Trash2 className="mr-1.5 h-4 w-4" />Delete</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this exam permanently?</AlertDialogTitle><AlertDialogDescription>All subjects and student results in this exam will be deleted. This cannot be undone.</AlertDialogDescription></AlertDialogHeader><div className="space-y-2"><Label>Type “{exam.title}” to confirm</Label><Input value={confirmation} onChange={event => setConfirmation(event.target.value)} /></div><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={deleteExam} disabled={deleting || confirmation !== exam.title} className="bg-red-600 hover:bg-red-700">{deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete permanently</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div>
             </div>
+        </header>
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Left Column: Quick Stats / Info (Could be added here, expanding for layout balance) */}
-                <div className="lg:col-span-3">
-                    <Card className="border-none shadow-lg overflow-hidden bg-white dark:bg-slate-950">
-                        <CardHeader className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 sticky top-0 z-10">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center">
-                                        <Book className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                                            Subjects & Syllabus
-                                        </CardTitle>
-                                        <CardDescription className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">
-                                            Manage exam subjects
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                                <div className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                    Total: <span className="text-slate-900 dark:text-white ml-1">{subjects.length}</span>
-                                </div>
-                            </div>
-                        </CardHeader>
-
-                        <CardContent className="p-0">
-                            {/* Add Subject Section */}
-                            <div className="p-6 bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                    <div className="md:col-span-6 space-y-1.5">
-                                        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Subject Name</Label>
-                                        <div className="relative">
-                                            <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                                                <Book className="h-4 w-4 text-slate-400" />
-                                            </div>
-                                            <Input
-                                                placeholder="e.g. Mathematics"
-                                                value={newSubjectName}
-                                                onChange={e => setNewSubjectName(e.target.value)}
-                                                className="pl-9 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:border-emerald-500 transition-all"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="md:col-span-3 space-y-1.5">
-                                        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Standard</Label>
-                                        <Select value={newSubjectStandard} onValueChange={setNewSubjectStandard}>
-                                            <SelectTrigger className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800">
-                                                <SelectValue placeholder="All" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="All">All Standards</SelectItem>
-                                                {["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"].map(std => (
-                                                    <SelectItem key={std} value={std}>{std}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div className="md:col-span-2 space-y-1.5">
-                                        <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Max Marks</Label>
-                                        <Input
-                                            type="number"
-                                            value={newSubjectMax}
-                                            onChange={e => setNewSubjectMax(parseInt(e.target.value) || 0)}
-                                            className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
-                                        />
-                                    </div>
-
-                                    <div className="md:col-span-1">
-                                        <Button
-                                            onClick={handleAddSubject}
-                                            disabled={!newSubjectName || addingSubject}
-                                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/20"
-                                        >
-                                            {addingSubject ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Plus className="w-5 h-5" />}
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Subjects Table */}
-                            <div className="overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900">
-                                            <TableHead className="pl-6 w-16 text-xs font-bold text-slate-500 uppercase">#</TableHead>
-                                            <TableHead className="text-xs font-bold text-slate-500 uppercase">Subject Name</TableHead>
-                                            <TableHead className="text-xs font-bold text-slate-500 uppercase">Standard</TableHead>
-                                            <TableHead className="text-xs font-bold text-slate-500 uppercase">Marks Config</TableHead>
-                                            <TableHead className="text-right pr-6 w-20"></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {subjects.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-16">
-                                                    <div className="flex flex-col items-center gap-3">
-                                                        <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
-                                                            <BookOpen className="h-6 w-6 text-slate-300" />
-                                                        </div>
-                                                        <p className="text-slate-500 font-medium">No subjects added yet</p>
-                                                        <p className="text-slate-400 text-sm">Add one above to get started</p>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : subjects.map((subject, index) => (
-                                            <TableRow key={subject.id} className="group transition-all hover:bg-slate-50 dark:hover:bg-slate-900 border-b border-slate-100 dark:border-slate-800/50">
-                                                <TableCell className="pl-6 font-medium text-slate-400">
-                                                    {(index + 1).toString().padStart(2, '0')}
-                                                </TableCell>
-                                                <TableCell className="font-semibold text-slate-700 dark:text-slate-200">
-                                                    {subject.name}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {subject.standard ? (
-                                                        <Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-900/50 px-2 py-0.5 rounded-md font-normal">
-                                                            {subject.standard} Std
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 px-2 py-0.5 rounded-md font-normal hover:bg-slate-200">
-                                                            Common
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-3 text-sm">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Max</span>
-                                                            <span className="font-bold text-slate-700 dark:text-slate-300">{subject.max_marks}</span>
-                                                        </div>
-                                                        <div className="h-6 w-px bg-slate-100 dark:bg-slate-800"></div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Min</span>
-                                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{subject.min_marks}</span>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right pr-6">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                                        onClick={() => handleDeleteSubject(subject.id)}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
+        <div className="grid grid-cols-3 gap-3">
+            <Card className="border-slate-200/70 shadow-sm"><CardContent className="p-3.5 sm:p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Standards</p><p className="mt-0.5 text-2xl font-extrabold text-blue-700">{standards.length}</p></CardContent></Card>
+            <Card className="border-slate-200/70 shadow-sm"><CardContent className="p-3.5 sm:p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Configured</p><p className="mt-0.5 text-2xl font-extrabold text-emerald-700">{configuredStandards}</p></CardContent></Card>
+            <Card className="border-slate-200/70 shadow-sm"><CardContent className="p-3.5 sm:p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Subjects</p><p className="mt-0.5 text-2xl font-extrabold text-violet-700">{subjects.length}</p></CardContent></Card>
         </div>
-    )
+
+        <section><div className="mb-3"><h2 className="text-[17px] font-extrabold text-slate-800">Choose a standard</h2><p className="text-[13px] font-medium text-slate-500">Open a standard to configure subjects and enter marks.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{standards.map((value, index) => {
+            const configured = subjects.filter(subject => subject.standard === value)
+            const totalMarks = configured.reduce((sum, subject) => sum + Number(subject.max_marks), 0)
+            const accent = accents[index % accents.length]
+            return <Link key={value} href={`/admin/${department}/exams/${id}/standard/${value}`} className={`group relative overflow-hidden rounded-xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${accent.hover}`}><div className={`absolute inset-y-0 left-0 w-1 ${accent.bar}`} /><div className="flex items-center gap-3"><div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.icon}`}><GraduationCap className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="text-lg font-extrabold">{value} Standard</h3>{configured.length > 0 && <span className="h-2 w-2 rounded-full bg-emerald-500" />}</div><p className="text-xs font-medium text-slate-500">{configured.length ? `${configured.length} subjects · ${totalMarks} total marks` : "Not configured"}</p></div><ChevronRight className="h-5 w-5 text-slate-400 transition group-hover:translate-x-1" /></div></Link>
+        })}</div></section>
+    </div>
 }

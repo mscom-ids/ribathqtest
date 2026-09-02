@@ -1,232 +1,54 @@
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { use, useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Calendar, BookOpen, GraduationCap, ChevronRight, TrendingUp, Users } from "lucide-react"
+import { Calendar, ChevronRight, GraduationCap, Loader2, Plus, Sparkles } from "lucide-react"
 import { format } from "date-fns"
-
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import api from "@/lib/api"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 
-type Exam = {
-    id: string
-    title: string
-    department: "School" | "Hifz" | "Madrassa"
-    start_date: string
-    end_date: string | null
-    is_active: boolean
-    created_at: string
-}
+type Exam = { id: string; title: string; start_date: string; is_active: boolean }
 
 export default function ExamsPage({ params }: { params: Promise<{ department: string }> }) {
-    const { department } = use(params);
-    const departmentName = department.charAt(0).toUpperCase() + department.slice(1);
-
+    const { department } = use(params)
+    const departmentName = department.charAt(0).toUpperCase() + department.slice(1)
     const [exams, setExams] = useState<Exam[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        loadExams()
+        api.get("/exams", { params: { department: departmentName } })
+            .then(response => setExams(response.data.exams || []))
+            .catch(error => alert(error.response?.data?.error || "Failed to load exams"))
+            .finally(() => setLoading(false))
     }, [departmentName])
 
-    async function loadExams() {
-        setLoading(true)
-        try {
-            const res = await api.get('/exams', { params: { department: departmentName } });
-            if (res.data.success) {
-                setExams(res.data.exams)
-            }
-        } catch (error) {
-            console.error(error)
-        }
-        setLoading(false)
-    }
+    const active = exams.filter(exam => exam.is_active)
+    const completed = exams.filter(exam => !exam.is_active)
 
-    const activeExams = exams.filter(e => e.is_active)
-    const completedExams = exams.filter(e => !e.is_active)
-
-    return (
-        <div className="space-y-8">
-            {/* Header Section */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                        {departmentName} Examinations
-                    </h1>
-                    <p className="text-muted-foreground mt-1">Manage {departmentName.toLowerCase()} examinations</p>
-                </div>
-                <Link href={`/admin/${department}/exams/create`}>
-                    <Button size="lg" className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-lg shadow-emerald-500/30">
-                        <Plus className="mr-2 h-5 w-5" /> Create New Exam
-                    </Button>
-                </Link>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-none shadow-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Exams</p>
-                                <h3 className="text-3xl font-bold text-blue-900 dark:text-blue-100 mt-2">{exams.length}</h3>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                <GraduationCap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-lg bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Active Exams</p>
-                                <h3 className="text-3xl font-bold text-emerald-900 dark:text-emerald-100 mt-2">{activeExams.length}</h3>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                                <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-lg bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-purple-600 dark:text-purple-400">Completed</p>
-                                <h3 className="text-3xl font-bold text-purple-900 dark:text-purple-100 mt-2">{completedExams.length}</h3>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-purple-500/20 flex items-center justify-center">
-                                <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Active Exams Section */}
-            {activeExams.length > 0 && (
-                <div>
-                    <h2 className="text-2xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Active Examinations</h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {activeExams.map((exam) => (
-                            <Card key={exam.id} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 bg-white dark:bg-slate-900 group cursor-pointer">
-                                <Link href={`/admin/${department}/exams/${exam.id}`}>
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={exam.department === "Hifz"
-                                                            ? "border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300"
-                                                            : "border-blue-500 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300"
-                                                        }
-                                                    >
-                                                        {exam.department === "Hifz" ? <BookOpen className="w-3 h-3 mr-1" /> : <GraduationCap className="w-3 h-3 mr-1" />}
-                                                        {exam.department}
-                                                    </Badge>
-                                                    <Badge className="bg-emerald-500 text-white">Active</Badge>
-                                                </div>
-                                                <CardTitle className="text-xl group-hover:text-emerald-600 transition-colors">{exam.title}</CardTitle>
-                                            </div>
-                                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Calendar className="w-4 h-4" />
-                                            <span>Starts {format(new Date(exam.start_date), "MMM d, yyyy")}</span>
-                                        </div>
-                                        <div className="mt-4 pt-4 border-t flex items-center justify-between">
-                                            <span className="text-xs text-muted-foreground">
-                                                Created {format(new Date(exam.created_at), "MMM d, yyyy")}
-                                            </span>
-                                            <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                                                Manage →
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Link>
-                            </Card>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Completed Exams Section */}
-            {completedExams.length > 0 && (
-                <div>
-                    <h2 className="text-2xl font-semibold mb-4 text-slate-800 dark:text-slate-200">Completed Examinations</h2>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {completedExams.map((exam) => (
-                            <Card key={exam.id} className="border-none shadow-md hover:shadow-lg transition-all duration-300 bg-slate-50 dark:bg-slate-900/50 group cursor-pointer opacity-75 hover:opacity-100">
-                                <Link href={`/admin/${department}/exams/${exam.id}`}>
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={exam.department === "Hifz"
-                                                            ? "border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-300"
-                                                            : "border-blue-500 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-300"
-                                                        }
-                                                    >
-                                                        {exam.department === "Hifz" ? <BookOpen className="w-3 h-3 mr-1" /> : <GraduationCap className="w-3 h-3 mr-1" />}
-                                                        {exam.department}
-                                                    </Badge>
-                                                    <Badge variant="secondary">Closed</Badge>
-                                                </div>
-                                                <CardTitle className="text-xl">{exam.title}</CardTitle>
-                                            </div>
-                                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:translate-x-1 transition-all" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Calendar className="w-4 h-4" />
-                                            <span>{format(new Date(exam.start_date), "MMM d, yyyy")}</span>
-                                        </div>
-                                    </CardContent>
-                                </Link>
-                            </Card>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Empty State */}
-            {loading && (
-                <div className="flex items-center justify-center h-64">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-                        <p className="mt-4 text-muted-foreground">Loading examinations...</p>
-                    </div>
-                </div>
-            )}
-
-            {!loading && exams.length === 0 && (
-                <Card className="border-dashed border-2 border-slate-300 dark:border-slate-700">
-                    <CardContent className="flex flex-col items-center justify-center py-16">
-                        <div className="h-20 w-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-                            <GraduationCap className="h-10 w-10 text-slate-400" />
-                        </div>
-                        <h3 className="text-xl font-semibold mb-2">No examinations yet</h3>
-                        <p className="text-muted-foreground mb-6">Get started by creating your first exam</p>
-                        <Link href={`/admin/${department}/exams/create`}>
-                            <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
-                                <Plus className="mr-2 h-4 w-4" /> Create Exam
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
-            )}
+    const examCard = (exam: Exam) => <Link key={exam.id} href={`/admin/${department}/exams/${exam.id}`} className="group relative overflow-hidden rounded-xl border bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md dark:bg-slate-950">
+        <div className={`absolute inset-x-0 top-0 h-1 ${exam.is_active ? "bg-gradient-to-r from-emerald-500 to-teal-400" : "bg-slate-300"}`} />
+        <div className="flex items-start gap-4">
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${exam.is_active ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><GraduationCap className="h-5 w-5" /></div>
+            <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><h3 className="line-clamp-2 font-bold leading-snug">{exam.title}</h3><ChevronRight className="h-5 w-5 shrink-0 text-slate-400 transition group-hover:translate-x-1 group-hover:text-emerald-600" /></div><div className="mt-3 flex flex-wrap items-center gap-2"><Badge variant={exam.is_active ? "default" : "secondary"} className={exam.is_active ? "bg-emerald-600" : ""}>{exam.is_active ? "Active" : "Completed"}</Badge><span className="flex items-center gap-1.5 text-sm text-muted-foreground"><Calendar className="h-3.5 w-3.5" />{format(new Date(exam.start_date), "dd MMM yyyy")}</span></div></div>
         </div>
-    )
+    </Link>
+
+    return <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-10">
+        <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white shadow-sm sm:px-6">
+            <div className="pointer-events-none absolute inset-0 opacity-15" style={{ backgroundImage: "linear-gradient(to right, rgba(255,255,255,.5) 1px, transparent 1px)", backgroundSize: "76px 100%" }} />
+            <div className="absolute -right-8 top-1/2 h-28 w-28 -translate-y-1/2 rounded-full border-[10px] border-white/15" />
+            <div className="relative flex flex-wrap items-center justify-between gap-3"><div><div className="mb-0.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-100"><Sparkles className="h-3.5 w-3.5" />Examination center</div><h1 className="text-xl font-bold sm:text-2xl">{departmentName} examinations</h1><p className="mt-0.5 text-[13px] font-medium text-blue-100">Plan exams, configure subjects, and record results.</p></div><Button asChild size="sm" className="bg-white text-blue-700 shadow-sm hover:bg-blue-50"><Link href={`/admin/${department}/exams/create`}><Plus className="mr-1.5 h-4 w-4" />Create exam</Link></Button></div>
+        </header>
+
+        <div className="grid grid-cols-3 gap-3">
+            {[["Total exams", exams.length, "bg-blue-50 text-blue-700", "bg-blue-100"], ["Active", active.length, "bg-emerald-50 text-emerald-700", "bg-emerald-100"], ["Completed", completed.length, "bg-violet-50 text-violet-700", "bg-violet-100"]].map(([label, value, colors, iconColors]) => <Card key={String(label)} className="border-slate-200/70 shadow-sm"><CardContent className="flex items-center justify-between p-3.5 sm:p-4"><div><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 sm:text-xs">{label}</p><p className={`mt-0.5 text-2xl font-extrabold ${String(colors).split(" ")[1]}`}>{value}</p></div><div className={`hidden h-10 w-10 items-center justify-center rounded-xl sm:flex ${iconColors}`}><GraduationCap className={`h-5 w-5 ${String(colors).split(" ")[1]}`} /></div></CardContent></Card>)}
+        </div>
+
+        {loading ? <div className="flex justify-center py-20"><Loader2 className="h-7 w-7 animate-spin text-emerald-600" /></div> : exams.length === 0 ? <Card><CardContent className="py-16 text-center"><h2 className="font-semibold">No exams yet</h2><p className="mt-1 text-sm text-muted-foreground">Create an exam to begin subject setup.</p><Button asChild className="mt-5 bg-emerald-600 hover:bg-emerald-700"><Link href={`/admin/${department}/exams/create`}>Create exam</Link></Button></CardContent></Card> : <div className="space-y-6">
+            {active.length > 0 && <section><h2 className="mb-2 text-[16px] font-extrabold text-slate-800">Active examinations</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{active.map(examCard)}</div></section>}
+            {completed.length > 0 && <section><h2 className="mb-2 text-[16px] font-extrabold text-slate-800">Completed examinations</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{completed.map(examCard)}</div></section>}
+        </div>}
+    </div>
 }

@@ -3,6 +3,7 @@ import {
     getExams, 
     createExam, 
     getExamDetails, 
+    deleteExam,
     updateExamStatus, 
     addSubject, 
     deleteSubject,
@@ -25,6 +26,9 @@ router.get('/', getExams);
 
 // POST /api/exams
 router.post('/', requireRole(EXAM_MANAGE_ROLES), createExam);
+
+// DELETE /api/exams/:id (cascades to subjects and results)
+router.delete('/:id', requireRole(EXAM_MANAGE_ROLES), deleteExam);
 
 // GET /api/exams/students
 router.get('/students', getStudentsForExamMarks);

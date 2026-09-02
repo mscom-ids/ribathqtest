@@ -1,368 +1,112 @@
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { use, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Save, Filter, Loader2, Search, CheckCircle2 } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
+import { ArrowLeft, BookOpen, Check, ChevronRight, GraduationCap, Loader2, Search } from "lucide-react"
 import api from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-type Exam = { id: string; title: string, department: string }
-type Subject = { id: string; name: string; max_marks: number; standard?: string | null }
-type Student = { adm_no: string; name: string;[key: string]: string | undefined }
+type Exam = { id: string; title: string }
+type Subject = { id: string; name: string; max_marks: number; min_marks: number; standard: string }
+type Student = { adm_no: string; name: string; standard: string }
+type Result = { subject_id: string; student_id: string; marks_obtained: number; remarks?: string | null }
+type Draft = Record<string, { marks: string; remarks: string }>
+const order = ["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]
 
-export default function MarkEntryPage({ params }: { params: Promise<{ id: string, department: string }> }) {
+export default function MarksPage({ params, searchParams }: { params: Promise<{ id: string; department: string }>; searchParams: Promise<{ standard?: string }> }) {
     const { id, department } = use(params)
-    const departmentName = department.charAt(0).toUpperCase() + department.slice(1);
-    const stdColumn = `${department}_standard`; // e.g., 'school_standard' or 'hifz_standard'
+    const query = use(searchParams)
     const router = useRouter()
-
+    const requestedStandard = query.standard || null
     const [exam, setExam] = useState<Exam | null>(null)
-    const [allSubjects, setAllSubjects] = useState<Subject[]>([])
-    const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([])
-    const [selectedSubjectId, setSelectedSubjectId] = useState<string>("")
-    const [selectedStandard, setSelectedStandard] = useState<string>("all")
-
+    const [subjects, setSubjects] = useState<Subject[]>([])
+    const [results, setResults] = useState<Result[]>([])
     const [students, setStudents] = useState<Student[]>([])
-    const [marksMap, setMarksMap] = useState<Record<string, { marks: string; remarks: string }>>({})
+    const [standard, setStandard] = useState("")
+    const [student, setStudent] = useState<Student | null>(null)
+    const [draft, setDraft] = useState<Draft>({})
+    const [search, setSearch] = useState("")
     const [loading, setLoading] = useState(true)
+    const [loadingStudents, setLoadingStudents] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [searchTerm, setSearchTerm] = useState("")
 
-    // Data Load
+    const standards = useMemo(() => [...new Set(subjects.map(item => item.standard).filter(Boolean))].sort((a, b) => order.indexOf(a) - order.indexOf(b)), [subjects])
+    const selectedSubjects = useMemo(() => subjects.filter(item => item.standard === standard), [subjects, standard])
+    const visibleStudents = useMemo(() => students.filter(item => `${item.name} ${item.adm_no}`.toLowerCase().includes(search.toLowerCase())), [students, search])
+
     useEffect(() => {
-        loadExamData()
-    }, [id])
+        Promise.all([api.get(`/exams/${id}`), api.get(`/exams/${id}/marks`)]).then(([examResponse, marksResponse]) => {
+            const loaded = examResponse.data.subjects || []
+            setExam(examResponse.data.exam); setSubjects(loaded); setResults(marksResponse.data.marks || [])
+            setStandard(requestedStandard && loaded.some((item: Subject) => item.standard === requestedStandard) ? requestedStandard : order.find(value => loaded.some((item: Subject) => item.standard === value)) || loaded[0]?.standard || "")
+        }).catch(error => alert(error.response?.data?.error || "Failed to load exam")).finally(() => setLoading(false))
+    }, [id, requestedStandard])
 
-    // Update Filtered Subjects when Standard changes
     useEffect(() => {
-        if (!allSubjects.length) return
+        if (!standard) return setStudents([])
+        setLoadingStudents(true)
+        api.get("/exams/students", { params: { department, standard } })
+            .then(response => setStudents(response.data.students || []))
+            .catch(error => alert(error.response?.data?.error || "Failed to load students"))
+            .finally(() => setLoadingStudents(false))
+    }, [department, standard])
 
-        let filtered = allSubjects
-        if (selectedStandard !== "all") {
-            filtered = allSubjects.filter(s => s.standard === null || s.standard === selectedStandard)
-        }
-        setFilteredSubjects(filtered)
-
-        // If current selected subject is not in filtered list, select first available
-        if (filtered.length > 0) {
-            if (!selectedSubjectId || !filtered.find(s => s.id === selectedSubjectId)) {
-                setSelectedSubjectId(filtered[0].id)
-            }
-        } else {
-            setSelectedSubjectId("")
-        }
-    }, [selectedStandard, allSubjects])
-
-    // Load Students and Results when Subject/Standard changes
-    useEffect(() => {
-        if (selectedSubjectId) {
-            loadStudentsAndResults()
-        }
-    }, [selectedSubjectId, selectedStandard])
-
-    async function loadExamData() {
-        setLoading(true)
-        try {
-            const res = await api.get(`/exams/${id}`)
-            if (res.data.success) {
-                setExam(res.data.exam)
-                const s = res.data.subjects
-                if (s) {
-                    setAllSubjects(s)
-                    setFilteredSubjects(s)
-                    if (s.length > 0) setSelectedSubjectId(s[0].id)
-                }
-            }
-        } catch (error) {
-            console.error("Failed to load exam data", error)
-        }
-        setLoading(false)
-    }
-
-    async function loadStudentsAndResults() {
-        if (!selectedSubjectId) return
-        setLoading(true)
-        try {
-            // Determine the standard to query for based on the selection or the subject's locked standard
-            let queryStandard = selectedStandard
-            if (queryStandard === "all") {
-                const subject = allSubjects.find(s => s.id === selectedSubjectId)
-                if (subject?.standard) {
-                    queryStandard = subject.standard
-                }
-            }
-
-            // 1. Fetch Students
-            const studentsRes = await api.get(`/exams/students`, {
-                params: {
-                    department,
-                    standard: queryStandard
-                }
-            })
-
-            if (studentsRes.data.success) {
-                setStudents(studentsRes.data.students)
-
-                // 2. Fetch Existing Results
-                const marksRes = await api.get(`/exams/${id}/marks`, {
-                    params: { subject_id: selectedSubjectId }
-                })
-                
-                if (marksRes.data.success) {
-                    const initialMarks: Record<string, { marks: string; remarks: string }> = {}
-                    marksRes.data.marks.forEach((r: any) => {
-                        initialMarks[r.student_id] = {
-                            marks: r.marks_obtained.toString(),
-                            remarks: r.remarks || ""
-                        }
-                    })
-                    setMarksMap(initialMarks)
-                }
-            }
-        } catch (error) {
-            console.error("Failed to load students and results", error)
-        }
-        setLoading(false)
-    }
-
-    const handleMarkChange = (studentId: string, val: string) => {
-        setMarksMap(prev => {
-            const current = prev[studentId] || { marks: "", remarks: "" }
-            return {
-                ...prev,
-                [studentId]: { ...current, marks: val }
-            }
+    function editStudent(selected: Student) {
+        const values: Draft = {}
+        selectedSubjects.forEach(subject => {
+            const result = results.find(item => item.student_id === selected.adm_no && item.subject_id === subject.id)
+            values[subject.id] = { marks: result ? String(result.marks_obtained) : "", remarks: result?.remarks || "" }
         })
+        setDraft(values); setStudent(selected)
     }
 
-    const handleRemarkChange = (studentId: string, val: string) => {
-        setMarksMap(prev => {
-            const current = prev[studentId] || { marks: "", remarks: "" }
-            return {
-                ...prev,
-                [studentId]: { ...current, remarks: val }
-            }
-        })
-    }
-
-    async function handleSave() {
+    async function save() {
+        if (!student) return
+        for (const subject of selectedSubjects) {
+            const value = draft[subject.id]?.marks.trim()
+            if (value && (Number(value) < 0 || Number(value) > subject.max_marks)) return alert(`${subject.name}: marks must be between 0 and ${subject.max_marks}`)
+        }
+        const updates = selectedSubjects.filter(subject => draft[subject.id]?.marks.trim()).map(subject => ({ subject_id: subject.id, student_id: student.adm_no, marks_obtained: Number(draft[subject.id].marks), remarks: draft[subject.id].remarks || null }))
+        if (!updates.length) return alert("Enter at least one mark")
         setSaving(true)
-        const updates: any[] = []
-
-        // Prepare upserts
-        students.forEach(student => {
-            const entry = marksMap[student.adm_no]
-            if (entry && entry.marks !== "") {
-                updates.push({
-                    subject_id: selectedSubjectId,
-                    student_id: student.adm_no,
-                    marks_obtained: parseFloat(entry.marks),
-                    remarks: entry.remarks || null
-                })
-            }
-        })
-
-        if (updates.length === 0) {
-            setSaving(false)
-            return
-        }
-
         try {
-            const res = await api.post(`/exams/${id}/marks`, { updates })
-            if (res.data.success) {
-                alert("Marks saved successfully!")
-            } else {
-                alert("Error saving: " + res.data.error)
-            }
-        } catch (error: any) {
-            alert("Error saving: " + error.message)
-        }
-
-        setSaving(false)
+            await api.post(`/exams/${id}/marks`, { updates })
+            const response = await api.get(`/exams/${id}/marks`)
+            setResults(response.data.marks || []); setStudent(null)
+        } catch (error: any) { alert(error.response?.data?.error || "Failed to save marks") }
+        finally { setSaving(false) }
     }
 
-    if (loading && !exam) return <div className="h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>
+    if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-emerald-600" /></div>
+    if (!exam) return <div className="p-8">Exam not found</div>
 
-    const currentSubject = allSubjects.find(s => s.id === selectedSubjectId)
-    const filteredStudents = students.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.adm_no.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    return <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-10">
+        <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-4 text-white shadow-sm sm:px-6">
+            <div className="pointer-events-none absolute inset-0 opacity-15" style={{ backgroundImage: "linear-gradient(to right, rgba(255,255,255,.5) 1px, transparent 1px)", backgroundSize: "76px 100%" }} />
+            <div className="absolute -right-8 top-1/2 h-28 w-28 -translate-y-1/2 rounded-full border-[10px] border-white/15" />
+            <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><button onClick={() => router.push(standard ? `/admin/${department}/exams/${id}/standard/${standard}` : `/admin/${department}/exams/${id}`)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20" aria-label="Back to standard setup"><ArrowLeft className="h-4 w-4" /></button><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15"><GraduationCap className="h-5 w-5" /></div><div className="min-w-0"><h1 className="text-xl font-bold sm:text-2xl">Enter marks</h1><p className="truncate text-[13px] font-medium text-blue-100">{exam.title}</p></div></div>{standards.length > 0 && <Select value={standard} onValueChange={setStandard}><SelectTrigger className="h-9 w-full border-white/20 bg-white/10 text-white sm:w-52"><SelectValue /></SelectTrigger><SelectContent>{standards.map(value => <SelectItem key={value} value={value}>{value} Standard</SelectItem>)}</SelectContent></Select>}</div>
+        </header>
 
-    return (
-        <div className="h-[calc(100vh-4rem)] flex flex-col gap-4">
-            {/* Top Bar - Compact Header */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-950 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <Button variant="ghost" size="icon" onClick={() => router.push(`/admin/${department}/exams/${id}`)} className="shrink-0">
-                        <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                    <div>
-                        <h1 className="text-xl font-bold flex items-center gap-2">
-                            {exam?.title}
-                            <Badge variant="outline" className="font-normal text-xs">{exam?.department}</Badge>
-                        </h1>
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            Arguments: <span className="font-medium text-foreground">{currentSubject?.name}</span> • Max Marks: {currentSubject?.max_marks}
-                        </p>
-                    </div>
-                </div>
+        {!standards.length ? <Card><CardContent className="py-16 text-center"><p className="font-semibold">Set up subjects first</p><p className="mt-1 text-sm text-muted-foreground">Marks entry becomes available after subjects are added.</p><Button className="mt-5" onClick={() => router.push(`/admin/${department}/exams/${id}`)}>Go to subject setup</Button></CardContent></Card> : <>
+            <Card className="overflow-hidden rounded-xl border-slate-200/70 shadow-sm"><div className="flex items-center gap-3 border-b bg-slate-50/80 px-4 py-3"><div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><BookOpen className="h-4 w-4" /></div><div><p className="text-[15px] font-extrabold">Subjects</p><p className="text-xs text-muted-foreground">{selectedSubjects.length} configured for {standard}</p></div></div><CardContent className="grid gap-px bg-slate-100 p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{selectedSubjects.map((subject, index) => { const accents = ["bg-blue-50 text-blue-600", "bg-violet-50 text-violet-600", "bg-emerald-50 text-emerald-600", "bg-orange-50 text-orange-600"]; return <div key={subject.id} className="flex items-center gap-3 bg-white p-3.5"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-extrabold ${accents[index % accents.length]}`}>{index + 1}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800">{subject.name}</p><p className="mt-0.5 text-[11px] font-medium text-slate-500">Maximum {subject.max_marks} · Pass {subject.min_marks}</p></div></div> })}</CardContent></Card>
+            <Card className="overflow-hidden rounded-xl border-slate-200/70 shadow-sm">
+                <div className="border-b bg-slate-50/70 p-4"><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by student name or admission number" className="bg-white pl-9" /></div></div>
+                <CardContent className="p-0">{loadingStudents ? <div className="py-16 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div> : visibleStudents.length === 0 ? <div className="py-16 text-center text-sm text-muted-foreground">No students found in {standard}.</div> : visibleStudents.map(item => {
+                    const entered = selectedSubjects.filter(subject => results.some(result => result.student_id === item.adm_no && result.subject_id === subject.id)).length
+                    const complete = entered === selectedSubjects.length && entered > 0
+                    return <button key={item.adm_no} onClick={() => editStudent(item)} className="group flex w-full items-center gap-3 border-b px-4 py-4 text-left last:border-b-0 hover:bg-blue-50/50 sm:px-5"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 text-sm font-bold text-indigo-700">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate font-semibold">{item.name}</p><p className="text-sm text-muted-foreground">{item.adm_no}</p></div><div className="text-right"><p className={complete ? "text-sm font-bold text-emerald-600" : "text-sm font-bold text-slate-700"}>{entered}/{selectedSubjects.length}</p><p className="text-xs text-muted-foreground">marks entered</p></div><div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 transition group-hover:bg-blue-100 group-hover:text-blue-700"><ChevronRight className="h-4 w-4" /></div></button>
+                })}</CardContent>
+            </Card>
+        </>}
 
-                <div className="flex gap-3 w-full sm:w-auto ml-auto">
-                    <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Find student..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                        />
-                    </div>
-                    <Button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20">
-                        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                        Save Changes
-                    </Button>
-                </div>
-            </div>
-
-            <div className="flex-1 flex gap-6 overflow-hidden">
-                {/* Sidebar Filter Panel */}
-                <Card className="w-72 hidden md:flex flex-col border-r border-slate-200 dark:border-slate-800 shadow-lg h-full bg-slate-50 dark:bg-slate-950">
-                    <CardHeader>
-                        <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Filters</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6 flex-1 overflow-y-auto">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Standard</label>
-                            <Select value={selectedStandard} onValueChange={setSelectedStandard}>
-                                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                                    <SelectValue placeholder="All Standards" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Standards</SelectItem>
-                                    {["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"].map(std => (
-                                        <SelectItem key={std} value={std}>{std} Standard</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Subject</label>
-                            <div className="space-y-1">
-                                {filteredSubjects.map(s => (
-                                    <button
-                                        key={s.id}
-                                        onClick={() => setSelectedSubjectId(s.id)}
-                                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${selectedSubjectId === s.id
-                                            ? "bg-emerald-100 text-emerald-900 font-medium dark:bg-emerald-900/40 dark:text-emerald-50"
-                                            : "hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
-                                            }`}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span>{s.name}</span>
-                                            {selectedSubjectId === s.id && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
-                                        </div>
-                                        {s.standard && <span className="text-xs opacity-60 block mt-0.5">{s.standard} Std</span>}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Main Entry Table */}
-                <div className="flex-1 bg-white dark:bg-slate-950 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-                    <div className="flex-1 overflow-auto">
-                        <Table>
-                            <TableHeader className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
-                                <TableRow className="border-b border-slate-200 dark:border-slate-800">
-                                    <TableHead className="w-24 pl-6 text-slate-500 dark:text-slate-400 font-semibold">Adm No</TableHead>
-                                    <TableHead className="text-slate-500 dark:text-slate-400 font-semibold">Student Name</TableHead>
-                                    <TableHead className="w-32 text-slate-500 dark:text-slate-400 font-semibold">Standard</TableHead>
-                                    <TableHead className="w-40 text-slate-500 dark:text-slate-400 font-semibold">
-                                        Marks <span className="text-xs font-normal opacity-70">(Max: {currentSubject?.max_marks})</span>
-                                    </TableHead>
-                                    <TableHead className="text-slate-500 dark:text-slate-400 font-semibold">Remarks</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {loading ? (
-                                    <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground">Loading student data...</TableCell></TableRow>
-                                ) : filteredStudents.length === 0 ? (
-                                    <TableRow><TableCell colSpan={5} className="h-32 text-center text-muted-foreground">No students found matching filters.</TableCell></TableRow>
-                                ) : (
-                                    filteredStudents.map((student, idx) => {
-                                        const entry = marksMap[student.adm_no] || { marks: "", remarks: "" }
-                                        const isHighMark = parseFloat(entry.marks) >= (currentSubject?.max_marks || 100) * 0.9
-                                        const isFail = parseFloat(entry.marks) < (currentSubject?.max_marks || 100) * 0.4
-                                        const isInvalid = parseFloat(entry.marks) > (currentSubject?.max_marks || 100)
-
-                                        return (
-                                            <TableRow
-                                                key={student.adm_no}
-                                                className={`transition-colors border-b border-slate-100 dark:border-slate-800/50 
-                                                    ${idx % 2 === 0
-                                                        ? 'bg-white dark:bg-slate-950'
-                                                        : 'bg-slate-50/50 dark:bg-slate-900/30'} 
-                                                    hover:bg-slate-100 dark:hover:bg-slate-800/50`}
-                                            >
-                                                <TableCell className="font-mono text-xs text-muted-foreground pl-6">{student.adm_no}</TableCell>
-                                                <TableCell className="font-medium text-slate-700 dark:text-slate-200">{student.name}</TableCell>
-                                                <TableCell><Badge variant="outline" className="font-normal text-xs bg-transparent dark:border-slate-700 dark:text-slate-400">{student[stdColumn]}</Badge></TableCell>
-                                                <TableCell>
-                                                    <div className="relative">
-                                                        <Input
-                                                            type="number"
-                                                            value={entry.marks}
-                                                            onChange={(e) => handleMarkChange(student.adm_no, e.target.value)}
-                                                            className={`w-28 font-mono font-medium transition-colors 
-                                                                ${isInvalid ? "border-red-500 bg-red-50 dark:bg-red-900/20 dark:text-red-200" :
-                                                                    isHighMark ? "text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400" :
-                                                                        isFail && entry.marks ? "text-red-600 border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400" :
-                                                                            "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:border-emerald-500"
-                                                                }`}
-                                                            min={0}
-                                                            max={currentSubject?.max_marks}
-                                                        />
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input
-                                                        value={entry.remarks}
-                                                        onChange={(e) => handleRemarkChange(student.adm_no, e.target.value)}
-                                                        placeholder="Add remark..."
-                                                        className="max-w-xs text-sm border-transparent hover:border-slate-200 dark:hover:border-slate-700 focus:border-emerald-500 bg-transparent hover:bg-white dark:hover:bg-slate-900 text-slate-600 dark:text-slate-300 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-
-                    {/* Floating Status Bar */}
-                    <div className="p-3 bg-slate-50 dark:bg-slate-900 border-t text-xs text-muted-foreground flex justify-between px-6">
-                        <span>Showing {filteredStudents.length} students</span>
-                        <span>{Object.keys(marksMap).filter(k => marksMap[k].marks).length} Marks Entered</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
+        <Dialog open={!!student} onOpenChange={open => !open && setStudent(null)}><DialogContent className="flex max-h-[90vh] max-w-xl flex-col overflow-hidden p-0"><DialogHeader className="border-b p-5"><DialogTitle>{student?.name}</DialogTitle><DialogDescription>{student?.adm_no} · {standard} Standard</DialogDescription></DialogHeader>
+            <div className="overflow-y-auto px-5">{selectedSubjects.map(subject => { const value = draft[subject.id] || { marks: "", remarks: "" }; const marks = Number(value.marks); return <div key={subject.id} className="border-b py-4"><div className="mb-3 flex items-center justify-between gap-2"><Label htmlFor={`mark-${subject.id}`} className="text-base font-semibold">{subject.name}</Label><span className="text-xs text-muted-foreground">Pass {subject.min_marks} / Max {subject.max_marks}</span></div><div className="grid gap-3 sm:grid-cols-[120px_1fr]"><div><Label htmlFor={`mark-${subject.id}`} className="text-xs text-muted-foreground">Mark</Label><Input id={`mark-${subject.id}`} type="number" min={0} max={subject.max_marks} value={value.marks} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, marks: event.target.value } }))} className={value.marks && marks < subject.min_marks ? "border-red-300" : ""} /></div><div><Label htmlFor={`remark-${subject.id}`} className="text-xs text-muted-foreground">Optional remark</Label><Input id={`remark-${subject.id}`} value={value.remarks} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, remarks: event.target.value } }))} placeholder="Add a remark" /></div></div></div> })}</div>
+            <DialogFooter className="border-t p-4"><Button variant="outline" onClick={() => setStudent(null)}>Cancel</Button><Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save marks</Button></DialogFooter>
+        </DialogContent></Dialog>
+    </div>
 }

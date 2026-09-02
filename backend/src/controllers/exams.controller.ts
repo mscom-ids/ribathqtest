@@ -83,6 +83,32 @@ export const updateExamStatus = async (req: Request, res: Response) => {
     }
 };
 
+export const deleteExam = async (req: Request, res: Response) => {
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
+        const examResult = await client.query('SELECT id, title FROM exams WHERE id = $1 FOR UPDATE', [req.params.id]);
+        if (examResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, error: 'Exam not found' });
+        }
+        const counts = await client.query(
+            `SELECT (SELECT COUNT(*)::int FROM exam_subjects WHERE exam_id = $1) AS subjects,
+                    (SELECT COUNT(*)::int FROM exam_results WHERE exam_id = $1) AS results`,
+            [req.params.id]
+        );
+        await client.query('DELETE FROM exams WHERE id = $1', [req.params.id]);
+        await client.query('COMMIT');
+        res.json({ success: true, deleted: { exam: examResult.rows[0], ...counts.rows[0] } });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error deleting exam:', err);
+        res.status(500).json({ success: false, error: 'Failed to permanently delete exam' });
+    } finally {
+        client.release();
+    }
+};
+
 // --- Subjects ---
 
 export const addSubject = async (req: Request, res: Response) => {
@@ -90,10 +116,24 @@ export const addSubject = async (req: Request, res: Response) => {
         const { id } = req.params; // exam_id
         const { name, max_marks, min_marks, standard } = req.body;
         
+        const cleanName = String(name || '').trim();
+        const max = Number(max_marks);
+        const min = Number(min_marks);
+        const cleanStandard = String(standard || '').trim();
+        if (!cleanName || !cleanStandard || !Number.isFinite(max) || max <= 0 || !Number.isFinite(min) || min < 0 || min > max) {
+            return res.status(400).json({ success: false, error: 'Subject, standard, maximum marks, and a valid pass mark are required' });
+        }
+        const duplicate = await db.query(
+            'SELECT 1 FROM exam_subjects WHERE exam_id = $1 AND LOWER(name) = LOWER($2) AND standard = $3',
+            [id, cleanName, cleanStandard]
+        );
+        if (duplicate.rows.length) {
+            return res.status(409).json({ success: false, error: `${cleanName} is already configured for ${cleanStandard}` });
+        }
         const result = await db.query(
             `INSERT INTO exam_subjects (exam_id, name, max_marks, min_marks, standard)
              VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [id, name, max_marks, min_marks, standard || null]
+            [id, cleanName, max, min, cleanStandard]
         );
         
         res.status(201).json({ success: true, subject: result.rows[0] });
@@ -123,7 +163,7 @@ export const getExamMarks = async (req: Request, res: Response) => {
         const { id } = req.params; // exam_id
         const { subject_id } = req.query;
         
-        let query = 'SELECT student_id, marks_obtained, remarks FROM exam_results WHERE exam_id = $1';
+        let query = 'SELECT subject_id, student_id, marks_obtained, remarks FROM exam_results WHERE exam_id = $1';
         const params: any[] = [id];
         
         if (subject_id) {
@@ -144,12 +184,33 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
         const { id } = req.params; // exam_id
         const { updates } = req.body; // Array of marks
         
-        // Use a transaction for batch upsert
+        if (!Array.isArray(updates) || updates.length === 0) {
+            return res.status(400).json({ success: false, error: 'At least one mark is required' });
+        }
         const client = await db.getClient();
         try {
             await client.query('BEGIN');
+
+            const subjectIds = [...new Set(updates.map((u: any) => u.subject_id))];
+            const subjectResult = await client.query(
+                'SELECT id, standard, max_marks FROM exam_subjects WHERE exam_id = $1 AND id = ANY($2::uuid[])',
+                [id, subjectIds]
+            );
+            const subjectMap = new Map(subjectResult.rows.map(row => [row.id, row]));
+            if (subjectMap.size !== subjectIds.length) throw new Error('One or more subjects do not belong to this exam');
             
             for (const update of updates) {
+                const subject = subjectMap.get(update.subject_id);
+                const marks = Number(update.marks_obtained);
+                if (!Number.isFinite(marks) || marks < 0 || marks > Number(subject.max_marks)) {
+                    throw new Error(`Marks must be between 0 and ${subject.max_marks}`);
+                }
+                const placement = await client.query(
+                    `SELECT 1 FROM academic_student_placements
+                     WHERE student_id = $1 AND standard = $2 AND status = 'active' LIMIT 1`,
+                    [update.student_id, subject.standard]
+                );
+                if (!placement.rows.length) throw new Error('Student is not actively placed in the subject standard');
                 await client.query(
                     `INSERT INTO exam_results (exam_id, subject_id, student_id, marks_obtained, remarks, grader_id)
                      VALUES ($1, $2, $3, $4, $5, $6)
@@ -158,7 +219,7 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
                         marks_obtained = EXCLUDED.marks_obtained,
                         remarks = EXCLUDED.remarks,
                         grader_id = EXCLUDED.grader_id`,
-                    [id, update.subject_id, update.student_id, update.marks_obtained, update.remarks || null, update.grader_id || null]
+                    [id, update.subject_id, update.student_id, marks, update.remarks || null, update.grader_id || null]
                 );
             }
             
@@ -170,9 +231,9 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
         } finally {
             client.release();
         }
-    } catch (err) {
+    } catch (err: any) {
         console.error('Error upserting exam marks:', err);
-        res.status(500).json({ success: false, error: 'Failed to save marks' });
+        res.status(400).json({ success: false, error: err?.message || 'Failed to save marks' });
     }
 };
 
@@ -210,6 +271,7 @@ export const getStudentsForExamMarks = async (req: Request, res: Response) => {
         const mappedStudents = result.rows.map(row => ({
             adm_no: row.adm_no,
             name: row.name,
+            standard: row.standard,
             [stdColumn]: row.standard
         }));
         
