@@ -311,14 +311,14 @@ export default function StaffLayout({
 
                         <SheetContent
                             side="bottom"
-                            className="md:hidden gap-0 rounded-t-3xl border-slate-200 bg-white p-0 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] dark:border-slate-800 dark:bg-slate-900"
+                            className="md:hidden gap-0 rounded-t-3xl border-slate-200 bg-white p-0 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-slate-800 dark:bg-slate-900"
                         >
-                            <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
-                            <SheetHeader className="px-5 pb-3 pt-4 text-left">
-                                <SheetTitle className="text-lg font-bold">More</SheetTitle>
+                            <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-slate-300 dark:bg-slate-700" />
+                            <SheetHeader className="px-5 pb-2 pt-3 text-left">
+                                <SheetTitle className="text-base font-bold">More</SheetTitle>
                             </SheetHeader>
 
-                            <div className="grid grid-cols-3 gap-3 px-4">
+                            <div className="grid grid-cols-2 gap-2.5 px-4">
                                 {mobileMoreItems.map((item) => {
                                     const Icon = item.icon
                                     const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
@@ -327,22 +327,20 @@ export default function StaffLayout({
                                         <SheetClose asChild key={item.href}>
                                             <Link
                                                 href={item.href}
-                                                className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-4 text-center transition-colors ${isActive
+                                                className={`flex min-h-20 items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${isActive
                                                     ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
                                                     : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/40'
                                                 }`}
                                             >
-                                                <span className={`flex h-11 w-11 items-center justify-center rounded-full ${isActive
+                                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isActive
                                                     ? 'bg-blue-600 text-white'
                                                     : 'bg-white text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-300'
                                                 }`}>
-                                                    <Icon className="h-5 w-5" />
+                                                    <Icon className="h-4 w-4" />
                                                 </span>
-                                                <span>
-                                                    <span className="block text-sm font-semibold">{item.label}</span>
-                                                    <span className="mt-0.5 block text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-                                                        {item.description}
-                                                    </span>
+                                                <span className="min-w-0">
+                                                    <span className="block truncate text-sm font-semibold">{item.label}</span>
+                                                    <span className="mt-0.5 block truncate text-[10px] leading-tight text-slate-500 dark:text-slate-400">{item.description}</span>
                                                 </span>
                                             </Link>
                                         </SheetClose>

@@ -380,6 +380,43 @@ export function CollectPaymentSheet({
     const paymentAmount = Number(amount) || 0
     const allocationComplete = paymentAmount > 0 && Math.abs(allocatedAmount - paymentAmount) < 0.005
 
+    function updateAllocationAmount(obligationId: string, rawValue: string, itemBalance: string | number) {
+        if (rawValue === "") {
+            setAllocationAmounts(current => ({ ...current, [obligationId]: "" }))
+            return
+        }
+
+        const requested = Number(rawValue)
+        if (!Number.isFinite(requested)) return
+
+        const currentValue = Number(allocationAmounts[obligationId] || 0)
+        const allocatedToOtherItems = Math.max(0, allocatedAmount - currentValue)
+        const paymentRemaining = Math.max(0, paymentAmount - allocatedToOtherItems)
+        const outstandingBalance = Math.max(0, Number(itemBalance) || 0)
+        const maximum = Math.floor(Math.min(outstandingBalance, paymentRemaining) * 100) / 100
+        const nextValue = Math.max(0, Math.min(requested, maximum))
+
+        setAllocationAmounts(current => ({ ...current, [obligationId]: String(nextValue) }))
+    }
+
+    function updatePaymentAmount(rawValue: string) {
+        setAmount(rawValue)
+        const newPaymentAmount = Math.max(0, Number(rawValue) || 0)
+        setAllocationAmounts(current => {
+            let remaining = newPaymentAmount
+            const next: Record<string, string> = {}
+            for (const item of studentAccount?.open_items || []) {
+                const obligationId = item.obligation_id || item.id
+                const existing = Number(current[obligationId] || 0)
+                if (existing <= 0) continue
+                const capped = Math.floor(Math.min(existing, Number(item.balance) || 0, remaining) * 100) / 100
+                if (capped > 0) next[obligationId] = String(capped)
+                remaining = Math.max(0, remaining - capped)
+            }
+            return next
+        })
+    }
+
     async function submit(event: React.FormEvent) {
         event.preventDefault()
         if (!studentId || Number(amount) <= 0) return
@@ -425,7 +462,7 @@ export function CollectPaymentSheet({
                         <div className="grid gap-4 sm:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="payment-amount">Amount received</Label>
-                                <Input id="payment-amount" inputMode="decimal" type="number" min="0.01" step="0.01" required value={amount} onChange={event => setAmount(event.target.value)} placeholder="0.00" />
+                                <Input id="payment-amount" inputMode="decimal" type="number" min="0.01" step="0.01" required value={amount} onChange={event => updatePaymentAmount(event.target.value)} placeholder="0.00" />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="payment-date">Payment date</Label>
@@ -478,6 +515,9 @@ export function CollectPaymentSheet({
                                 <div className="mt-4 space-y-2">
                                     {(studentAccount?.open_items || []).map(item => {
                                         const obligationId = item.obligation_id || item.id
+                                        const currentAllocation = Number(allocationAmounts[obligationId] || 0)
+                                        const allocatedToOtherItems = Math.max(0, allocatedAmount - currentAllocation)
+                                        const maximumAllocation = Math.max(0, Math.min(Number(item.balance) || 0, paymentAmount - allocatedToOtherItems))
                                         return (
                                         <div key={item.id} className="flex items-center justify-between gap-4 rounded-xl bg-white px-3 py-2.5 text-sm dark:bg-slate-950">
                                             <div className="min-w-0">
@@ -490,10 +530,10 @@ export function CollectPaymentSheet({
                                                 inputMode="decimal"
                                                 type="number"
                                                 min="0"
-                                                max={item.balance}
+                                                max={maximumAllocation}
                                                 step="0.01"
                                                 value={allocationAmounts[obligationId] || ""}
-                                                onChange={event => setAllocationAmounts(current => ({ ...current, [obligationId]: event.target.value }))}
+                                                onChange={event => updateAllocationAmount(obligationId, event.target.value, item.balance)}
                                                 placeholder="0.00"
                                             />
                                         </div>

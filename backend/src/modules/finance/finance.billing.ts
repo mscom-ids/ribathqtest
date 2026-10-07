@@ -86,11 +86,26 @@ async function billingAudit(
 }
 
 async function applyUnappliedCredits(client: Queryable, runId: string) {
+    // Most billing runs have no unapplied credits. Previously this selected
+    // every student in the run and executed two more queries per student,
+    // turning a 135-student publish into 270+ sequential database calls. On a
+    // remote database that could exceed the HTTP proxy timeout after the dues
+    // had already been prepared. Limit the loop to students who can actually
+    // consume a credit.
     const students = await client.query(
-        `SELECT DISTINCT student_id
-         FROM finance_obligations
-         WHERE billing_run_id = $1 AND balance > 0
-         ORDER BY student_id`,
+        `SELECT DISTINCT o.student_id
+         FROM finance_obligations o
+         WHERE o.billing_run_id = $1
+           AND o.balance > 0
+           AND EXISTS (
+               SELECT 1
+               FROM finance_payments p
+               WHERE p.student_id = o.student_id
+                 AND p.status = 'posted'
+                 AND p.allocation_status = 'strict'
+                 AND p.unapplied_amount > 0
+           )
+         ORDER BY o.student_id`,
         [runId],
     );
     let appliedPaise = 0;
@@ -209,10 +224,13 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
     }
 
     const client = await db.getClient();
+    let publishStage = 'starting the billing transaction';
     try {
         await client.query('BEGIN');
+        publishStage = 'locking the billing month';
         await client.query(`SELECT pg_advisory_xact_lock(hashtext('finance-billing:' || $1::text))`, [serviceMonth]);
 
+        publishStage = 'checking for an existing billing run';
         const duplicate = await client.query(
             `SELECT * FROM finance_billing_runs WHERE idempotency_key = $1 LIMIT 1`,
             [key],
@@ -236,6 +254,7 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
             throw new FinanceError(409, 'Monthly fees have already been published for this month.', 'BILLING_MONTH_ALREADY_PUBLISHED');
         }
 
+        publishStage = 'validating student fee schedules';
         const unconfigured = await client.query(
             `WITH candidates AS (${BILLING_CANDIDATES_SQL})
              SELECT COUNT(*)::int AS count,
@@ -255,6 +274,7 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
                 },
             );
         }
+        publishStage = 'creating the billing run';
         const runResult = await client.query(
             `INSERT INTO finance_billing_runs
                 (service_month, status, student_count, total_amount, idempotency_key, created_by)
@@ -264,6 +284,7 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
         );
         const run = runResult.rows[0];
 
+        publishStage = 'creating student dues';
         await client.query(
             `WITH candidates AS (${BILLING_CANDIDATES_SQL})
              INSERT INTO finance_obligations
@@ -299,6 +320,7 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
              RETURNING id, student_id, amount`,
             [serviceMonth, dueDate, run.id, actor.staffId],
         );
+        publishStage = 'calculating published totals';
         const totals = await client.query(
             `SELECT COUNT(*)::int AS student_count, COALESCE(SUM(amount), 0) AS total_amount
              FROM finance_obligations
@@ -307,7 +329,9 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
         );
         const studentCount = Number(totals.rows[0]?.student_count || 0);
         const totalAmount = String(totals.rows[0]?.total_amount || '0.00');
+        publishStage = 'applying existing payment credits';
         const creditsApplied = await applyUnappliedCredits(client, run.id);
+        publishStage = 'finalizing the billing run';
         const published = await client.query(
             `UPDATE finance_billing_runs
              SET status = 'published', student_count = $2, total_amount = $3, published_at = NOW()
@@ -315,6 +339,7 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
              RETURNING *`,
             [run.id, studentCount, totalAmount],
         );
+        publishStage = 'writing the billing audit record';
         await billingAudit(client, actor, 'monthly_fees_published', run.id, {
             service_month: serviceMonth,
             student_count: studentCount,
@@ -322,11 +347,20 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
             credits_applied: creditsApplied.applied_amount,
             credit_allocation_count: creditsApplied.allocation_count,
         });
+        publishStage = 'committing the monthly fees';
         await client.query('COMMIT');
         return { run: published.rows[0], duplicate: false };
     } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+        await client.query('ROLLBACK').catch(() => undefined);
+        if (error instanceof FinanceError) throw error;
+
+        console.error('[FINANCE MONTHLY PUBLISH FAILED]', { stage: publishStage, error });
+        throw new FinanceError(
+            500,
+            `Monthly fee publishing failed while ${publishStage}. No partial dues were saved; please retry.`,
+            'MONTHLY_FEE_PUBLISH_FAILED',
+            { stage: publishStage },
+        );
     } finally {
         client.release();
     }
@@ -337,4 +371,3 @@ export async function generateCurrentMonthlyFees(actor: FinanceActor, body: any 
     const normalizedKey = body?.idempotency_key || `monthly-fees:${monthValue}`;
     return publishMonthlyFees(actor, { ...body, month: monthValue, idempotency_key: normalizedKey });
 }
-
