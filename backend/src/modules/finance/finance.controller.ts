@@ -8,6 +8,7 @@ import {
     createAccount,
     createCategory,
     createCharge,
+    correctPublishedMonthlyFee,
     createFeeSchedule,
     createStudentFeeAgreement,
     currentMonthlyFees,
@@ -17,6 +18,8 @@ import {
     listAccounts,
     listCategories,
     recordPayment,
+    replaceCharge,
+    replacePayment,
     reversePayment,
     requestActor,
     revokePermission,
@@ -64,6 +67,16 @@ export const postPayment = financeHandler(async (req, res) => {
 export const postPaymentReverse = financeHandler(async (req, res) => {
     const result = await reversePayment(requestActor(req), req.params.id, req.body);
     res.json({ success: true, message: result.duplicate ? 'Payment was already reversed.' : 'Payment reversed.', ...result });
+});
+export const postChargeReplace = financeHandler(async (req, res) => {
+    res.json({ success: true, message: 'Charge edited; original retained in history.', ...await replaceCharge(requestActor(req), req.params.id, req.body) });
+});
+export const postPublishedMonthlyFeeCorrection = financeHandler(async (req, res) => {
+    res.json({ success: true, message: 'Published monthly due corrected; original retained in history.',
+        ...await correctPublishedMonthlyFee(requestActor(req), req.params.id, req.body) });
+});
+export const postPaymentReplace = financeHandler(async (req, res) => {
+    res.json({ success: true, message: 'Payment edited; original retained in history.', ...await replacePayment(requestActor(req), req.params.id, req.body) });
 });
 export const postObligationVoid = financeHandler(async (req, res) => {
     const result = await voidObligation(requestActor(req), req.params.id, req.body);

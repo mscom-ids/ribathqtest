@@ -182,6 +182,8 @@ export type FinanceOpenItem = {
     month?: string | null
     service_month?: string | null
     status?: string
+    void_reason?: string | null
+    created_at?: string
     priority?: number
     allocation_priority?: number
 }
@@ -227,6 +229,7 @@ export type StudentFinanceAccount = {
     student: FinanceStudentBalance
     summary: FinanceSummary & { total_due?: number; credit_balance?: number }
     open_items: FinanceOpenItem[]
+    obligation_history?: FinanceOpenItem[]
     payments: FinancePayment[]
     active_fee_rule?: ActiveFeeRule | null
 }
@@ -310,22 +313,24 @@ function responseData<T>(response: { data: T }) {
 }
 
 function normalizeAccount(account: StudentFinanceAccount): StudentFinanceAccount {
+    const normalizeItem = (item: FinanceOpenItem): FinanceOpenItem => ({
+        ...item,
+        id: item.id || item.obligation_id || "",
+        obligation_id: item.obligation_id || item.id,
+        type: item.type || item.obligation_type || "charge",
+        obligation_type: item.obligation_type || item.type,
+        description: item.description || item.category_name || item.obligation_type || "Finance item",
+        amount: Number(item.amount ?? item.original_amount ?? 0),
+        balance: Number(item.balance || 0),
+        month: item.month || item.service_month,
+        service_month: item.service_month || item.month,
+        priority: item.priority ?? item.allocation_priority,
+        allocation_priority: item.allocation_priority ?? item.priority,
+    })
     return {
         ...account,
-        open_items: (account.open_items || []).map(item => ({
-            ...item,
-            id: item.id || item.obligation_id || "",
-            obligation_id: item.obligation_id || item.id,
-            type: item.type || item.obligation_type || "charge",
-            obligation_type: item.obligation_type || item.type,
-            description: item.description || item.category_name || item.obligation_type || "Finance item",
-            amount: Number(item.amount ?? item.original_amount ?? 0),
-            balance: Number(item.balance || 0),
-            month: item.month || item.service_month,
-            service_month: item.service_month || item.month,
-            priority: item.priority ?? item.allocation_priority,
-            allocation_priority: item.allocation_priority ?? item.priority,
-        })),
+        open_items: (account.open_items || []).map(normalizeItem),
+        obligation_history: (account.obligation_history || []).map(normalizeItem),
     }
 }
 
@@ -370,6 +375,18 @@ export const financeApi = {
 
     async voidObligation(obligationId: string, reason: string) {
         return responseData(await api.post<MutationResponse>(`/finance/obligations/${encodeURIComponent(obligationId)}/void`, { reason }))
+    },
+
+    async replaceCharge(obligationId: string, input: Omit<AddChargeInput, 'student_id'> & { reason: string }) {
+        return normalizeMutation(responseData(await api.post<MutationResponse>(`/finance/obligations/${encodeURIComponent(obligationId)}/replace`, input)))
+    },
+
+    async correctPublishedMonthlyFee(obligationId: string, input: { amount: string; reason: string; idempotency_key?: string }) {
+        return normalizeMutation(responseData(await api.post<MutationResponse>(`/finance/obligations/${encodeURIComponent(obligationId)}/correct-monthly-fee`, input)))
+    },
+
+    async replacePayment(paymentId: string, input: Omit<RecordPaymentInput, 'student_id'> & { reason: string }) {
+        return normalizeMutation(responseData(await api.post<MutationResponse>(`/finance/payments/${encodeURIComponent(paymentId)}/replace`, input)))
     },
 
     async previewMonthlyFees(month: string) {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Ban, CalendarClock, CreditCard, FileText, Loader2, Plus, ReceiptText, RotateCcw, WalletCards } from "lucide-react"
+import { Ban, CalendarClock, CreditCard, FileText, Loader2, Pencil, Plus, ReceiptText, RotateCcw, WalletCards } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import type { FinanceOpenItem, FinancePayment, StudentFinanceAccount } from "@/lib/finance-api"
-import { financeApi, financeErrorMessage, studentFinanceId } from "@/lib/finance-api"
+import { Input } from "@/components/ui/input"
+import type { ChargeCategory, FinanceOpenItem, FinancePayment, PaymentAccount, StudentFinanceAccount } from "@/lib/finance-api"
+import { createIdempotencyKey, financeApi, financeErrorMessage, studentFinanceId } from "@/lib/finance-api"
 import { money, shortDate, shortDateTime, summaryValue } from "./finance-utils"
 
-type AccountTab = "open" | "payments" | "rule"
+type AccountTab = "open" | "records" | "payments" | "rule"
 type CorrectionTarget =
     | { kind: "payment"; payment: FinancePayment }
     | { kind: "obligation"; item: FinanceOpenItem }
@@ -27,6 +28,8 @@ export function StudentAccountSheet({
     canAddCharge,
     canCollectPayment,
     canManageCorrections,
+    categories,
+    paymentAccounts,
     onAction,
     onCorrectionSuccess,
 }: {
@@ -37,6 +40,8 @@ export function StudentAccountSheet({
     canAddCharge: boolean
     canCollectPayment: boolean
     canManageCorrections: boolean
+    categories: ChargeCategory[]
+    paymentAccounts: PaymentAccount[]
     onAction: (action: "charge" | "payment", studentId: string) => void
     onCorrectionSuccess: (studentId: string) => Promise<void> | void
 }) {
@@ -45,6 +50,18 @@ export function StudentAccountSheet({
     const [correction, setCorrection] = useState<CorrectionTarget>(null)
     const [correctionReason, setCorrectionReason] = useState("")
     const [correctionSaving, setCorrectionSaving] = useState(false)
+    const [editing, setEditing] = useState<Exclude<CorrectionTarget, null> | null>(null)
+    const [editReason, setEditReason] = useState("")
+    const [editAmount, setEditAmount] = useState("")
+    const [editDate, setEditDate] = useState("")
+    const [editDescription, setEditDescription] = useState("")
+    const [editCategoryId, setEditCategoryId] = useState("")
+    const [editMethod, setEditMethod] = useState("cash")
+    const [editAccountId, setEditAccountId] = useState("")
+    const [editReceipt, setEditReceipt] = useState("")
+    const [editNotes, setEditNotes] = useState("")
+    const [editAllocations, setEditAllocations] = useState<Record<string, string>>({})
+    const [editSaving, setEditSaving] = useState(false)
 
     useEffect(() => {
         const media = window.matchMedia("(min-width: 640px)")
@@ -65,6 +82,58 @@ export function StudentAccountSheet({
     function openCorrection(target: Exclude<CorrectionTarget, null>) {
         setCorrection(target)
         setCorrectionReason("")
+    }
+
+    function openEdit(target: Exclude<CorrectionTarget, null>) {
+        setEditing(target)
+        setEditReason("")
+        if (target.kind === "obligation") {
+            setEditAmount(String(target.item.amount))
+            setEditDate(String(target.item.due_date || target.item.month || "").slice(0, 10))
+            setEditDescription(target.item.description)
+            setEditCategoryId(target.item.category_id || "")
+        } else {
+            const payment = target.payment
+            setEditAmount(String(payment.amount))
+            setEditDate(String(payment.date || "").slice(0, 10))
+            setEditMethod(payment.payment_method || payment.method || "cash")
+            setEditAccountId(payment.payment_account_id || "")
+            setEditReceipt(payment.receipt_number || payment.reference_number || "")
+            setEditNotes(payment.notes || "")
+            setEditAllocations(Object.fromEntries((payment.allocations || []).map(item => [item.obligation_id || item.item_id || item.open_item_id || "", String(item.amount)])))
+        }
+    }
+
+    async function submitEdit(event: React.FormEvent) {
+        event.preventDefault()
+        if (!editing || !studentId || editReason.trim().length < 3) return
+        setEditSaving(true)
+        try {
+            const result = editing.kind === "obligation" && editing.item.type === "monthly_fee"
+                ? await financeApi.correctPublishedMonthlyFee(editing.item.id, {
+                    amount: editAmount, reason: editReason.trim(), idempotency_key: createIdempotencyKey("monthly-fee-correction"),
+                })
+                : editing.kind === "obligation"
+                ? await financeApi.replaceCharge(editing.item.id, {
+                    category_id: editCategoryId, amount: editAmount, date: editDate, due_date: editDate,
+                    description: editDescription, reason: editReason.trim(), idempotency_key: createIdempotencyKey("charge-edit"),
+                })
+                : await financeApi.replacePayment(editing.payment.id, {
+                    amount: editAmount, method: editMethod, payment_account_id: editAccountId || undefined,
+                    receipt_number: editReceipt || undefined, date: editDate, notes: editNotes || undefined,
+                    allocations: Object.entries(editAllocations).filter(([, value]) => Number(value) > 0)
+                        .map(([obligation_id, amount]) => ({ obligation_id, amount })),
+                    reason: editReason.trim(), idempotency_key: createIdempotencyKey("payment-edit"),
+                })
+            if (!result.success) throw new Error(result.error || "Could not edit finance record")
+            toast.success(result.message || "Finance record edited")
+            setEditing(null)
+            await onCorrectionSuccess(studentId)
+        } catch (error) {
+            toast.error(financeErrorMessage(error, "Could not edit finance record"))
+        } finally {
+            setEditSaving(false)
+        }
     }
 
     function closeCorrection() {
@@ -137,6 +206,7 @@ export function StudentAccountSheet({
                             <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
                                 {([
                                     ["open", "Open items", FileText],
+                                    ["records", "Records", ReceiptText],
                                     ["payments", "Payments", ReceiptText],
                                     ["rule", "Fee rule", CalendarClock],
                                 ] as const).map(([value, label, Icon]) => (
@@ -177,9 +247,10 @@ export function StudentAccountSheet({
                                                      <p className="font-black text-rose-600 dark:text-rose-300">{money(item.balance)}</p>
                                                      {Number(item.paid_amount || 0) > 0 && <p className="text-xs text-emerald-600">Paid {money(item.paid_amount)}</p>}
                                                      {canVoid && (
-                                                         <Button type="button" variant="ghost" size="xs" className="mt-1 text-slate-500 hover:text-rose-700" onClick={() => openCorrection({ kind: "obligation", item })}>
-                                                             <Ban className="h-3 w-3" /> Void
-                                                         </Button>
+                                                         <div className="mt-1 flex justify-end gap-1">
+                                                             {obligationType === "charge" && <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "obligation", item })}><Pencil className="h-3 w-3" /> Edit</Button>}
+                                                             <Button type="button" variant="ghost" size="xs" className="text-rose-700" onClick={() => openCorrection({ kind: "obligation", item })}><Ban className="h-3 w-3" /> Delete</Button>
+                                                         </div>
                                                      )}
                                                  </div>
                                              </div>
@@ -196,6 +267,9 @@ export function StudentAccountSheet({
                                     ) : account.payments.map(payment => {
                                         const reversed = payment.status === "reversed"
                                         const canReverse = canManageCorrections && payment.status === "posted" && payment.allocation_status === "strict"
+                                        const canEditPayment = canReverse
+                                            && Math.abs((payment.allocations || []).reduce((sum, item) => sum + Number(item.amount || 0), 0) - Number(payment.amount)) < 0.005
+                                            && (payment.allocations || []).every(allocation => account.obligation_history?.some(item => item.id === (allocation.obligation_id || allocation.item_id || allocation.open_item_id)))
                                         return (
                                         <div key={payment.id} className={`rounded-2xl border p-4 ${reversed ? "border-rose-200 bg-rose-50/60 dark:border-rose-900/60 dark:bg-rose-950/20" : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"}`}>
                                             <div className="flex items-start justify-between gap-4">
@@ -214,9 +288,10 @@ export function StudentAccountSheet({
                                                 <div className="shrink-0 text-right">
                                                     <p className={`font-black ${reversed ? "text-rose-700 line-through dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`}>{money(payment.amount)}</p>
                                                     {canReverse && (
-                                                        <Button type="button" variant="ghost" size="xs" className="mt-1 text-slate-500 hover:text-rose-700" onClick={() => openCorrection({ kind: "payment", payment })}>
-                                                            <RotateCcw className="h-3 w-3" /> Reverse
-                                                        </Button>
+                                                        <div className="mt-1 flex justify-end gap-1">
+                                                            {canEditPayment && <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "payment", payment })}><Pencil className="h-3 w-3" /> Edit</Button>}
+                                                            <Button type="button" variant="ghost" size="xs" className="text-rose-700" onClick={() => openCorrection({ kind: "payment", payment })}><Ban className="h-3 w-3" /> Delete</Button>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -234,6 +309,35 @@ export function StudentAccountSheet({
                                             )}
                                         </div>
                                         )
+                                    })}
+                                </div>
+                            )}
+
+                            {tab === "records" && (
+                                <div className="space-y-3">
+                                    {!account.obligation_history?.length ? (
+                                        <EmptyState icon={ReceiptText} title="No finance records" description="Charges and published dues will appear here." />
+                                    ) : account.obligation_history.map(item => {
+                                        const isCharge = item.type === "charge"
+                                        const canCorrect = canManageCorrections && (isCharge || item.type === "monthly_fee") && item.status !== "void" && Number(item.paid_amount || 0) === 0
+                                        return <div key={item.id} className={`rounded-2xl border p-4 ${item.status === "void" ? "border-rose-200 bg-rose-50/60" : "border-slate-200 bg-white"}`}>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-slate-900">{item.description}</p>
+                                                    <p className="mt-1 text-xs text-slate-500">{item.category_name || item.type.replaceAll("_", " ")} · {shortDate(item.due_date || item.month)} · {item.status}</p>
+                                                    {item.void_reason && <p className="mt-2 text-xs text-rose-700">Correction: {item.void_reason}</p>}
+                                                </div>
+                                                <div className="shrink-0 text-right">
+                                                    <p className={item.status === "void" ? "font-bold text-slate-500 line-through" : "font-bold text-slate-900"}>{money(item.amount)}</p>
+                                                    {canCorrect && <div className="mt-1 flex gap-1">
+                                                        <Button type="button" size="xs" variant="ghost" onClick={() => openEdit({ kind: "obligation", item })}><Pencil className="h-3 w-3" /> {isCharge ? "Edit" : "Correct"}</Button>
+                                                        {isCharge && <Button type="button" size="xs" variant="ghost" className="text-rose-700" onClick={() => openCorrection({ kind: "obligation", item })}><Ban className="h-3 w-3" /> Delete</Button>}
+                                                    </div>}
+                                                    {canManageCorrections && (isCharge || item.type === "monthly_fee") && item.status !== "void" && Number(item.paid_amount || 0) > 0 &&
+                                                        <p className="mt-1 max-w-36 text-xs text-slate-500">Reverse allocated payment first</p>}
+                                                </div>
+                                            </div>
+                                        </div>
                                     })}
                                 </div>
                             )}
@@ -273,7 +377,7 @@ export function StudentAccountSheet({
             <DialogContent className="sm:max-w-md">
                 <form onSubmit={submitCorrection} className="space-y-5">
                     <DialogHeader>
-                        <DialogTitle>{correction?.kind === "payment" ? "Reverse payment" : "Void finance item"}</DialogTitle>
+                        <DialogTitle>{correction?.kind === "payment" ? "Delete payment" : "Delete finance item"}</DialogTitle>
                         <DialogDescription>
                             {correction?.kind === "payment"
                                 ? "The payment allocations will be restored as pending. The original payment remains in the audit history as reversed."
@@ -288,7 +392,81 @@ export function StudentAccountSheet({
                         <Button type="button" variant="outline" disabled={correctionSaving} onClick={closeCorrection}>Cancel</Button>
                         <Button type="submit" variant="destructive" disabled={correctionSaving || correctionReason.trim().length < 3}>
                             {correctionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : correction?.kind === "payment" ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
-                            {correction?.kind === "payment" ? "Reverse payment" : "Void item"}
+                            {correction?.kind === "payment" ? "Reverse and remove" : "Void and remove"}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+        <Dialog open={Boolean(editing)} onOpenChange={nextOpen => { if (!nextOpen && !editSaving) setEditing(null) }}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                <form onSubmit={submitEdit} className="space-y-4">
+                    <DialogHeader>
+                        <DialogTitle>{editing?.kind === "payment" ? "Edit payment" : editing?.item.type === "monthly_fee" ? "Correct published monthly due" : "Edit charge"}</DialogTitle>
+                        <DialogDescription>The original entry is retained as reversed or voided. The corrected entry is posted atomically with an audit reason.</DialogDescription>
+                    </DialogHeader>
+                    {editing?.kind === "obligation" && editing.item.type !== "monthly_fee" && <>
+                        <label className="block space-y-1 text-sm font-semibold">Category
+                            <select required className="h-10 w-full rounded-lg border px-3" value={editCategoryId} onChange={event => setEditCategoryId(event.target.value)}>
+                                {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                            </select>
+                        </label>
+                        <label className="block space-y-1 text-sm font-semibold">Description
+                            <Textarea required maxLength={500} value={editDescription} onChange={event => setEditDescription(event.target.value)} />
+                        </label>
+                    </>}
+                    <div className="grid grid-cols-2 gap-3">
+                        <label className="block space-y-1 text-sm font-semibold">Amount
+                            <Input required type="number" min={editing?.kind === "obligation" && editing.item.type === "monthly_fee" ? "0" : "0.01"} step="0.01" value={editAmount} onChange={event => setEditAmount(event.target.value)} />
+                        </label>
+                        <label className="block space-y-1 text-sm font-semibold">{editing?.kind === "payment" ? "Payment date" : "Due date"}
+                            <Input required type="date" value={editDate} onChange={event => setEditDate(event.target.value)} />
+                        </label>
+                    </div>
+                    {editing?.kind === "obligation" && editing.item.type === "monthly_fee" &&
+                        <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">This changes only this student’s published fee for {shortDate(editing.item.month)}. The original bill remains in history. Use ₹0 for a full waiver.</p>}
+                    {editing?.kind === "payment" && <>
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className="block space-y-1 text-sm font-semibold">Method
+                                <select className="h-10 w-full rounded-lg border px-3" value={editMethod} onChange={event => { setEditMethod(event.target.value); setEditAccountId("") }}>
+                                    <option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank</option>
+                                </select>
+                            </label>
+                            {editMethod !== "cash" && <label className="block space-y-1 text-sm font-semibold">Receiving account
+                                <select required className="h-10 w-full rounded-lg border px-3" value={editAccountId} onChange={event => setEditAccountId(event.target.value)}>
+                                    <option value="">Choose account</option>
+                                    {paymentAccounts.filter(account => account.account_type === editMethod || account.id === editAccountId).map(account =>
+                                        <option key={account.id} value={account.id}>{account.account_holder || account.account_name || account.account_type}</option>)}
+                                </select>
+                            </label>}
+                        </div>
+                        <label className="block space-y-1 text-sm font-semibold">Receipt / reference
+                            <Input value={editReceipt} onChange={event => setEditReceipt(event.target.value)} />
+                        </label>
+                        <label className="block space-y-1 text-sm font-semibold">Notes
+                            <Textarea value={editNotes} onChange={event => setEditNotes(event.target.value)} />
+                        </label>
+                        <div className="space-y-2 rounded-xl border bg-slate-50 p-3">
+                            <p className="text-sm font-bold">Payment allocation</p>
+                            {(account?.obligation_history || []).filter(item => item.status !== "void" && Number(item.balance) >= 0).map(item => {
+                                const originalAllocation = Number(editing.payment.allocations?.find(allocation =>
+                                    (allocation.obligation_id || allocation.item_id || allocation.open_item_id) === item.id)?.amount || 0)
+                                return <label key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <span className="min-w-0 truncate">{item.description} · available {money(Number(item.balance) + originalAllocation)}</span>
+                                    <Input className="h-9 w-24 shrink-0" aria-label={`Allocation for ${item.description}`} type="number" min="0" max={Number(item.balance) + originalAllocation} step="0.01"
+                                        value={editAllocations[item.id] || ""} onChange={event => setEditAllocations(current => ({ ...current, [item.id]: event.target.value }))} />
+                                </label>
+                            })}
+                            <p className="text-xs text-slate-600">Allocated {money(Object.values(editAllocations).reduce((sum, value) => sum + (Number(value) || 0), 0))} of {money(Number(editAmount) || 0)}</p>
+                        </div>
+                    </>}
+                    <label className="block space-y-1 text-sm font-semibold">Reason for edit
+                        <Textarea required minLength={3} maxLength={500} rows={2} value={editReason} onChange={event => setEditReason(event.target.value)} placeholder="Why is this correction needed?" />
+                    </label>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" disabled={editSaving} onClick={() => setEditing(null)}>Cancel</Button>
+                        <Button type="submit" disabled={editSaving || editReason.trim().length < 3 || (editing?.kind === "payment" && Math.abs(Object.values(editAllocations).reduce((sum, value) => sum + (Number(value) || 0), 0) - (Number(editAmount) || 0)) > 0.005)}>
+                            {editSaving && <Loader2 className="h-4 w-4 animate-spin" />} Save correction
                         </Button>
                     </DialogFooter>
                 </form>

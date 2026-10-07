@@ -6,7 +6,7 @@ import {
     getDashboard, getFeeSchedulesCompatibility, getLedgerCompatibility, getPaymentFormData,
     getWorkspace, getAccount, postAccount, postCategory, postCharge, postFeeSchedule,
     postMonthlyGenerateCompatibility, postMonthlyPreview, postMonthlyPublish, postOpeningBalances,
-    postPayment, postPaymentReverse, postObligationVoid, postPermission, postStudentAgreement, putAccountToggle, putCategoryToggle,
+    postPayment, postPaymentReverse, postPaymentReplace, postChargeReplace, postPublishedMonthlyFeeCorrection, postObligationVoid, postPermission, postStudentAgreement, putAccountToggle, putCategoryToggle,
     putPermissionRevoke, rejectFeeScheduleDelete, rejectMonthlyDelete, searchLedgerCompatibility,
 } from '../modules/finance/finance.controller';
 
@@ -20,7 +20,10 @@ router.get('/students/:studentId/account', getAccount);
 router.post('/charges', rejectFinanceDelegation, postCharge);
 router.post('/payments', rejectFinanceDelegation, postPayment);
 router.post('/payments/:id/reverse', rejectFinanceDelegation, postPaymentReverse);
+router.post('/payments/:id/replace', rejectFinanceDelegation, postPaymentReplace);
 router.post('/obligations/:id/void', rejectFinanceDelegation, postObligationVoid);
+router.post('/obligations/:id/replace', rejectFinanceDelegation, postChargeReplace);
+router.post('/obligations/:id/correct-monthly-fee', rejectFinanceDelegation, postPublishedMonthlyFeeCorrection);
 router.post('/opening-balances', rejectFinanceDelegation, postOpeningBalances);
 router.post('/monthly-fees/preview', rejectFinanceDelegation, postMonthlyPreview);
 router.post('/monthly-fees/publish', rejectFinanceDelegation, postMonthlyPublish);

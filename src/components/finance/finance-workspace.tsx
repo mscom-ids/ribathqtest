@@ -300,6 +300,8 @@ export function FinanceWorkspace({ mode, initialView = "overview" }: { mode: Fin
                 canAddCharge={canAddCharge}
                 canCollectPayment={canCollectPayment}
                 canManageCorrections={canManageFinance}
+                categories={categories}
+                paymentAccounts={accounts}
                 onAction={(nextAction, studentId) => { setAccountOpen(false); openAction(nextAction, studentId) }}
                 onCorrectionSuccess={afterCorrection}
             />

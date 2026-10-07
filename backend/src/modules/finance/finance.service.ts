@@ -225,6 +225,20 @@ export async function getStudentAccount(actor: FinanceActor, studentIdInput: unk
         params,
     );
 
+    const chargeHistoryPromise = visibility.fullLedger
+        ? db.query(
+            `SELECT o.id, o.obligation_type AS type, o.category_id, c.name AS category_name,
+                    o.description, o.amount, o.paid_amount, o.balance, o.due_date,
+                    o.service_month AS month, o.status, o.void_reason, o.created_at
+             FROM finance_obligations o
+             LEFT JOIN charge_categories c ON c.id = o.category_id
+             WHERE o.student_id = $1
+             ORDER BY o.created_at DESC, o.id DESC
+             LIMIT 500`,
+            [studentId],
+        )
+        : Promise.resolve({ rows: [] });
+
     const paymentsPromise = visibility.fullLedger
         ? db.query(
             `SELECT p.id, p.amount, p.method, p.method AS payment_method,
@@ -307,11 +321,12 @@ export async function getStudentAccount(actor: FinanceActor, studentIdInput: unk
             [studentId],
         )
         : Promise.resolve({ rows: [{ credit: '0.00' }] });
-    const [openItemsResult, paymentsResult, activeRuleResult, creditResult] = await Promise.all([
+    const [openItemsResult, paymentsResult, activeRuleResult, creditResult, chargeHistoryResult] = await Promise.all([
         openItemsPromise,
         paymentsPromise,
         activeRulePromise,
         creditPromise,
+        chargeHistoryPromise,
     ]);
     const openItems = openItemsResult.rows;
     const outstandingPaise = openItems.reduce(
@@ -340,6 +355,7 @@ export async function getStudentAccount(actor: FinanceActor, studentIdInput: unk
             credits: Number(creditResult.rows[0]?.credit || 0),
         },
         open_items: openItems,
+        obligation_history: chargeHistoryResult.rows,
         payments: paymentsResult.rows,
         active_fee_rule: activeRuleResult.rows[0] || null,
     };
@@ -747,6 +763,198 @@ export async function reversePayment(actor: FinanceActor, paymentIdInput: unknow
         });
         await client.query('COMMIT');
         return { payment: reversed.rows[0], duplicate: false };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+// Ledger rows are immutable. An edit is an atomic, audited replacement rather
+// than an UPDATE that would erase the original financial evidence.
+export async function replaceCharge(actor: FinanceActor, obligationIdInput: unknown, body: any) {
+    requireFinanceManager(actor);
+    const obligationId = requiredUuid(obligationIdInput, 'Charge');
+    const reason = requiredText(body?.reason, 'Edit reason', 500);
+    const amount = money(body?.amount, 'Charge amount');
+    const description = requiredText(body?.description, 'Description', 500);
+    const chargeDate = date(body?.date, 'Charge date');
+    const dueDate = optionalDate(body?.due_date, 'Due date') || chargeDate;
+    const categoryId = requiredUuid(body?.category_id, 'Charge category');
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
+        const original = (await client.query('SELECT * FROM finance_obligations WHERE id = $1 FOR UPDATE', [obligationId])).rows[0];
+        if (!original || original.obligation_type !== 'charge') throw new FinanceError(404, 'Editable charge not found.', 'CHARGE_NOT_FOUND');
+        if (original.status === 'void') throw new FinanceError(409, 'This charge was already removed.', 'CHARGE_VOID');
+        if (moneyToPaise(original.paid_amount, { allowZero: true, field: 'Paid amount' }) !== 0) {
+            throw new FinanceError(409, 'Reverse payments allocated to this charge before editing it.', 'CHARGE_HAS_PAYMENTS');
+        }
+        const category = (await client.query(
+            'SELECT id, allocation_priority, requires_approval FROM charge_categories WHERE id = $1 AND is_active = true',
+            [categoryId],
+        )).rows[0];
+        if (!category || category.requires_approval) throw new FinanceError(409, 'Choose an active charge category that does not require approval.', 'CATEGORY_UNAVAILABLE');
+        await client.query(
+            `UPDATE finance_obligations SET status = 'void', voided_at = NOW(), voided_by = $2, void_reason = $3 WHERE id = $1`,
+            [obligationId, actor.staffId, `Replaced: ${reason}`],
+        );
+        const replacement = (await client.query(
+            `INSERT INTO finance_obligations
+                (student_id, obligation_type, category_id, description, amount, paid_amount, balance,
+                 service_month, due_date, status, allocation_priority, idempotency_key, created_by,
+                 requires_approval, approval_status, approved_at, approved_by)
+             VALUES ($1, 'charge', $2, $3, $4, 0, $4, date_trunc('month', $5::date)::date,
+                     $6, 'open', $7, $8, $9, false, 'approved', NOW(), $9::uuid)
+             RETURNING *`,
+            [original.student_id, categoryId, description, amount.value, chargeDate, dueDate,
+                Number(category.allocation_priority ?? 100), idempotencyKey(body?.idempotency_key), actor.staffId],
+        )).rows[0];
+        await audit(client, actor, {
+            action: 'charge_replaced', entityType: 'obligation', entityId: replacement.id, studentId: original.student_id,
+            metadata: { original_id: obligationId, reason, old_amount: original.amount, new_amount: amount.value },
+        });
+        await client.query('COMMIT');
+        return { obligation: replacement, original_id: obligationId };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function correctPublishedMonthlyFee(actor: FinanceActor, obligationIdInput: unknown, body: any) {
+    requireFinanceManager(actor);
+    const obligationId = requiredUuid(obligationIdInput, 'Monthly due');
+    const reason = requiredText(body?.reason, 'Correction reason', 500);
+    const amount = money(body?.amount, 'Corrected monthly fee', true);
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
+        const original = (await client.query('SELECT * FROM finance_obligations WHERE id = $1 FOR UPDATE', [obligationId])).rows[0];
+        if (!original || original.obligation_type !== 'monthly_fee') {
+            throw new FinanceError(404, 'Published monthly due not found.', 'MONTHLY_DUE_NOT_FOUND');
+        }
+        if (original.status === 'void') throw new FinanceError(409, 'This monthly due was already corrected.', 'MONTHLY_DUE_VOID');
+        if (moneyToPaise(original.paid_amount, { allowZero: true, field: 'Paid amount' }) !== 0) {
+            throw new FinanceError(409, 'Reverse payments allocated to this due before correcting it.', 'MONTHLY_DUE_HAS_PAYMENTS');
+        }
+        await client.query(
+            `UPDATE finance_obligations SET status = 'void', voided_at = NOW(), voided_by = $2,
+                void_reason = $3 WHERE id = $1`,
+            [obligationId, actor.staffId, `Published fee corrected: ${reason}`],
+        );
+        const replacement = (await client.query(
+            `INSERT INTO finance_obligations
+                (student_id, obligation_type, category_id, description, amount, paid_amount, balance,
+                 service_month, due_date, status, allocation_priority, fee_schedule_id, fee_agreement_id,
+                 billing_run_id, idempotency_key, created_by, requires_approval, approval_status,
+                 approved_at, approved_by)
+             VALUES ($1, 'monthly_fee', $2, $3, $4, 0, $4, $5, $6,
+                     CASE WHEN $4::numeric = 0 THEN 'paid' ELSE 'open' END, $7, $8, $9,
+                     $10, $11, $12, false, 'approved', NOW(), $12::uuid)
+             RETURNING *`,
+            [original.student_id, original.category_id, original.description, amount.value,
+                original.service_month, original.due_date, original.allocation_priority,
+                original.fee_schedule_id, original.fee_agreement_id, original.billing_run_id,
+                idempotencyKey(body?.idempotency_key), actor.staffId],
+        )).rows[0];
+        await audit(client, actor, {
+            action: 'published_monthly_fee_corrected', entityType: 'obligation', entityId: replacement.id,
+            studentId: original.student_id,
+            metadata: { original_id: obligationId, reason, original_amount: original.amount,
+                corrected_amount: amount.value, service_month: original.service_month },
+        });
+        await client.query('COMMIT');
+        return { obligation: replacement, original_id: obligationId };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+export async function replacePayment(actor: FinanceActor, paymentIdInput: unknown, body: any) {
+    requireFinanceManager(actor);
+    const paymentId = requiredUuid(paymentIdInput, 'Payment');
+    const reason = requiredText(body?.reason, 'Edit reason', 500);
+    const amount = money(body?.amount, 'Payment amount');
+    const method = paymentMethod(body?.method);
+    const accountId = optionalUuid(body?.payment_account_id, 'Payment account');
+    const receipt = optionalText(body?.receipt_number, 'Receipt number', 120);
+    const paymentDate = date(body?.date, 'Payment date');
+    const notes = optionalText(body?.notes, 'Notes', 1000);
+    if ((method === 'cash' && accountId) || (method !== 'cash' && !accountId)) {
+        throw new FinanceError(400, 'Choose a receiving account for bank or UPI payments, but not cash.', 'PAYMENT_ACCOUNT_INVALID');
+    }
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
+        const original = (await client.query('SELECT * FROM finance_payments WHERE id = $1 FOR UPDATE', [paymentId])).rows[0];
+        if (!original) throw new FinanceError(404, 'Payment not found.', 'PAYMENT_NOT_FOUND');
+        if (original.status !== 'posted' || original.allocation_status !== 'strict') {
+            throw new FinanceError(409, 'Only posted payments with allocation history can be edited.', 'PAYMENT_NOT_EDITABLE');
+        }
+        if (accountId) {
+            const receiving = (await client.query('SELECT account_type FROM payment_accounts WHERE id = $1 AND is_active = true', [accountId])).rows[0];
+            if (!receiving || String(receiving.account_type).toLowerCase() !== method) {
+                throw new FinanceError(400, 'Receiving account does not match the payment method.', 'PAYMENT_ACCOUNT_METHOD_MISMATCH');
+            }
+        }
+        const oldAllocations = (await client.query(
+            `SELECT a.obligation_id, a.amount FROM finance_payment_allocations a
+             JOIN finance_obligations o ON o.id = a.obligation_id
+             WHERE a.payment_id = $1 ORDER BY a.created_at, a.id FOR UPDATE OF o`, [paymentId],
+        )).rows;
+        for (const allocation of oldAllocations) {
+            const result = await client.query(
+                `UPDATE finance_obligations SET paid_amount = paid_amount - $2::numeric,
+                    balance = balance + $2::numeric,
+                    status = CASE WHEN paid_amount - $2::numeric = 0 THEN 'open' ELSE 'partial' END
+                 WHERE id = $1 AND status IN ('paid', 'partial') AND paid_amount >= $2::numeric RETURNING id`,
+                [allocation.obligation_id, allocation.amount],
+            );
+            if (!result.rows[0]) throw new FinanceError(409, 'Payment allocations changed. Refresh and retry.', 'PAYMENT_REVERSAL_CONFLICT');
+        }
+        await client.query(
+            `UPDATE finance_payments SET status = 'reversed', reversed_at = NOW(), reversed_by = $2,
+                reversal_reason = $3 WHERE id = $1`, [paymentId, actor.staffId, `Replaced: ${reason}`],
+        );
+        const obligations = (await client.query(
+            `SELECT id, balance FROM finance_obligations WHERE student_id = $1 AND voided_at IS NULL
+               AND status IN ('open', 'partial') AND approval_status = 'approved' AND balance > 0
+             ORDER BY due_date NULLS LAST, allocation_priority, created_at, id FOR UPDATE`,
+            [original.student_id],
+        )).rows;
+        const allocation = manualAllocation(body?.allocations, obligations, amount.paise);
+        const replacement = (await client.query(
+            `INSERT INTO finance_payments
+                (student_id, amount, allocated_amount, unapplied_amount, allocation_status,
+                 method, payment_account_id, receipt_number, date, notes, status, idempotency_key, recorded_by)
+             VALUES ($1, $2, $2, 0, 'strict', $3, $4, $5, $6, $7, 'posted', $8, $9) RETURNING *`,
+            [original.student_id, amount.value, method, accountId, receipt, paymentDate, notes,
+                idempotencyKey(body?.idempotency_key), actor.staffId],
+        )).rows[0];
+        for (const item of allocation.allocations) {
+            await client.query('INSERT INTO finance_payment_allocations (payment_id, obligation_id, amount) VALUES ($1, $2, $3)',
+                [replacement.id, item.obligation_id, item.amount]);
+            await client.query(
+                `UPDATE finance_obligations SET paid_amount = paid_amount + $2::numeric,
+                    balance = balance - $2::numeric,
+                    status = CASE WHEN balance - $2::numeric = 0 THEN 'paid' ELSE 'partial' END WHERE id = $1`,
+                [item.obligation_id, item.amount],
+            );
+        }
+        await audit(client, actor, {
+            action: 'payment_replaced', entityType: 'payment', entityId: replacement.id, studentId: original.student_id,
+            metadata: { original_id: paymentId, reason, old_amount: original.amount, new_amount: amount.value,
+                allocations: allocation.allocations.map(item => ({ obligation_id: item.obligation_id, amount: item.amount })) },
+        });
+        await client.query('COMMIT');
+        return { payment: replacement, original_id: paymentId };
     } catch (error) {
         await client.query('ROLLBACK');
         throw error;
