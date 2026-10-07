@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import { db } from '../../config/db';
 import { invalidateCacheByPrefix } from '../../utils/server-cache';
-import { audit, calculateRisk, changeStatus, nextReference, reporterScopeSql, resolveDisciplineActor, syncIncidentMark } from './discipline.service';
+import { assertCanReportStudent, audit, calculateRisk, changeStatus, nextReference, reporterScopeSql, resolveDisciplineActor, syncIncidentMark } from './discipline.service';
 import { cleanText, pagination, parseActionStatus, parseIncidentCreate, parsePositiveMark, parseReview, requiredText } from './discipline.validation';
 
 function respondError(res: Response, error: any, fallback: string) {
     const message = error?.message || fallback;
-    const status = /required|invalid|must be|not found|before closing/i.test(message) ? 400 : 500;
+    const status = Number(error?.statusCode) || (/required|invalid|must be|not found|before closing/i.test(message) ? 400 : 500);
     if (status === 500) console.error(`[discipline] ${fallback}:`, error);
     return res.status(status).json({ success: false, error: message });
 }
@@ -57,6 +57,7 @@ export async function createIncident(req: Request, res: Response) {
         const actor = await resolveDisciplineActor(req);
         if (!actor.staffId) return res.status(403).json({ success: false, error: 'A linked staff profile is required' });
         await client.query('BEGIN');
+        await assertCanReportStudent(actor, input.student_id, client);
         if (input.idempotency_key) {
             const duplicate = await client.query('SELECT id,reference_no FROM discipline_incidents WHERE idempotency_key=$1', [input.idempotency_key]);
             if (duplicate.rows[0]) { await client.query('ROLLBACK'); return res.json({ success: true, incident: duplicate.rows[0], duplicate: true }); }

@@ -150,3 +150,22 @@ export function reporterScopeSql(role: string, staffId: string | null, params: a
     return ` AND i.reported_by = $${params.length}`;
 }
 
+export async function assertCanReportStudent(actor: { role: string; staffId: string | null }, studentId: string, queryable: Queryable = db) {
+    if (isReviewRole(actor.role)) return;
+    if (!actor.staffId) throw new Error('A linked staff profile is required');
+
+    const assigned = await queryable.query(
+        `SELECT 1
+         FROM students
+         WHERE adm_no = $1
+           AND status = 'active'
+           AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
+         LIMIT 1`,
+        [studentId, actor.staffId],
+    );
+    if (!assigned.rows[0]) {
+        const error = new Error('You can report disciplinary incidents only for your assigned students') as Error & { statusCode?: number };
+        error.statusCode = 403;
+        throw error;
+    }
+}

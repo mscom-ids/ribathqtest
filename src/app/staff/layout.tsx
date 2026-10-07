@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { LayoutDashboard, CalendarCheck, FileText, Menu, LogOut, DoorOpen, Landmark, MessageCircle, Users } from "lucide-react"
+import { LayoutDashboard, CalendarCheck, FileText, Menu, LogOut, DoorOpen, Landmark, MessageCircle, ShieldAlert, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -113,6 +113,7 @@ export default function StaffLayout({
         { href: "/staff/attendance", label: "Attendance", icon: CalendarCheck },
         { href: "/staff/leaves", label: "Leaves", icon: DoorOpen },
         { href: "/staff/reports", label: "Reports", icon: FileText },
+        { href: "/staff/disciplinary", label: "Discipline", icon: ShieldAlert },
         ...(isLeader ? [] : [{ href: "/staff/assigned", label: "Assigned", icon: Users }]),
         { href: "/staff/chat", label: "Chat", icon: MessageCircle },
         { href: "/staff/finance", label: "Finance", icon: Landmark },
@@ -127,6 +128,7 @@ export default function StaffLayout({
 
     const mobileMoreItems = [
         { href: "/staff/reports", label: "Reports", description: "Student progress reports", icon: FileText },
+        { href: "/staff/disciplinary", label: "Discipline", description: "Report student incidents", icon: ShieldAlert },
         ...(isLeader ? [] : [{ href: "/staff/assigned", label: "Assigned", description: "Assigned students", icon: Users }]),
         { href: "/staff/finance", label: "Finance", description: "Finance module", icon: Landmark },
     ]

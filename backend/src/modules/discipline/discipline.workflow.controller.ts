@@ -1,13 +1,13 @@
 import { Request, Response } from 'express';
 import { db } from '../../config/db';
 import { invalidateCacheByPrefix } from '../../utils/server-cache';
-import { audit, changeStatus, resolveDisciplineActor } from './discipline.service';
+import { assertCanReportStudent, audit, changeStatus, resolveDisciplineActor } from './discipline.service';
 import { PARENT_STATUSES } from './discipline.types';
 import { cleanText, parseIncidentCreate } from './discipline.validation';
 
 function fail(res: Response, error: any, fallback: string) {
     const message = error?.message || fallback;
-    const status = /required|invalid|not found|only draft/i.test(message) ? 400 : 500;
+    const status = Number(error?.statusCode) || (/required|invalid|not found|only draft/i.test(message) ? 400 : 500);
     if (status === 500) console.error(`[discipline] ${fallback}:`, error);
     return res.status(status).json({ success: false, error: message });
 }
@@ -30,6 +30,7 @@ export async function updateDraftIncident(req: Request, res: Response) {
             await client.query('ROLLBACK');
             return res.status(403).json({ success: false, error: 'You can edit only your own draft reports' });
         }
+        await assertCanReportStudent(actor, input.student_id, client);
         const updated = await client.query(
             `UPDATE discipline_incidents SET student_id=$2,category_id=$3,offence_type_id=$4,severity=$5,
              discipline_marks=$6,reported_at=$7,location=$8,hostel=$9,floor=$10,room_number=$11,
