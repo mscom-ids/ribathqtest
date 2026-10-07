@@ -36,6 +36,7 @@ import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
 import { Badge } from "@/components/ui/badge"
 import { MonthlyReportExportButtons } from "./monthly-report-export-buttons"
+import { getHifzPerformancePoints } from "@/lib/hifz-performance"
 
 type StudentMonthlyStats = {
     adm_no: string
@@ -58,6 +59,10 @@ type StudentMonthlyStats = {
     cancelledClasses?: number
     attendedClasses?: number
     notAttendedClasses?: number
+    percentage?: number | string | null
+    totalPoints?: number | string | null
+    total_points?: number | string | null
+    points?: number | string | null
 }
 
 function formatAttendanceText(student: StudentMonthlyStats) {
@@ -84,6 +89,11 @@ function formatAttendanceText(student: StudentMonthlyStats) {
 function formatPointDays(value?: number) {
     if (value === undefined || value === null) return "-"
     return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "")
+}
+
+function formatPerformancePoints(student: StudentMonthlyStats) {
+    const points = getHifzPerformancePoints(student)
+    return points === null ? "-" : points.toFixed(2)
 }
 
 export default function MonthlyReportsPage() {
@@ -471,6 +481,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             <TableHead>Recent Rev (D)</TableHead>
                             <TableHead>Juz Rev (J)</TableHead>
                             <TableHead>Point Days</TableHead>
+                            <TableHead title="Same 70-point score used in Top Performers">Performance Points</TableHead>
                             <TableHead>Grade</TableHead>
                             <TableHead>Attendance</TableHead>
                             <TableHead>Usthad</TableHead>
@@ -480,7 +491,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="text-center h-48">
+                                <TableCell colSpan={10} className="text-center h-48">
                                     <div className="flex flex-col items-center justify-center gap-2 text-slate-500">
                                         <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
                                         <p>Generating monthly report...</p>
@@ -489,7 +500,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             </TableRow>
                         ) : memorizingStats.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={9} className="text-center h-32 text-slate-500">
+                                <TableCell colSpan={10} className="text-center h-32 text-slate-500">
                                     No memorizing students for this month.
                                 </TableCell>
                             </TableRow>
@@ -507,6 +518,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.recent_days}</TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-emerald-600'}`}>{s.juz_revision}</TableCell>
                                     <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
+                                    <TableCell className="font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{formatPerformancePoints(s)}</TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
                                     </TableCell>
@@ -559,6 +571,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 <TableHead>New Revision (J)</TableHead>
                                 <TableHead>Old Revision (J)</TableHead>
                                 <TableHead>Point Days</TableHead>
+                                <TableHead title="Same 70-point score used in Top Performers">Performance Points</TableHead>
                                 <TableHead>Grade</TableHead>
                                 <TableHead>Attendance</TableHead>
                                 <TableHead>Usthad</TableHead>
@@ -568,7 +581,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="text-center h-24">
+                                    <TableCell colSpan={9} className="text-center h-24">
                                         <div className="flex items-center justify-center gap-2 text-slate-500">
                                             <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
                                         </div>
@@ -587,6 +600,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                         <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.new_juz_revision ?? 0}</TableCell>
                                         <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.old_juz_revision ?? 0}</TableCell>
                                         <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
+                                        <TableCell className="font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{formatPerformancePoints(s)}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
                                         </TableCell>

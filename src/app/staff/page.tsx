@@ -22,6 +22,7 @@ import { AssignStudentsModal } from "@/components/staff/AssignStudentsModal"
 import { MentorFocus } from "@/components/staff/MentorFocus"
 import { SupervisorHome } from "@/components/staff/SupervisorHome"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
+import { getHifzPerformancePoints } from "@/lib/hifz-performance"
 
 // Roles that supervise every mentor via Mentor Focus (Principal / Vice Principal).
 const SUPERVISOR_ROLES = ["principal", "vice_principal", "admin"]
@@ -124,21 +125,13 @@ function buildPerformers(
     return students
         .map((student) => {
             const report = reportByAdmNo.get(student.adm_no)
-            const rawPoints = report?.totalPoints ?? report?.total_points ?? report?.points
-            const rawPercentage = report?.percentage
-            const percentage = Number(rawPercentage)
-            const legacyPoints = Number(rawPoints)
             if (!report) return null
 
             // Juz Revision can now be non-applicable or pro-rated, so students
             // have different raw maximums. Rank and display everyone on the
             // same 70-point scale using their calculated percentage.
-            const totalPoints = rawPercentage !== undefined
-                && rawPercentage !== null
-                && Number.isFinite(percentage)
-                ? Math.round((percentage * 0.7 + Number.EPSILON) * 100) / 100
-                : legacyPoints
-            if (!Number.isFinite(totalPoints)) return null
+            const totalPoints = getHifzPerformancePoints(report)
+            if (totalPoints === null) return null
             return {
                 adm_no: student.adm_no,
                 name: student.name,
