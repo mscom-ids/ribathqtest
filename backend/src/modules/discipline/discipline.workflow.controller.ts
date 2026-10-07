@@ -33,12 +33,12 @@ export async function updateDraftIncident(req: Request, res: Response) {
         await assertCanReportStudent(actor, input.student_id, client);
         const updated = await client.query(
             `UPDATE discipline_incidents SET student_id=$2,category_id=$3,offence_type_id=$4,severity=$5,
-             discipline_marks=$6,reported_at=$7,location=$8,hostel=$9,floor=$10,room_number=$11,
-             class_name=$12,division=$13,short_description=$14,immediate_action=$15,student_position=$16,
-             parent_notification_required=$17,parent_notification_status=CASE WHEN $17 THEN 'pending' ELSE 'not_required' END,
-             private_staff_notes=$18,updated_at=now() WHERE id=$1 RETURNING *`,
+             reported_at=$6,location=$7,hostel=$8,floor=$9,room_number=$10,
+             class_name=$11,division=$12,short_description=$13,immediate_action=$14,student_position=$15,
+             parent_notification_required=$16,parent_notification_status=CASE WHEN $16 THEN 'pending' ELSE 'not_required' END,
+             private_staff_notes=$17,updated_at=now() WHERE id=$1 RETURNING *`,
             [String(req.params.id), input.student_id, input.category_id, input.offence_type_id, input.severity,
-             input.discipline_marks, input.reported_at, input.location, input.hostel, input.floor, input.room_number,
+             input.reported_at, input.location, input.hostel, input.floor, input.room_number,
              input.class_name, input.division, input.short_description, input.immediate_action, input.student_position,
              input.parent_notification_required, input.private_staff_notes],
         );

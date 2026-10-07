@@ -12,7 +12,6 @@ export type Incident = {
     photo_url?: string | null
     status: string
     severity: string
-    discipline_marks: number
     reported_at: string
     category_name: string
     offence_name: string
@@ -63,12 +62,6 @@ export function StatusBadge({ status }: { status: string }) {
         cancelled: "border-slate-200 bg-slate-100 text-slate-500",
     }
     return <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ${styles[status] || styles.draft}`}>{STATUS_LABELS[status] || status}</span>
-}
-
-export function RiskBadge({ level }: { level: string }) {
-    const danger = level === "Critical Review" || level === "High Risk"
-    const warning = level === "Warning" || level === "Needs Attention"
-    return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${danger ? "bg-red-50 text-red-700" : warning ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{level}</span>
 }
 
 export function DisciplineMetric({ label, value, icon: Icon, tone = "blue", href }: { label: string; value: number | string; icon: LucideIcon; tone?: "blue" | "amber" | "red" | "emerald" | "violet"; href?: string }) {

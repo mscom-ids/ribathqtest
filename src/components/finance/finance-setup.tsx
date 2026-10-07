@@ -9,6 +9,7 @@ import {
     IndianRupee,
     Loader2,
     Plus,
+    Search,
     ShieldCheck,
     Tag,
     UserRoundCog,
@@ -175,11 +176,16 @@ function MonthlyBillingSection({ month, onRefresh }: { month: string; onRefresh:
                             Publishing is blocked: {previewUnconfigured} student{previewUnconfigured === 1 ? "" : "s"} have no active fee rule for this month.
                         </div>
                     )}
+                    {previewUnconfigured === 0 && previewStudents === 0 && (
+                        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                            All eligible students already have a monthly due for this month. Nothing new needs to be published.
+                        </div>
+                    )}
                     <div className="mt-4 border-t border-blue-200 pt-4 dark:border-blue-900/60">
                         {!confirmingPublish ? (
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs text-blue-800 dark:text-blue-200">{previewUnconfigured > 0 ? "Add the missing fee rules, then preview again." : "Individual agreements are already included. Publishing will snapshot these amounts."}</p>
-                                <Button onClick={() => setConfirmingPublish(true)} disabled={previewUnconfigured > 0} className="gap-2 bg-blue-600 text-white hover:bg-blue-700">
+                                <p className="text-xs text-blue-800 dark:text-blue-200">{previewUnconfigured > 0 ? "Add the missing fee rules, then preview again." : previewStudents === 0 ? "No missing monthly dues were found." : "Individual agreements are already included. Publishing will create only the missing dues and leave existing dues unchanged."}</p>
+                                <Button onClick={() => setConfirmingPublish(true)} disabled={previewUnconfigured > 0 || previewStudents === 0} className="gap-2 bg-blue-600 text-white hover:bg-blue-700">
                                     <CheckCircle2 className="h-4 w-4" /> Review publish
                                 </Button>
                             </div>
@@ -207,6 +213,18 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
     const [schedule, setSchedule] = useState({ name: "", amount: "", effective_from: nextMonthValue() })
     const [agreement, setAgreement] = useState({ student_id: "", adjustment_type: "fixed" as StudentFeeAgreementInput["adjustment_type"], amount: "", effective_from: currentMonthValue(), effective_until: "", reason: "" })
     const [saving, setSaving] = useState<"schedule" | "agreement" | null>(null)
+    const [agreementSearch, setAgreementSearch] = useState("")
+    const visibleAgreements = useMemo(() => {
+        const needle = agreementSearch.trim().toLowerCase()
+        return (setup.agreements || []).filter(item => !needle || [
+            item.student_name,
+            item.student_id,
+            item.standard,
+            item.division,
+            item.reason,
+            item.adjustment_type,
+        ].some(value => String(value || "").toLowerCase().includes(needle)))
+    }, [agreementSearch, setup.agreements])
 
     async function addSchedule(event: React.FormEvent) {
         event.preventDefault()
@@ -333,6 +351,38 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
                         {saving === "agreement" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add agreement
                     </Button>
                 </form>
+            </SetupCard>
+
+            <SetupCard className="xl:col-span-2" icon={UserRoundCog} title={`Student-specific fee rules (${setup.agreements?.length || 0})`} description="Search and review every individual agreement without opening students one by one.">
+                <div className="relative mb-4">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input value={agreementSearch} onChange={event => setAgreementSearch(event.target.value)} placeholder="Search student, admission number, class, or reason..." className="pl-9" />
+                </div>
+                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                    <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(150px,1fr)_120px_170px_minmax(180px,1fr)] gap-3 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid dark:bg-slate-900">
+                        <span>Student</span><span>Rule</span><span>Amount</span><span>Period</span><span>Reason</span>
+                    </div>
+                    <div className="max-h-[420px] divide-y divide-slate-200 overflow-y-auto dark:divide-slate-800">
+                        {visibleAgreements.map(item => {
+                            const start = String(item.effective_from).slice(0, 10)
+                            const end = item.effective_until ? String(item.effective_until).slice(0, 10) : ""
+                            const current = `${currentMonthValue()}-01`
+                            const state = item.status !== "active" ? "Archived" : start > current ? "Scheduled" : end && end < current ? "Ended" : "Active"
+                            const ruleLabel = ({ fixed: "Fixed monthly fee", discount_amount: "Amount discount", discount_percent: "Percentage discount", surcharge: "Surcharge", waiver: "Full waiver" } as const)[item.adjustment_type]
+                            const amountLabel = item.adjustment_type === "waiver" ? "₹0" : item.adjustment_type === "discount_percent" ? `${Number(item.amount)}%` : money(item.amount)
+                            return (
+                                <div key={item.id} className="grid gap-2 px-4 py-3 text-sm md:grid-cols-[minmax(220px,1.5fr)_minmax(150px,1fr)_120px_170px_minmax(180px,1fr)] md:items-center md:gap-3">
+                                    <div className="min-w-0"><p className="truncate font-bold text-slate-950 dark:text-white">{item.student_name}</p><p className="text-xs text-slate-500">{item.student_id}{item.standard ? ` · ${item.standard}` : ""}{item.division ? ` / ${item.division}` : ""}</p></div>
+                                    <div><p className="font-semibold text-slate-800 dark:text-slate-200">{ruleLabel}</p><Badge variant="outline" className="mt-1 text-[10px]">{state}</Badge></div>
+                                    <p className="font-black text-slate-950 dark:text-white">{amountLabel}</p>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">{shortDate(item.effective_from)} — {item.effective_until ? shortDate(item.effective_until) : "No end date"}</p>
+                                    <p className="line-clamp-2 text-xs text-slate-600 dark:text-slate-300">{item.reason}</p>
+                                </div>
+                            )
+                        })}
+                        {!visibleAgreements.length && <p className="p-6 text-center text-sm text-slate-500">{setup.agreements?.length ? "No agreements match this search." : "No student-specific fee agreements have been added."}</p>}
+                    </div>
+                </div>
             </SetupCard>
         </div>
     )
@@ -688,9 +738,9 @@ function OpeningBalanceSection({ students, categories, onRefresh }: { students: 
         </SetupCard>
     )
 }
-function SetupCard({ icon: Icon, title, description, children }: { icon: typeof IndianRupee; title: string; description: string; children: React.ReactNode }) {
+function SetupCard({ icon: Icon, title, description, children, className = "" }: { icon: typeof IndianRupee; title: string; description: string; children: React.ReactNode; className?: string }) {
     return (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6">
+        <section className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6 ${className}`}>
             <div className="mb-5 flex items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"><Icon className="h-5 w-5" /></span>
                 <div><h3 className="font-black text-slate-950 dark:text-white">{title}</h3><p className="mt-1 text-sm leading-relaxed text-slate-500">{description}</p></div>

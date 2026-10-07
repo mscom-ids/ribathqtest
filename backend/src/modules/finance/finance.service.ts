@@ -1335,11 +1335,26 @@ export async function workspace(actor: FinanceActor, query: any) {
     );
     let setup: any = undefined;
     if (isFinanceManager(actor.role)) {
-        const [schedules, staff, permissionRows, allCategories, allAccounts] = await Promise.all([
+        const [schedules, agreements, staff, permissionRows, allCategories, allAccounts] = await Promise.all([
             db.query(`SELECT id, name AS label, name, amount, effective_from, effective_until,
                              scope_type, COALESCE(division, standard) AS scope_value, standard, division,
                              status, (status = 'active') AS is_active
                       FROM finance_fee_schedules ORDER BY effective_from DESC, created_at DESC`),
+            db.query(`SELECT a.id, a.student_id, s.name AS student_name,
+                             COALESCE(placement.standard, s.standard) AS standard,
+                             placement.division,
+                             a.adjustment_type, a.amount, a.effective_from, a.effective_until,
+                             a.reason, a.status, a.created_at, creator.name AS created_by_name
+                      FROM finance_student_fee_agreements a
+                      JOIN students s ON s.adm_no = a.student_id
+                      LEFT JOIN academic_years ay ON ay.is_current = true
+                      LEFT JOIN academic_student_placements placement
+                        ON placement.student_id = s.adm_no
+                       AND placement.academic_year_id = ay.id
+                       AND placement.status = 'active'
+                      LEFT JOIN staff creator ON creator.id = a.created_by
+                      ORDER BY CASE WHEN a.status = 'active' THEN 0 ELSE 1 END,
+                               a.effective_from DESC, s.name, a.created_at DESC`),
             db.query(`SELECT id, name, role, photo_url FROM staff WHERE is_active = true ORDER BY name`),
             db.query(`SELECT DISTINCT ON (p.staff_id, p.capability)
                              p.*, s.name AS staff_name, c.name AS category_name,
@@ -1362,6 +1377,7 @@ export async function workspace(actor: FinanceActor, query: any) {
         ]);
         setup = {
             schedules: schedules.rows,
+            agreements: agreements.rows,
             categories: allCategories.rows,
             accounts: allAccounts.rows,
             staff: staff.rows,

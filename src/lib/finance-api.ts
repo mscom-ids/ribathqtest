@@ -73,6 +73,22 @@ export type FeeSchedule = {
     is_active?: boolean
 }
 
+export type StudentFeeAgreement = {
+    id: string
+    student_id: string
+    student_name: string
+    standard?: string | null
+    division?: string | null
+    adjustment_type: "fixed" | "discount_amount" | "discount_percent" | "surcharge" | "waiver"
+    amount: number
+    effective_from: string
+    effective_until?: string | null
+    reason: string
+    status: string
+    created_at?: string
+    created_by_name?: string | null
+}
+
 export type ChargeCategory = {
     id: string
     name: string
@@ -128,6 +144,7 @@ export type FinancePermission = {
 
 export type FinanceSetup = {
     schedules?: FeeSchedule[]
+    agreements?: StudentFeeAgreement[]
     categories?: ChargeCategory[]
     accounts?: PaymentAccount[]
     staff?: FinanceStaff[]

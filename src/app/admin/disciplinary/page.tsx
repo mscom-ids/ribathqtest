@@ -5,14 +5,14 @@ import { useEffect, useState } from "react"
 import { AlertOctagon, ArrowRight, BarChart3, CheckCircle2, ClipboardList, Clock3, FilePlus2, Settings2, ShieldAlert, UsersRound } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import { DisciplineEmpty, DisciplineLoading, DisciplineMetric, Incident, RiskBadge, SeverityBadge, StatusBadge, formatDisciplineDate } from "@/components/discipline/discipline-ui"
+import { DisciplineEmpty, DisciplineLoading, DisciplineMetric, Incident, SeverityBadge, StatusBadge, formatDisciplineDate } from "@/components/discipline/discipline-ui"
 
 type DashboardData = {
     summary: { incidents_today: number; waiting_review: number; serious_cases: number; students_needing_attention: number; pending_actions: number; overdue_actions: number; completed_last_30: number }
     recent: Incident[]
     categories: Array<{ name: string; count: number }>
     trend: Array<{ label: string; month: string; count: number }>
-    risk: Array<{ student_id: string; name: string; standard?: string; division?: string; active_marks: number; risk_level: string }>
+    risk: Array<{ student_id: string; name: string; standard?: string; division?: string; open_incidents: number; highest_severity: string }>
 }
 
 export default function DisciplinaryPage() {
@@ -57,8 +57,8 @@ export default function DisciplinaryPage() {
                 </div>
 
                 <div className="space-y-6">
-                    <div className="rounded-lg border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Priority students</h2><p className="mb-4 text-sm text-slate-500">Active marks after positive adjustments</p><div className="space-y-3">{data?.risk.length ? data.risk.map(student => <Link key={student.student_id} href={`/admin/disciplinary/students/${student.student_id}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{student.name}</p><p className="text-xs text-slate-500">{student.student_id} · {[student.standard, student.division].filter(Boolean).join(" - ") || "Not placed"}</p></div><div className="text-right"><p className="text-sm font-bold text-red-600">{student.active_marks}</p><RiskBadge level={student.risk_level} /></div></Link>) : <p className="py-8 text-center text-sm text-slate-500">No students currently need attention.</p>}</div></div>
-                    <div className="rounded-lg border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Quick access</h2><div className="mt-4 grid grid-cols-2 gap-2"><Button asChild variant="outline" className="h-auto justify-start py-3"><Link href="/admin/disciplinary/incidents?queue=review"><Clock3 className="mr-2 h-4 w-4" />Review queue</Link></Button><Button asChild variant="outline" className="h-auto justify-start py-3"><Link href="/admin/disciplinary/reports"><BarChart3 className="mr-2 h-4 w-4" />Reports</Link></Button><Button asChild variant="outline" className="col-span-2 h-auto justify-start py-3"><Link href="/admin/disciplinary/settings"><Settings2 className="mr-2 h-4 w-4" />Categories, marks, and rules</Link></Button></div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Priority students</h2><p className="mb-4 text-sm text-slate-500">Open incidents, ordered by highest severity</p><div className="space-y-3">{data?.risk.length ? data.risk.map(student => <Link key={student.student_id} href={`/admin/disciplinary/students/${student.student_id}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 px-3 py-3 hover:bg-slate-50"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{student.name}</p><p className="text-xs text-slate-500">{student.student_id} · {[student.standard, student.division].filter(Boolean).join(" - ") || "Not placed"}</p></div><div className="text-right"><p className="mb-1 text-xs font-medium text-slate-500">{student.open_incidents} open</p><SeverityBadge severity={student.highest_severity} /></div></Link>) : <p className="py-8 text-center text-sm text-slate-500">No students currently need attention.</p>}</div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Quick access</h2><div className="mt-4 grid grid-cols-2 gap-2"><Button asChild variant="outline" className="h-auto justify-start py-3"><Link href="/admin/disciplinary/incidents?queue=review"><Clock3 className="mr-2 h-4 w-4" />Review queue</Link></Button><Button asChild variant="outline" className="h-auto justify-start py-3"><Link href="/admin/disciplinary/reports"><BarChart3 className="mr-2 h-4 w-4" />Reports</Link></Button><Button asChild variant="outline" className="col-span-2 h-auto justify-start py-3"><Link href="/admin/disciplinary/settings"><Settings2 className="mr-2 h-4 w-4" />Categories and severity</Link></Button></div></div>
                 </div>
             </section>
 

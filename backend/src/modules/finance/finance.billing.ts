@@ -207,7 +207,7 @@ export async function previewMonthlyFees(actor: FinanceActor, monthInput: unknow
                 COALESCE(SUM(final_amount) FILTER (WHERE fee_schedule_id IS NOT NULL AND existing_obligation_id IS NULL), 0) AS total_amount,
                 COUNT(*) FILTER (WHERE existing_obligation_id IS NOT NULL)::int AS existing_count,
                 COUNT(*) FILTER (WHERE fee_schedule_id IS NOT NULL AND has_exception AND existing_obligation_id IS NULL)::int AS exception_count,
-                COUNT(*) FILTER (WHERE fee_schedule_id IS NULL)::int AS unconfigured_count
+                COUNT(*) FILTER (WHERE fee_schedule_id IS NULL AND existing_obligation_id IS NULL)::int AS unconfigured_count
          FROM candidates`,
         [serviceMonth],
     );
@@ -243,24 +243,14 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
             return { run: duplicate.rows[0], duplicate: true };
         }
 
-        const alreadyPublished = await client.query(
-            `SELECT id, status, student_count, total_amount, service_month
-             FROM finance_billing_runs
-             WHERE service_month = $1 AND status = 'published'
-             ORDER BY published_at DESC LIMIT 1`,
-            [serviceMonth],
-        );
-        if (alreadyPublished.rows[0]) {
-            throw new FinanceError(409, 'Monthly fees have already been published for this month.', 'BILLING_MONTH_ALREADY_PUBLISHED');
-        }
-
         publishStage = 'validating student fee schedules';
         const unconfigured = await client.query(
             `WITH candidates AS (${BILLING_CANDIDATES_SQL})
              SELECT COUNT(*)::int AS count,
                     COALESCE(array_agg(student_id ORDER BY student_id) FILTER (WHERE student_id IS NOT NULL), '{}') AS student_ids
              FROM candidates
-             WHERE fee_schedule_id IS NULL`,
+             WHERE fee_schedule_id IS NULL
+               AND existing_obligation_id IS NULL`,
             [serviceMonth],
         );
         if (Number(unconfigured.rows[0]?.count || 0) > 0) {
@@ -272,6 +262,21 @@ export async function publishMonthlyFees(actor: FinanceActor, body: any) {
                     count: Number(unconfigured.rows[0].count),
                     student_ids: (unconfigured.rows[0].student_ids || []).slice(0, 50),
                 },
+            );
+        }
+        const missing = await client.query(
+            `WITH candidates AS (${BILLING_CANDIDATES_SQL})
+             SELECT COUNT(*)::int AS count
+             FROM candidates
+             WHERE fee_schedule_id IS NOT NULL
+               AND existing_obligation_id IS NULL`,
+            [serviceMonth],
+        );
+        if (Number(missing.rows[0]?.count || 0) === 0) {
+            throw new FinanceError(
+                409,
+                'Every eligible student already has a monthly due for this month.',
+                'BILLING_MONTH_COMPLETE',
             );
         }
         publishStage = 'creating the billing run';

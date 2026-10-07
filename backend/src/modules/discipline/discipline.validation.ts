@@ -32,11 +32,6 @@ function validDateTime(value: unknown, field: string) {
 }
 
 export function parseIncidentCreate(body: any): IncidentCreateInput {
-    const marks = Number(body?.discipline_marks);
-    if (!Number.isInteger(marks) || marks < 0 || marks > 100) {
-        throw new Error('Discipline marks must be a whole number between 0 and 100');
-    }
-
     const witnesses = Array.isArray(body?.witnesses)
         ? body.witnesses.slice(0, 10).map((item: any) => ({
             name: requiredText(item?.name, 'Witness name', 120),
@@ -64,7 +59,6 @@ export function parseIncidentCreate(body: any): IncidentCreateInput {
         category_id: requiredText(body?.category_id, 'Problem category', 60),
         offence_type_id: requiredText(body?.offence_type_id, 'Specific problem', 60),
         severity: oneOf(body?.severity, SEVERITIES, 'severity'),
-        discipline_marks: marks,
         reported_at: validDateTime(body?.reported_at, 'incident date and time'),
         location: cleanText(body?.location, 180),
         hostel: cleanText(body?.hostel, 120),
@@ -88,7 +82,6 @@ export function parseReview(body: any) {
     return {
         decision: oneOf(body?.decision, ['approve', 'request_explanation', 'assign_action', 'cancel', 'escalate'] as const, 'review decision'),
         severity: body?.severity ? oneOf(body.severity, SEVERITIES, 'severity') : undefined,
-        discipline_marks: body?.discipline_marks == null ? undefined : Math.max(0, Math.min(100, Number(body.discipline_marks) || 0)),
         note: cleanText(body?.note, 2000),
         parent_notification_status: body?.parent_notification_status
             ? oneOf(body.parent_notification_status, PARENT_STATUSES, 'parent notification status')
@@ -104,18 +97,6 @@ export function parseActionStatus(value: unknown) {
     return oneOf(value, ACTION_STATUSES, 'action status');
 }
 
-export function parsePositiveMark(body: any) {
-    const marks = Number(body?.marks);
-    if (!Number.isInteger(marks) || marks <= 0 || marks > 100) {
-        throw new Error('Positive marks must be a whole number between 1 and 100');
-    }
-    return {
-        category: requiredText(body?.category, 'Positive behaviour category', 120),
-        marks,
-        note: cleanText(body?.note, 1000),
-    };
-}
-
 export function pagination(query: any) {
     const page = Math.max(1, Number(query?.page) || 1);
     const limit = Math.min(100, Math.max(10, Number(query?.limit) || 20));
@@ -123,4 +104,3 @@ export function pagination(query: any) {
 }
 
 export { cleanText, requiredText };
-

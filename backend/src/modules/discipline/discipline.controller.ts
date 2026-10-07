@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { db } from '../../config/db';
 import { invalidateCacheByPrefix } from '../../utils/server-cache';
-import { assertCanReportStudent, audit, calculateRisk, changeStatus, nextReference, reporterScopeSql, resolveDisciplineActor, syncIncidentMark } from './discipline.service';
-import { cleanText, pagination, parseActionStatus, parseIncidentCreate, parsePositiveMark, parseReview, requiredText } from './discipline.validation';
+import { assertCanReportStudent, audit, changeStatus, nextReference, reporterScopeSql, resolveDisciplineActor } from './discipline.service';
+import { cleanText, pagination, parseActionStatus, parseIncidentCreate, parseReview, requiredText } from './discipline.validation';
 
 function respondError(res: Response, error: any, fallback: string) {
     const message = error?.message || fallback;
@@ -34,7 +34,7 @@ export async function listIncidents(req: Request, res: Response) {
         params.push(limit, offset);
         const result = await db.query(
             `SELECT i.id,i.reference_no,i.student_id,s.name student_name,s.photo_url,i.status,i.severity,
-                    i.discipline_marks,i.reported_at,i.location,i.repeat_offence,i.parent_notification_status,
+                    i.reported_at,i.location,i.repeat_offence,i.parent_notification_status,
                     c.name category_name,o.name offence_name,r.name reporter_name,count(*) OVER()::int total_count
              FROM discipline_incidents i
              JOIN students s ON s.adm_no=i.student_id
@@ -83,13 +83,13 @@ export async function createIncident(req: Request, res: Response) {
         const inserted = await client.query(
             `INSERT INTO discipline_incidents
              (reference_no,idempotency_key,student_id,category_id,offence_type_id,academic_year_id,reported_by,status,
-              severity,discipline_marks,reported_at,location,hostel,floor,room_number,class_name,division,
+              severity,reported_at,location,hostel,floor,room_number,class_name,division,
               short_description,immediate_action,student_position,parent_notification_required,parent_notification_status,
               private_staff_notes,repeat_offence,submitted_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
                      CASE WHEN $8='submitted' THEN now() ELSE NULL END) RETURNING *`,
             [reference,input.idempotency_key,input.student_id,input.category_id,input.offence_type_id,row.academic_year_id,
-             actor.staffId,status,input.severity,input.discipline_marks,input.reported_at,input.location,input.hostel,input.floor,
+             actor.staffId,status,input.severity,input.reported_at,input.location,input.hostel,input.floor,
              input.room_number,input.class_name || row.standard,input.division || row.division,input.short_description,
              input.immediate_action,input.student_position,parentRequired,parentRequired ? 'pending' : 'not_required',
              input.private_staff_notes,repeated.rows[0]?.repeated || false]);
@@ -150,15 +150,14 @@ export async function reviewIncident(req: Request,res: Response){
         const actor=await resolveDisciplineActor(req); const input=parseReview(req.body); await client.query('BEGIN');
         const current=await client.query('SELECT * FROM discipline_incidents WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[String(req.params.id)]);
         if(!current.rows[0]) throw new Error('Incident not found');
-        const incident=current.rows[0]; const severity=input.severity || incident.severity; const marks=input.discipline_marks ?? incident.discipline_marks;
-        await client.query(`UPDATE discipline_incidents SET reviewed_by=$2,reviewed_at=now(),severity=$3,discipline_marks=$4,
-                            parent_notification_status=COALESCE($5,parent_notification_status),updated_at=now() WHERE id=$1`,
-                           [incident.id,actor.staffId,severity,marks,input.parent_notification_status || null]);
+        const incident=current.rows[0]; const severity=input.severity || incident.severity;
+        await client.query(`UPDATE discipline_incidents SET reviewed_by=$2,reviewed_at=now(),severity=$3,
+                            parent_notification_status=COALESCE($4,parent_notification_status),updated_at=now() WHERE id=$1`,
+                           [incident.id,actor.staffId,severity,input.parent_notification_status || null]);
         const next=input.decision==='request_explanation'?'waiting_student_explanation':input.decision==='assign_action'?'action_assigned':input.decision==='cancel'?'cancelled':'under_review';
         await changeStatus(client,incident.id,next,actor.staffId,input.note);
-        if(!['cancelled','waiting_student_explanation'].includes(next)) await syncIncidentMark(client,{...incident,severity,discipline_marks:marks},actor.staffId);
         if(input.decision==='escalate') await client.query('UPDATE discipline_incidents SET escalated_at=now() WHERE id=$1',[incident.id]);
-        await audit(client,{incidentId:incident.id,studentId:incident.student_id,actorId:actor.staffId,action:`review_${input.decision}`,oldValue:incident,newValue:{severity,marks,note:input.note},ipAddress:actor.ipAddress});
+        await audit(client,{incidentId:incident.id,studentId:incident.student_id,actorId:actor.staffId,action:`review_${input.decision}`,oldValue:incident,newValue:{severity,note:input.note},ipAddress:actor.ipAddress});
         await client.query('COMMIT'); clearDisciplineCache(); return res.json({success:true});
     }catch(error){await client.query('ROLLBACK');return respondError(res,error,'Failed to review incident');}finally{client.release();}
 }
@@ -202,21 +201,15 @@ export async function closeIncident(req:Request,res:Response){
     }catch(error){await client.query('ROLLBACK');return respondError(res,error,'Failed to close incident');}finally{client.release();}
 }
 
-export async function addPositiveBehaviour(req:Request,res:Response){
-    const client=await db.getClient();
-    try{const actor=await resolveDisciplineActor(req);const input=parsePositiveMark(req.body);await client.query('BEGIN');const student=await client.query('SELECT adm_no FROM students WHERE adm_no=$1',[String(req.params.studentId)]);if(!student.rows[0])throw new Error('Student not found');
-        const result=await client.query(`INSERT INTO discipline_positive_marks (student_id,category,marks,note,awarded_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,[String(req.params.studentId),input.category,input.marks,input.note,actor.staffId]);await audit(client,{studentId:String(req.params.studentId),actorId:actor.staffId,action:'positive_behaviour_awarded',newValue:result.rows[0],ipAddress:actor.ipAddress});await client.query('COMMIT');clearDisciplineCache();return res.status(201).json({success:true,award:result.rows[0]});
-    }catch(error){await client.query('ROLLBACK');return respondError(res,error,'Failed to add positive behaviour');}finally{client.release();}
-}
-
 export async function getStudentDisciplineProfile(req:Request,res:Response){
-    try{const [studentResult,incidentsResult,marksResult,positiveResult,actionsResult]=await Promise.all([
+    try{const [studentResult,incidentsResult,actionsResult]=await Promise.all([
         db.query(`SELECT s.adm_no,s.name,s.photo_url,s.status,p.standard,p.division FROM students s LEFT JOIN academic_years ay ON ay.is_current=true LEFT JOIN academic_student_placements p ON p.student_id=s.adm_no AND p.academic_year_id=ay.id AND p.status='active' WHERE s.adm_no=$1`,[String(req.params.studentId)]),
-        db.query(`SELECT i.id,i.reference_no,i.status,i.severity,i.discipline_marks,i.reported_at,c.name category_name,o.name offence_name FROM discipline_incidents i JOIN discipline_categories c ON c.id=i.category_id JOIN discipline_offence_types o ON o.id=i.offence_type_id WHERE i.student_id=$1 AND i.deleted_at IS NULL ORDER BY i.reported_at DESC`,[String(req.params.studentId)]),
-        db.query(`SELECT COALESCE(sum(marks),0)::int active_marks FROM discipline_marks WHERE student_id=$1 AND status='active' AND (expires_at IS NULL OR expires_at>=CURRENT_DATE)`,[String(req.params.studentId)]),
-        db.query('SELECT * FROM discipline_positive_marks WHERE student_id=$1 ORDER BY awarded_at DESC',[String(req.params.studentId)]),
+        db.query(`SELECT i.id,i.reference_no,i.status,i.severity,i.reported_at,c.name category_name,o.name offence_name FROM discipline_incidents i JOIN discipline_categories c ON c.id=i.category_id JOIN discipline_offence_types o ON o.id=i.offence_type_id WHERE i.student_id=$1 AND i.deleted_at IS NULL ORDER BY i.reported_at DESC`,[String(req.params.studentId)]),
         db.query(`SELECT a.*,i.reference_no FROM discipline_actions a JOIN discipline_incidents i ON i.id=a.incident_id WHERE i.student_id=$1 ORDER BY a.created_at DESC`,[String(req.params.studentId)])]);
-        const student=studentResult.rows[0];if(!student)return res.status(404).json({success:false,error:'Student not found'});const positiveMarks=positiveResult.rows.reduce((sum,row)=>sum+Number(row.marks||0),0);const activeMarks=Math.max(0,Number(marksResult.rows[0]?.active_marks||0)-positiveMarks);
-        return res.json({success:true,student,incidents:incidentsResult.rows,actions:actionsResult.rows,positiveMarks:positiveResult.rows,summary:{activeMarks,positiveMarks,riskLevel:await calculateRisk(activeMarks)}});
+        const student=studentResult.rows[0];if(!student)return res.status(404).json({success:false,error:'Student not found'});
+        const openIncidents=incidentsResult.rows.filter(row=>!['completed','cancelled'].includes(row.status));
+        const severityRank:Record<string,number>={minor:1,moderate:2,major:3,critical:4};
+        const highestSeverity=openIncidents.reduce((highest,row)=>severityRank[row.severity]>severityRank[highest]?row.severity:highest,'minor');
+        return res.json({success:true,student,incidents:incidentsResult.rows,actions:actionsResult.rows,summary:{openIncidents:openIncidents.length,highestSeverity}});
     }catch(error){return respondError(res,error,'Failed to load student discipline profile');}
 }

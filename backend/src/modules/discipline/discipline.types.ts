@@ -48,7 +48,6 @@ export type IncidentCreateInput = {
     category_id: string;
     offence_type_id: string;
     severity: Severity;
-    discipline_marks: number;
     reported_at: string;
     location?: string | null;
     hostel?: string | null;
@@ -72,4 +71,3 @@ export type IncidentCreateInput = {
     save_as_draft?: boolean;
     idempotency_key?: string | null;
 };
-
