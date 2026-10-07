@@ -135,6 +135,30 @@ function isCancellationForStudent(cancellation: any, student: RegisterStudent) {
     return students.includes(student.adm_no) || (cancelled.length === 0 ? students.length === 0 : cancelled.includes(normalizeStandard(student.standard)));
 }
 
+function institutionalLeaveCancelsStudent(
+    schedule: Schedule,
+    student: RegisterStudent,
+    date: string,
+    leaves: any[],
+) {
+    const sessionStart = new Date(`${date}T${String(schedule.start_time || '00:00:00').slice(0, 8)}+05:30`);
+    const sessionEnd = new Date(`${date}T${String(schedule.end_time || '23:59:59').slice(0, 8)}+05:30`);
+    if (sessionEnd <= sessionStart) sessionEnd.setDate(sessionEnd.getDate() + 1);
+
+    return leaves.some((leave) => {
+        const leaveStart = new Date(leave.start_datetime);
+        const leaveEnd = new Date(leave.end_datetime);
+        if (!(sessionStart < leaveEnd && sessionEnd > leaveStart)) return false;
+
+        const targetStudents = parseList(leave.target_student_ids).map(String);
+        if (targetStudents.length > 0) return targetStudents.includes(student.adm_no);
+        if (leave.is_entire_institution) return true;
+
+        const targetStandards = parseList(leave.target_classes).map(normalizeStandard);
+        return targetStandards.includes(normalizeStandard(student.standard));
+    });
+}
+
 function portionValue(portion: string | null | undefined) {
     if (portion === 'Full') return 1;
     if (portion?.includes('Half')) return 0.5;
@@ -323,7 +347,7 @@ export async function resolveHifzEntryEligibility(options: {
         return { allowed: false, reason: 'No Hifz session is available for this date.', sessionId: null, attendanceStatus: null, sessionStart: null, sessionEnd: null };
     }
 
-    const [marks, cancellations] = await Promise.all([
+    const [marks, cancellations, institutionalLeaves] = await Promise.all([
         Promise.resolve({ rows: dayMarks.rows.filter((mark) => String(mark.schedule_id) === String(schedule.id)) }),
         options.db.query(
             `SELECT cancelled_standards, cancelled_students
@@ -332,8 +356,17 @@ export async function resolveHifzEntryEligibility(options: {
              LIMIT 1`,
             [schedule.id, entryDate],
         ),
+        options.db.query(
+            `SELECT start_datetime, end_datetime, target_classes,
+                    target_student_ids, is_entire_institution
+             FROM institutional_leaves
+             WHERE start_datetime < ($1::date + 1)
+               AND end_datetime >= $1::date`,
+            [entryDate],
+        ),
     ]);
-    if (isCancellationForStudent(cancellations.rows[0], student)) {
+    if (isCancellationForStudent(cancellations.rows[0], student)
+        || institutionalLeaveCancelsStudent(schedule, student, entryDate, institutionalLeaves.rows)) {
         return { allowed: false, reason: 'No Hifz session is available for this date.', sessionId: schedule.id, attendanceStatus: 'CANCELLED', sessionStart: schedule.start_time, sessionEnd: schedule.end_time };
     }
 
@@ -423,7 +456,7 @@ export async function getHifzStudentMonthRegister(options: {
 }) {
     const { start, end, dates } = monthRange(options.month);
     const requestedAt = options.requestedAt || new Date();
-    const [student, logsResult, schedules, marksResult, cancellationsResult, lifetimeNewLogsResult] = await Promise.all([
+    const [student, logsResult, schedules, marksResult, cancellationsResult, lifetimeNewLogsResult, institutionalLeavesResult] = await Promise.all([
         loadStudent(options.db, options.studentId, options.academicYearId || null),
         options.db.query(
             `SELECT hl.*, recorder.name AS recorded_by_name,
@@ -454,6 +487,14 @@ export async function getHifzStudentMonthRegister(options: {
              FROM hifz_logs
              WHERE student_id = $1 AND mode = 'New Verses' AND deleted_at IS NULL`,
             [options.studentId],
+        ),
+        options.db.query(
+            `SELECT start_datetime, end_datetime, target_classes,
+                    target_student_ids, is_entire_institution
+             FROM institutional_leaves
+             WHERE start_datetime < ($2::date + 1)
+               AND end_datetime >= $1::date`,
+            [start, end],
         ),
     ]);
     if (!student) {
@@ -514,6 +555,7 @@ export async function getHifzStudentMonthRegister(options: {
         const attendanceMark = schedule ? marks.get(`${schedule.id}|${date}`) : null;
         const rawStatus = attendanceMark?.status;
         const attendanceStatus = isCancellationForStudent(cancellation, student)
+            || (schedule && institutionalLeaveCancelsStudent(schedule, student, date, institutionalLeavesResult.rows))
             ? 'CANCELLED'
             : rawStatus ? String(rawStatus).toUpperCase() : null;
 

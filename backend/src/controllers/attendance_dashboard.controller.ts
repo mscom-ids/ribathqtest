@@ -376,6 +376,22 @@ function institutionalLeaveCancellationForSlot(schedule: any, dateKey: string, l
     return null;
 }
 
+async function loadInstitutionalLeaveCancellationForSlot(
+    queryable: { query: (text: string, params?: any[]) => Promise<{ rows: any[] }> },
+    schedule: any,
+    dateKey: string,
+) {
+    const leaves = await queryable.query(
+        `SELECT id, name, start_datetime, end_datetime,
+                target_classes, target_student_ids, is_entire_institution
+         FROM institutional_leaves
+         WHERE start_datetime < ($1::date + 1)
+           AND end_datetime >= $1::date`,
+        [dateKey],
+    );
+    return institutionalLeaveCancellationForSlot(schedule, dateKey, leaves.rows);
+}
+
 // Maps schedule.class_type → the corresponding students.<col> column.
 // Centralised so all attendance queries stay in sync.
 const MENTOR_COL_MAP: Record<string, 'hifz_mentor_id' | 'school_mentor_id' | 'madrasa_mentor_id'> = {
@@ -2090,7 +2106,7 @@ export const markAttendance = async (req: Request, res: Response) => {
         // attendance modals and removes any earlier mark saved before a leave was
         // registered for the same class date.
         const submittedMarks = Array.isArray(student_marks) ? student_marks : [];
-        const [existingMarks, cancelCheck] = await Promise.all([
+        const [existingMarks, cancelCheck, institutionalCancellation] = await Promise.all([
             db.query(
                 `SELECT student_id
                  FROM student_attendance_marks
@@ -2101,8 +2117,9 @@ export const markAttendance = async (req: Request, res: Response) => {
                 'SELECT * FROM attendance_cancellations WHERE schedule_id = $1 AND date = $2',
                 [schedule_id, date],
             ),
+            loadInstitutionalLeaveCancellationForSlot(db, schedule, String(date).slice(0, 10)),
         ]);
-        const cancellation = cancelCheck.rows[0] || null;
+        const cancellation = cancelCheck.rows[0] || institutionalCancellation || null;
         if (isFullCancellation(cancellation)) {
             return res.status(400).json({ success: false, error: "Cannot mark attendance for a cancelled class" });
         }
@@ -2293,7 +2310,8 @@ export const markAttendance = async (req: Request, res: Response) => {
             // by cancellation/restore writers. This closes the race where a
             // class was cancelled after the modal loaded but just before save.
             const lockedState = await client.query(
-                `SELECT a.is_deleted, a.day_of_week, a.effective_from, a.effective_until,
+                `SELECT a.id, a.standards, a.start_time, a.end_time,
+                        a.is_deleted, a.day_of_week, a.effective_from, a.effective_until,
                         c.schedule_id AS cancellation_schedule_id,
                         c.cancelled_standards, c.cancelled_students, c.reason
                  FROM attendance_schedules a
@@ -2321,17 +2339,30 @@ export const markAttendance = async (req: Request, res: Response) => {
             // otherwise null cancellation fields look identical to a full
             // cancellation (whose standards/students arrays are intentionally
             // empty) and every normal web save is rejected with HTTP 409.
-            if (currentSchedule.cancellation_schedule_id && isFullCancellation(currentSchedule)) {
+            const currentCancellation = currentSchedule.cancellation_schedule_id
+                ? currentSchedule
+                : await loadInstitutionalLeaveCancellationForSlot(
+                    client,
+                    currentSchedule,
+                    String(date).slice(0, 10),
+                );
+            if (currentCancellation && isFullCancellation(currentCancellation)) {
                 await client.query('ROLLBACK');
-                return res.status(409).json({ success: false, code: 'SESSION_CANCELLED', error: currentSchedule.reason || 'This class was cancelled.' });
+                return res.status(409).json({
+                    success: false,
+                    code: 'SESSION_CANCELLED',
+                    error: currentCancellation.resolved_reason
+                        ? `This class is cancelled for ${currentCancellation.resolved_reason}.`
+                        : currentCancellation.reason || 'This class was cancelled.',
+                });
             }
-            if (currentSchedule.cancelled_standards && marksToPersist.length > 0) {
+            if (currentCancellation && !isFullCancellation(currentCancellation) && marksToPersist.length > 0) {
                 const markedStudents = await client.query(
                     `SELECT adm_no, standard FROM students WHERE adm_no = ANY($1::text[])`,
                     [marksToPersist.map((mark: any) => mark.student_id)],
                 );
                 const cancelledStudent = markedStudents.rows.find((student: any) =>
-                    isStandardCancelled(currentSchedule, student.standard)
+                    isStandardCancelled(currentCancellation, student.standard)
                 );
                 if (cancelledStudent) {
                     await client.query('ROLLBACK');

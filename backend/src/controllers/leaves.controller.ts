@@ -109,7 +109,7 @@ function doRangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
     return startA < endB && endA > startB;
 }
 
-async function applyInstitutionalAttendanceCancellations(client: any, leave: {
+export async function applyInstitutionalAttendanceCancellations(client: any, leave: {
     id: string;
     start_datetime: string;
     end_datetime: string;
@@ -213,14 +213,14 @@ async function applyInstitutionalAttendanceCancellations(client: any, leave: {
                      ) merged
                  )
              END,
-             cancelled_students = (
+             cancelled_students = COALESCE((
                  SELECT jsonb_agg(DISTINCT value)
                  FROM (
                      SELECT jsonb_array_elements_text(COALESCE(attendance_cancellations.cancelled_students, '[]'::jsonb)) AS value
                      UNION
                      SELECT jsonb_array_elements_text(COALESCE(EXCLUDED.cancelled_students, '[]'::jsonb)) AS value
                  ) merged_students
-             )`,
+             ), '[]'::jsonb)`,
         [JSON.stringify(rows)]
     );
 
