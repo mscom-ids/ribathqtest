@@ -52,6 +52,9 @@ export default function AlumniPage() {
     const { toast } = useToast()
 
     const [tcModalOpen, setTcModalOpen] = useState(false)
+    const [rejoinTarget, setRejoinTarget] = useState<any>(null)
+    const [readmissionDate, setReadmissionDate] = useState("")
+    const [rejoining, setRejoining] = useState(false)
     const [tcTargetStudent, setTcTargetStudent] = useState<any>(null)
     const [tcFiles, setTcFiles] = useState<File[]>([])
     const [uploadingTC, setUploadingTC] = useState(false)
@@ -77,17 +80,32 @@ export default function AlumniPage() {
         }
     }
 
-    const handleRejoin = async (studentId: string) => {
-        if (!confirm("Reactivate this student? They will reappear in the main Students list.")) return
+    const openRejoin = (student: any) => {
+        const todayParts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).formatToParts(new Date()).map(part => [part.type, part.value]))
+        setReadmissionDate(`${todayParts.year}-${todayParts.month}-${todayParts.day}`)
+        setRejoinTarget(student)
+    }
+
+    const handleRejoin = async () => {
+        if (!rejoinTarget || !readmissionDate) return
+        setRejoining(true)
         try {
-            const res = await api.put(`/students/${studentId}`, { status: 'active' })
+            const res = await api.put(`/students/${rejoinTarget.adm_no}`, { status: 'active', readmission_date: readmissionDate })
             if (res.data.success) {
-                toast({ title: "Reactivated", description: "Student is now active." })
+                toast({ title: "Readmitted", description: res.data.readmission_billing?.created
+                    ? `Student is active. Monthly fees were added for ${res.data.readmission_billing.created_months.join(', ')}.`
+                    : "Student is active. Their fee starts in the readmission month." })
+                setRejoinTarget(null)
                 invalidateCache('/students')
                 fetchAlumni()
             }
         } catch (error) {
-            toast({ title: "Error", description: "Failed to reactivate student.", variant: "destructive" })
+            const message = (error as { response?: { data?: { error?: string } } })?.response?.data?.error
+            toast({ title: "Readmission failed", description: message || "Failed to readmit student.", variant: "destructive" })
+        } finally {
+            setRejoining(false)
         }
     }
 
@@ -445,7 +463,7 @@ export default function AlumniPage() {
                                                 <div className="flex items-center justify-center gap-3">
                                                     <button
                                                         title="Rejoin as active student"
-                                                        onClick={() => handleRejoin(student.adm_no)}
+                                                        onClick={() => openRejoin(student)}
                                                         className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors"
                                                     >
                                                         <UserPlus className="h-4 w-4" />
@@ -494,6 +512,23 @@ export default function AlumniPage() {
                     </div>
                 )}
             </div>
+
+            <Dialog open={!!rejoinTarget} onOpenChange={open => { if (!open && !rejoining) setRejoinTarget(null) }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Readmit {rejoinTarget?.name}</DialogTitle>
+                        <DialogDescription>Fees resume in the readmission month. Missing dues for published months since then are added automatically.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-3">
+                        <Label htmlFor="readmission-date">Readmission date</Label>
+                        <Input id="readmission-date" type="date" value={readmissionDate} onChange={event => setReadmissionDate(event.target.value)} />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRejoinTarget(null)} disabled={rejoining}>Cancel</Button>
+                        <Button onClick={handleRejoin} disabled={rejoining || !readmissionDate}>{rejoining ? "Readmitting…" : "Confirm readmission"}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* ── TC Issue Modal ─────────────────────── */}
             <Dialog open={tcModalOpen} onOpenChange={setTcModalOpen}>

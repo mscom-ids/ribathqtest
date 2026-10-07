@@ -1261,6 +1261,8 @@ export async function workspace(actor: FinanceActor, query: any) {
              GROUP BY p.id, p.amount, sa.is_assigned
          )
          SELECT COALESCE(SUM(amount) FILTER (WHERE service_month = $2::date), 0) AS expected,
+                COALESCE(SUM(amount) FILTER (WHERE service_month = $2::date AND obligation_type = 'monthly_fee'), 0) AS monthly_fees,
+                COALESCE(SUM(amount) FILTER (WHERE service_month = $2::date AND obligation_type <> 'monthly_fee'), 0) AS other_charges,
                 COALESCE((SELECT SUM(amount) FROM visible_receipts WHERE amount > 0), 0) AS collected,
                 COALESCE(SUM(balance) FILTER (WHERE balance > 0), 0) AS outstanding,
                 COALESCE(SUM(balance) FILTER (WHERE balance > 0), 0) AS pending,

@@ -5,6 +5,7 @@ import { devLog } from '../utils/logger';
 import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
+import { addReadmittedStudentToCurrentBilling } from '../modules/finance/finance.billing';
 
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 const ALUMNI_STATUSES = ['completed', 'dropout', 'stopped', 'higher_education'];
@@ -651,7 +652,7 @@ export const updateStudent = async (req: Request, res: Response) => {
       await client.query('BEGIN');
 
       const currentRes = await client.query(
-        `SELECT adm_no, status, hifz_mentor_id FROM students WHERE adm_no = $1 FOR UPDATE`,
+        `SELECT adm_no, status, hifz_mentor_id, exit_date::text AS exit_date FROM students WHERE adm_no = $1 FOR UPDATE`,
         [studentId]
       );
       if (currentRes.rows.length === 0) {
@@ -663,6 +664,21 @@ export const updateStudent = async (req: Request, res: Response) => {
       const becomingAlumni = nextStatus !== undefined
         && isAlumniStatus(nextStatus)
         && !isAlumniStatus(currentRes.rows[0].status);
+      const beingReadmitted = nextStatus === 'active' && isAlumniStatus(currentRes.rows[0].status);
+      const todayParts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+        timeZone: process.env.INSTITUTION_TIMEZONE || 'Asia/Kolkata',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date()).map(part => [part.type, part.value]));
+      const readmissionDate = beingReadmitted
+        ? String(updateData.readmission_date || `${todayParts.year}-${todayParts.month}-${todayParts.day}`)
+        : null;
+      if (readmissionDate && (!/^\d{4}-\d{2}-\d{2}$/.test(readmissionDate)
+          || Number.isNaN(Date.parse(`${readmissionDate}T00:00:00Z`))
+          || new Date(`${readmissionDate}T00:00:00Z`).toISOString().slice(0, 10) !== readmissionDate
+          || (currentRes.rows[0].exit_date && readmissionDate < currentRes.rows[0].exit_date))) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Choose a valid readmission date on or after the student left.' });
+      }
 
       if (becomingAlumni) {
         const activeRecords = await getActiveOperationalRecords(client, studentId);
@@ -691,6 +707,7 @@ export const updateStudent = async (req: Request, res: Response) => {
       let paramCount = 1;
 
       for (const key of keysToUpdate) {
+        if (key === 'comprehensive_details' && beingReadmitted) continue;
         if (key === 'comprehensive_details') {
           // Deep merge the new JSON inside Postgres so we don't accidentally overwrite other saved tabs
           setClauses.push(`${key} = COALESCE(students.${key}, '{}'::jsonb) || $${paramCount}::jsonb`);
@@ -705,6 +722,16 @@ export const updateStudent = async (req: Request, res: Response) => {
         setClauses.push(`exit_date = $${paramCount}::date`);
         values.push(incomingLeavingDate.slice(0, 10));
         paramCount++;
+      } else if (becomingAlumni) {
+        setClauses.push(`exit_date = CURRENT_DATE`);
+      }
+      if (beingReadmitted) {
+        setClauses.push(`exit_date = NULL`);
+        setClauses.push(`comprehensive_details = COALESCE(students.comprehensive_details, '{}'::jsonb)
+          || $${paramCount}::jsonb
+          || jsonb_build_object('finance_readmission_date', $${paramCount + 1}::text)`);
+        values.push(JSON.stringify(updateData.comprehensive_details || {}), readmissionDate);
+        paramCount += 2;
       }
 
       // Add exactly one more parameter for the ID
@@ -772,6 +799,10 @@ export const updateStudent = async (req: Request, res: Response) => {
         }
       }
 
+      const readmissionBilling = beingReadmitted
+        ? await addReadmittedStudentToCurrentBilling(client, studentId, await getStaffId(req), readmissionDate!)
+        : null;
+
       await client.query('COMMIT');
 
       invalidateCacheByPrefix('students:');
@@ -780,7 +811,7 @@ export const updateStudent = async (req: Request, res: Response) => {
       invalidateCacheByPrefix('attendance:');
       invalidateCacheByPrefix('mentor-students:');
       invalidateCacheByPrefix('leaves:');
-      res.json({ success: true, student: result.rows[0] });
+      res.json({ success: true, student: result.rows[0], readmission_billing: readmissionBilling });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

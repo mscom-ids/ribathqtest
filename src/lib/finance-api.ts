@@ -22,6 +22,8 @@ export type FinanceCapabilityRow = {
 
 export type FinanceSummary = {
     expected?: number
+    monthly_fees?: number
+    other_charges?: number
     collected?: number
     outstanding?: number
     pending?: number

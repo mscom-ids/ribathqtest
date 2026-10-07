@@ -144,6 +144,11 @@ function MonthlyBillingSection({ month, onRefresh }: { month: string; onRefresh:
     const previewExisting = Number(preview?.existing_count ?? preview?.existing ?? preview?.skipped ?? 0)
     const previewAdjusted = Number(preview?.exception_count ?? preview?.adjusted ?? 0)
     const previewUnconfigured = Number(preview?.unconfigured_count ?? preview?.unconfigured ?? 0)
+    const eligibleCount = Number(preview?.eligible_count ?? previewStudents + previewExisting)
+    const monthlyFeeTotal = Number(preview?.monthly_fee_total ?? previewTotal)
+    const excludedStudents = Array.isArray(preview?.excluded_students)
+        ? preview.excluded_students as Array<{ student_id: string; student_name: string; reason: string }>
+        : []
 
     return (
         <SetupCard icon={CalendarCheck2} title="Preview and publish monthly fees" description="Publishing is idempotent. Existing published, partial, and paid dues remain unchanged.">
@@ -171,6 +176,18 @@ function MonthlyBillingSection({ month, onRefresh }: { month: string; onRefresh:
                         <PreviewMetric label="Already exists" value={previewExisting} />
                         <PreviewMetric label="No fee rule" value={previewUnconfigured} />
                     </div>
+                    <p className="mt-3 text-sm font-semibold text-blue-900 dark:text-blue-100">
+                        {eligibleCount} eligible students · Monthly fee total {money(monthlyFeeTotal)}
+                        {previewExisting > 0 ? ` (${previewExisting} already billed)` : ""}
+                    </p>
+                    {!!excludedStudents.length && (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                            <p className="font-bold">{excludedStudents.length} active student{excludedStudents.length === 1 ? " is" : "s are"} outside this billing month:</p>
+                            <ul className="mt-1 list-disc pl-5">
+                                {excludedStudents.map(student => <li key={student.student_id}>{student.student_name} ({student.student_id}) — {student.reason}</li>)}
+                            </ul>
+                        </div>
+                    )}
                     {previewUnconfigured > 0 && (
                         <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
                             Publishing is blocked: {previewUnconfigured} student{previewUnconfigured === 1 ? "" : "s"} have no active fee rule for this month.
@@ -213,6 +230,7 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
     const [schedule, setSchedule] = useState({ name: "", amount: "", effective_from: nextMonthValue() })
     const [agreement, setAgreement] = useState({ student_id: "", adjustment_type: "fixed" as StudentFeeAgreementInput["adjustment_type"], amount: "", effective_from: currentMonthValue(), effective_until: "", reason: "" })
     const [saving, setSaving] = useState<"schedule" | "agreement" | null>(null)
+    const [onlySelectedMonth, setOnlySelectedMonth] = useState(false)
     const [agreementSearch, setAgreementSearch] = useState("")
     const visibleAgreements = useMemo(() => {
         const needle = agreementSearch.trim().toLowerCase()
@@ -249,7 +267,7 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
             const result = await financeApi.addStudentFeeAgreement({
                 ...agreement,
                 effective_from: agreement.effective_from + "-01",
-                effective_until: agreement.effective_until ? agreement.effective_until + "-01" : undefined,
+                effective_until: onlySelectedMonth ? agreement.effective_from + "-01" : agreement.effective_until ? agreement.effective_until + "-01" : undefined,
                 amount: agreement.adjustment_type === "waiver" ? "0.00" : decimalMoney(agreement.amount),
             })
             if (!result.success) throw new Error(result.error || "Could not add agreement")
@@ -344,8 +362,13 @@ function FeeRulesSection({ setup, students, onRefresh }: { setup: FinanceSetup; 
                             />
                         </Field>
                         <Field label="Starts"><Input type="month" required value={agreement.effective_from} onChange={event => setAgreement({ ...agreement, effective_from: event.target.value })} /></Field>
-                        <Field label="Ends (optional)"><Input type="month" value={agreement.effective_until} onChange={event => setAgreement({ ...agreement, effective_until: event.target.value })} /></Field>
+                        <Field label="Ends (optional)"><Input type="month" disabled={onlySelectedMonth} value={onlySelectedMonth ? agreement.effective_from : agreement.effective_until} onChange={event => setAgreement({ ...agreement, effective_until: event.target.value })} /></Field>
                     </div>
+                    <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                        <input type="checkbox" checked={onlySelectedMonth} onChange={event => setOnlySelectedMonth(event.target.checked)} className="mt-1" />
+                        <span>Apply only for the selected month (for vacation, illness, or a temporary fee concession). The previous ongoing rule resumes afterward.</span>
+                    </label>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">Set a concession before publishing that month. Already published fee amounts stay unchanged.</p>
                     <Field label="Reason"><Textarea rows={3} required value={agreement.reason} onChange={event => setAgreement({ ...agreement, reason: event.target.value })} placeholder="Approved reason for this fee" /></Field>
                     <Button type="submit" disabled={saving === "agreement" || !agreement.student_id || (agreement.adjustment_type !== "waiver" && Number(agreement.amount) <= 0)} className="justify-self-end gap-2">
                         {saving === "agreement" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add agreement

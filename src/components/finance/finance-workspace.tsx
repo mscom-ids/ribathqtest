@@ -341,6 +341,8 @@ function OverviewPanel({
 }) {
     const summary = workspace?.summary
     const expected = summaryValue(summary, "expected")
+    const monthlyFees = summaryValue(summary, "monthly_fees")
+    const otherCharges = summaryValue(summary, "other_charges")
     const collected = summaryValue(summary, "collected")
     const outstanding = summaryValue(summary, "outstanding", "pending")
     const overdue = summaryValue(summary, "overdue")
@@ -350,11 +352,12 @@ function OverviewPanel({
             {canViewSummary && (
                 <>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <MetricCard label="Expected this month" value={money(expected)} icon={IndianRupee} tone="blue" />
+                        <MetricCard label="Monthly fees this month" value={money(monthlyFees)} icon={IndianRupee} tone="blue" />
                         <MetricCard label="Collected this month" value={money(collected)} icon={CreditCard} tone="emerald" />
                         <MetricCard label="Outstanding all time" value={money(outstanding)} icon={WalletCards} tone="amber" />
                         <MetricCard label="Overdue all time" value={money(overdue)} icon={TrendingDown} tone="rose" />
                     </div>
+                    <p className="mt-2 text-right text-xs text-slate-500">Other charges this month: {money(otherCharges)} · Total expected: {money(expected)}</p>
                 </>
             )}
 

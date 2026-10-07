@@ -67,7 +67,10 @@ const BILLING_CANDIDATES_SQL = `
      AND existing.obligation_type = 'monthly_fee'
     WHERE s.status = 'active'
       AND (s.admission_date IS NULL OR s.admission_date < ($1::date + INTERVAL '1 month'))
-      AND (s.exit_date IS NULL OR s.exit_date >= $1::date)
+      AND (
+          s.comprehensive_details->>'finance_readmission_date' IS NULL
+          OR (s.comprehensive_details->>'finance_readmission_date')::date < ($1::date + INTERVAL '1 month')
+      )
 `;
 
 async function billingAudit(
@@ -201,17 +204,38 @@ function institutionMonth() {
 export async function previewMonthlyFees(actor: FinanceActor, monthInput: unknown) {
     requireFinanceManager(actor);
     const serviceMonth = month(monthInput);
-    const result = await db.query(
+    const [result, excluded] = await Promise.all([db.query(
         `WITH candidates AS (${BILLING_CANDIDATES_SQL})
          SELECT COUNT(*) FILTER (WHERE fee_schedule_id IS NOT NULL AND existing_obligation_id IS NULL)::int AS student_count,
                 COALESCE(SUM(final_amount) FILTER (WHERE fee_schedule_id IS NOT NULL AND existing_obligation_id IS NULL), 0) AS total_amount,
+                COUNT(*)::int AS eligible_count,
+                (SELECT COALESCE(SUM(amount), 0)
+                 FROM finance_obligations
+                 WHERE service_month = $1::date
+                   AND obligation_type = 'monthly_fee'
+                   AND voided_at IS NULL)
+                + COALESCE(SUM(final_amount)
+                    FILTER (WHERE fee_schedule_id IS NOT NULL AND existing_obligation_id IS NULL), 0) AS monthly_fee_total,
                 COUNT(*) FILTER (WHERE existing_obligation_id IS NOT NULL)::int AS existing_count,
                 COUNT(*) FILTER (WHERE fee_schedule_id IS NOT NULL AND has_exception AND existing_obligation_id IS NULL)::int AS exception_count,
                 COUNT(*) FILTER (WHERE fee_schedule_id IS NULL AND existing_obligation_id IS NULL)::int AS unconfigured_count
          FROM candidates`,
         [serviceMonth],
-    );
-    return { service_month: serviceMonth, ...(result.rows[0] || {}) };
+    ), db.query(
+        `SELECT s.adm_no AS student_id, s.name AS student_name,
+                CASE
+                    WHEN s.admission_date >= ($1::date + INTERVAL '1 month') THEN 'Admission starts after this month'
+                    WHEN (s.comprehensive_details->>'finance_readmission_date')::date >= ($1::date + INTERVAL '1 month') THEN 'Readmission starts after this month'
+                    ELSE 'Check enrollment dates'
+                END AS reason
+         FROM students s
+         WHERE s.status = 'active'
+           AND (s.admission_date >= ($1::date + INTERVAL '1 month')
+                OR (s.comprehensive_details->>'finance_readmission_date')::date >= ($1::date + INTERVAL '1 month'))
+         ORDER BY s.name, s.adm_no`,
+        [serviceMonth],
+    )]);
+    return { service_month: serviceMonth, ...(result.rows[0] || {}), excluded_students: excluded.rows };
 }
 
 export async function publishMonthlyFees(actor: FinanceActor, body: any) {
@@ -375,4 +399,101 @@ export async function generateCurrentMonthlyFees(actor: FinanceActor, body: any 
     const monthValue = String(body?.month || institutionMonth());
     const normalizedKey = body?.idempotency_key || `monthly-fees:${monthValue}`;
     return publishMonthlyFees(actor, { ...body, month: monthValue, idempotency_key: normalizedKey });
+}
+
+// Called in the same transaction as an Alumni -> active transition. A month
+// already published before the student returned still needs this one due.
+export async function addReadmittedStudentToCurrentBilling(
+    client: Queryable,
+    studentId: string,
+    staffId: string | null,
+    readmissionDate: string,
+) {
+    const currentServiceMonth = `${institutionMonth()}-01`;
+    const publishedMonths = await client.query(
+        `SELECT DISTINCT service_month::text AS service_month
+         FROM finance_billing_runs
+         WHERE status = 'published'
+           AND service_month >= date_trunc('month', $1::date)::date
+           AND service_month <= $2::date
+         ORDER BY service_month`,
+        [readmissionDate, currentServiceMonth],
+    );
+    const createdMonths: string[] = [];
+    for (const publishedMonth of publishedMonths.rows) {
+        const serviceMonth = String(publishedMonth.service_month).slice(0, 10);
+        const result = await addReadmittedStudentToPublishedMonth(client, studentId, staffId, readmissionDate, serviceMonth);
+        if (result.created) createdMonths.push(serviceMonth.slice(0, 7));
+    }
+    return { created: createdMonths.length > 0, created_months: createdMonths };
+}
+
+async function addReadmittedStudentToPublishedMonth(
+    client: Queryable,
+    studentId: string,
+    staffId: string | null,
+    readmissionDate: string,
+    serviceMonth: string,
+) {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('finance-billing:' || $1::text))`, [serviceMonth]);
+    const candidate = await client.query(
+        `WITH candidates AS (${BILLING_CANDIDATES_SQL})
+         SELECT student_id, fee_schedule_id, fee_agreement_id, final_amount,
+                existing_obligation_id
+         FROM candidates WHERE student_id = $2`,
+        [serviceMonth, studentId],
+    );
+    const row = candidate.rows[0];
+    if (!row || row.existing_obligation_id) return { created: false, reason: 'already_billed_or_not_eligible' };
+    if (!row.fee_schedule_id) {
+        throw new FinanceError(409, 'Set an active monthly fee rule before readmitting this student.', 'READMISSION_FEE_RULE_MISSING');
+    }
+
+    const dueDateResult = await client.query(
+        `SELECT GREATEST(MIN(due_date), $2::date)::date AS due_date
+         FROM finance_obligations
+         WHERE service_month = $1 AND obligation_type = 'monthly_fee'`,
+        [serviceMonth, readmissionDate],
+    );
+    const dueDate = dueDateResult.rows[0]?.due_date || readmissionDate;
+    const runResult = await client.query(
+        `INSERT INTO finance_billing_runs
+            (service_month, status, student_count, total_amount, idempotency_key, created_by)
+         VALUES ($1, 'publishing', 0, 0, $2, $3)
+         RETURNING id`,
+        [serviceMonth, `monthly-fees:readmission:${serviceMonth}:${studentId}`, staffId],
+    );
+    const runId = runResult.rows[0].id;
+    const inserted = await client.query(
+        `INSERT INTO finance_obligations
+            (student_id, obligation_type, description, amount, paid_amount, balance,
+             service_month, due_date, status, allocation_priority,
+             fee_schedule_id, fee_agreement_id, billing_run_id, idempotency_key,
+             created_by, requires_approval, approval_status, approved_by, approved_at)
+         VALUES ($1, 'monthly_fee', 'Monthly fee - ' || to_char($2::date, 'FMMonth YYYY'),
+                 $3, 0, $3, $2, $4,
+                 CASE WHEN $3::numeric = 0 THEN 'paid' ELSE 'open' END,
+                 10, $5, $6, $7, $8, $9, false, 'approved', $9, NOW())
+         ON CONFLICT (student_id, service_month)
+             WHERE obligation_type = 'monthly_fee'
+         DO NOTHING
+         RETURNING id`,
+        [studentId, serviceMonth, row.final_amount, dueDate, row.fee_schedule_id,
+            row.fee_agreement_id, runId, `monthly-fee:${serviceMonth.slice(0, 7)}:${studentId}`, staffId],
+    );
+    const count = inserted.rows.length;
+    if (count) await applyUnappliedCredits(client, runId);
+    await client.query(
+        `UPDATE finance_billing_runs
+         SET status = 'published', student_count = $2, total_amount = $3, published_at = NOW()
+         WHERE id = $1`,
+        [runId, count, count ? row.final_amount : 0],
+    );
+    await client.query(
+        `INSERT INTO finance_audit_events
+            (actor_id, action, entity_type, entity_id, student_id, metadata)
+         VALUES ($1, 'monthly_fee_created_on_readmission', 'billing_run', $2, $3, $4::jsonb)`,
+        [staffId, runId, studentId, JSON.stringify({ service_month: serviceMonth, amount: count ? row.final_amount : 0 })],
+    );
+    return { created: count > 0, reason: count ? 'readmission_due_created' : 'already_billed' };
 }
