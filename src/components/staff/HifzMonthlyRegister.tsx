@@ -384,10 +384,56 @@ function emptyDraft(): DraftItem {
   return { surah_name: "", start_v: "", end_v: "", juz_number: "", juz_portion: "" }
 }
 
-type RangeDraft = { fromSurah: string; fromAyah: string; toSurah: string; toAyah: string }
+type RangeDraft = {
+  fromSurah: string
+  fromAyah: string
+  toSurah: string
+  toAyah: string
+  // A range is stored as individual Surah rows. Keep their IDs so editing or
+  // deleting this compact range updates the same underlying rows as one unit.
+  entryIds?: string[]
+}
 
 function emptyRangeDraft(): RangeDraft {
   return { fromSurah: "", fromAyah: "", toSurah: "", toAyah: "" }
+}
+
+function compressEntriesToRanges(entries: DraftItem[]): RangeDraft[] {
+  const ranges: RangeDraft[] = []
+  let current: RangeDraft | null = null
+  let previous: DraftItem | null = null
+
+  for (const entry of entries) {
+    const surah = SURAH_BY_NAME.get(entry.surah_name)
+    const start = Number(entry.start_v)
+    const end = Number(entry.end_v)
+    if (!surah || !Number.isInteger(start) || !Number.isInteger(end)) continue
+
+    const previousSurah = previous ? SURAH_BY_NAME.get(previous.surah_name) : undefined
+    const previousEnd = Number(previous?.end_v)
+    const followsPrevious = !!current && !!previousSurah && (
+      (previousSurah.id === surah.id && previousEnd + 1 === start) ||
+      (previousSurah.id + 1 === surah.id && previousEnd === previousSurah.totalVerses && start === 1)
+    )
+
+    if (followsPrevious && current) {
+      current.toSurah = entry.surah_name
+      current.toAyah = entry.end_v
+      if (entry.id) current.entryIds = [...(current.entryIds || []), entry.id]
+    } else {
+      current = {
+        fromSurah: entry.surah_name,
+        fromAyah: entry.start_v,
+        toSurah: entry.surah_name,
+        toAyah: entry.end_v,
+        entryIds: entry.id ? [entry.id] : [],
+      }
+      ranges.push(current)
+    }
+    previous = entry
+  }
+
+  return ranges.length ? ranges : [emptyRangeDraft()]
 }
 
 function expandRangeDrafts(ranges: RangeDraft[]): DraftItem[] {
@@ -433,24 +479,29 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   const activity = target?.activity ? ACTIVITY[target.activity] : null
   const existing = useMemo(() => (target ? target.day.entries[target.activity] || [] : []), [target])
   const allowed = target?.day.eligibility.allowed ?? false
+  const isRange = activity?.kind === "range"
   const [items, setItems] = useState<DraftItem[]>([])
   const [removedIds, setRemovedIds] = useState<string[]>([])
   const [entryMode, setEntryMode] = useState<"individual" | "range">("individual")
   const [ranges, setRanges] = useState<RangeDraft[]>([emptyRangeDraft()])
+  const [rangeRemovedIds, setRangeRemovedIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setItems(existing.length ? existing.map(toDraft) : [emptyDraft()])
+    const drafts = existing.length ? existing.map(toDraft) : [emptyDraft()]
+    setItems(drafts)
     setRemovedIds([])
-    setEntryMode("individual")
-    setRanges([emptyRangeDraft()])
+    setRangeRemovedIds([])
+    // Restore range-entry records in their compact From → To form. Users can
+    // still switch to Daily Entry if they need individual Surah control.
+    setEntryMode(isRange && existing.length ? "range" : "individual")
+    setRanges(isRange && existing.length ? compressEntriesToRanges(drafts) : [emptyRangeDraft()])
     setError(null)
-  }, [target?.day.date, target?.activity])
+  }, [existing, isRange, target?.day.date, target?.activity])
 
   if (!target || !activity) return null
 
-  const isRange = activity.kind === "range"
   const setItem = (index: number, patch: Partial<DraftItem>) =>
     setItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)))
   const addItem = () => setItems((current) => [...current, emptyDraft()])
@@ -486,18 +537,42 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
     setRanges((current) => current.map((range, i) => (i === index ? { ...range, ...patch } : range)))
   const addRange = () => setRanges((current) => [...current, emptyRangeDraft()])
   const removeRange = (index: number) => setRanges((current) => {
+    const removed = current[index]
+    if (removed?.entryIds?.length) {
+      setRangeRemovedIds((ids) => Array.from(new Set([...ids, ...removed.entryIds!])))
+    }
     const next = current.filter((_, i) => i !== index)
-    return next.length ? next : [emptyRangeDraft()]
+    return next
   })
 
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
-      const saveItems = entryMode === "range"
-        ? [...items.filter((item) => item.id), ...expandRangeDrafts(ranges)]
-        : items
-      await onSave({ day: target.day, activity: target.activity }, saveItems, removedIds)
+      let saveItems = items
+      let deletedIds = removedIds
+      if (entryMode === "range") {
+        const existingById = new Map(items.filter((item) => item.id).map((item) => [item.id!, item]))
+        const unusedIds = new Set(items.flatMap((item) => item.id ? [item.id] : []))
+        const overflowIds: string[] = []
+        saveItems = ranges.flatMap((range) => {
+          const expanded = expandRangeDrafts([range])
+          const ids = range.entryIds || []
+          const rangeItems: DraftItem[] = expanded.map((row, index) => {
+            const id = ids[index]
+            if (id) unusedIds.delete(id)
+            const original = id ? existingById.get(id) : undefined
+            return { ...row, id, recorded_by_name: original?.recorded_by_name, created_at: original?.created_at, updated_at: original?.updated_at }
+          })
+          for (const id of ids.slice(expanded.length)) {
+            overflowIds.push(id)
+            unusedIds.delete(id)
+          }
+          return rangeItems
+        })
+        deletedIds = Array.from(new Set([...removedIds, ...rangeRemovedIds, ...overflowIds, ...unusedIds]))
+      }
+      await onSave({ day: target.day, activity: target.activity }, saveItems, deletedIds)
       onClose()
     } catch (cause) {
       const err = cause as { response?: { data?: { error?: string } }; message?: string }
@@ -510,7 +585,7 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   const showFields = allowed || existing.length > 0
   const hasRangeValue = ranges.some((range) => range.fromSurah || range.toSurah || range.fromAyah || range.toAyah)
   const canSave = showFields && (entryMode === "range"
-    ? hasRangeValue || removedIds.length > 0
+    ? hasRangeValue || removedIds.length > 0 || rangeRemovedIds.length > 0
     : items.some((item) => (isRange ? item.surah_name : item.juz_number) || item.id) || removedIds.length > 0)
 
   return (
@@ -551,14 +626,14 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
         >
           {entryMode === "range" ? (
             <>
-              <p className="text-xs text-slate-500">Each range is saved as individual Surah records.</p>
+              <p className="text-xs text-slate-500">Saved range entries stay together here. Edit or delete the complete range at once.</p>
               {ranges.map((range, index) => (
                 <div key={index} className="rounded-lg border border-slate-200 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Range {index + 1}</span>
-                    {ranges.length > 1 && (
+                    {(ranges.length > 1 || range.entryIds?.length) && (
                       <button type="button" onClick={() => removeRange(index)} className="flex items-center gap-1 text-xs font-medium text-red-500 hover:underline">
-                        <Trash2 className="h-3.5 w-3.5" />Delete
+                        <Trash2 className="h-3.5 w-3.5" />Delete range
                       </button>
                     )}
                   </div>
