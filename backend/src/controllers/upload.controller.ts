@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { supabaseAdmin } from '../config/supabase';
+import { uploadStudentPhoto } from '../services/r2-student-photo.service';
 
 // Use memory storage — file goes into RAM buffer, then we push to Supabase
 const upload = multer({
@@ -31,6 +32,23 @@ export const uploadAvatar = (req: Request, res: Response) => {
 
         try {
             const ext = path.extname(req.file.originalname).toLowerCase();
+            const studentAdmissionNumber = String(req.body?.student_admission_number || '').trim();
+            const studentName = String(req.body?.student_name || '').trim();
+
+            if (studentAdmissionNumber || studentName) {
+                if (!studentAdmissionNumber || !studentName) {
+                    return res.status(400).json({ success: false, error: 'Student name and admission number are required for a student photo.' });
+                }
+                const uploaded = await uploadStudentPhoto({
+                    admissionNumber: studentAdmissionNumber,
+                    studentName,
+                    body: req.file.buffer,
+                    contentType: req.file.mimetype,
+                    extension: ext,
+                });
+                return res.json({ success: true, filePath: uploaded.publicUrl, storage: 'r2', key: uploaded.key });
+            }
+
             const fileName = `avatar-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
 
             // Upload buffer directly to Supabase Storage bucket "avatars"

@@ -54,8 +54,8 @@ const SURAH_NAME_MAP: Record<string, number> = {
 const JUZ_BOUNDARIES = [
     { id: 1, startSurah: 1, startVerse: 1, endSurah: 2, endVerse: 141 },
     { id: 2, startSurah: 2, startVerse: 142, endSurah: 2, endVerse: 252 },
-    { id: 3, startSurah: 2, startVerse: 253, endSurah: 3, endVerse: 92 },
-    { id: 4, startSurah: 3, startVerse: 93, endSurah: 4, endVerse: 23 },
+    { id: 3, startSurah: 2, startVerse: 253, endSurah: 3, endVerse: 91 },
+    { id: 4, startSurah: 3, startVerse: 92, endSurah: 4, endVerse: 23 },
     { id: 5, startSurah: 4, startVerse: 24, endSurah: 4, endVerse: 147 },
     { id: 6, startSurah: 4, startVerse: 148, endSurah: 5, endVerse: 81 },
     { id: 7, startSurah: 5, startVerse: 82, endSurah: 6, endVerse: 110 },

@@ -105,10 +105,19 @@ export default function CreateStudentPage() {
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files || e.target.files.length === 0) return;
         const file = e.target.files[0];
+        const studentName = form.getValues("name").trim();
+        const admissionNumber = form.getValues("adm_no").trim().toUpperCase();
+        if (!studentName || !/^R\d{3}$/.test(admissionNumber)) {
+            alert("Enter the student name and an admission number like R123 before uploading a photo.");
+            e.target.value = "";
+            return;
+        }
         setPhotoUploading(true);
 
         const formData = new FormData();
         formData.append('avatar', file);
+        formData.append('student_name', studentName);
+        formData.append('student_admission_number', admissionNumber);
 
         try {
             const res = await api.post('/upload/avatar', formData, {
@@ -116,12 +125,7 @@ export default function CreateStudentPage() {
             });
 
             if (res.data.success) {
-                // The backend returns a relative url like `/public/avatars/avatar-xxx.jpg`
-                // Build the full absolute path so the NextJS image strictly loads from the active backend server
-                const IS_DEV = process.env.NODE_ENV !== 'production';
-                const backendBase = IS_DEV ? 'http://localhost:5000' : '';
-                const fullUrl = backendBase + res.data.filePath;
-                setPhotoUrl(fullUrl);
+                setPhotoUrl(res.data.filePath);
             } else {
                 alert("Failed to upload photo: " + res.data.error);
             }

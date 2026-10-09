@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Ban, CalendarClock, CreditCard, FileText, Loader2, Pencil, Plus, ReceiptText, RotateCcw, WalletCards } from "lucide-react"
+import { Ban, CalendarClock, CreditCard, FileText, Loader2, Pencil, Plus, ReceiptText, RotateCcw, Tag, WalletCards } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import type { ChargeCategory, FinanceOpenItem, FinancePayment, PaymentAccount, StudentFinanceAccount } from "@/lib/finance-api"
 import { createIdempotencyKey, financeApi, financeErrorMessage, studentFinanceId } from "@/lib/finance-api"
-import { money, shortDate, shortDateTime, summaryValue } from "./finance-utils"
+import { currentMonthValue, money, shortDate, shortDateTime, summaryValue } from "./finance-utils"
 
 type AccountTab = "open" | "records" | "payments" | "rule"
 type CorrectionTarget =
@@ -62,6 +62,12 @@ export function StudentAccountSheet({
     const [editNotes, setEditNotes] = useState("")
     const [editAllocations, setEditAllocations] = useState<Record<string, string>>({})
     const [editSaving, setEditSaving] = useState(false)
+    const [discountOpen, setDiscountOpen] = useState(false)
+    const [discountMonth, setDiscountMonth] = useState(currentMonthValue())
+    const [discountType, setDiscountType] = useState<"amount" | "waiver">("amount")
+    const [discountAmount, setDiscountAmount] = useState("")
+    const [discountReason, setDiscountReason] = useState("")
+    const [discountSaving, setDiscountSaving] = useState(false)
 
     useEffect(() => {
         const media = window.matchMedia("(min-width: 640px)")
@@ -78,6 +84,60 @@ export function StudentAccountSheet({
     const studentId = studentFinanceId(account?.student)
     const due = Number(account?.summary?.total_due ?? summaryValue(account?.summary, "outstanding", "pending"))
     const credit = Number(account?.summary?.credit_balance ?? account?.summary?.credits ?? 0)
+    const publishedMonthlyDue = account?.obligation_history?.find(item => item.type === "monthly_fee"
+        && item.status !== "void" && String(item.month || item.service_month || "").slice(0, 7) === discountMonth)
+    const discountValue = Number(discountAmount)
+    const discountedFee = publishedMonthlyDue && discountType === "amount"
+        ? Math.max(0, Number(publishedMonthlyDue.amount) - (Number.isFinite(discountValue) ? discountValue : 0))
+        : 0
+
+    function openDiscount(month?: string | null) {
+        setDiscountMonth(month ? String(month).slice(0, 7) : currentMonthValue())
+        setDiscountType("amount")
+        setDiscountAmount("")
+        setDiscountReason("")
+        setDiscountOpen(true)
+    }
+
+    async function submitDiscount(event: React.FormEvent) {
+        event.preventDefault()
+        if (!studentId || discountReason.trim().length < 3 || !discountMonth) return
+        setDiscountSaving(true)
+        try {
+            const reason = `${discountType === "waiver" ? "Full monthly waiver" : "One-month discount"}: ${discountReason.trim()}`
+            if (publishedMonthlyDue) {
+                if (Number(publishedMonthlyDue.paid_amount || 0) > 0) throw new Error("Reverse the payment allocated to this month before applying a discount or waiver.")
+                if (discountType === "amount" && (!Number.isFinite(discountValue) || discountValue <= 0 || discountValue > Number(publishedMonthlyDue.amount))) {
+                    throw new Error("Enter a discount greater than zero and no more than the published monthly fee.")
+                }
+                const correctedAmount = discountType === "waiver" ? 0 : discountedFee
+                const result = await financeApi.correctPublishedMonthlyFee(publishedMonthlyDue.id, {
+                    amount: correctedAmount.toFixed(2), reason, idempotency_key: createIdempotencyKey("monthly-discount"),
+                })
+                if (!result.success) throw new Error(result.error || "Could not apply monthly discount")
+            } else {
+                if (discountType === "amount" && (!Number.isFinite(discountValue) || discountValue <= 0)) {
+                    throw new Error("Enter a discount greater than zero.")
+                }
+                const result = await financeApi.addStudentFeeAgreement({
+                    student_id: studentId,
+                    adjustment_type: discountType === "waiver" ? "waiver" : "discount_amount",
+                    amount: discountType === "waiver" ? "0.00" : discountValue.toFixed(2),
+                    effective_from: `${discountMonth}-01`,
+                    effective_until: `${discountMonth}-01`,
+                    reason,
+                })
+                if (!result.success) throw new Error(result.error || "Could not schedule monthly discount")
+            }
+            toast.success(publishedMonthlyDue ? "Published monthly fee corrected" : "One-month discount scheduled")
+            setDiscountOpen(false)
+            await onCorrectionSuccess(studentId)
+        } catch (error) {
+            toast.error(financeErrorMessage(error, "Could not apply monthly discount"))
+        } finally {
+            setDiscountSaving(false)
+        }
+    }
 
     function openCorrection(target: Exclude<CorrectionTarget, null>) {
         setCorrection(target)
@@ -200,6 +260,9 @@ export function StudentAccountSheet({
                                     <p className="mt-1 text-2xl font-black text-emerald-700 dark:text-emerald-200">{money(credit)}</p>
                                 </div>
                             </div>
+                            {canManageCorrections && <Button type="button" variant="outline" size="sm" className="mt-3 w-full gap-2 border-blue-200 text-blue-700" onClick={() => openDiscount()}>
+                                <Tag className="h-4 w-4" /> Monthly discount / waiver
+                            </Button>}
                         </SheetHeader>
 
                         <div className="border-b border-slate-200 px-4 py-2 dark:border-slate-800">
@@ -232,7 +295,7 @@ export function StudentAccountSheet({
                                         <EmptyState icon={WalletCards} title="Nothing pending" description="This student has no open fee or charge items." />
                                     ) : account.open_items.map(item => {
                                         const obligationType = item.obligation_type || item.type
-                                        const canVoid = canManageCorrections && obligationType !== "monthly_fee" && Number(item.paid_amount || 0) === 0
+                                        const isUnpaidCharge = canManageCorrections && obligationType === "charge" && Number(item.paid_amount || 0) === 0
                                         return (
                                         <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
                                             <div className="flex items-start justify-between gap-4">
@@ -240,18 +303,24 @@ export function StudentAccountSheet({
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <p className="font-bold text-slate-900 dark:text-white">{item.description}</p>
                                                         <Badge variant="outline" className="capitalize">{item.type.replaceAll("_", " ")}</Badge>
+                                                        <Badge variant="outline" className={Number(item.paid_amount || 0) > 0 ? "border-emerald-200 text-emerald-700" : "border-slate-200 text-slate-600"}>
+                                                            {Number(item.paid_amount || 0) > 0 ? "Part-paid" : "Unpaid"}
+                                                        </Badge>
                                                     </div>
                                                     <p className="mt-1 text-xs text-slate-500">Due {shortDate(item.due_date || item.month)}</p>
                                                 </div>
                                                  <div className="shrink-0 text-right">
                                                      <p className="font-black text-rose-600 dark:text-rose-300">{money(item.balance)}</p>
                                                      {Number(item.paid_amount || 0) > 0 && <p className="text-xs text-emerald-600">Paid {money(item.paid_amount)}</p>}
-                                                     {canVoid && (
+                                                     {isUnpaidCharge && (
                                                          <div className="mt-1 flex justify-end gap-1">
-                                                             {obligationType === "charge" && <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "obligation", item })}><Pencil className="h-3 w-3" /> Edit</Button>}
+                                                             <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "obligation", item })}><Pencil className="h-3 w-3" /> Edit</Button>
                                                              <Button type="button" variant="ghost" size="xs" className="text-rose-700" onClick={() => openCorrection({ kind: "obligation", item })}><Ban className="h-3 w-3" /> Delete</Button>
                                                          </div>
                                                      )}
+                                                     {canManageCorrections && obligationType === "monthly_fee" && <Button type="button" variant="ghost" size="xs" className="mt-1 text-blue-700" onClick={() => openDiscount(item.month)}>
+                                                         <Tag className="h-3 w-3" /> Discount / waive
+                                                     </Button>}
                                                  </div>
                                              </div>
                                          </div>
@@ -289,7 +358,7 @@ export function StudentAccountSheet({
                                                     <p className={`font-black ${reversed ? "text-rose-700 line-through dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`}>{money(payment.amount)}</p>
                                                     {canReverse && (
                                                         <div className="mt-1 flex justify-end gap-1">
-                                                            {canEditPayment && <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "payment", payment })}><Pencil className="h-3 w-3" /> Edit</Button>}
+                                                            {canEditPayment && <Button type="button" variant="ghost" size="xs" onClick={() => openEdit({ kind: "payment", payment })}><Pencil className="h-3 w-3" /> Correct payment</Button>}
                                                             <Button type="button" variant="ghost" size="xs" className="text-rose-700" onClick={() => openCorrection({ kind: "payment", payment })}><Ban className="h-3 w-3" /> Delete</Button>
                                                         </div>
                                                     )}
@@ -393,6 +462,46 @@ export function StudentAccountSheet({
                         <Button type="submit" variant="destructive" disabled={correctionSaving || correctionReason.trim().length < 3}>
                             {correctionSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : correction?.kind === "payment" ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
                             {correction?.kind === "payment" ? "Reverse and remove" : "Void and remove"}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+        <Dialog open={discountOpen} onOpenChange={nextOpen => { if (!discountSaving) setDiscountOpen(nextOpen) }}>
+            <DialogContent className="sm:max-w-md">
+                <form onSubmit={submitDiscount} className="space-y-4">
+                    <DialogHeader>
+                        <DialogTitle>Monthly discount or waiver</DialogTitle>
+                        <DialogDescription>Give this student a discount for one month, such as an approved absence for vacation or illness. This does not change other months.</DialogDescription>
+                    </DialogHeader>
+                    <label className="block space-y-1 text-sm font-semibold">Month
+                        <Input required type="month" value={discountMonth} onChange={event => setDiscountMonth(event.target.value)} />
+                    </label>
+                    <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                        {publishedMonthlyDue
+                            ? `Published fee: ${money(publishedMonthlyDue.amount)}${Number(publishedMonthlyDue.paid_amount || 0) > 0 ? ` · already paid ${money(publishedMonthlyDue.paid_amount)}` : ""}`
+                            : "This month has not been published. The discount will apply when monthly fees are published."}
+                    </p>
+                    <label className="block space-y-1 text-sm font-semibold">Adjustment
+                        <select className="h-10 w-full rounded-lg border px-3" value={discountType} onChange={event => setDiscountType(event.target.value as "amount" | "waiver")}>
+                            <option value="amount">Discount by an amount</option>
+                            <option value="waiver">Waive the full monthly fee</option>
+                        </select>
+                    </label>
+                    {discountType === "amount" && <label className="block space-y-1 text-sm font-semibold">Discount amount
+                        <Input required type="number" min="0.01" max={publishedMonthlyDue ? Number(publishedMonthlyDue.amount) : undefined} step="0.01" value={discountAmount} onChange={event => setDiscountAmount(event.target.value)} placeholder="e.g. 3000" />
+                    </label>}
+                    {publishedMonthlyDue && discountType === "amount" && discountValue > 0 &&
+                        <p className="text-sm font-semibold text-blue-700">Corrected monthly fee: {money(discountedFee)}</p>}
+                    <label className="block space-y-1 text-sm font-semibold">Reason
+                        <Textarea required minLength={3} maxLength={440} value={discountReason} onChange={event => setDiscountReason(event.target.value)} placeholder="Vacation, illness, or other approved reason" />
+                    </label>
+                    {publishedMonthlyDue && Number(publishedMonthlyDue.paid_amount || 0) > 0 &&
+                        <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">This month has a payment allocated to it. Reverse that payment in the Payments tab before changing the published fee, then record it against the corrected fee.</p>}
+                    <DialogFooter>
+                        <Button type="button" variant="outline" disabled={discountSaving} onClick={() => setDiscountOpen(false)}>Cancel</Button>
+                        <Button type="submit" disabled={discountSaving || discountReason.trim().length < 3 || (publishedMonthlyDue && Number(publishedMonthlyDue.paid_amount || 0) > 0) || (discountType === "amount" && (!Number.isFinite(discountValue) || discountValue <= 0 || Boolean(publishedMonthlyDue && discountValue > Number(publishedMonthlyDue.amount))))}>
+                            {discountSaving && <Loader2 className="h-4 w-4 animate-spin" />} {publishedMonthlyDue ? "Apply correction" : "Schedule discount"}
                         </Button>
                     </DialogFooter>
                 </form>

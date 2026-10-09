@@ -246,13 +246,19 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
     // ── Photo upload ──────────────────────────────────────────
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
         if (!e.target.files?.length) return
+        const studentName = String(studentData?.name || form.getValues("name") || "").trim()
+        if (!studentName || !/^R\d{3}$/.test(id)) {
+            console.error("Student name or admission number is unavailable for the R2 photo upload")
+            return
+        }
         setPhotoUploading(true)
         const fd = new FormData()
         fd.append('avatar', e.target.files[0])
+        fd.append('student_name', studentName)
+        fd.append('student_admission_number', id.toUpperCase())
         try {
             const res = await api.post('/upload/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
             if (res.data.success) {
-                // filePath is now a full Supabase public URL — use it directly
                 setPhotoUrl(res.data.filePath)
             }
         } catch (err) { console.error("Upload error:", err) }
