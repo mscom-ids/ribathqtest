@@ -1,6 +1,6 @@
 "use client"
 
-import { Bell, Moon, Sun, Menu, Users, MessageSquare, PartyPopper, CheckCheck } from "lucide-react"
+import { Bell, Moon, Sun, Menu, Users, MessageSquare, PartyPopper, CheckCheck, CalendarDays, Clock3, GraduationCap } from "lucide-react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useTheme } from "next-themes"
 import api from "@/lib/api"
@@ -35,6 +35,48 @@ function roleLabel(role?: string) {
         mentor: 'Mentor',
     }
     return roles[role || ''] || 'Staff'
+}
+
+type AcademicYear = { name?: string; is_current?: boolean }
+
+function DashboardContext() {
+    const [now, setNow] = useState(() => new Date())
+    const [academicSession, setAcademicSession] = useState("")
+
+    useEffect(() => {
+        const clock = window.setInterval(() => setNow(new Date()), 1000)
+        api.get("/academic-history/years")
+            .then(response => {
+                const years = Array.isArray(response.data?.data) ? response.data.data as AcademicYear[] : []
+                const current = years.find(year => year.is_current) || years[0]
+                if (current?.name) setAcademicSession(current.name)
+            })
+            .catch(() => {})
+        return () => window.clearInterval(clock)
+    }, [])
+
+    const date = now.toLocaleDateString("en-GB", {
+        timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long", year: "numeric",
+    })
+    const time = now.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
+    })
+
+    return (
+        <div className="hidden items-center gap-2 xl:flex">
+            {academicSession && <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[12px] text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300">
+                <GraduationCap className="h-4 w-4" />
+                <span>Academic Session:</span><strong>{academicSession}</strong>
+            </div>}
+            <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[12px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <CalendarDays className="h-4 w-4 text-slate-500" /> {date}
+            </div>
+            <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[12px] font-bold tabular-nums text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /><Clock3 className="h-4 w-4 text-emerald-600" /> {time}
+            </div>
+            <div className="h-6 w-px bg-[#e8ede9] dark:bg-[#2a2f3e]" />
+        </div>
+    )
 }
 
 // ── Notification Bell ───────────────────────────────────────────────────────
@@ -293,17 +335,7 @@ export function TopNav({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
             <div className="flex-1" />
 
             <div className="flex items-center gap-3">
-                {isDashboard && (
-                    <div className="mr-1 flex shrink-0 items-center gap-2">
-                        <Link href="/admin/students/create" className="rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:px-4 sm:text-[12px]">
-                            + Add New Student
-                        </Link>
-                        <Link href="/admin/finance/dashboard" className="hidden rounded-lg border border-slate-200 bg-white px-4 py-2 text-[12px] font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 md:block">
-                            Fees Details
-                        </Link>
-                        <div className="hidden h-6 w-px bg-[#e8ede9] dark:bg-[#2a2f3e] sm:block" />
-                    </div>
-                )}
+                {isDashboard && <DashboardContext />}
 
                 {/* Notification Bell */}
                 <NotificationBell />
