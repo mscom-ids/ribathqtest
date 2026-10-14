@@ -1,4 +1,4 @@
-import { isWhatsAppSendingEnabled } from './whatsapp-safety';
+import { isStaffWhatsAppSendingEnabled } from './whatsapp-safety';
 
 export interface WhatsAppConfig {
   apiUrl?: string;
@@ -29,7 +29,7 @@ export async function sendWhatsAppMessage(
   message: string,
   configOverride?: WhatsAppConfig
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isWhatsAppSendingEnabled()) {
+  if (!isStaffWhatsAppSendingEnabled()) {
     return { success: false, error: 'WhatsApp sending is disabled' };
   }
   const phone = normalizePhoneNumber(toPhone);
@@ -127,7 +127,7 @@ export async function notifyMentorsForEvent(event: {
   end_time: string;
   message?: string;
 }) {
-  if (!isWhatsAppSendingEnabled()) return;
+  if (!isStaffWhatsAppSendingEnabled()) return;
   try {
     const { db } = await import('../config/db');
     const { title, category, event_for, target_roles, start_date, end_date, start_time, end_time, message } = event;

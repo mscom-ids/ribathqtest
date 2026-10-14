@@ -7,6 +7,14 @@ type Database = {
 type MovementEvent = 'student_exit' | 'student_return';
 type NotificationStatus = 'api_accepted' | 'failed' | 'uncertain' | 'skipped' | 'pending';
 
+const eligibleMovementLeaveSql = `(
+  sl.leave_type = 'out-campus'
+  OR (sl.leave_type = 'institutional' AND EXISTS (
+    SELECT 1 FROM institutional_leaves il
+    WHERE il.id = sl.institutional_leave_id AND il.campus_location = 'outside'
+  ))
+)`;
+
 export type MovementNotificationConfig = {
   webhookUrl: string;
   secret: string;
@@ -14,6 +22,7 @@ export type MovementNotificationConfig = {
   senderId?: string;
   testRecipient?: string;
   testStudentId?: string;
+  productionStartAt?: string;
 };
 
 export function getMovementNotificationConfig(
@@ -23,6 +32,7 @@ export function getMovementNotificationConfig(
   if ((!isWhatsAppSendingEnabled(environment) && !testMode) || environment.N8N_STUDENT_MOVEMENT_ENABLED !== 'true') return null;
   let testRecipient: string | undefined;
   let testStudentId: string | undefined;
+  let productionStartAt: string | undefined;
   if (testMode) {
     const testPhone = environment.N8N_STUDENT_MOVEMENT_TEST_PHONE?.trim() || '';
     if (!/^\+[1-9]\d{7,14}$/.test(testPhone)) {
@@ -33,6 +43,13 @@ export function getMovementNotificationConfig(
     if (!testStudentId || !/^R\d{3}$/.test(testStudentId)) {
       throw new Error('Test mode requires a dedicated N8N_STUDENT_MOVEMENT_TEST_STUDENT_ID like R999');
     }
+  } else {
+    const startAt = environment.N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT?.trim() || '';
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(startAt)
+      || !Number.isFinite(new Date(startAt).getTime())) {
+      throw new Error('Production sending requires N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT as a fixed ISO timestamp with timezone');
+    }
+    productionStartAt = new Date(startAt).toISOString();
   }
   const webhookUrl = environment.N8N_STUDENT_MOVEMENT_WEBHOOK_URL?.trim() || '';
   const secret = environment.N8N_STUDENT_MOVEMENT_WEBHOOK_SECRET?.trim() || '';
@@ -59,7 +76,7 @@ export function getMovementNotificationConfig(
   }
   return {
     webhookUrl, secret, phoneField,
-    senderId, testRecipient, testStudentId,
+    senderId, testRecipient, testStudentId, productionStartAt,
   };
 }
 
@@ -67,7 +84,8 @@ function movementSendingAllowed(config: MovementNotificationConfig) {
   if (config.testRecipient && config.testStudentId) {
     return process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED === 'true';
   }
-  return isWhatsAppSendingEnabled() && process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED !== 'true';
+  return !!config.productionStartAt && isWhatsAppSendingEnabled()
+    && process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED !== 'true';
 }
 
 export async function enqueueMovementNotifications(
@@ -78,6 +96,7 @@ export async function enqueueMovementNotifications(
 ) {
   const config = getMovementNotificationConfig();
   if (!config || leaveIds.length === 0) return;
+  if (config.productionStartAt && new Date(occurredAt).getTime() < new Date(config.productionStartAt).getTime()) return;
   await client.query(
     `INSERT INTO student_movement_notifications (id, leave_id, event, payload, next_attempt_at)
      SELECT gen_random_uuid(), sl.id, $2,
@@ -94,11 +113,16 @@ export async function enqueueMovementNotifications(
      FROM student_leaves sl
      JOIN students s ON s.adm_no = sl.student_id
      WHERE sl.id = ANY($1::uuid[])
-       AND sl.leave_type IN ('out-campus', 'outdoor', 'institutional', 'personal')
+       AND ${eligibleMovementLeaveSql}
        AND sl.status <> 'cancelled'
+       AND ($6::timestamptz IS NULL OR (
+         sl.created_at >= $6::timestamptz AND sl.start_datetime >= $6::timestamptz
+         AND $3::timestamptz >= $6::timestamptz
+         AND COALESCE(s.comprehensive_details->>'whatsapp_notification_test', 'false') <> 'true'
+       ))
        AND ($4::text IS NULL OR (s.adm_no = $4 AND s.comprehensive_details->>'whatsapp_notification_test' = 'true'))
      ON CONFLICT (leave_id, event) DO NOTHING`,
-    [leaveIds, event, occurredAt, config.testStudentId || null, config.testRecipient || null],
+    [leaveIds, event, occurredAt, config.testStudentId || null, config.testRecipient || null, config.productionStartAt || null],
   );
 }
 
@@ -141,7 +165,8 @@ export function prepareMovementNotification(
 }
 
 export async function refreshPendingMovementNotifications(client: Database, leaveId: string) {
-  if (!getMovementNotificationConfig()) return;
+  const config = getMovementNotificationConfig();
+  if (!config) return;
   await client.query(
     `UPDATE student_movement_notifications notification
      SET payload = notification.payload || jsonb_build_object(
@@ -154,8 +179,14 @@ export async function refreshPendingMovementNotifications(client: Database, leav
            THEN sl.start_datetime ELSE sl.actual_return_datetime END),
          updated_at = now()
      FROM student_leaves sl
-     WHERE notification.leave_id = sl.id AND sl.id = $1 AND notification.status = 'pending'`,
-    [leaveId],
+     WHERE notification.leave_id = sl.id AND sl.id = $1 AND notification.status = 'pending'
+       AND ${eligibleMovementLeaveSql}
+       AND ($2::timestamptz IS NULL OR (
+         notification.created_at >= $2::timestamptz
+         AND sl.created_at >= $2::timestamptz AND sl.start_datetime >= $2::timestamptz
+         AND COALESCE(notification.payload->>'test_notification', 'false') <> 'true'
+       ))`,
+    [leaveId, config.productionStartAt || null],
   );
 }
 
@@ -201,6 +232,19 @@ export async function processMovementNotification(
        SELECT notification.id
        FROM student_movement_notifications notification
        WHERE notification.status = 'pending' AND notification.next_attempt_at <= now()
+         AND EXISTS (
+           SELECT 1 FROM student_leaves sl JOIN students s ON s.adm_no = sl.student_id
+           WHERE sl.id = notification.leave_id AND sl.status <> 'cancelled'
+             AND ${eligibleMovementLeaveSql}
+             AND ($3::timestamptz IS NULL OR (
+               notification.created_at >= $3::timestamptz
+               AND sl.created_at >= $3::timestamptz AND sl.start_datetime >= $3::timestamptz
+               AND CASE WHEN notification.event = 'student_exit' THEN sl.start_datetime
+                        ELSE sl.actual_return_datetime END >= $3::timestamptz
+               AND COALESCE(notification.payload->>'test_notification', 'false') <> 'true'
+               AND COALESCE(s.comprehensive_details->>'whatsapp_notification_test', 'false') <> 'true'
+             ))
+         )
          AND ($2::uuid IS NULL OR notification.id = $2::uuid)
          AND ($1::text IS NULL OR (
            notification.payload->>'student_id' = $1
@@ -225,7 +269,7 @@ export async function processMovementNotification(
          attempts = attempts + 1, updated_at = now()
      FROM candidate WHERE notification.id = candidate.id
      RETURNING notification.id, notification.payload, notification.attempts`,
-    [config.testStudentId || null, notificationId || null],
+    [config.testStudentId || null, notificationId || null, config.productionStartAt || null],
   );
   const notification = claimed.rows[0];
   if (!notification) return false;
@@ -294,6 +338,33 @@ export function startMovementNotificationWorker(database: Database) {
     if (running || stopped || !movementSendingAllowed(config)) return;
     running = true;
     try {
+      if (config.productionStartAt) {
+        await database.query(
+          `UPDATE student_movement_notifications notification
+           SET status = 'skipped', last_error = 'before_production_start_or_test', updated_at = now()
+           WHERE notification.status = 'pending' AND (
+             notification.created_at < $1::timestamptz
+             OR COALESCE(notification.payload->>'test_notification', 'false') = 'true'
+             OR NOT EXISTS (
+               SELECT 1 FROM student_leaves sl JOIN students s ON s.adm_no = sl.student_id
+               WHERE sl.id = notification.leave_id
+                 AND sl.created_at >= $1::timestamptz AND sl.start_datetime >= $1::timestamptz
+                 AND CASE WHEN notification.event = 'student_exit' THEN sl.start_datetime
+                          ELSE sl.actual_return_datetime END >= $1::timestamptz
+                 AND COALESCE(s.comprehensive_details->>'whatsapp_notification_test', 'false') <> 'true'
+             )
+           )`,
+          [config.productionStartAt],
+        );
+      }
+      await database.query(
+        `UPDATE student_movement_notifications notification
+         SET status = 'skipped', last_error = 'leave_type_not_notifiable', updated_at = now()
+         WHERE notification.status = 'pending' AND NOT EXISTS (
+           SELECT 1 FROM student_leaves sl
+           WHERE sl.id = notification.leave_id AND ${eligibleMovementLeaveSql}
+         )`,
+      );
       await database.query(
         `UPDATE student_movement_notifications notification
          SET status = 'skipped', last_error = 'leave_cancelled', updated_at = now()

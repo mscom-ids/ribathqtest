@@ -36,6 +36,7 @@ yarn-error.log*
 !.env.staging.example
 !backend/.env.staging.example
 !backend/.env.notifications.example
+/tmp/whatsapp-template-test-state.json*
 
 # vercel
 .vercel

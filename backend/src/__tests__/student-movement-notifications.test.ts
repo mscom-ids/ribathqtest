@@ -6,12 +6,13 @@ import {
   prepareMovementNotification,
   processMovementNotification,
 } from '../services/student-movement-notifications.service';
-import { isWhatsAppSendingEnabled } from '../services/whatsapp-safety';
+import { isWhatsAppSendingEnabled, isStaffWhatsAppSendingEnabled } from '../services/whatsapp-safety';
 import { sendWhatsAppMessage } from '../services/whatsapp.service';
 
 const environment = {
   WHATSAPP_SENDING_ENABLED: 'true',
   N8N_STUDENT_MOVEMENT_ENABLED: 'true',
+  N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT: '2026-10-12T00:00:00Z',
   N8N_STUDENT_MOVEMENT_WEBHOOK_URL: 'https://server.n8n.zvntorai.in/webhook/erp-student-movement',
   N8N_STUDENT_MOVEMENT_WEBHOOK_SECRET: 'test-only-secret-with-at-least-32-characters',
 };
@@ -29,6 +30,8 @@ async function run() {
   assert.equal(isWhatsAppSendingEnabled({}), false);
   assert.equal(isWhatsAppSendingEnabled({ WHATSAPP_SENDING_ENABLED: 'false' }), false);
   assert.equal(isWhatsAppSendingEnabled({ WHATSAPP_SENDING_ENABLED: '1' }), false);
+  assert.equal(isStaffWhatsAppSendingEnabled({ WHATSAPP_SENDING_ENABLED: 'true' }), false);
+  assert.equal(isStaffWhatsAppSendingEnabled({ WHATSAPP_SENDING_ENABLED: 'true', WHATSAPP_STAFF_SENDING_ENABLED: 'true' }), true);
   assert.equal(isWhatsAppSendingEnabled({ WHATSAPP_SENDING_ENABLED: 'true', N8N_STUDENT_MOVEMENT_TEST_ENABLED: 'true' }), false);
   assert.equal(getMovementNotificationConfig({ ...environment, WHATSAPP_SENDING_ENABLED: 'false' }), null);
   assert.equal(getMovementNotificationConfig({ ...environment, WHATSAPP_SENDING_ENABLED: undefined }), null);
@@ -55,6 +58,43 @@ async function run() {
   assert.throws(() => getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_WEBHOOK_URL: 'http://example.com/webhook/test' }));
   assert.throws(() => getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_WEBHOOK_URL: 'https://example.com/webhook-test/test' }));
   assert.throws(() => getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_PHONE_FIELD: 'phone; SELECT' }));
+  assert.equal(config.productionStartAt, '2026-10-12T00:00:00.000Z');
+  for (const cutoff of ['', 'invalid', '2026-10-12T00:00:00', '2026-15-12T00:00:00Z']) {
+    assert.throws(() => getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT: cutoff }));
+  }
+  assert.equal(getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT: '2026-10-12T05:30:00+05:30' })?.productionStartAt,
+    config.productionStartAt, 'Production cutoff must be a fixed timezone-aware instant');
+
+  const eligibilityPattern = /sl\.leave_type = 'out-campus'\s+OR \(sl\.leave_type = 'institutional' AND EXISTS \(\s+SELECT 1 FROM institutional_leaves il\s+WHERE il\.id = sl\.institutional_leave_id AND il\.campus_location = 'outside'/;
+  const priorEnvironment = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
+  Object.assign(process.env, environment);
+  try {
+    for (const event of ['student_exit', 'student_return'] as const) {
+      let insertion = '';
+      await enqueueMovementNotifications({
+        query: async (sql, params) => {
+          insertion = sql;
+          assert.equal(params?.[1], event);
+          assert.equal(params?.[5], config.productionStartAt);
+          return { rows: [] };
+        },
+      }, ['test-leave'], event, payload.occurred_at);
+      assert.match(insertion, eligibilityPattern, `${event} must allow only Out-Campus or explicitly outside institutional leaves`);
+      assert.ok(insertion.includes('sl.created_at >= $6::timestamptz'));
+      assert.ok(insertion.includes('sl.start_datetime >= $6::timestamptz'));
+      assert.ok(insertion.includes("COALESCE(s.comprehensive_details->>'whatsapp_notification_test', 'false') <> 'true'"));
+      for (const excludedType of ['outdoor', 'on-campus', 'internal', 'personal']) {
+        assert.ok(!insertion.includes(`'${excludedType}'`), `${excludedType} must not be included in notification eligibility`);
+      }
+      await enqueueMovementNotifications({ query: async () => { throw new Error('Historical movements must not be queued'); } },
+        ['old-leave'], event, '2026-10-11T23:59:59Z');
+    }
+  } finally {
+    for (const [key, value] of Object.entries(priorEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 
   const prepared = prepareMovementNotification('test-exit', payload);
   assert.equal(prepared.to, '919876543210');
@@ -85,7 +125,15 @@ async function run() {
   const updates: any[][] = [];
   const database = {
     async query(sql: string, params?: any[]) {
-      if (sql.includes('WITH candidate')) return { rows: [{ id: 'test-exit', payload, attempts: 1 }] };
+      if (sql.includes('WITH candidate')) {
+        assert.match(sql, eligibilityPattern, 'Previously queued notifications must have their current leave eligibility rechecked');
+        assert.ok(sql.includes("sl.status <> 'cancelled'"));
+        assert.equal(params?.[2], config.productionStartAt);
+        for (const requiredCutoff of ['notification.created_at >= $3::timestamptz', 'sl.created_at >= $3::timestamptz', 'sl.start_datetime >= $3::timestamptz', 'ELSE sl.actual_return_datetime END >= $3::timestamptz']) {
+          assert.ok(sql.includes(requiredCutoff), 'Queued historical departures and their later returns must be excluded');
+        }
+        return { rows: [{ id: 'test-exit', payload, attempts: 1 }] };
+      }
       updates.push(params || []);
       return { rows: [] };
     },
@@ -141,6 +189,7 @@ async function run() {
   const testConfig = getMovementNotificationConfig(testEnvironment)!;
   assert.equal(testConfig.testStudentId, 'R999');
   assert.equal(testConfig.testRecipient, '919876543210');
+  assert.equal(testConfig.productionStartAt, undefined, 'Isolated tests must not require or overwrite the production cutoff');
   assert.throws(() => getMovementNotificationConfig({ ...testEnvironment, N8N_STUDENT_MOVEMENT_TEST_PHONE: '' }));
   assert.throws(() => getMovementNotificationConfig({ ...testEnvironment, N8N_STUDENT_MOVEMENT_TEST_STUDENT_ID: '' }));
   const previousTestMode = process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED;

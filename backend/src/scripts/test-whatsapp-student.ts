@@ -13,7 +13,8 @@ async function main() {
   const config = getMovementNotificationConfig();
   if (!config?.testStudentId || !config.testRecipient
     || process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED !== 'true'
-    || process.env.WHATSAPP_SENDING_ENABLED !== 'false') {
+    || process.env.WHATSAPP_SENDING_ENABLED !== 'false'
+    || config.testStudentId !== 'R999' || config.testRecipient !== '918921551686') {
     throw new Error('test_only_configuration_required');
   }
   const client = await db.getClient();
@@ -28,6 +29,26 @@ async function main() {
       [config.testStudentId],
     );
     if (!student.rows[0]) throw new Error('dedicated_test_student_required');
+    if (process.argv.includes('--retry-confirmed-no-number')) {
+      const retried = await client.query(
+        `UPDATE student_movement_notifications notification
+         SET status = 'pending', last_error = NULL, next_attempt_at = now(),
+             processing_started_at = NULL, updated_at = now()
+         FROM student_leaves leave
+         WHERE notification.id = $1 AND notification.leave_id = leave.id
+           AND leave.student_id = $2
+           AND leave.reason = 'WhatsApp notification integration test'
+           AND notification.event = 'student_exit'
+           AND notification.status = 'uncertain' AND notification.attempts = 1
+           AND notification.last_error = 'invalid_webhook_response'
+           AND notification.payload->>'student_id' = $2
+           AND notification.payload->>'test_notification' = 'true'
+           AND notification.payload->>'to' IN ($3, '+' || $3)
+         RETURNING notification.id`,
+        ['47d07a23-e968-4c60-a541-18f0a4fdd311', config.testStudentId, config.testRecipient],
+      );
+      if (retried.rows.length !== 1) throw new Error('confirmed_no_number_retry_not_allowed');
+    }
     const existing = await client.query(
       `SELECT id FROM student_leaves WHERE student_id = $1
        AND reason = 'WhatsApp notification integration test' ORDER BY created_at LIMIT 1`,
@@ -118,6 +139,7 @@ main().catch(error => {
     'test_only_configuration_required', 'dedicated_test_student_required',
     'test_student_already_outside', 'test_notification_not_queued',
     'test_send_not_confirmed_no_automatic_retry',
+    'confirmed_no_number_retry_not_allowed',
   ]);
   console.error(error instanceof Error && safeErrors.has(error.message)
     ? error.message : 'Test stopped; check private webhook settings, migration, and database connectivity');
