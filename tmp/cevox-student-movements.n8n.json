@@ -39,7 +39,7 @@
         "options": {
           "timeout": 60000,
           "redirect": { "redirect": { "followRedirects": false } },
-          "response": { "response": { "fullResponse": true, "responseFormat": "json" } }
+          "response": { "response": { "fullResponse": true, "responseFormat": "json", "neverError": true } }
         }
       },
       "id": "cevox-send",

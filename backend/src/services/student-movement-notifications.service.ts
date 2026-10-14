@@ -1,4 +1,5 @@
 import { isWhatsAppSendingEnabled } from './whatsapp-safety';
+import { readWhatsAppSettings, reserveWhatsAppSend, finishWhatsAppSend, WhatsAppControlError, PortalDatabase } from './whatsapp-admin.service';
 
 type Database = {
   query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
@@ -23,12 +24,15 @@ export type MovementNotificationConfig = {
   testRecipient?: string;
   testStudentId?: string;
   productionStartAt?: string;
+  adminControls?: boolean;
+  maxAgeHours?: number;
 };
 
 export function getMovementNotificationConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): MovementNotificationConfig | null {
   const testMode = environment.N8N_STUDENT_MOVEMENT_TEST_ENABLED === 'true';
+  const adminControls = !testMode && environment.N8N_STUDENT_MOVEMENT_ADMIN_CONTROLS_ENABLED === 'true';
   if ((!isWhatsAppSendingEnabled(environment) && !testMode) || environment.N8N_STUDENT_MOVEMENT_ENABLED !== 'true') return null;
   let testRecipient: string | undefined;
   let testStudentId: string | undefined;
@@ -43,7 +47,7 @@ export function getMovementNotificationConfig(
     if (!testStudentId || !/^R\d{3}$/.test(testStudentId)) {
       throw new Error('Test mode requires a dedicated N8N_STUDENT_MOVEMENT_TEST_STUDENT_ID like R999');
     }
-  } else {
+  } else if (!adminControls) {
     const startAt = environment.N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT?.trim() || '';
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(startAt)
       || !Number.isFinite(new Date(startAt).getTime())) {
@@ -76,7 +80,7 @@ export function getMovementNotificationConfig(
   }
   return {
     webhookUrl, secret, phoneField,
-    senderId, testRecipient, testStudentId, productionStartAt,
+    senderId, testRecipient, testStudentId, productionStartAt, adminControls,
   };
 }
 
@@ -84,8 +88,15 @@ function movementSendingAllowed(config: MovementNotificationConfig) {
   if (config.testRecipient && config.testStudentId) {
     return process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED === 'true';
   }
-  return !!config.productionStartAt && isWhatsAppSendingEnabled()
+  return (!!config.productionStartAt || config.adminControls) && isWhatsAppSendingEnabled()
     && process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED !== 'true';
+}
+
+export async function getActiveMovementNotificationConfig(database: Database, config = getMovementNotificationConfig()) {
+  if (!config?.adminControls) return config;
+  const settings = await readWhatsAppSettings(database);
+  if (!settings.enabled || !settings.sender_id || !settings.production_started_at) return null;
+  return { ...config, senderId: settings.sender_id, productionStartAt: new Date(settings.production_started_at).toISOString(), maxAgeHours: settings.max_age_hours };
 }
 
 export async function enqueueMovementNotifications(
@@ -94,7 +105,7 @@ export async function enqueueMovementNotifications(
   event: MovementEvent,
   occurredAt: string,
 ) {
-  const config = getMovementNotificationConfig();
+  const config = await getActiveMovementNotificationConfig(client);
   if (!config || leaveIds.length === 0) return;
   if (config.productionStartAt && new Date(occurredAt).getTime() < new Date(config.productionStartAt).getTime()) return;
   await client.query(
@@ -165,7 +176,7 @@ export function prepareMovementNotification(
 }
 
 export async function refreshPendingMovementNotifications(client: Database, leaveId: string) {
-  const config = getMovementNotificationConfig();
+  const config = await getActiveMovementNotificationConfig(client);
   if (!config) return;
   await client.query(
     `UPDATE student_movement_notifications notification
@@ -209,6 +220,14 @@ export function classifyMovementWebhookResult(
   if (!gateway || typeof gateway !== 'object') return { status: 'uncertain', error: 'invalid_cevox_response' };
   const body = gateway as Record<string, unknown>;
   if (gatewayStatus < 200 || gatewayStatus >= 300 || !Number.isFinite(gatewayStatus)) {
+    const rejectedBeforeSend: Record<string, number> = {
+      no_number: 404, not_ready: 503, paused: 423, quiet_hours: 425,
+      cooldown: 429, hourly_limit: 429, cap_reached: 429, cold_cap_reached: 429,
+    };
+    if (typeof body.code === 'string' && Object.prototype.hasOwnProperty.call(rejectedBeforeSend, body.code)
+      && gatewayStatus === rejectedBeforeSend[body.code] && typeof body.error === 'string') {
+      return { status: 'pending', error: `cevox_${body.code}` };
+    }
     return { status: 'uncertain', error: 'cevox_http_not_successful' };
   }
   if (body.success === false || body.error || body.status === 'failed') {
@@ -227,6 +246,11 @@ export async function processMovementNotification(
   notificationId?: string,
 ): Promise<boolean> {
   if (!movementSendingAllowed(config)) return false;
+  if (config.adminControls) {
+    const active = await getActiveMovementNotificationConfig(database, config);
+    if (!active) return false;
+    config = active;
+  }
   const claimed = await database.query(
     `WITH candidate AS (
        SELECT notification.id
@@ -300,6 +324,22 @@ export async function processMovementNotification(
       );
       return false;
     }
+    let attemptId: string | undefined;
+    if (config.adminControls) {
+      try {
+        attemptId = await reserveWhatsAppSend(database as PortalDatabase, {
+          kind: 'production', notificationId: notification.id, senderId: config.senderId!, recipient: payload.to,
+        });
+      } catch (error) {
+        const code = error instanceof WhatsAppControlError ? error.code : 'send_reservation_unavailable';
+        await database.query(
+          `UPDATE student_movement_notifications SET status = 'pending', last_error = $2,
+           processing_started_at = NULL, next_attempt_at = now() + interval '5 minutes', updated_at = now()
+           WHERE id = $1 AND status = 'processing'`, [notification.id, code],
+        );
+        return false;
+      }
+    }
     try {
       const response = await request(config.webhookUrl, {
         method: 'POST',
@@ -313,31 +353,47 @@ export async function processMovementNotification(
     } catch {
       outcome = { status: 'uncertain', error: 'webhook_request_outcome_unknown' };
     }
+    if (attemptId) await finishWhatsAppSend(database, attemptId, outcome.status, outcome.error);
   }
   const finalOutcome = outcome;
-  if (finalOutcome.status === 'pending' && notification.attempts >= 5) {
+  if (finalOutcome.status === 'pending' && finalOutcome.error === 'webhook_http_404' && notification.attempts >= 5) {
     finalOutcome.status = 'failed';
   }
+  const retryDelay = finalOutcome.error && ['cevox_hourly_limit', 'cevox_cap_reached', 'cevox_cold_cap_reached'].includes(finalOutcome.error)
+    ? 3600 : finalOutcome.error === 'cevox_quiet_hours' ? 1800 : 300;
   await database.query(
     `UPDATE student_movement_notifications
      SET status = $2, last_error = $3, processing_started_at = NULL,
-         next_attempt_at = now() + interval '5 minutes', updated_at = now()
+         next_attempt_at = now() + ($4 * interval '1 second'), updated_at = now()
      WHERE id = $1 AND status = 'processing'`,
-    [notification.id, finalOutcome.status, finalOutcome.error],
+    [notification.id, finalOutcome.status, finalOutcome.error, retryDelay],
   );
   console.log(`[MOVEMENT NOTIFICATION] ${notification.id} ${finalOutcome.status}`);
   return true;
 }
 
 export function startMovementNotificationWorker(database: Database) {
-  const config = getMovementNotificationConfig();
-  if (!config) return null;
+  const baseConfig = getMovementNotificationConfig();
+  if (!baseConfig) return null;
   let running = false;
   let stopped = false;
   const tick = async () => {
-    if (running || stopped || !movementSendingAllowed(config)) return;
+    if (running || stopped || !movementSendingAllowed(baseConfig)) return;
     running = true;
     try {
+      const config = await getActiveMovementNotificationConfig(database, baseConfig);
+      if (!config) return;
+      if (config.adminControls) {
+        await database.query(
+          `UPDATE student_movement_notifications notification SET status = 'skipped', last_error = 'expired_or_already_returned', updated_at = now()
+           FROM student_leaves sl WHERE notification.leave_id = sl.id AND notification.status = 'pending' AND (
+             CASE WHEN notification.event = 'student_exit' THEN sl.start_datetime ELSE sl.actual_return_datetime END
+               < now() - ($1 * interval '1 hour')
+             OR (notification.event = 'student_exit' AND sl.actual_return_datetime IS NOT NULL)
+           )`, [config.maxAgeHours],
+        );
+        await database.query("UPDATE whatsapp_notification_attempts SET status = 'uncertain', error_code = 'interrupted_attempt', updated_at = now() WHERE status = 'reserved' AND created_at < now() - interval '3 minutes'");
+      }
       if (config.productionStartAt) {
         await database.query(
           `UPDATE student_movement_notifications notification

@@ -88,6 +88,7 @@ const academicLinks: NavEntry[] = [
 const managementLinks: NavEntry[] = [
     { href: "/admin/finance/dashboard", label: "Finance", icon: Landmark, group: ["/admin/finance"] },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/whatsapp-notifications", label: "WhatsApp Notifications", icon: MessageCircle },
     { href: "/admin/disciplinary", label: "Disciplinary", icon: ShieldAlert, group: ["/admin/disciplinary"] },
     {
         label: "Report", icon: FileText, group: ["/admin/management-reports"],
@@ -192,11 +193,13 @@ export function AdminSidebar({
     const pathname = usePathname()
     const router   = useRouter()
     const [user, setUser]       = useState({ name: 'Admin User', role: 'Administrator' })
+    const [whatsappAdmin, setWhatsAppAdmin] = useState(false)
     const [openSection, setOpenSection] = useState<string | null>(null)
     const isPrincipalPortal = user.role === 'Principal' || user.role === 'Vice Principal'
     const visibleMenuLinks = isPrincipalPortal ? principalMenuLinks : menuLinks
     const visibleAcademicLinks = isPrincipalPortal ? principalAcademicLinks : academicLinks
-    const visibleManagementLinks = isPrincipalPortal ? principalManagementLinks : managementLinks
+    const visibleManagementLinks = (isPrincipalPortal ? principalManagementLinks : managementLinks)
+        .filter(item => !('href' in item && item.href === '/admin/whatsapp-notifications') || whatsappAdmin)
     const visibleGeneralLinks = isPrincipalPortal ? principalGeneralLinks : generalLinks
 
     useEffect(() => {
@@ -204,6 +207,7 @@ export function AdminSidebar({
             .then((res) => {
                 const profile = res.data?.user
                 if (profile) {
+                    setWhatsAppAdmin(profile.role === 'admin')
                     setUser({
                         name: profile.name || 'Admin',
                         role: roleLabel(profile.role),

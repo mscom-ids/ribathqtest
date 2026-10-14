@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /.next-build-check/
+/.next-whatsapp-preview/
+/tmp/preview-whatsapp-admin.cjs
 /out/
 
 # production

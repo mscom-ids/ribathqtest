@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "seed:mobile:staging": "ts-node src/scripts/seed-mobile-staging.ts",
     "smoke:mobile:student": "ts-node src/scripts/smoke-mobile-student.ts",
-    "test:movement-notifications": "ts-node src/__tests__/student-movement-notifications.test.ts"
+    "test:movement-notifications": "ts-node src/__tests__/student-movement-notifications.test.ts",
+    "test:whatsapp-admin": "ts-node src/__tests__/whatsapp-admin.test.ts && ts-node src/__tests__/whatsapp-admin-routes.test.ts"
   },
   "keywords": [],
   "author": "",

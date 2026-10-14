@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { X, LayoutDashboard, Users, GraduationCap, Landmark, BookMarked, School, BookOpen, UserCog, DoorOpen, Calendar, Settings, LogOut, FileText, BarChart3, ShieldAlert } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import api from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +17,7 @@ const navLinks = [
     { href: "/admin/hifz/tracking", label: "Hifz", icon: BookOpen },
     { href: "/admin/staff", label: "Staff", icon: UserCog },
     { href: "/admin/leaves", label: "Leaves", icon: DoorOpen },
+    { href: "/admin/whatsapp-notifications", label: "WhatsApp Notifications", icon: Settings },
     { href: "/admin/disciplinary", label: "Disciplinary", icon: ShieldAlert },
     { href: "/admin/academic", label: "Academic Year", icon: School },
     { href: "/admin/academic/enrollments", label: "Student Placement", icon: Users },
@@ -35,6 +36,11 @@ interface MobileSidebarProps {
 export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
     const pathname = usePathname()
     const router = useRouter()
+    const [whatsappAdmin, setWhatsAppAdmin] = useState(false)
+
+    useEffect(() => {
+        api.get('/auth/me').then(response => setWhatsAppAdmin(response.data?.user?.role === 'admin')).catch(() => {})
+    }, [])
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch (e) { /* ignore */ }
@@ -86,7 +92,7 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
 
                 {/* Nav links */}
                 <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-                    {navLinks.map(link => {
+                    {navLinks.filter(link => link.href !== '/admin/whatsapp-notifications' || whatsappAdmin).map(link => {
                         const isActive = link.href === "/admin"
                             ? pathname === "/admin"
                             : pathname.startsWith(link.href)

@@ -12,6 +12,11 @@ leaves, and edits to already-processed notifications do not create new messages.
 
 ## Enable in the NewRQP backend
 
+For the passcode-protected admin page, sender dropdown, persistent pause/resume
+and app usage limits, follow `docs/WHATSAPP_ADMIN_CONTROLS.md` instead of the
+legacy environment-only activation steps below. Admin-control mode records its
+permanent production cutoff on first portal enable and starts paused.
+
 During setup keep `WHATSAPP_SENDING_ENABLED=false` and
 `N8N_STUDENT_MOVEMENT_ENABLED=false`. An absent master flag also means off.
 The master flag blocks both student movement webhooks and the older staff-event

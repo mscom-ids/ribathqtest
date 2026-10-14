@@ -43,6 +43,7 @@ import yearlyReportRoutes from './routes/yearly_report.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import disciplineRoutes from './modules/discipline/discipline.routes';
 import mobileSyncRoutes from './modules/mobile-sync/mobile-sync.routes';
+import whatsappAdminRoutes from './routes/whatsapp-admin.routes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 const parsedSlowApiThreshold = Number(process.env.SLOW_API_THRESHOLD_MS || 500);
@@ -117,6 +118,7 @@ app.use('/api/yearly-report', yearlyReportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/discipline', disciplineRoutes);
 app.use('/api/mobile', mobileSyncRoutes);
+app.use('/api/whatsapp-admin', whatsappAdminRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Backend is running', database_pool: db.getPoolStats() });
@@ -129,6 +131,10 @@ async function startServer() {
     if (!queue.rows[0]?.queue) {
       console.error('FATAL: Apply migration 20261012000000_student_movement_notifications.sql before enabling notifications');
       process.exit(1);
+    }
+    if (notificationConfig.adminControls) {
+      const controls = await db.query("SELECT to_regclass('public.whatsapp_notification_settings') AS settings, to_regclass('public.whatsapp_notification_attempts') AS attempts");
+      if (!controls.rows[0]?.settings || !controls.rows[0]?.attempts) throw new Error('Apply WhatsApp admin controls migration before enabling admin control mode');
     }
   }
   try {
