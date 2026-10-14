@@ -105,7 +105,9 @@ function isFullCancellation(row: any) {
 function isStandardCancelled(row: any, standard: string) {
     if (!row) return false;
     const standards = cancellationStandards(row);
-    if (standards.length === 0) return true;
+    // Empty standards means a whole session only when there are no individual
+    // exemptions. A selected-student leave must keep every standard available.
+    if (standards.length === 0) return cancellationStudents(row).length === 0;
     return standards.includes(normalizeScheduleStandard(standard));
 }
 
@@ -1814,7 +1816,9 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
 
         // Normalize schedule pill-labels → actual student DB values
         const dbStds = rawStds.map(normalizeScheduleStandard);
-        const cancellation = schedule.attendance_cancellation || null;
+        const cancellation = schedule.attendance_cancellation || (date
+            ? await loadInstitutionalLeaveCancellationForSlot(db, schedule, String(date).slice(0, 10))
+            : null);
         const savedMarks = Array.isArray(schedule.saved_marks) ? schedule.saved_marks : [];
         const activeDbStds = cancellation
             ? dbStds.filter(std => !isStandardCancelled(cancellation, std))
@@ -2028,18 +2032,20 @@ export const getStudentsForSchedule = async (req: Request, res: Response) => {
                 const leaveByStudent = new Map<string, any>(
                     overlappingLeaves.map((leave: any) => [leave.student_id, leave]),
                 );
+                const exemptStudentIds = new Set(cancellationStudents(cancellation));
 
                 studentsWithLeave = students.map((student: any) => {
                     const leave = leaveByStudent.get(student.adm_no);
-                    const isOnCampusLeave = ['on-campus', 'internal'].includes(String(leave?.leave_type || '').toLowerCase());
-                    const isUnavailable = !!leave;
+                    const isInstitutionalExemption = !leave && exemptStudentIds.has(student.adm_no);
+                    const isOnCampusLeave = isInstitutionalExemption || ['on-campus', 'internal'].includes(String(leave?.leave_type || '').toLowerCase());
+                    const isUnavailable = !!leave || isInstitutionalExemption;
                     return {
                         ...student,
                         is_locked_outside: isUnavailable,
                         went_outside_later: false,
                         leave_start_time: leave?.start_datetime || null,
                         is_on_leave: isOnCampusLeave,
-                        leave_type: leave?.leave_type || null,
+                        leave_type: leave?.leave_type || (isInstitutionalExemption ? 'on-campus' : null),
                         attendance_status: isOnCampusLeave ? 'on_leave' : isUnavailable ? 'outside' : 'pending',
                     };
                 });

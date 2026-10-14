@@ -8,7 +8,9 @@ const PRINCIPAL_ROLES = ['principal', 'vice_principal'];
 const STAFF_ROLES = ['staff', 'usthad', 'mentor'];
 const configuredParentHost = (
   process.env.PARENT_PORTAL_HOST ||
-  (process.env.NODE_ENV === 'production' ? 'parents.domain.in' : 'parents.localhost')
+  (process.env.NODE_ENV === 'production'
+    ? 'parents.ribathulquran.in'
+    : 'parents.localhost')
 ).toLowerCase();
 
 function getRequestHost(request: NextRequest): string {

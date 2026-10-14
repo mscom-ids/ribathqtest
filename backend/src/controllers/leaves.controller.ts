@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { lockAttendanceSessions } from '../services/attendance-session-lock.service';
+import { enqueueMovementNotifications } from '../services/student-movement-notifications.service';
 
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -533,6 +534,7 @@ export const markInstitutionalExit = async (req: Request, res: Response) => {
                 [exit_datetime, user.id, movementStudentIds, movementLeaveIds]
             );
 
+            await enqueueMovementNotifications(client, movementLeaveIds, 'student_exit', exit_datetime);
             await client.query('COMMIT');
             invalidateLeaveCaches();
             res.status(201).json({ success: true, count: allowedIds.length });
@@ -723,6 +725,7 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
                 [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r: any) => r.end_datetime)]
             );
 
+            await enqueueMovementNotifications(client, leaveIds, 'student_return', return_datetime);
             await client.query('COMMIT');
             invalidateLeaveCaches();
             res.json({ success: true, count: pending.rows.length });
@@ -840,6 +843,7 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
                 [return_datetime, user.id, studentIds, leaveIds, pending.rows.map((r: any) => r.end_datetime)]
             );
 
+            await enqueueMovementNotifications(client, leaveIds, 'student_return', return_datetime);
             await client.query('COMMIT');
             invalidateLeaveCaches();
             res.json({ success: true, count: pending.rows.length });
@@ -954,6 +958,7 @@ export const createPersonalLeave = async (req: Request, res: Response) => {
                     INSERT INTO student_movements (student_id, leave_id, direction, timestamp, recorded_by)
                     VALUES ($1, $2, 'out', $3, $4)
                 `, [student_id, leave_id, start_datetime, user.id]);
+                await enqueueMovementNotifications(client, [leave_id], 'student_exit', start_datetime);
             }
 
             await client.query('COMMIT');
@@ -1051,6 +1056,7 @@ export const createGroupLeave = async (req: Request, res: Response) => {
                      FROM unnest($3::text[], $4::uuid[]) AS t(sid, lid)`,
                     [start_datetime, user.id, movStudentIds, movLeaveIds]
                 );
+                await enqueueMovementNotifications(client, movLeaveIds, 'student_exit', start_datetime);
             }
 
             await client.query('COMMIT');
@@ -1261,6 +1267,7 @@ export const recordReturn = async (req: Request, res: Response) => {
                 WHERE id = $3
             `, [return_datetime, returnStatus, leave_id, closedStatus]);
 
+            await enqueueMovementNotifications(client, [leave_id], 'student_return', return_datetime);
             await client.query('COMMIT');
             invalidateLeaveCaches();
             res.json({ success: true });

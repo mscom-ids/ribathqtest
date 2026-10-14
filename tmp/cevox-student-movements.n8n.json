@@ -1,0 +1,80 @@
+{
+  "name": "ERP - Student Exit and Return via Cevox",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "erp-student-movement",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "erp-webhook",
+      "name": "ERP Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "b2dfe13b-6d73-475a-b534-d5f5af4ab6ec"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json.body;\nif (!input || typeof input !== 'object') throw new Error('JSON body required');\nconst requiredText = (field, limit = 150) => {\n  const value = input[field];\n  if (typeof value !== 'string' || !value.trim() || value.length > limit || /[\\r\\n\\u0000-\\u001f]/.test(value)) throw new Error('Invalid ' + field);\n  return value.trim();\n};\nconst notificationId = requiredText('notification_id');\nconst studentName = requiredText('student_name');\nconst recipient = requiredText('to', 16).replace(/^\\+/, '');\nif (!/^[1-9]\\d{7,14}$/.test(recipient)) throw new Error('Use guardian phone with country code');\nif (!['student_exit', 'student_return'].includes(input.event)) throw new Error('Unsupported event');\nconst timestamp = requiredText('occurred_at', 40);\nif (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(timestamp)) throw new Error('Use an ISO timestamp with timezone');\nconst occurredAt = new Date(timestamp);\nif (!Number.isFinite(occurredAt.getTime())) throw new Error('Invalid occurred_at');\nconst time = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(occurredAt) + ' IST';\nlet message;\nif (input.event === 'student_exit') {\n  const companion = requiredText('companion_name');\n  const relationship = requiredText('companion_relationship');\n  message = 'Dear Parent, ' + studentName + ' left campus with ' + companion + ' (' + relationship + ') on ' + time + '.\\n— Campus Administration';\n} else {\n  message = 'Dear Parent, ' + studentName + ' arrived back on campus on ' + time + '.\\n— Campus Administration';\n}\nconst payload = { to: recipient, body: message };\nif (input.wa_number_id !== undefined) payload.wa_number_id = requiredText('wa_number_id');\nreturn [{ json: { notification_id: notificationId, payload } }];"
+      },
+      "id": "prepare-message",
+      "name": "Validate and Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://rqwaps.ribathulquran.in/api/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 60000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": { "response": { "fullResponse": true, "responseFormat": "json" } }
+        }
+      },
+      "id": "cevox-send",
+      "name": "Send through Cevox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 0],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ notification_id: $('Validate and Build Message').first().json.notification_id, cevox_http_status: $json.statusCode, cevox_response: $json.body }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "erp-response",
+      "name": "Return Cevox Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [780, 0]
+    }
+  ],
+  "connections": {
+    "ERP Webhook": { "main": [[{ "node": "Validate and Build Message", "type": "main", "index": 0 }]] },
+    "Validate and Build Message": { "main": [[{ "node": "Send through Cevox", "type": "main", "index": 0 }]] },
+    "Send through Cevox": { "main": [[{ "node": "Return Cevox Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed:mobile:staging": "ts-node src/scripts/seed-mobile-staging.ts",
-    "smoke:mobile:student": "ts-node src/scripts/smoke-mobile-student.ts"
+    "smoke:mobile:student": "ts-node src/scripts/smoke-mobile-student.ts",
+    "test:movement-notifications": "ts-node src/__tests__/student-movement-notifications.test.ts"
   },
   "keywords": [],
   "author": "",

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getStaffId } from '../utils/staff.utils';
 import { invalidateCacheByPrefix } from '../utils/server-cache';
+import { refreshPendingMovementNotifications } from '../services/student-movement-notifications.service';
 
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -264,6 +265,7 @@ export const correctStudentLeave = async (req: Request, res: Response) => {
             }
         }
 
+        await refreshPendingMovementNotifications(client, leaveId);
         await client.query('COMMIT');
         invalidateLeaveCaches();
         return res.json({ success: true });

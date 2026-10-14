@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import compression from 'compression';
 import { db, startDatabaseKeepAlive, warmDatabasePool } from './config/db';
+import { getMovementNotificationConfig, startMovementNotificationWorker } from './services/student-movement-notifications.service';
 
 // Load env BEFORE any module that reads process.env
 dotenv.config();
@@ -122,6 +123,14 @@ app.get('/api/health', (_req, res) => {
 });
 
 async function startServer() {
+  const notificationConfig = getMovementNotificationConfig();
+  if (notificationConfig) {
+    const queue = await db.query("SELECT to_regclass('public.student_movement_notifications') AS queue");
+    if (!queue.rows[0]?.queue) {
+      console.error('FATAL: Apply migration 20261012000000_student_movement_notifications.sql before enabling notifications');
+      process.exit(1);
+    }
+  }
   try {
     await warmDatabasePool();
   } catch (error: any) {
@@ -132,8 +141,12 @@ async function startServer() {
 
   app.listen(PORT, () => {
     startDatabaseKeepAlive();
+    startMovementNotificationWorker(db);
     console.log(`[STARTUP] Server is running on port ${PORT}`);
   });
 }
 
-void startServer();
+void startServer().catch(() => {
+  console.error('[STARTUP] Failed; check database connectivity and notification environment settings');
+  process.exit(1);
+});

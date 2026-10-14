@@ -6,6 +6,7 @@ import { getAcademicYearContext } from '../../utils/academic-year';
 import { invalidateCacheByPrefix } from '../../utils/server-cache';
 import { MobileDevice } from './mobile-sync.service';
 import { MobileLeaveMutationInput } from './mobile-leaves.validation';
+import { enqueueMovementNotifications } from '../../services/student-movement-notifications.service';
 
 type MutationResult = { httpStatus: number; response: Record<string, unknown> };
 const MOBILE_MENTOR_ROLES = new Set(['staff', 'usthad', 'mentor']);
@@ -235,6 +236,7 @@ export async function saveMobileLeave(options: {
            VALUES ($1, $2, 'out', $3::timestamptz, $4)`,
           [studentId, savedLeave.id, input.startDatetime, auditActorId],
         );
+        await enqueueMovementNotifications(client, [savedLeave.id], 'student_exit', input.startDatetime!);
       }
     } else {
       const leaveResult = await client.query('SELECT * FROM student_leaves WHERE id = $1 FOR UPDATE', [input.leaveId]);
@@ -265,6 +267,7 @@ export async function saveMobileLeave(options: {
         [leave.id, isOnCampus ? 'completed' : 'returned', input.returnDatetime, returnStatus],
       );
       savedLeave = updated.rows[0];
+      await enqueueMovementNotifications(client, [savedLeave.id], 'student_return', input.returnDatetime!);
     }
 
     const student = await client.query(
