@@ -23,6 +23,7 @@ import { MentorFocus } from "@/components/staff/MentorFocus"
 import { SupervisorHome } from "@/components/staff/SupervisorHome"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 import { getHifzPerformancePoints } from "@/lib/hifz-performance"
+import { GlassSelect } from "@/components/ui/glass-select"
 
 // Roles that supervise every mentor via Mentor Focus (Principal / Vice Principal).
 const SUPERVISOR_ROLES = ["principal", "vice_principal", "admin"]
@@ -521,16 +522,7 @@ export default function StaffDashboard() {
                             <p className="text-[11px] text-indigo-100">Monthly leaderboard</p>
                         </div>
                     </div>
-                    <select
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        aria-label="Select month"
-                        className="min-w-[100px] cursor-pointer rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-xs font-medium text-white outline-none backdrop-blur-sm transition hover:bg-white/20 focus:ring-2 focus:ring-white/60 [&>option]:text-slate-900"
-                    >
-                        {monthOptions.map((m) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                    </select>
+                    <GlassSelect value={selectedMonth} onValueChange={setSelectedMonth} options={monthOptions} label="Leaderboard month" align="end" tone="inverse" className="h-10 w-auto min-w-[112px] shrink-0 rounded-full border-white/30 bg-white/15 px-3 text-xs font-semibold text-white shadow-none backdrop-blur-md hover:bg-white/25 [&_svg]:!text-white" />
                 </div>
             </div>
 

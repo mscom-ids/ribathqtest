@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addMonths, format, startOfMonth, subMonths } from "date-fns"
-import { BookOpen, Calendar, Check, ChevronLeft, ChevronRight, ChevronsUpDown, LayoutGrid, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Table2, Trash2, X } from "lucide-react"
+import { BookOpen, Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Maximize2, Minimize2, Plus, RotateCcw, Save, Table2, Trash2, X } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -15,6 +15,7 @@ import { cn, resolveBackendUrl } from "@/lib/utils"
 import { SURAH_LIST } from "@/lib/data/surah-list"
 import { getArabic, toArabicNum, calculateCoveredPagesFromLogs } from "@/lib/hifz-progress"
 import { groupContinuousSurahEntries } from "@/lib/hifz-entry-ranges"
+import { GlassSelect } from "@/components/ui/glass-select"
 
 type Stage = "MEMORIZING" | "HAFIZ_REVISION"
 type Activity = "newHifz" | "recentRevision" | "juzRevision" | "newJuzRevision" | "oldJuzRevision"
@@ -56,6 +57,8 @@ type ViewMode = "weekly" | "cards"
 const MONTH_CACHE = new Map<string, MonthRegister>()
 const IN_FLIGHT_MONTHS = new Map<string, Promise<MonthRegister>>()
 const PORTIONS = ["Full", "1st Half", "2nd Half", "Q1", "Q2", "Q3", "Q4"]
+const JUZ_OPTIONS = Array.from({ length: 30 }, (_, index) => ({ value: String(index + 1), label: `Juz ${index + 1}` }))
+const PORTION_OPTIONS = PORTIONS.map(portion => ({ value: portion, label: portion }))
 const VIEW_STORAGE_KEY = "hifz-register-view"
 
 type SurahMeta = { id: number; name: string; totalVerses: number }
@@ -217,18 +220,18 @@ function SurahCombobox({
   const [open, setOpen] = useState(false)
   const selected = value ? SURAH_BY_NAME.get(value) : undefined
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="h-10 w-full justify-between px-3 text-sm font-normal">
+        <Button type="button" variant="outline" role="combobox" aria-label="Select Surah" aria-expanded={open} className="glass-picker-trigger h-10 w-full justify-between rounded-xl px-3 text-sm font-normal">
           <span className="flex min-w-0 items-center gap-2">
             {selected ? (
               <>
-                <span dir="rtl" className="font-medium text-slate-900">{getArabic(selected.name)}</span>
+                <span dir="rtl" className="font-medium text-slate-900 dark:text-slate-100">{getArabic(selected.name)}</span>
                 <span className="truncate text-xs text-slate-500">{selected.name} · {selected.id}</span>
               </>
             ) : <span className="text-slate-400">Select Surah</span>}
           </span>
-          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+          <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       {/* Portal to document.body (Radix default) — do NOT pass `container`.
@@ -236,28 +239,22 @@ function SurahCombobox({
           trigger sits near the bottom of the dialog (dialog uses overflow-hidden
           and a bounded max-h). The higher z-index below keeps it above the dialog. */}
       <PopoverContent
-        className="z-[200] w-[min(360px,calc(100vw-2rem))] p-0"
+        className="glass-picker-panel z-[240] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] p-1.5"
         align="start"
+        sideOffset={8}
+        collisionPadding={12}
       >
         <Command
+          defaultValue={selected ? `${selected.id} ${selected.name} ${getArabic(selected.name)}` : undefined}
           filter={(itemValue, search) => {
             const term = search.toLowerCase()
             return itemValue.toLowerCase().includes(term) ? 1 : 0
           }}
         >
-          <CommandInput placeholder="Search Surah (Arabic or English)…" className="h-9" />
+          <div className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Choose Surah</div>
+          <CommandInput aria-label="Search Surah" placeholder="Search Arabic, English or number…" className="h-11 text-base sm:text-sm" />
           <CommandList
-            className="max-h-[300px] overscroll-contain [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
-            // Radix Dialog's RemoveScroll layer blocks wheel/touch events outside
-            // the DialogContent DOM subtree — and this Popover portals to body.
-            // Scroll manually so the surah list is usable inside the register modal.
-            onWheel={(event) => {
-              event.currentTarget.scrollTop += event.deltaY
-              event.stopPropagation()
-            }}
-            onTouchMove={(event) => {
-              event.stopPropagation()
-            }}
+            className="max-h-[min(300px,calc(var(--radix-popover-content-available-height,420px)-90px))] overscroll-contain [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
           >
             <CommandEmpty>No Surah found.</CommandEmpty>
             <CommandGroup>
@@ -265,6 +262,8 @@ function SurahCombobox({
                 <CommandItem
                   key={surah.id}
                   value={`${surah.id} ${surah.name} ${getArabic(surah.name)}`}
+                  aria-current={value === surah.name ? "true" : undefined}
+                  className="glass-picker-option min-h-12 cursor-pointer rounded-xl px-3 py-3"
                   onSelect={() => { onChange(surah.name); setOpen(false) }}
                 >
                   <span className="flex flex-1 items-center gap-2 truncate">
@@ -560,8 +559,8 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
             {juzItems.map((item, index) => <div key={item.id || index} className="space-y-2 rounded-lg border border-slate-200 p-3">
               <div className="flex items-center justify-between"><Label>Juz Clear {index + 1}</Label><button type="button" disabled={saving} className="text-xs text-red-500" onClick={() => { if (item.id) setRemovedIds(ids => [...ids, item.id!]); setJuzItems(rows => rows.filter((_, i) => i !== index)) }}>Delete</button></div>
               <div className="grid grid-cols-2 gap-2">
-                <label className="space-y-1 text-xs">Juz number<select aria-label={`Juz Clear ${index + 1} number`} value={item.juz_number} onChange={event => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_number: event.target.value } : row))} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="">Select Juz</option>{Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>
-                <label className="space-y-1 text-xs">Portion<select aria-label={`Juz Clear ${index + 1} portion`} value={item.juz_portion} onChange={event => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_portion: event.target.value } : row))} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="">Select portion</option>{PORTIONS.map(portion => <option key={portion}>{portion}</option>)}</select></label>
+                <div className="space-y-1 text-xs"><Label className="text-xs">Juz number</Label><GlassSelect label={`Juz Clear ${index + 1} number`} placeholder="Select Juz" value={item.juz_number} options={JUZ_OPTIONS} onValueChange={value => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_number: value } : row))} /></div>
+                <div className="space-y-1 text-xs"><Label className="text-xs">Portion</Label><GlassSelect label={`Juz Clear ${index + 1} portion`} placeholder="Select portion" value={item.juz_portion} options={PORTION_OPTIONS} onValueChange={value => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_portion: value } : row))} /></div>
               </div>
             </div>)}
             <Button type="button" variant="outline" size="sm" onClick={() => setJuzItems(rows => [...rows, emptyDraft()])} className="w-full border-dashed"><Plus className="mr-2 h-4 w-4" />Add another Juz</Button>
@@ -623,17 +622,11 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Juz number</Label>
-                        <select value={item.juz_number} onChange={(event) => setItem(index, { juz_number: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-                          <option value="">Select Juz</option>
-                          {Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                        </select>
+                        <GlassSelect label={`Juz ${index + 1} number`} placeholder="Select Juz" value={item.juz_number} options={JUZ_OPTIONS} onValueChange={value => setItem(index, { juz_number: value })} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Portion</Label>
-                        <select value={item.juz_portion} onChange={(event) => setItem(index, { juz_portion: event.target.value })} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-                          <option value="">Select portion</option>
-                          {PORTIONS.map((portion) => <option key={portion}>{portion}</option>)}
-                        </select>
+                        <GlassSelect label={`Juz ${index + 1} portion`} placeholder="Select portion" value={item.juz_portion} options={PORTION_OPTIONS} onValueChange={value => setItem(index, { juz_portion: value })} />
                       </div>
                     </div>
                   )}
