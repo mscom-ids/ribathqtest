@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Download, Search, Loader2, ArrowLeft, GraduationCap, Calendar, CheckCircle, XCircle, Clock } from "lucide-react"
-import { cachedGet } from "@/lib/api-cache"
+import { Download, Search, Loader2, ArrowLeft, GraduationCap, Calendar, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw } from "lucide-react"
 import api from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -44,6 +43,9 @@ export default function StudentReportsPage() {
     const [selectedAcademicYear, setSelectedAcademicYear] = useState("")
     const [reportMode, setReportMode] = useState<"academic-year" | "monthly">("academic-year")
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [yearsError, setYearsError] = useState<string | null>(null)
+    const [retry, setRetry] = useState(0)
     const [searchTerm, setSearchTerm] = useState("")
     const [targetMonth, setTargetMonth] = useState((new Date().getMonth() + 1).toString())
     const [targetYear, setTargetYear] = useState((new Date().getFullYear()).toString())
@@ -51,30 +53,34 @@ export default function StudentReportsPage() {
     const router = useRouter()
 
     useEffect(() => {
+        let active = true
+        setYearsLoaded(false)
+        setYearsError(null)
         api.get("/academic-history/years")
             .then((res) => {
-                const rows = res.data?.data || []
+                if (!active) return
+                if (!res.data?.success || !Array.isArray(res.data.data)) throw new Error("Invalid academic year response")
+                const rows = res.data.data as AcademicYear[]
                 setYears(rows)
-                setSelectedAcademicYear(rows.find((year: AcademicYear) => year.is_current)?.id || rows[0]?.id || "")
+                setSelectedAcademicYear(current => rows.some(year => year.id === current) ? current : rows.find(year => year.is_current)?.id || rows[0]?.id || "")
             })
-            .catch(() => {})
-            .finally(() => setYearsLoaded(true))
-    }, [])
+            .catch(() => { if (active) setYearsError("Could not load academic years. Please retry.") })
+            .finally(() => { if (active) setYearsLoaded(true) })
+        return () => { active = false }
+    }, [retry])
 
     useEffect(() => {
-        if (reportMode === "academic-year" && !yearsLoaded) return
+        if (reportMode === "academic-year" && (!yearsLoaded || yearsError)) return
         if (reportMode === "academic-year" && !selectedAcademicYear) {
             setData([])
             setLoading(false)
             return
         }
-        fetchReports()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [targetMonth, targetYear, reportMode, selectedAcademicYear, yearsLoaded])
-
-    const fetchReports = async () => {
+        const controller = new AbortController()
         setLoading(true)
-        try {
+        setError(null)
+        const fetchReports = async () => {
+          try {
             const selectedYear = years.find((year) => year.id === selectedAcademicYear)
             const params = reportMode === "academic-year" && selectedYear
                 ? {
@@ -83,14 +89,19 @@ export default function StudentReportsPage() {
                     end_date: selectedYear.end_date?.slice(0, 10),
                 }
                 : { month: targetMonth, year: targetYear }
-            const res = await cachedGet('/reports/students', params, 60_000)
-            if (res.data?.success) setData(res.data.data)
-        } catch {
-            toast({ title: "Error", description: "Failed to load student reports", variant: "destructive" })
-        } finally {
-            setLoading(false)
+            const res = await api.get('/reports/students', { params, signal: controller.signal })
+            if (controller.signal.aborted) return
+            if (!res.data?.success || !Array.isArray(res.data.data)) throw new Error(res.data?.error || "Invalid report response")
+            setData(res.data.data)
+          } catch (failure: any) {
+            if (!controller.signal.aborted) setError(failure.response?.data?.error || "Could not load student reports. Please retry.")
+          } finally {
+            if (!controller.signal.aborted) setLoading(false)
+          }
         }
-    }
+        void fetchReports()
+        return () => controller.abort()
+    }, [targetMonth, targetYear, reportMode, selectedAcademicYear, yearsLoaded, yearsError, years, retry])
 
     const filtered = data.filter(s => 
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -144,7 +155,7 @@ export default function StudentReportsPage() {
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] w-full">
             {/* Header Area */}
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
                     <button onClick={() => router.push('/admin')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-[13px] font-bold mb-4 transition-colors">
                         <ArrowLeft className="h-4 w-4" /> Back to Dashboard
@@ -184,12 +195,14 @@ export default function StudentReportsPage() {
                         </>
                     )}
 
-                    <button onClick={handleDownloadExcel} className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-[14px] px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
+                    <button onClick={handleDownloadExcel} disabled={loading || !!error || !!yearsError || !filtered.length} className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold text-[14px] px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
                         <Download className="h-4 w-4" />
                         Download CSV
                     </button>
                 </div>
             </div>
+
+            {(error || (reportMode === "academic-year" && yearsError)) && <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><div className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />{error || yearsError}</div><button onClick={() => setRetry(value => value + 1)} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 font-semibold"><RefreshCw className="h-4 w-4" />Retry</button></div>}
 
             {/* Content Area */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
@@ -207,7 +220,7 @@ export default function StudentReportsPage() {
                 </div>
 
                 <div className="flex-1 overflow-auto relative p-1">
-                    {loading ? (
+                    {(error || (reportMode === "academic-year" && yearsError)) ? <div className="py-16 text-center text-sm text-slate-500">The report could not be loaded. Use Retry above to try again.</div> : loading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
                             <Loader2 className="h-8 w-8 text-cyan-600 animate-spin mb-4" />
                             <span className="text-sm font-bold text-slate-500">Generating Report...</span>
@@ -238,7 +251,7 @@ export default function StudentReportsPage() {
                                 {filtered.length === 0 ? (
                                     <tr>
                                         <td colSpan={8} className="py-16 text-center text-slate-500 font-medium text-[14px]">
-                                            No student records found.
+                                            {searchTerm ? "No students match your search." : "No student records found for this period."}
                                         </td>
                                     </tr>
                                 ) : (

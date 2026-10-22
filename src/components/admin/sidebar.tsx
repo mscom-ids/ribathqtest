@@ -217,12 +217,14 @@ export function AdminSidebar({
             .catch(() => {})
     }, [])
 
-    // Auto-expand the active section, keeping the sidebar as a single-open accordion.
+    const activeSectionLabel = [...visibleMenuLinks, ...visibleAcademicLinks, ...visibleManagementLinks]
+        .find(item => item.children && isItemActive(item, pathname))?.label ?? null
+
+    // Reset only on navigation. Filtered menu arrays are recreated during render;
+    // using those as dependencies immediately undoes every manual toggle.
     useEffect(() => {
-        const activeExpandable = [...visibleMenuLinks, ...visibleAcademicLinks, ...visibleManagementLinks]
-            .find(item => item.children && isItemActive(item, pathname))
-        setOpenSection(activeExpandable?.label ?? null)
-    }, [pathname, visibleMenuLinks, visibleAcademicLinks, visibleManagementLinks])
+        setOpenSection(activeSectionLabel)
+    }, [pathname, activeSectionLabel])
 
     const handleLogout = async () => {
         try { await api.post('/auth/logout') } catch {}
@@ -264,6 +266,7 @@ export function AdminSidebar({
                 <div className="mb-1">
                     <button
                         suppressHydrationWarning
+                        aria-expanded={isOpen}
                         onClick={() => toggle(item.label)}
                         className={cn(
                             "group w-full flex items-center gap-3 rounded-lg py-[10px] text-[13.5px] font-semibold transition-all duration-200",

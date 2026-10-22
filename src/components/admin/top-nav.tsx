@@ -40,10 +40,11 @@ function roleLabel(role?: string) {
 type AcademicYear = { name?: string; is_current?: boolean }
 
 function DashboardContext() {
-    const [now, setNow] = useState(() => new Date())
+    const [now, setNow] = useState<Date | null>(null)
     const [academicSession, setAcademicSession] = useState("")
 
     useEffect(() => {
+        setNow(new Date())
         const clock = window.setInterval(() => setNow(new Date()), 1000)
         api.get("/academic-history/years")
             .then(response => {
@@ -55,12 +56,12 @@ function DashboardContext() {
         return () => window.clearInterval(clock)
     }, [])
 
-    const date = now.toLocaleDateString("en-GB", {
+    const date = now?.toLocaleDateString("en-GB", {
         timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long", year: "numeric",
-    })
-    const time = now.toLocaleTimeString("en-IN", {
+    }) || "Loading date…"
+    const time = now?.toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
-    })
+    }) || "--:--:--"
 
     return (
         <div className="hidden items-center gap-2 xl:flex">
