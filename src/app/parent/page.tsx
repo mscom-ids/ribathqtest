@@ -906,7 +906,7 @@ function HifzPanel({ report, logs, monthlyReports }: {
                                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Monthly Grade</p>
                                         <p className="mt-1 text-5xl font-black text-indigo-700">{report.summary.grade === 'O' ? '★ O' : report.summary.grade}</p>
                                         {report.summary.percentage != null && (
-                                            <p className="mt-1 text-sm text-slate-500">{isHafiz ? `${report.summary.percentage}%` : `${report.summary.points?.totalPoints ?? report.summary.percentage} points · +${report.summary.points?.bonusPoints ?? 0} bonus`}</p>
+                                            <p className="mt-1 text-sm text-slate-500">{report.summary.points?.totalPoints ?? report.summary.percentage} points · +{report.summary.points?.bonusPoints ?? 0} bonus</p>
                                         )}
                                         {report.summary.grade === 'O' && <p className="mt-1 text-sm font-bold text-amber-800">Outstanding performance</p>}
                                     </CardContent>

@@ -32,7 +32,7 @@ interface HifzReportPointOptions {
 // Up to 20 extra New Hifz points unlock once both revisions reach 90%.
 // Before the first completed Juz, the Juz component is non-applicable; in the
 // transition period its maximum is pro-rated by eligible Hifz point days.
-// Hafiz (30 Juz complete): Juz Revision (New+Old combined) 50 + Attendance 20.
+// Hafiz: New Revision 40 + Old Revision 30 + Attendance 30, plus up to 20 bonus.
 const HIFZ_POINT_MAX = {
     newVerses: 30,
     recentRevision: 20,
@@ -40,8 +40,9 @@ const HIFZ_POINT_MAX = {
     attendance: 30,
 } as const;
 const HAFIZ_POINT_MAX = {
-    juzRevision: 50,
-    attendance: 20,
+    newRevision: 40,
+    oldRevision: 30,
+    attendance: 30,
 } as const;
 
 export function calculateHifzReportPoints(
@@ -91,7 +92,12 @@ export function calculateHifzReportPoints(
     const isHafiz = !!options?.isHafiz;
     const attendanceMax = isHafiz ? HAFIZ_POINT_MAX.attendance : HIFZ_POINT_MAX.attendance;
     const attendancePoints = roundTo2Early((attendancePercentage / 100) * attendanceMax);
-    const bonusMax = isHafiz ? 0 : 20;
+    const bonusMax = 20;
+    const newRevisionTarget = isHafiz ? totalClassDays * 0.3 : 0;
+    const oldRevisionTarget = isHafiz ? totalClassDays * 0.75 : 0;
+    const newRevisionPointRate = newRevisionTarget > 0 ? HAFIZ_POINT_MAX.newRevision / newRevisionTarget : 0;
+    const oldRevisionPointRate = oldRevisionTarget > 0 ? HAFIZ_POINT_MAX.oldRevision / oldRevisionTarget : 0;
+    const newHifzPointRate = !isHafiz && totalClassDays > 0 ? HIFZ_POINT_MAX.newVerses / (totalClassDays * 0.9) : 0;
 
     let juzEligibleRatio = 1;
     let juzEligiblePointDays = totalClassDays;
@@ -127,15 +133,15 @@ export function calculateHifzReportPoints(
     juzEligibleRatio = Math.min(1, Math.max(0, juzEligibleRatio));
     juzEligiblePointDays = roundTo2Early(totalClassDays * juzEligibleRatio);
     const juzMax = isHafiz
-        ? HAFIZ_POINT_MAX.juzRevision
+        ? HAFIZ_POINT_MAX.newRevision + HAFIZ_POINT_MAX.oldRevision
         : roundTo2Early(HIFZ_POINT_MAX.juzRevision * juzEligibleRatio);
     const totalMax = isHafiz
-        ? HAFIZ_POINT_MAX.juzRevision + HAFIZ_POINT_MAX.attendance
+        ? HAFIZ_POINT_MAX.newRevision + HAFIZ_POINT_MAX.oldRevision + HAFIZ_POINT_MAX.attendance
         : HIFZ_POINT_MAX.newVerses + HIFZ_POINT_MAX.recentRevision + juzMax + HIFZ_POINT_MAX.attendance;
 
     if (totalClassDays === 0) {
         const zeroTotal = attendancePoints;
-        const zeroPct = isHafiz && totalMax > 0 ? roundTo2Early((zeroTotal / totalMax) * 100) : zeroTotal;
+        const zeroPct = zeroTotal;
         return {
             detectedClassDays,
             totalClassDays: 0,
@@ -155,6 +161,16 @@ export function calculateHifzReportPoints(
             bonusEligible: false,
             expectedNewPages: 0,
             newHifzPages: 0,
+            extraNewHifzPages: 0,
+            newHifzPointRate,
+            newRevisionPoints: 0,
+            oldRevisionPoints: 0,
+            newRevisionJuz: 0,
+            oldRevisionJuz: 0,
+            newRevisionTarget,
+            oldRevisionTarget,
+            newRevisionPointRate,
+            oldRevisionPointRate,
             attendancePercentage: roundTo2Early(attendancePercentage),
             totalPoints: zeroTotal,
             percentage: zeroPct,
@@ -178,6 +194,8 @@ export function calculateHifzReportPoints(
         ? ['Juz Revision (New)', 'Juz Revision (Old)']
         : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
     let totalJuzRecited = 0;
+    let newRevisionJuz = 0;
+    let oldRevisionJuz = 0;
     logs.filter(log => {
         const recentJuzClear = !isHafiz && log.mode === 'Recent Revision' && Number.isInteger(Number(log.juz_number)) && Number(log.juz_number) >= 1 && Number(log.juz_number) <= 30;
         if (!log.mode || (!juzRevisionModes.includes(log.mode) && !recentJuzClear)) return false;
@@ -186,10 +204,10 @@ export function calculateHifzReportPoints(
         return !!completionDate && !!entryDate && entryDate > completionDate;
     }).forEach(log => {
         const portion = log.juz_portion;
-        if (portion === 'Full') totalJuzRecited += 1;
-        else if (portion?.includes('Half')) totalJuzRecited += 0.5;
-        else if (portion?.startsWith('Q')) totalJuzRecited += 0.25;
-        else if (portion) totalJuzRecited += 1;
+        const value = portion === 'Full' ? 1 : portion?.includes('Half') ? 0.5 : portion?.startsWith('Q') ? 0.25 : portion ? 1 : 0;
+        totalJuzRecited += value;
+        if (log.mode === 'Juz Revision (New)') newRevisionJuz += value;
+        if (log.mode === 'Juz Revision (Old)') oldRevisionJuz += value;
     });
 
     let newVersePoints = 0;
@@ -199,14 +217,21 @@ export function calculateHifzReportPoints(
     let bonusEligible = false;
     let expectedNewPages = 0;
     let newHifzPages = 0;
+    let extraNewHifzPages = 0;
+    let newRevisionPoints = 0;
+    let oldRevisionPoints = 0;
 
     if (isHafiz) {
-        // Hafiz: expect 0.5 Juz per class day. New + Old combined out of 50.
-        const expectedHafizJuz = totalClassDays * 0.5;
-        juzPoints = expectedHafizJuz > 0
-            ? (totalJuzRecited / expectedHafizJuz) * HAFIZ_POINT_MAX.juzRevision
-            : 0;
-        juzPoints = roundTo2(Math.min(juzPoints, HAFIZ_POINT_MAX.juzRevision));
+        newRevisionPoints = roundTo2(Math.min(HAFIZ_POINT_MAX.newRevision, newRevisionJuz * newRevisionPointRate));
+        oldRevisionPoints = roundTo2(Math.min(HAFIZ_POINT_MAX.oldRevision, oldRevisionJuz * oldRevisionPointRate));
+        juzPoints = roundTo2(newRevisionPoints + oldRevisionPoints);
+        // Gate on actual quantities, never rounded points. Excess from either
+        // bucket earns its own monthly rate only after BOTH targets are met.
+        bonusEligible = newRevisionTarget > 0 && oldRevisionTarget > 0
+            && newRevisionJuz >= newRevisionTarget && oldRevisionJuz >= oldRevisionTarget;
+        bonusPoints = bonusEligible ? roundTo2(Math.min(bonusMax,
+            Math.max(0, newRevisionJuz - newRevisionTarget) * newRevisionPointRate
+            + Math.max(0, oldRevisionJuz - oldRevisionTarget) * oldRevisionPointRate)) : 0;
     } else {
         // Memorizing: three separate recitation buckets.
         const expectedPages = totalClassDays * 0.9;
@@ -216,8 +241,8 @@ export function calculateHifzReportPoints(
         newVersePoints = expectedPages > 0
             ? (totalPagesRecited / expectedPages) * HIFZ_POINT_MAX.newVerses
             : 0;
-        const uncappedNewPoints = newVersePoints;
         newVersePoints = roundTo2(Math.min(newVersePoints, HIFZ_POINT_MAX.newVerses));
+        extraNewHifzPages = Math.max(0, totalPagesRecited - expectedPages);
 
         const uniqueRecentDates = new Set<string>();
         logs.filter(l => l.mode === 'Recent Revision').forEach(log => {
@@ -243,17 +268,15 @@ export function calculateHifzReportPoints(
             && uncappedRecentPoints >= HIFZ_POINT_MAX.recentRevision * 0.9
             && juzMax > 0 && juzPoints >= juzMax * 0.9;
         bonusPoints = bonusEligible
-            ? roundTo2(Math.min(bonusMax, Math.max(0, uncappedNewPoints - HIFZ_POINT_MAX.newVerses)))
+            ? roundTo2(Math.min(bonusMax, extraNewHifzPages * newHifzPointRate))
             : 0;
         juzPoints = roundTo2(Math.min(juzPoints, juzMax));
     }
 
     const basePoints = roundTo2(newVersePoints + recentRevisionPoints + juzPoints + attendancePoints);
     const totalPoints = roundTo2(basePoints + bonusPoints);
-    // Keep the legacy percentage field for API compatibility. Non-Hafiz grades
-    // now use earned points directly, including the bonus; never normalize by
-    // a smaller N/A or transition-month maximum. Hafiz rules stay unchanged.
-    const totalPercentage = isHafiz && totalMax > 0 ? roundTo2((totalPoints / totalMax) * 100) : totalPoints;
+    // Legacy API field: both stages now use earned points, without rescaling.
+    const totalPercentage = totalPoints;
 
     return {
         detectedClassDays,
@@ -274,10 +297,20 @@ export function calculateHifzReportPoints(
         bonusEligible,
         expectedNewPages: roundTo2(expectedNewPages),
         newHifzPages,
+        extraNewHifzPages,
+        newHifzPointRate,
+        newRevisionPoints,
+        oldRevisionPoints,
+        newRevisionJuz,
+        oldRevisionJuz,
+        newRevisionTarget,
+        oldRevisionTarget,
+        newRevisionPointRate,
+        oldRevisionPointRate,
         attendancePercentage: roundTo2(attendancePercentage),
         totalPoints,
         percentage: totalPercentage,
-        grade: !isHafiz && totalPoints > 100 ? 'O' : resolveGrade(totalPercentage)
+        grade: totalPoints > 100 ? 'O' : resolveGrade(totalPercentage)
     };
 }
 

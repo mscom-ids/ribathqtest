@@ -74,6 +74,14 @@ type StudentMonthlyStats = {
     juzPoints?: number
     juzMax?: number
     attendancePoints?: number
+    newHifzPointRate?: number
+    extraNewHifzPages?: number
+    newRevisionPoints?: number
+    oldRevisionPoints?: number
+    newRevisionTarget?: number
+    oldRevisionTarget?: number
+    newRevisionPointRate?: number
+    oldRevisionPointRate?: number
 }
 
 function formatAttendanceText(student: StudentMonthlyStats) {
@@ -538,6 +546,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                         <span className="ml-1 text-xs text-slate-400">points</span>
                                         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={s.grade === "O" ? "h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" : "h-full rounded-full bg-indigo-500"} style={{ width: `${Math.min(100, Math.max(0, Number(s.totalPoints || 0) / 120 * 100))}%` }} /></div>
                                         <p className="mt-1 text-[10px] font-medium text-slate-500">Base {s.basePoints ?? s.totalPoints ?? 0} · <span className={s.bonusPoints ? "font-bold text-amber-700" : ""}>Bonus +{s.bonusPoints || 0}/20</span></p>
+                                        <p className="mt-1 text-[10px] text-amber-700">{Number(s.extraNewHifzPages || 0).toFixed(2)} extra pages × {Number(s.newHifzPointRate || 0).toFixed(4)} pts/page · {s.bonusEligible ? 'unlocked' : 'locked'}</p>
                                         <p className="mt-1 text-[10px] text-slate-500">New {s.newVersePoints ?? 0}/30 · Recent {s.recentRevisionPoints ?? 0}/20<br />Juz {s.juzMax ? `${s.juzPoints ?? 0}/${s.juzMax}` : "N/A"} · Attendance {s.attendancePoints ?? 0}/30</p>
                                     </TableCell>
                                     <TableCell>
@@ -610,7 +619,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 </TableRow>
                             ) : (
                                 hafizStats.map((s) => (
-                                    <TableRow key={s.adm_no} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                    <TableRow key={s.adm_no} className={s.grade === "O" ? "bg-gradient-to-r from-amber-50 via-yellow-50/50 to-white dark:from-amber-950/40 dark:to-slate-900" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/50"}>
                                         <TableCell className="pl-6 font-medium">
                                             <div>
                                                 {s.name}
@@ -618,12 +627,17 @@ _Generated from Ma'din Ribathul Quran ERP_
                                                 <span className="text-xs text-slate-400 block">{s.standard} Std • {s.adm_no}</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.new_juz_revision ?? 0}</TableCell>
-                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.old_juz_revision ?? 0}</TableCell>
+                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-blue-600'}`}>{s.new_juz_revision ?? 0}<p className="text-[10px] font-normal text-slate-500">Target {Number(Number(s.newRevisionTarget || 0).toFixed(4))} Juz · {s.newRevisionPoints ?? 0}/40 pts</p></TableCell>
+                                        <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.old_juz_revision ?? 0}<p className="text-[10px] font-normal text-slate-500">Target {Number(Number(s.oldRevisionTarget || 0).toFixed(4))} Juz · {s.oldRevisionPoints ?? 0}/30 pts</p></TableCell>
                                         <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
-                                        <TableCell className="font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{formatPerformancePoints(s)}</TableCell>
+                                        <TableCell className="min-w-44 tabular-nums">
+                                            <span className={s.grade === "O" ? "text-2xl font-black text-amber-700 dark:text-amber-300" : "text-lg font-bold text-indigo-600 dark:text-indigo-400"}>{formatPerformancePoints(s)}</span><span className="ml-1 text-xs text-slate-400">points</span>
+                                            <p className="mt-1 text-[10px] text-slate-500">Base {s.basePoints ?? s.totalPoints ?? 0} · <span className={s.bonusPoints ? "font-bold text-amber-700" : ""}>Bonus +{s.bonusPoints || 0}/20</span></p>
+                                            <p className="mt-1 text-[10px] text-slate-500">Attendance {s.attendancePoints ?? 0}/30 · {s.bonusEligible ? 'bonus unlocked' : 'bonus locked'}</p>
+                                            <p className="mt-1 text-[10px] text-amber-700">Extra Juz rates: New {Number(s.newRevisionPointRate || 0).toFixed(4)} · Old {Number(s.oldRevisionPointRate || 0).toFixed(4)} pts/Juz</p>
+                                        </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
+                                            <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade === "O" ? "★ O · Outstanding" : s.grade}</Badge>
                                         </TableCell>
                                         <TableCell>{formatAttendanceText(s)}</TableCell>
                                         <TableCell className="text-slate-500 text-sm">{s.usthad_name}</TableCell>
@@ -724,8 +738,8 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 id="grade"
                                 className="col-span-3"
                                 value={editForm.grade}
-                                disabled={editingStudent?.hifz_stage !== 'HAFIZ_REVISION'}
-                                title="Non-Hafiz grades are calculated from earned points, including eligible bonus points."
+                                disabled
+                                title="Grades are calculated from earned points, including eligible bonus points."
                                 onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })}
                                 placeholder="Calculated from earned points"
                             />

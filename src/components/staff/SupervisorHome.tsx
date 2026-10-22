@@ -360,7 +360,7 @@ export function SupervisorHome({ role }: { role: string }) {
                     {/* Champion card */}
                     {performers[0] && (() => {
                         const winner = performers[0]
-                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / (winner.isHafiz ? 70 : 120)) * 100))
+                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / 120) * 100))
                         return (
                             <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-4 shadow-sm dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/5 dark:to-slate-900">
                                 <div className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-amber-300/15" />

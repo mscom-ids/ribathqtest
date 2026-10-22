@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 13;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 14;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -1262,7 +1262,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             attendance: manualRecord.attendance || '-',
                             is_manual: true,
                             ...calculatedPoints,
-                            grade: isHafiz ? (manualRecord.grade || '-') : calculatedPoints.grade,
+                            grade: calculatedPoints.grade,
                             totalClassDays: effectiveClassDays,
                             detectedClassDays,
                             scheduledClassDays: targetSummary?.plannedClasses || scheduledClassDays,

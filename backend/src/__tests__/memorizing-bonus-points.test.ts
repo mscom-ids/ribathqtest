@@ -13,6 +13,9 @@ const full=score(18);
 assert.equal(full.newVersePoints,30);assert.equal(full.recentRevisionPoints,20);assert.equal(full.juzPoints,20);assert.equal(full.attendancePoints,30);
 assert.equal(full.totalPoints,100);assert.equal(full.grade,'A++');assert.equal(full.bonusPoints,0);
 const extra=score(21);
+assert.equal(score(19).bonusPoints,1.67,'one extra page earns the monthly page rate, not a flat20');
+assert.equal(score(20).bonusPoints,3.33,'two extra pages earn twice that rate');
+assert.equal(calculateHifzReportPoints(logs(10),[],{...options,expectedClassDaysOverride:10}).bonusPoints,3.33,'a different month target changes the per-page rate');
 assert.equal(extra.basePoints,100);assert.equal(extra.bonusPoints,5);assert.equal(extra.totalPoints,105);assert.equal(extra.grade,'O');assert.equal(extra.percentage,105);
 assert.equal(score(30).totalPoints,120);assert.equal(score(200).totalPoints,120);
 assert.equal(score(200,12).bonusPoints,0,'below 90% recent: no bonus even with 200 pages');
@@ -36,5 +39,5 @@ for(const [points,grade] of [[35,'D+'],[40,'C'],[50,'C+'],[60,'B'],[70,'B+'],[80
 }
 const hafizLogs:HifzLog[]=[{mode:'Juz Revision (New)',entry_date:'2026-10-01',juz_portion:'Full'},{mode:'Juz Revision (Old)',entry_date:'2026-10-01',juz_portion:'1st Half'}];
 const hafiz=calculateHifzReportPoints(hafizLogs,[],{...options,isHafiz:true});
-assert.equal(hafiz.juzPoints,7.5);assert.equal(hafiz.attendancePoints,20);assert.equal(hafiz.totalMax,70);assert.equal(hafiz.totalPoints,27.5);assert.equal(hafiz.percentage,39.29);assert.equal(hafiz.grade,'D+');assert.equal(hafiz.bonusPoints,0);assert.equal(hafiz.bonusMax,0);
-console.log('Memorizing scoring passed: 30/20/20/30, 90% bonus gates, proportional excess pages, cap120, raw grades, transition/N/A, zero days, Hafiz unchanged.');
+assert.equal(hafiz.newRevisionPoints,6.67);assert.equal(hafiz.oldRevisionPoints,1);assert.equal(hafiz.attendancePoints,30);assert.equal(hafiz.totalMax,100);assert.equal(hafiz.bonusPoints,0);
+console.log('Memorizing scoring passed: 30/20/20/30, 90% gates, per-page excess credit, cap120, raw grades, transition/N/A, zero days.');

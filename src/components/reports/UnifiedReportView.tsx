@@ -146,7 +146,7 @@ export default function UnifiedReportView() {
         const countryPhone = phone.length === 10 ? `91${phone}` : phone
         const performance = reportData?.performance
         const isHafiz = reportData?.hifz_stage === 'HAFIZ_REVISION'
-        const juzMax = Number(performance?.juzMax ?? (isHafiz ? 50 : 20))
+        const juzMax = Number(performance?.juzMax ?? (isHafiz ? 70 : 20))
         const firstJuzDate = performance?.firstJuzCompletionDate ?? null
         const juzZeroReason = firstJuzDate
             ? 'no class days recorded'
@@ -181,7 +181,7 @@ export default function UnifiedReportView() {
             ...perfLines,
             `Attendance: ${attendedSessions}/${effectiveSessions} sessions (${attendancePct}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
-            ...(!isHafiz ? [`Points: ${performance?.totalPoints ?? 0} (base ${performance?.basePoints ?? 0} + New Hifz bonus ${performance?.bonusPoints ?? 0})`] : []),
+            `Points: ${performance?.totalPoints ?? 0} (base ${performance?.basePoints ?? 0} + ${isHafiz ? 'Revision' : 'New Hifz'} bonus ${performance?.bonusPoints ?? 0})`,
         ].join("\n")
         window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
     }
@@ -505,31 +505,37 @@ export default function UnifiedReportView() {
                             <div className="print:hidden">
                                 <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Performance & Grade</h3>
                                 {reportData.hifz_stage === 'HAFIZ_REVISION' ? (
-                                    // Hafiz layout: Juz Revision is scored as one combined 50-point bucket
-                                    // (New + Old). Show the two Juz breakdowns instead of memorizing buckets.
+                                    // Hafiz has separate New/Old targets, rates and caps.
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                         <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
-                                            <p className="text-xs font-semibold text-blue-700">New Revision (Juz)</p>
-                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.hifz_activity?.new_juz_revision ?? 0}</p>
+                                            <p className="text-xs font-semibold text-blue-700">New Revision</p>
+                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newRevisionPoints ?? 0}/40</p>
+                                            <p className="text-xs text-blue-700">{reportData.performance.newRevisionJuz ?? 0} / {Number(Number(reportData.performance.newRevisionTarget ?? 0).toFixed(4))} Juz</p>
                                         </div>
                                         <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
-                                            <p className="text-xs font-semibold text-orange-700">Old Revision (Juz)</p>
-                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.hifz_activity?.old_juz_revision ?? 0}</p>
+                                            <p className="text-xs font-semibold text-orange-700">Old Revision</p>
+                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.oldRevisionPoints ?? 0}/30</p>
+                                            <p className="text-xs text-orange-700">{reportData.performance.oldRevisionJuz ?? 0} / {Number(Number(reportData.performance.oldRevisionTarget ?? 0).toFixed(4))} Juz</p>
                                         </div>
                                         <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-teal-700">Attendance</p>
-                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
+                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/30</p>
                                             <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
                                         </div>
-                                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
-                                            <p className="text-xs font-semibold text-emerald-700">Total</p>
-                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/{reportData.performance.totalMax ?? 70}</p>
-                                            <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
+                                        <div className={reportData.performance.grade === 'O' ? "rounded-lg border border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 p-4 shadow-sm ring-1 ring-amber-200" : "rounded-lg border border-emerald-100 bg-emerald-50 p-4"}>
+                                            <p className="text-xs font-semibold text-emerald-700">Total points</p>
+                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}</p>
+                                            <p className="text-xs text-emerald-700">Base {reportData.performance.basePoints ?? 0} + bonus {reportData.performance.bonusPoints ?? 0}</p>
                                         </div>
                                         <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
                                             <p className="text-xs font-semibold text-slate-600">Grade</p>
-                                            <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
-                                            <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
+                                            <p className={reportData.performance.grade === 'O' ? "mt-1 text-3xl font-black text-amber-700" : "mt-1 text-2xl font-black text-slate-900"}>{reportData.performance.grade === 'O' ? '★ O' : reportData.performance.grade}</p>
+                                            <p className="text-xs text-slate-500">{reportData.performance.grade === 'O' ? 'Outstanding performance' : `${reportData.performance.totalClassDays} point days`}</p>
+                                        </div>
+                                        <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 md:col-span-5">
+                                            <p className="text-sm font-bold text-amber-900">Revision bonus earned: +{reportData.performance.bonusPoints ?? 0} points <span className="font-normal">(maximum 20 combined)</span></p>
+                                            <p className="mt-1 text-xs text-amber-800">{reportData.performance.bonusEligible ? 'Unlocked: both monthly revision targets are complete.' : 'Locked: complete both New Revision (40) and Old Revision (30) targets first. Extra in one cannot replace the other.'}</p>
+                                            <p className="mt-1 text-xs text-amber-800">Extra New: {Number(reportData.performance.newRevisionPointRate ?? 0).toFixed(4)} points/Juz · Extra Old: {Number(reportData.performance.oldRevisionPointRate ?? 0).toFixed(4)} points/Juz. Half earns half; quarter earns a quarter.</p>
                                         </div>
                                     </div>
                                 ) : (
@@ -561,7 +567,7 @@ export default function UnifiedReportView() {
                                         </div>
                                         <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-teal-700">Attendance</p>
-                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/{reportData.hifz_stage === 'HAFIZ_REVISION' ? 20 : 30}</p>
+                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/30</p>
                                             <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
                                         </div>
                                         <div className={reportData.performance.grade === 'O' ? "rounded-lg border border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 p-4 shadow-sm ring-1 ring-amber-200" : "rounded-lg border border-emerald-100 bg-emerald-50 p-4"}>
@@ -575,9 +581,10 @@ export default function UnifiedReportView() {
                                             <p className="text-xs text-slate-500">{reportData.performance.grade === 'O' ? 'Outstanding performance' : `${reportData.performance.totalClassDays} point days`}</p>
                                         </div>
                                         <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 md:col-span-6">
-                                            <p className="text-sm font-bold text-amber-900">New Hifz bonus <span className="ml-2 text-xl">+{reportData.performance.bonusPoints ?? 0}/20</span></p>
+                                            <p className="text-sm font-bold text-amber-900">New Hifz bonus earned <span className="ml-2 text-xl">+{reportData.performance.bonusPoints ?? 0}</span> <span className="font-normal">(maximum 20)</span></p>
                                             <p className="mt-1 text-xs text-amber-800">{reportData.performance.bonusEligible ? 'Unlocked: excess New Hifz pages earn additional points at the same page rate.' : 'Locked: reach 30 New Hifz points and at least 90% in both Recent and applicable Juz Revision. Juz must be applicable.'}</p>
                                             <p className="mt-1 text-xs text-amber-800">New pages: {reportData.performance.newHifzPages ?? 0} / target {reportData.performance.expectedNewPages ?? 0}. Maximum total: 120 points.</p>
+                                            <p className="mt-1 text-xs text-amber-800">{Number(reportData.performance.extraNewHifzPages ?? 0).toFixed(2)} extra pages × {Number(reportData.performance.newHifzPointRate ?? 0).toFixed(4)} points/page, capped at 20 after the revision gates. Never a flat +20.</p>
                                         </div>
                                     </div>
                                 )}
@@ -828,7 +835,8 @@ export default function UnifiedReportView() {
                                                         </>
                                                     );
                                                 })()}
-                                                {reportData.hifz_stage !== 'HAFIZ_REVISION' && <p className="mt-2 text-sm font-bold">{reportData.performance?.totalPoints ?? 0} points · +{reportData.performance?.bonusPoints ?? 0} bonus{grade === 'O' ? ' · Outstanding' : ''}</p>}
+                                                <p className="mt-2 text-sm font-bold">{reportData.performance?.totalPoints ?? 0} points · +{reportData.performance?.bonusPoints ?? 0} bonus{grade === 'O' ? ' · Outstanding' : ''}</p>
+                                                {reportData.hifz_stage === 'HAFIZ_REVISION' && <p className="mt-1 text-xs">New {reportData.performance?.newRevisionPoints ?? 0}/40 · Old {reportData.performance?.oldRevisionPoints ?? 0}/30 · Attendance {reportData.performance?.attendancePoints ?? 0}/30</p>}
                                             </div>
                                         </div>
                                     </div>
