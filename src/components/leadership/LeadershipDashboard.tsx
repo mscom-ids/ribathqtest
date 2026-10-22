@@ -9,7 +9,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { LeadershipLeaderboard } from "@/components/leadership/LeadershipLeaderboard"
+import { useLeadershipIdentity } from "@/components/leadership/LeadershipShell"
+import { setMentorFocus } from "@/lib/mentor-focus"
 import api from "@/lib/api"
 import { getHifzPerformancePoints } from "@/lib/hifz-performance"
 import { GlassSelect } from "@/components/ui/glass-select"
@@ -31,13 +33,13 @@ type SupervisorSnapshot = {
     mentors: Mentor[]
 }
 
-const SUPERVISOR_SNAPSHOT_KEY = "__supervisor_home_snapshot"
+const SUPERVISOR_SNAPSHOT_KEY = "__leadership_home_snapshot:"
 const SUPERVISOR_SNAPSHOT_MAX_AGE_MS = 5 * 60_000
 
-function readSupervisorSnapshot(): SupervisorSnapshot | null {
+function readSupervisorSnapshot(userId: string): SupervisorSnapshot | null {
     try {
         if (typeof window === "undefined") return null
-        const raw = sessionStorage.getItem(SUPERVISOR_SNAPSHOT_KEY)
+        const raw = sessionStorage.getItem(SUPERVISOR_SNAPSHOT_KEY + userId)
         if (!raw) return null
         const snapshot = JSON.parse(raw) as SupervisorSnapshot
         if (!snapshot.savedAt || Date.now() - snapshot.savedAt > SUPERVISOR_SNAPSHOT_MAX_AGE_MS) return null
@@ -47,9 +49,9 @@ function readSupervisorSnapshot(): SupervisorSnapshot | null {
     }
 }
 
-function saveSupervisorSnapshot(snapshot: SupervisorSnapshot) {
+function saveSupervisorSnapshot(userId: string, snapshot: SupervisorSnapshot) {
     try {
-        sessionStorage.setItem(SUPERVISOR_SNAPSHOT_KEY, JSON.stringify(snapshot))
+        sessionStorage.setItem(SUPERVISOR_SNAPSHOT_KEY + userId, JSON.stringify(snapshot))
     } catch { /* A fresh network load remains the fallback. */ }
 }
 
@@ -142,8 +144,10 @@ function buildMonthOptions(anchor: Date): { value: string; label: string }[] {
 /**
  * Leadership home for Principal / Vice Principal when NO Mentor Focus is set.
  */
-export function SupervisorHome({ role }: { role: string }) {
-    const [initialSnapshot] = useState(readSupervisorSnapshot)
+export function LeadershipDashboard() {
+    const identity = useLeadershipIdentity()
+    const role = identity.role
+    const [initialSnapshot] = useState(() => readSupervisorSnapshot(identity.id))
     const [name, setName] = useState(initialSnapshot?.name || "")
     const [photo, setPhoto] = useState(initialSnapshot?.photo || "")
     const [counts, setCounts] = useState<SupervisorCounts | null>(initialSnapshot?.counts || null)
@@ -184,8 +188,7 @@ export function SupervisorHome({ role }: { role: string }) {
             // full-page spinner every time leadership returns to the dashboard.
             if (!initialSnapshot) setLoading(true)
             const today = format(new Date(), "yyyy-MM-dd")
-            const [me, admin, daily, mentorList, studentList] = await Promise.allSettled([
-                cachedGet("/staff/me", undefined, 60_000),
+            const [admin, daily, mentorList, studentList] = await Promise.allSettled([
                 cachedGet("/dashboard/admin", undefined, 60_000),
                 cachedGet("/attendance/daily-stats", { start_date: today, end_date: today }, 60_000),
                 cachedGet("/delegations/focusable-mentors", undefined, 60_000),
@@ -193,12 +196,8 @@ export function SupervisorHome({ role }: { role: string }) {
             ])
             if (cancelled) return
 
-            const nextName = me.status === "fulfilled" && me.value.data?.staff
-                ? me.value.data.staff.name || ""
-                : initialSnapshot?.name || ""
-            const nextPhoto = me.status === "fulfilled" && me.value.data?.staff
-                ? me.value.data.staff.photo_url || ""
-                : initialSnapshot?.photo || ""
+            const nextName = identity.name || ""
+            const nextPhoto = identity.photo_url || ""
             let nextCounts = initialSnapshot?.counts || null
             if (admin.status === "fulfilled" && admin.value.data?.summary) {
                 const s = admin.value.data.summary
@@ -229,7 +228,7 @@ export function SupervisorHome({ role }: { role: string }) {
             // Only persist a usable overview. A failed cold load must not turn
             // into a fresh-looking empty snapshot on the next visit.
             if (nextCounts) {
-                saveSupervisorSnapshot({
+                saveSupervisorSnapshot(identity.id, {
                     savedAt: Date.now(),
                     name: nextName,
                     photo: nextPhoto,
@@ -286,11 +285,8 @@ export function SupervisorHome({ role }: { role: string }) {
         try {
             const res = await api.post("/delegations/supervisor-focus", { mentorId: m.id })
             if (res.data?.success) {
-                sessionStorage.setItem("delegationToken", res.data.delegationToken)
-                sessionStorage.setItem("delegationMentorName", res.data.mentor.name)
-                sessionStorage.setItem("mentorFocus", "1")
-                sessionStorage.removeItem("delegationStudentName")
-                window.location.href = "/staff"
+                setMentorFocus(res.data.delegationToken, res.data.mentor.name)
+                window.location.href = "/leadership/mentor"
             } else {
                 setFocusingId(null)
             }
@@ -313,9 +309,7 @@ export function SupervisorHome({ role }: { role: string }) {
     // ── Top Performers sheet content (same visual as mentor portal) ──
     const topPerformersContent = (
         <>
-            <div className="staff-gradient-surface relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
-                <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
-                <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
+            <div className="leadership-ranking-header relative mb-5 rounded-2xl p-4 text-white shadow-md">
                 <div className="relative flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20">
@@ -435,12 +429,10 @@ export function SupervisorHome({ role }: { role: string }) {
     )
 
     return (
-        <div className="staff-dashboard-surface min-h-full bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
+        <div className="leadership-dashboard bg-slate-50 dark:bg-[#020617]">
 
             {/* ── Welcome banner ── */}
-            <div className="staff-gradient-surface relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
-                <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5" />
-                <div className="absolute -bottom-12 -left-6 w-40 h-40 rounded-full bg-white/5" />
+            <div className="leadership-welcome relative rounded-2xl mx-3 mt-3 text-white shadow-md lg:mx-6 lg:mt-6">
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 md:p-7">
                     <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-xl ring-2 ring-white/20 shrink-0">
@@ -597,14 +589,9 @@ export function SupervisorHome({ role }: { role: string }) {
             </div>
 
             {/* ── Top Performers slide-in sheet ── */}
-            <Sheet open={lbOpen} onOpenChange={setLbOpen}>
-                <SheetContent side="right" overlayClassName="staff-leaderboard-overlay" className="staff-leaderboard-sheet p-0 flex flex-col w-[85vw] sm:max-w-sm">
-                    <SheetTitle className="sr-only">Top Performers</SheetTitle>
-                    <div className="staff-leaderboard-scroll min-h-0 flex-1 overflow-y-auto px-5 pt-12 pb-6">
-                        {topPerformersContent}
-                    </div>
-                </SheetContent>
-            </Sheet>
+            <LeadershipLeaderboard open={lbOpen} onOpenChange={setLbOpen}>
+                {topPerformersContent}
+            </LeadershipLeaderboard>
 
             {/* Hifz register modal */}
             <HifzMonthlyRegister

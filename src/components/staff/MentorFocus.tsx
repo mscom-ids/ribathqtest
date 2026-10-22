@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
+import { getFocusDestination } from "@/lib/portal-paths"
+import { clearMentorFocus, setMentorFocus } from "@/lib/mentor-focus"
 
 // Roles that supervise every mentor and therefore get the Mentor Focus control.
 const SUPERVISOR_ROLES = ["principal", "vice_principal", "admin"]
@@ -81,13 +83,10 @@ export function MentorFocus({ role }: { role: string }) {
         try {
             const res = await api.post("/delegations/supervisor-focus", { mentorId: mentor.id })
             if (res.data?.success) {
-                sessionStorage.setItem("delegationToken", res.data.delegationToken)
-                sessionStorage.setItem("delegationMentorName", res.data.mentor.name)
-                sessionStorage.setItem("mentorFocus", "1")
-                sessionStorage.removeItem("delegationStudentName")
+                setMentorFocus(res.data.delegationToken, res.data.mentor.name)
                 // Full reload so every request picks up the focus token and the
                 // dashboard re-fetches as the focused mentor.
-                window.location.href = "/staff"
+                window.location.href = getFocusDestination(role, true)
             } else {
                 setError(res.data?.error || "Could not focus on this mentor.")
                 setSubmittingId(null)
@@ -99,11 +98,8 @@ export function MentorFocus({ role }: { role: string }) {
     }
 
     function exitFocus() {
-        sessionStorage.removeItem("delegationToken")
-        sessionStorage.removeItem("delegationMentorName")
-        sessionStorage.removeItem("delegationStudentName")
-        sessionStorage.removeItem("mentorFocus")
-        window.location.href = "/staff"
+        clearMentorFocus()
+        window.location.href = getFocusDestination(role, false)
     }
 
     // ── Focused: compact "viewing X's class" bar with change / exit ──────────

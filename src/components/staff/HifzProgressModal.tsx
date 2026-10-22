@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn, resolveBackendUrl } from "@/lib/utils"
 import api from "@/lib/api"
+import { usePathname } from "next/navigation"
+import { getStaffPortalBase } from "@/lib/portal-paths"
 import { calculatePages, MUSHAF_PAGES } from "@/lib/quran-pages"
 import { getCompletedJuzList, getSurahId, formatHifzLogLabel, toGlobalVerseIndex } from "@/lib/hifz-progress"
 import { formatCompactHifzEntries } from "@/lib/hifz-entry-summary"
@@ -270,6 +272,7 @@ function buildWeeklyReport(allLogs: Log[], attendanceRecords: AttendanceRecord[]
 
 // ── Component ────────────────────────────────────────────────────────────────
 function LegacyHifzProgressModal({ open, onClose, student }: Props) {
+    const portalBase = getStaffPortalBase(usePathname())
     const [loading, setLoading] = useState(false)
     const [reportMonth, setReportMonth] = useState(new Date())
     const [allLogs, setAllLogs] = useState<Log[]>([])
@@ -733,7 +736,7 @@ function LegacyHifzProgressModal({ open, onClose, student }: Props) {
                 {/* ── Footer ──────────────────────────────────────────────── */}
                 <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] shrink-0">
                     <Button asChild className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-9 text-sm">
-                        <a href={`/staff/student/${student?.adm_no}?register=1`}>
+                        <a href={`${portalBase}/student/${student?.adm_no}?register=1`}>
                             <BookOpen className="h-3.5 w-3.5 mr-2" /> Record Hifz
                         </a>
                     </Button>

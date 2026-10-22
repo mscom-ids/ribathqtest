@@ -242,6 +242,31 @@
   }
 }
 
+/* Leadership has its own document-flow shell and stationary leaderboard.
+   These backgrounds deliberately have no masked/3D/filtered ancestor. */
+.leadership-welcome {
+  background: #174bdc;
+  background-image: linear-gradient(110deg, #185bfa, #1946db 55%, #4930d8);
+}
+.leadership-ranking-header {
+  background: #4930ee;
+  background-image: linear-gradient(120deg, #2558ff, #5440f5 60%, #8128fa);
+}
+.leadership-portal .glass-picker-trigger,
+.leadership-ranking-header .glass-picker-trigger {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.leadership-leaderboard[data-state="open"],
+.leadership-leaderboard-overlay[data-state="open"] { animation: leadership-appear 140ms ease-out; }
+.leadership-leaderboard[data-state="closed"],
+.leadership-leaderboard-overlay[data-state="closed"] { animation: leadership-disappear 120ms ease-in; }
+@keyframes leadership-appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes leadership-disappear { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .leadership-leaderboard[data-state], .leadership-leaderboard-overlay[data-state] { animation: none; }
+}
+
 /* Touch WebKit can drop rounded gradient tiles when an animated, scrollable
    drawer samples their backdrop. Keep only these small surfaces composited;
    do not promote the entire dashboard or every student row to a GPU layer. */

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useSearchParams, usePathname } from "next/navigation"
+import { getStaffPortalBase } from "@/lib/portal-paths"
 
 import { Button } from "@/components/ui/button"
 import { StudentDetailView } from "@/app/admin/students/[id]/StudentDetailView"
@@ -11,6 +12,7 @@ import type { Student } from "@/app/admin/students/page"
 
 export default function StaffStudentProfilePage() {
     const params = useParams()
+    const portalBase = getStaffPortalBase(usePathname())
     const studentId = params.id as string
     const searchParams = useSearchParams()
 
@@ -41,7 +43,7 @@ export default function StaffStudentProfilePage() {
                     Open Hifz register
                 </Button>
             </div>
-            <StudentDetailView canEdit={false} backTo="/staff" />
+            <StudentDetailView canEdit={false} backTo={portalBase} />
             {student && (
                 <HifzMonthlyRegister
                     open={registerOpen}

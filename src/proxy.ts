@@ -44,9 +44,7 @@ function decodeTokenRole(tokenValue: string): string | null {
 
 function getPortalForRole(role: string): string {
   if (ADMIN_ROLES.includes(role)) return '/admin';
-  // Principal / Vice Principal now supervise from the Mentor Portal (/staff),
-  // where the "Mentor Focus" feature lets them operate as any mentor.
-  if (PRINCIPAL_ROLES.includes(role)) return '/staff';
+  if (PRINCIPAL_ROLES.includes(role)) return '/leadership';
   if (STAFF_ROLES.includes(role)) return '/staff';
   if (role === 'parent') return '/parent';
   return '/staff';
@@ -98,6 +96,7 @@ export async function proxy(request: NextRequest) {
     if (
       currentPath.startsWith('/admin') ||
       currentPath.startsWith('/staff') ||
+      currentPath.startsWith('/leadership') ||
       currentPath.startsWith('/principal')
     ) {
       const loginUrl = request.nextUrl.clone();
@@ -169,6 +168,7 @@ export async function proxy(request: NextRequest) {
     currentPath.startsWith('/admin') ||
     currentPath.startsWith('/principal') ||
     currentPath.startsWith('/staff') ||
+    currentPath.startsWith('/leadership') ||
     currentPath.startsWith('/parent');
 
   if (!isProtected) return NextResponse.next();
@@ -181,6 +181,18 @@ export async function proxy(request: NextRequest) {
 
   if (currentPath.startsWith('/admin') && !ADMIN_ROLES.includes(role)) {
     return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
+  }
+  if (currentPath.startsWith('/leadership') && !PRINCIPAL_ROLES.includes(role) && !ADMIN_ROLES.includes(role)) {
+    return NextResponse.redirect(new URL(getPortalForRole(role), request.url));
+  }
+  // Preserve existing bookmarks while moving leaders out of the mentor layout.
+  if (currentPath === '/staff' || currentPath.startsWith('/staff/')) {
+    if (PRINCIPAL_ROLES.includes(role)) {
+      const destination = request.nextUrl.clone();
+      const suffix = currentPath.slice('/staff'.length);
+      destination.pathname = suffix === '/assigned' ? '/leadership' : '/leadership' + suffix;
+      return NextResponse.redirect(destination);
+    }
   }
   // /principal portal was retired — anyone landing there is sent to their portal.
   if (currentPath.startsWith('/principal')) {

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { ArrowLeft, FileText, Link2, Save, Search, Send, UserRound, Users } from "lucide-react"
 import { toast } from "sonner"
 import api from "@/lib/api"
+import { getStaffPortalBase } from "@/lib/portal-paths"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -16,7 +17,7 @@ interface Category { id: string; name: string; offences: Offence[] }
 const initialForm = { student_id:"",category_id:"",offence_type_id:"",severity:"minor",reported_at:new Date().toISOString().slice(0,16),location:"",hostel:"",floor:"",room_number:"",short_description:"",immediate_action:"",student_position:"not_recorded",parent_notification_required:false,private_staff_notes:"",witness_name:"",witness_details:"",evidence_url:"" }
 
 export default function NewDisciplineIncidentPage(){
-    const router=useRouter(); const pathname=usePathname(); const portalBase=pathname.startsWith("/staff/")?"/staff/disciplinary":"/admin/disciplinary"; const [mode,setMode]=useState<"quick"|"detailed">("quick"); const [form,setForm]=useState(initialForm); const [categories,setCategories]=useState<Category[]>([]); const [students,setStudents]=useState<Student[]>([]); const [studentSearch,setStudentSearch]=useState(""); const [loadingStudents,setLoadingStudents]=useState(false); const [saving,setSaving]=useState(false)
+    const router=useRouter(); const pathname=usePathname(); const portalBase=(pathname.startsWith("/staff/") || pathname.startsWith("/leadership/"))?getStaffPortalBase(pathname)+"/disciplinary":"/admin/disciplinary"; const [mode,setMode]=useState<"quick"|"detailed">("quick"); const [form,setForm]=useState(initialForm); const [categories,setCategories]=useState<Category[]>([]); const [students,setStudents]=useState<Student[]>([]); const [studentSearch,setStudentSearch]=useState(""); const [loadingStudents,setLoadingStudents]=useState(false); const [saving,setSaving]=useState(false)
     const selectedCategory=categories.find(item=>item.id===form.category_id); const offences=selectedCategory?.offences || []; const selectedOffence=offences.find(item=>item.id===form.offence_type_id)
     const set=(key:string,value:unknown)=>setForm(current=>({...current,[key]:value}))
     useEffect(()=>{api.get("/discipline/settings").then(response=>setCategories(response.data.categories||[])).catch(()=>toast.error("Could not load discipline categories"))},[])

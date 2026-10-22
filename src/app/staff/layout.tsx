@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import api from "@/lib/api"
-import { getUserRole, getUserRoleSync, clearRoleCache } from "@/lib/auth"
+import { clearRoleCache } from "@/lib/auth"
 import { ModeToggle } from "@/components/mode-toggle"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
@@ -29,19 +29,8 @@ export default function StaffLayout({
     const [actingAsStudentName, setActingAsStudentName] = useState<string | null>(null)
     // Mentor Focus (supervisor) vs regular mentor delegation — different banner.
     const [isFocusMode, setIsFocusMode] = useState(false)
-    // Role-aware branding: leaders see "Leadership Portal", mentors "Mentor Portal".
-    // Seeded from sessionStorage cache so the header renders correctly on the
-    // first paint — no flicker from "Mentor Portal" → "Leadership Portal".
-    const [brand, setBrand] = useState(() => {
-        const r = getUserRoleSync()
-        return (r === 'principal' || r === 'vice_principal') ? 'Leadership Portal' : 'Mentor Portal'
-    })
-    // Leaders (Principal / VP) don't request delegation — they use Mentor Focus —
-    // so the "Assigned" (delegation requests) nav item is hidden for them.
-    const [isLeader, setIsLeader] = useState(() => {
-        const r = getUserRoleSync()
-        return r === 'principal' || r === 'vice_principal'
-    })
+    const brand = "Mentor Portal"
+    const isLeader = false
 
     useEffect(() => {
         setMounted(true)
@@ -53,14 +42,6 @@ export default function StaffLayout({
             setActingAsStudentName(studentName)
             setIsFocusMode(sessionStorage.getItem('mentorFocus') === '1')
         }
-        getUserRole()
-            .then((r) => {
-                if (r === 'principal' || r === 'vice_principal') {
-                    setBrand('Leadership Portal')
-                    setIsLeader(true)
-                }
-            })
-            .catch(() => {})
     }, [])
 
     useEffect(() => {
