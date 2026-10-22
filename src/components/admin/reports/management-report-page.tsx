@@ -18,7 +18,7 @@ type Filters = { academic_years?: AcademicYear[]; groups?: GroupFilter[] }
 type Pagination = { total: number; limit: number; offset: number; has_more: boolean }
 type StudentRow = {
     adm_no: string; name: string; standard: string; division?: string; cells?: Record<string, string>
-    present?: number; absent?: number; leave?: number; pending?: number; cancelled?: number; total?: number
+    present?: number; late?: number; absent?: number; leave?: number; pending?: number; cancelled?: number; total?: number
     percentage?: number; attendance_percentage?: number; recited_days?: number; new_entries?: number
     recent_entries?: number; juz_entries?: number
 }
@@ -121,6 +121,7 @@ const inputClass = "h-10 min-w-0 rounded-md border border-slate-200 bg-white px-
 
 function statusStyle(value: string) {
     if (value === "P") return "bg-emerald-50 text-emerald-700 border border-emerald-200"
+    if (value === "T") return "bg-orange-50 text-orange-700 border border-orange-200"
     if (value === "A") return "bg-rose-50 text-rose-700 border border-rose-200"
     if (value === "L") return "bg-amber-50 text-amber-700 border border-amber-200"
     if (value === "C") return "bg-slate-100 text-slate-500 border border-slate-200"
@@ -262,11 +263,11 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
             downloadCsv(
                 "attendance-report-" + (sched?.name || "all") + "-" + startDate + "-to-" + endDate + ".csv",
                 [
-                    ["Admission No", "Student", "Class", "Division", ...dates, "Present", "Absent", "Leave", "Total", "%"],
+                    ["Admission No", "Student", "Class", "Division", ...dates, "Present", "Late", "Absent", "Leave", "Unconfirmed", "Total", "%"],
                     ...rows.map(row => [
                         row.adm_no, row.name, row.standard, row.division || "-",
                         ...dates.map(date => row.cells?.[date] || "-"),
-                        row.present, row.absent, row.leave, row.total, row.percentage,
+                        row.present, row.late, row.absent, row.leave, row.pending, row.total, row.percentage,
                     ]),
                 ],
             )
@@ -277,9 +278,9 @@ export function ManagementReportPage({ kind }: { kind: ManagementReportKind }) {
             downloadCsv(
                 "progress-report-" + startDate + "-to-" + endDate + ".csv",
                 [
-                    ["Admission No", "Student", "Class", "Division", "Present", "Absent", "Leave", "Cancelled", "Pending", "Attendance %", "Recited Days", "New", "Recent", "Juz"],
+                    ["Admission No", "Student", "Class", "Division", "Present", "Late", "Absent", "Leave", "Cancelled", "Unconfirmed", "Attendance %", "Recited Days", "New", "Recent", "Juz"],
                     ...rows.map(row => [
-                        row.adm_no, row.name, row.standard, row.division || "-", row.present, row.absent,
+                        row.adm_no, row.name, row.standard, row.division || "-", row.present, row.late, row.absent,
                         row.leave, row.cancelled, row.pending, row.attendance_percentage, row.recited_days,
                         row.new_entries, row.recent_entries, row.juz_entries,
                     ]),
@@ -584,11 +585,11 @@ function AttendanceTable({ response, selectedSchedule }: { response: ReportRespo
                         <tr>
                             <th className="sticky left-0 z-30 min-w-60 border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-left"># Student Name</th>
                             {dates.map(date => <th key={date} className="min-w-12 border-b border-r border-slate-200 px-2 py-3 text-center">{Number(date.slice(8))}</th>)}
-                            {["Present", "Absent", "Leave", "Total", "%"].map(label => <th key={label} className="min-w-16 border-b border-slate-200 px-2 py-3 text-center">{label}</th>)}
+                            {["Present", "Late", "Absent", "Leave", "Unconfirmed", "Total", "%"].map(label => <th key={label} className="min-w-16 border-b border-slate-200 px-2 py-3 text-center">{label}</th>)}
                         </tr>
                     </thead>
                     <tbody>
-                        {!rows.length && <EmptyRows columns={dates.length + 6} />}
+                        {!rows.length && <EmptyRows columns={dates.length + 8} />}
                         {rows.map((row, idx) => (
                             <tr key={row.adm_no} className="border-b border-slate-100 hover:bg-slate-50">
                                 <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-4 py-3 group-hover:bg-slate-50">
@@ -612,8 +613,10 @@ function AttendanceTable({ response, selectedSchedule }: { response: ReportRespo
                                     )
                                 })}
                                 <td className="px-2 text-center font-semibold text-emerald-700">{row.present || 0}</td>
+                                <td className="px-2 text-center font-semibold text-orange-700">{row.late || 0}</td>
                                 <td className="px-2 text-center font-semibold text-rose-700">{row.absent || 0}</td>
                                 <td className="px-2 text-center text-amber-700">{row.leave || 0}</td>
+                                <td className="px-2 text-center text-blue-700">{row.pending || 0}</td>
                                 <td className="px-2 text-center font-semibold text-slate-700">{row.total || 0}</td>
                                 <td className="px-2 text-center font-bold text-slate-900">{row.percentage || 0}%</td>
                             </tr>
@@ -623,6 +626,8 @@ function AttendanceTable({ response, selectedSchedule }: { response: ReportRespo
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
                 <span><b className="text-emerald-700">✓</b> Present</span>
+                <span><b className="text-orange-700">T</b> Late (included in attended)</span>
+                <span><b className="text-blue-700">N</b> Unconfirmed — included in total</span>
                 <span><b className="text-rose-700">X</b> Absent</span>
                 <span><b className="text-amber-700">L</b> Leave</span>
                 <span><b className="text-slate-500">C</b> Cancelled</span>
@@ -640,16 +645,17 @@ function ProgressTable({ rows }: { rows: StudentRow[] }) {
             <table className="min-w-[1050px] w-full text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                     <tr>
-                        {["Student", "Class", "Present", "Absent", "Leave", "Cancelled", "Pending", "Attendance", "Recited Days", "New", "Recent", "Juz"].map(label => <th key={label} className="border-b border-slate-200 px-4 py-3 text-left">{label}</th>)}
+                        {["Student", "Class", "Present", "Late", "Absent", "Leave", "Cancelled", "Unconfirmed", "Attendance", "Recited Days", "New", "Recent", "Juz"].map(label => <th key={label} className="border-b border-slate-200 px-4 py-3 text-left">{label}</th>)}
                     </tr>
                 </thead>
                 <tbody>
-                    {!rows.length && <EmptyRows columns={12} />}
+                    {!rows.length && <EmptyRows columns={13} />}
                     {rows.map(row => (
                         <tr key={row.adm_no} className="border-b border-slate-100 hover:bg-slate-50">
                             <td className="px-4 py-3"><div className="font-semibold text-slate-900">{row.name}</div><div className="text-xs text-slate-500">{row.adm_no}</div></td>
                             <td className="px-4">{row.standard}{row.division ? " - " + row.division : ""}</td>
                             <td className="px-4 font-semibold text-emerald-700">{row.present || 0}</td>
+                            <td className="px-4 font-semibold text-orange-700">{row.late || 0}</td>
                             <td className="px-4 font-semibold text-rose-700">{row.absent || 0}</td>
                             <td className="px-4 text-amber-700">{row.leave || 0}</td>
                             <td className="px-4 text-slate-500">{row.cancelled || 0}</td>

@@ -415,7 +415,7 @@ function entriesForDay(logs: any[], stage: HifzStage) {
 function monthSummary(logs: any[], student: RegisterStudent, completedJuz = 0) {
     const newHifz = logs.filter((log) => log.mode === 'New Verses');
     const recent = logs.filter((log) => log.mode === 'Recent Revision');
-    const juz = logs.filter((log) => log.mode === 'Juz Revision');
+    const juz = logs.filter((log) => log.mode === 'Juz Revision' || (log.mode === 'Recent Revision' && !!log.juz_number));
     const newJuz = logs.filter((log) => log.mode === 'Juz Revision (New)');
     const oldJuz = logs.filter((log) => log.mode === 'Juz Revision (Old)');
     const totalNewJuz = newJuz.reduce((total, log) => total + portionValue(log.juz_portion), 0);

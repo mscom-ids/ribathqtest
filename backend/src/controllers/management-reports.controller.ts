@@ -98,7 +98,8 @@ function leaveApplies(leave: any, schedule: any, day: string, studentStandard: s
 
 function statusCode(value: any) {
     const status = String(value || '').toLowerCase();
-    if (status === 'present' || status === 'late') return 'P';
+    if (status === 'present') return 'P';
+    if (status === 'late') return 'T';
     if (status === 'absent' || status === 'outside') return 'A';
     if (status === 'leave') return 'L';
     return 'N';
@@ -111,6 +112,7 @@ function dayCode(values: string[]) {
     if (active.includes('N')) return 'N';
     if (active.includes('A')) return 'A';
     if (active.every(value => value === 'L')) return 'L';
+    if (active.includes('T')) return 'T';
     return 'P';
 }
 
@@ -322,7 +324,7 @@ function pageInfo(students: any[], options: Options) {
 export const getManagementAttendanceReport = async (req: Request, res: Response) => {
     try {
         const options = await resolveOptions(req);
-        const result = await cachedResult(makeCacheKey('reports:management-attendance:v6', cacheParts(options)), 120000, async () => {
+        const result = await cachedResult(makeCacheKey('reports:management-attendance:v7', cacheParts(options)), 120000, async () => {
             const scheduleSql = `
                 SELECT a.id, a.name, a.class_type, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, 
                        a.mentor_id, sub.id AS subject_id, sub.name AS subject_name, sub.mentor_id AS subject_mentor_id,
@@ -464,7 +466,7 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
                     const rows = students.filter((student: any) =>
                         subject.schedules.some((schedule: any) => studentMatchesSchedule(student, schedule))
                     ).map((student: any) => {
-                        const totals = { present: 0, absent: 0, leave: 0, pending: 0, cancelled: 0, total: 0 };
+                        const totals = { present: 0, late: 0, absent: 0, leave: 0, pending: 0, cancelled: 0, total: 0 };
                         const cells: Record<string, string> = {};
                         
                         for (const day of subjectDates) {
@@ -496,13 +498,16 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
                             const resolvedCode = dayCode(dayCodes);
                             cells[day] = resolvedCode;
                             
-                            const totalCodes = subject.isAll ? dayCodes : [resolvedCode];
+                            // Cells summarize a day; totals must count every session,
+                            // including multiple occurrences of the same subject.
+                            const totalCodes = dayCodes;
                             for (const totalCode of totalCodes) {
                                 if (totalCode === 'C') {
                                     totals.cancelled += 1;
                                 } else {
                                     totals.total += 1;
                                     if (totalCode === 'N') totals.pending += 1;
+                                    if (totalCode === 'T') totals.late += 1;
                                     if (totalCode === 'P') { totals.present += 1; summary.present += 1; }
                                     if (totalCode === 'A') { totals.absent += 1; summary.absent += 1; }
                                     if (totalCode === 'L') { totals.leave += 1; summary.leave += 1; }
@@ -510,11 +515,11 @@ export const getManagementAttendanceReport = async (req: Request, res: Response)
                             }
                         }
                         
-                        const denominator = totals.present + totals.absent;
+                        const denominator = totals.total;
                         return {
                             adm_no: student.adm_no, name: student.name, photo_url: student.photo_url,
                             standard: student.standard, division: student.division, cells, ...totals,
-                            percentage: denominator ? Math.round(totals.present / denominator * 1000) / 10 : 0,
+                            percentage: denominator ? Math.min(totals.pending > 0 ? 99.9 : 100, Math.round((totals.present + totals.late) / denominator * 1000) / 10) : 0,
                         };
                     });
                     
@@ -638,7 +643,7 @@ export const getTopPerformanceLeaderboard = async (req: Request, res: Response) 
 export const getManagementProgressReport = async (req: Request, res: Response) => {
     try {
         const options = await resolveOptions(req);
-        const result = await cachedResult(makeCacheKey('reports:management-progress:v2', cacheParts(options)), 120000, async () => {
+        const result = await cachedResult(makeCacheKey('reports:management-progress:v3', cacheParts(options)), 120000, async () => {
             const [filters, rosterResult] = await Promise.all([loadFilters(options.academicYearId), loadRoster(options)]);
             const students = rosterResult.rows.map((student: any) => ({
                 ...student, attendance_standard: student.standard,
@@ -653,14 +658,14 @@ export const getManagementProgressReport = async (req: Request, res: Response) =
             const rows = students.map((student: any) => {
                 const a = attendance.get(student.adm_no);
                 const h: any = hifz.get(student.adm_no) || {};
-                const denominator = Number(a?.presentClasses || 0) + Number(a?.absentClasses || 0);
+                const denominator = Number(a?.effectiveClasses || 0);
                 return {
                     adm_no: student.adm_no, name: student.name, photo_url: student.photo_url,
                     standard: student.standard, division: student.division,
-                    present: a?.presentClasses || 0, absent: a?.absentClasses || 0,
+                    present: a?.presentClasses || 0, late: a?.lateClasses || 0, absent: a?.absentClasses || 0,
                     leave: a?.leaveClasses || 0, cancelled: a?.cancelledClasses || 0,
-                    pending: a?.notAttendedClasses || 0,
-                    attendance_percentage: denominator ? Math.round(Number(a?.presentClasses || 0) / denominator * 1000) / 10 : 0,
+                    pending: a?.pendingClasses || 0,
+                    attendance_percentage: denominator ? Math.min(a?.pendingClasses ? 99.9 : 100, Math.round(Number(a?.attendedClasses || 0) / denominator * 1000) / 10) : 0,
                     recited_days: Number(h.recited_days || 0), new_entries: Number(h.new_entries || 0),
                     recent_entries: Number(h.recent_entries || 0), juz_entries: Number(h.juz_entries || 0),
                 };

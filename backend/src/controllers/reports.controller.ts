@@ -285,9 +285,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
 
     return students.map((s: any) => {
        const summary = attendanceSummaries.get(s.adm_no);
-       const unmarkedClasses = summary
-         ? Math.max(0, summary.notAttendedClasses - summary.absentClasses - summary.leaveClasses)
-         : 0;
+       const unmarkedClasses = summary?.pendingClasses || 0;
        const att = summary ? {
          total_classes: summary.effectiveClasses,
          planned_classes: summary.plannedClasses,
@@ -295,7 +293,7 @@ export const getStudentReports = async (req: Request, res: Response) => {
          attended: summary.attendedClasses,
          not_attended: summary.notAttendedClasses,
          present: summary.presentClasses,
-         absent: summary.absentClasses + unmarkedClasses,
+         absent: summary.absentClasses,
          marked_absent: summary.absentClasses,
          unmarked: unmarkedClasses,
          late: summary.lateClasses,
@@ -814,7 +812,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         // are excluded from every aggregate the report card renders next to
         // the score so the numbers stay consistent.
         const isEligibleJuzRevisionLog = (log: any) => {
-            if (!log?.mode || !String(log.mode).startsWith('Juz Revision')) return false;
+            if (!log?.mode || !(String(log.mode).startsWith('Juz Revision') || (!isHafiz && log.mode === 'Recent Revision' && !!log.juz_number))) return false;
             if (isHafiz) return true;
             if (!firstJuzCompletionDate) return false;
             return toDateKey(log.entry_date) > firstJuzCompletionDate;
@@ -824,7 +822,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
         const hifzAggByMode = new Map<string, any>();
         periodLogs.forEach((log: any) => {
             const mode = log.mode || 'Unknown';
-            const isJuzRev = typeof log.mode === 'string' && log.mode.startsWith('Juz Revision');
+            const isJuzRev = typeof log.mode === 'string' && (log.mode.startsWith('Juz Revision') || (!isHafiz && log.mode === 'Recent Revision' && !!log.juz_number));
             if (isJuzRev && !isEligibleJuzRevisionLog(log)) return;
             const metric = hifzAggByMode.get(mode) || { mode, entry_count: 0, verses_recited: 0, pages_recited: 0, juz_recited: 0 };
             metric.entry_count++;
@@ -859,7 +857,7 @@ export const getUnifiedStudentProgressReport = async (req: Request, res: Respons
             : ['Juz Revision', 'Juz Revision (New)', 'Juz Revision (Old)'];
         const totalJuzRecited = Math.round(
             (periodLogs
-                .filter((l: any) => l.mode && juzRevisionModesForTotal.includes(l.mode) && isEligibleJuzRevisionLog(l))
+                .filter((l: any) => l.mode && (juzRevisionModesForTotal.includes(l.mode) || (!isHafiz && l.mode === 'Recent Revision' && !!l.juz_number)) && isEligibleJuzRevisionLog(l))
                 .reduce((sum: number, l: any) => sum + juzPortionValue(l.juz_portion), 0)
                 + Number.EPSILON) * 100
         ) / 100;

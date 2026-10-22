@@ -12,7 +12,7 @@ import { getDelegationContext, getStaffId } from '../utils/staff.utils';
 
 const HIFZ_SUMMARY_TTL_MS = 5 * 60_000;
 const HIFZ_MONTHLY_TTL_MS = 10 * 60_000;
-const HIFZ_MONTHLY_POINT_DAY_VERSION = 11;
+const HIFZ_MONTHLY_POINT_DAY_VERSION = 13;
 
 const normalizeClassDayCount = (value: any) => {
     const parsed = Number(value || 0);
@@ -226,15 +226,19 @@ function normalizeHifzLogInput(log: any, index = 0) {
     if (!entryDate) throw hifzValidationError(`${label}: entry date is required`);
     if (!VALID_HIFZ_MODES.has(mode)) throw hifzValidationError(`${label}: invalid Hifz mode`);
 
-    if (['New Verses', 'Recent Revision'].includes(mode)) {
+    const recentJuzClear = mode === 'Recent Revision' && juzNumber !== null;
+    if (recentJuzClear && (log?.surah_name || startVerse !== null || endVerse !== null)) {
+        throw hifzValidationError(`${label}: select either Surah verses or Juz Clear, not both`);
+    }
+    if (['New Verses', 'Recent Revision'].includes(mode) && !recentJuzClear) {
         if (!log?.surah_name) throw hifzValidationError(`${label}: Surah is required`);
         if (!startVerse || Number.isNaN(startVerse)) throw hifzValidationError(`${label}: start verse is required`);
         if (!endVerse || Number.isNaN(endVerse)) throw hifzValidationError(`${label}: end verse is required`);
         if (startVerse > endVerse) throw hifzValidationError(`${label}: end verse must be after start verse`);
     }
 
-    if (mode.startsWith('Juz Revision')) {
-        if (!juzNumber || Number.isNaN(juzNumber) || juzNumber < 1 || juzNumber > 30) {
+    if (mode.startsWith('Juz Revision') || recentJuzClear) {
+        if (!juzNumber || !Number.isInteger(juzNumber) || juzNumber < 1 || juzNumber > 30) {
             throw hifzValidationError(`${label}: Juz number must be between 1 and 30`);
         }
         if (!juzPortion || !VALID_JUZ_PORTIONS.has(juzPortion)) {
@@ -267,13 +271,14 @@ type HifzEligibilityLog = {
     surah_name?: string | null;
     start_v?: number | null;
     end_v?: number | null;
+    juz_number?: number | null;
 };
 
 const enforceJuzRevisionEligibility = async (
     queryable: { query: (text: string, params?: any[]) => Promise<{ rows: any[] }> },
     logs: HifzEligibilityLog[],
 ) => {
-    const candidates = logs.filter(log => String(log.mode || '').startsWith('Juz Revision'));
+    const candidates = logs.filter(log => String(log.mode || '').startsWith('Juz Revision') || (log.mode === 'Recent Revision' && !!log.juz_number));
     if (candidates.length === 0) return;
 
     const studentIds = [...new Set(candidates.map(log => String(log.student_id)))];
@@ -919,7 +924,7 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
                 [student_id, academicContext.academicYearId]
             ),
             db.query(
-                `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_portion
+                `SELECT mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion
                  FROM hifz_logs
                  WHERE student_id = $1 AND entry_date >= $2 AND entry_date <= $3
                    AND deleted_at IS NULL`,
@@ -1235,7 +1240,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                     let newJuzTotal = 0;
                     let oldJuzTotal = 0;
                     studentLogs.forEach((log: any) => {
-                        if (log.mode === 'Juz Revision') plainJuzTotal += portionValue(log.juz_portion);
+                        if (log.mode === 'Juz Revision' || (log.mode === 'Recent Revision' && log.juz_number)) plainJuzTotal += portionValue(log.juz_portion);
                         else if (log.mode === 'Juz Revision (New)') newJuzTotal += portionValue(log.juz_portion);
                         else if (log.mode === 'Juz Revision (Old)') oldJuzTotal += portionValue(log.juz_portion);
                     });
@@ -1257,7 +1262,7 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             attendance: manualRecord.attendance || '-',
                             is_manual: true,
                             ...calculatedPoints,
-                            grade: manualRecord.grade || '-',
+                            grade: isHafiz ? (manualRecord.grade || '-') : calculatedPoints.grade,
                             totalClassDays: effectiveClassDays,
                             detectedClassDays,
                             scheduledClassDays: targetSummary?.plannedClasses || scheduledClassDays,
@@ -1265,6 +1270,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                             cancelledClasses: targetSummary?.cancelledClasses || 0,
                             attendedClasses: attendanceSummary?.attendedClasses || 0,
                             notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
+                            lateClasses: attendanceSummary?.lateClasses || 0,
+                            pendingClasses: attendanceSummary?.pendingClasses || 0,
                         };
                     }
 
@@ -1312,6 +1319,8 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         cancelledClasses: targetSummary?.cancelledClasses || 0,
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
+                        lateClasses: attendanceSummary?.lateClasses || 0,
+                        pendingClasses: attendanceSummary?.pendingClasses || 0,
                         is_manual: false,
                         ...calculatedPoints
                     };

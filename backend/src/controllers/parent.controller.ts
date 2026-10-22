@@ -134,6 +134,7 @@ function groupAttendanceSessions(sessions: AttendanceSessionSummary[] = []) {
         existing.effective_total += session.effective_total || 0;
         existing.attended += session.attended || 0;
         existing.not_attended += session.not_attended || 0;
+        existing.pending += session.pending || 0;
         existing.present += session.present || 0;
         existing.late += session.late || 0;
         existing.absent += session.absent || 0;
@@ -155,7 +156,7 @@ function withGroupedAttendanceSessions(summary: StudentAttendanceSummary | null 
         ...summary,
         totalClasses: effectiveClasses,
         attendanceLabel: effectiveClasses
-            ? `${attendedClasses} attended, ${notAttendedClasses} not attended`
+            ? `${attendedClasses} attended, ${notAttendedClasses} not attended, ${summary.lateClasses || 0} late (included in attended), ${summary.pendingClasses || 0} unconfirmed`
             : '-',
         sessions: groupAttendanceSessions(summary.sessions),
     };

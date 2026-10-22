@@ -5,13 +5,10 @@ export type HifzPerformanceScoreSource = {
     points?: number | string | null
 }
 
-/** Returns the comparable 70-point score used by Top Performers. */
+/** Actual earned points, never a percentage rescaled to an invented 70-point score. */
 export function getHifzPerformancePoints(source: HifzPerformanceScoreSource): number | null {
-    const percentage = Number(source.percentage)
-    if (source.percentage !== undefined && source.percentage !== null && Number.isFinite(percentage)) {
-        return Math.round((percentage * 0.7 + Number.EPSILON) * 100) / 100
-    }
-
-    const legacyPoints = Number(source.totalPoints ?? source.total_points ?? source.points)
-    return Number.isFinite(legacyPoints) ? legacyPoints : null
+    const value = source.totalPoints ?? source.total_points ?? source.points
+    if (value === undefined || value === null || value === '') return null
+    const points = Number(value)
+    return Number.isFinite(points) ? Math.round((points + Number.EPSILON) * 100) / 100 : null
 }

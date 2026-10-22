@@ -21,6 +21,7 @@ export type AttendanceSessionSummary = {
     effective_total: number;
     attended: number;
     not_attended: number;
+    pending: number;
     present: number;
     late: number;
     absent: number;
@@ -37,6 +38,7 @@ export type StudentAttendanceSummary = {
     attendedClasses: number;
     weightedAttendedClasses: number;
     notAttendedClasses: number;
+    pendingClasses: number;
     presentClasses: number;
     lateClasses: number;
     absentClasses: number;
@@ -54,6 +56,7 @@ const emptySummary = (): StudentAttendanceSummary => ({
     attendedClasses: 0,
     weightedAttendedClasses: 0,
     notAttendedClasses: 0,
+    pendingClasses: 0,
     presentClasses: 0,
     lateClasses: 0,
     absentClasses: 0,
@@ -229,6 +232,8 @@ function formatAttendanceLabel(summary: StudentAttendanceSummary) {
     const parts: string[] = [];
     parts.push(`${summary.attendedClasses} attended`);
     parts.push(`${summary.notAttendedClasses} not attended`);
+    if (summary.lateClasses) parts.push(`${summary.lateClasses} late (included in attended)`);
+    if (summary.pendingClasses) parts.push(`${summary.pendingClasses} unconfirmed`);
     if (summary.cancelledClasses > 0) parts.push(`${summary.cancelledClasses} cancelled`);
     return parts.join(', ');
 }
@@ -421,6 +426,7 @@ async function computeStudentAttendanceSummaries(
                         effective_total: 0,
                         attended: 0,
                         not_attended: 0,
+                        pending: 0,
                         present: 0,
                         late: 0,
                         absent: 0,
@@ -482,8 +488,8 @@ async function computeStudentAttendanceSummaries(
                     session.leave += 1;
                     session.not_attended += 1;
                 } else {
-                    summary.notAttendedClasses += 1;
-                    session.not_attended += 1;
+                    summary.pendingClasses += 1;
+                    session.pending += 1;
                 }
 
                 summaries.set(studentId, summary);
@@ -520,7 +526,7 @@ export async function getStudentAttendanceSummaries(
     if (students.length === 0) return new Map<string, StudentAttendanceSummary>();
 
     return cachedResult(
-        makeCacheKey('attendance:student-summaries:v2', {
+        makeCacheKey('attendance:student-summaries:v3', {
             startDate,
             endDate,
             classType: classType || 'all',

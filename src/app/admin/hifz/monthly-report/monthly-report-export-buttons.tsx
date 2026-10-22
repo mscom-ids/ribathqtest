@@ -20,6 +20,11 @@ type ExportStudent = {
     attendedClasses?: number
     notAttendedClasses?: number
     cancelledClasses?: number
+    lateClasses?: number
+    pendingClasses?: number
+    totalPoints?: number | string | null
+    basePoints?: number
+    bonusPoints?: number
 }
 
 type Props = {
@@ -40,6 +45,8 @@ function attendanceText(student: ExportStudent) {
     const parts = [
         `${student.attendedClasses || 0} attended`,
         `${student.notAttendedClasses || 0} not attended`,
+        `${student.lateClasses || 0} late (included in attended)`,
+        `${student.pendingClasses || 0} unconfirmed`,
     ]
     if ((student.cancelledClasses || 0) > 0) parts.push(`${student.cancelledClasses} cancelled`)
     return parts.join(", ")
@@ -66,6 +73,9 @@ export function MonthlyReportExportButtons({ month, students, search, standard, 
                     recent_days: student.recent_days,
                     juz_revision: student.juz_revision,
                     point_days: student.pointClassDays ?? 0,
+                    base_points: student.basePoints ?? student.totalPoints ?? 0,
+                    bonus_points: student.bonusPoints ?? 0,
+                    total_points: student.totalPoints ?? 0,
                     grade: student.grade,
                     attendance: attendanceText(student),
                     usthad_name: student.usthad_name,

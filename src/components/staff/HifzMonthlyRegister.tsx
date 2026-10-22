@@ -13,7 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import api from "@/lib/api"
 import { cn, resolveBackendUrl } from "@/lib/utils"
 import { SURAH_LIST } from "@/lib/data/surah-list"
-import { getArabic, toArabicNum, getSurahId, SURAH_VERSE_COUNTS, calculateCoveredPagesFromLogs } from "@/lib/hifz-progress"
+import { getArabic, toArabicNum, calculateCoveredPagesFromLogs } from "@/lib/hifz-progress"
+import { groupContinuousSurahEntries } from "@/lib/hifz-entry-ranges"
 
 type Stage = "MEMORIZING" | "HAFIZ_REVISION"
 type Activity = "newHifz" | "recentRevision" | "juzRevision" | "newJuzRevision" | "oldJuzRevision"
@@ -134,82 +135,11 @@ function entryChip(group: RenderGroup) {
 }
 
 function groupEntries(entries: Entry[]): RenderGroup[] {
-  if (!entries || entries.length === 0) return []
-
-  const rangeEntries: { entry: Entry; startGlobal: number; endGlobal: number }[] = []
-  const otherEntries: Entry[] = []
-
-  for (const entry of entries) {
-    if (entry.surah_name && entry.start_v && entry.end_v) {
-      const sId = getSurahId(entry.surah_name)
-      if (sId > 0 && sId <= 114) {
-        let offset = 0
-        for (let i = 1; i < sId; i++) {
-          offset += SURAH_VERSE_COUNTS[i - 1] || 0
-        }
-        rangeEntries.push({
-          entry,
-          startGlobal: offset + entry.start_v,
-          endGlobal: offset + entry.end_v,
-        })
-        continue
-      }
-    }
-    otherEntries.push(entry)
-  }
-
-  const groups: RenderGroup[] = []
-
-  if (rangeEntries.length > 0) {
-    rangeEntries.sort((a, b) => a.startGlobal - b.startGlobal)
-
-    let currentSegment: typeof rangeEntries = [rangeEntries[0]]
-
-    for (let i = 1; i < rangeEntries.length; i++) {
-      const prev = currentSegment[currentSegment.length - 1]
-      const curr = rangeEntries[i]
-
-      if (curr.startGlobal === prev.endGlobal + 1) {
-        currentSegment.push(curr)
-      } else {
-        if (currentSegment.length > 1) {
-          groups.push({
-            isCombined: true,
-            startEntry: currentSegment[0].entry,
-            endEntry: currentSegment[currentSegment.length - 1].entry,
-          })
-        } else {
-          groups.push({
-            isCombined: false,
-            startEntry: currentSegment[0].entry,
-          })
-        }
-        currentSegment = [curr]
-      }
-    }
-
-    if (currentSegment.length > 1) {
-      groups.push({
-        isCombined: true,
-        startEntry: currentSegment[0].entry,
-        endEntry: currentSegment[currentSegment.length - 1].entry,
-      })
-    } else if (currentSegment.length === 1) {
-      groups.push({
-        isCombined: false,
-        startEntry: currentSegment[0].entry,
-      })
-    }
-  }
-
-  for (const entry of otherEntries) {
-    groups.push({
-      isCombined: false,
-      startEntry: entry,
-    })
-  }
-
-  return groups
+  return groupContinuousSurahEntries(entries).map(group => ({
+    isCombined: group.length > 1,
+    startEntry: group[0],
+    endEntry: group.length > 1 ? group[group.length - 1] : undefined,
+  }))
 }
 
 function entryTooltip(entry: Entry) {
@@ -269,7 +199,7 @@ function buildWeek(index: number, days: Day[]): Week {
   // monthly page counts agree instead of drifting from a verse-count/15 heuristic.
   const pages = calculateCoveredPagesFromLogs(newHifz)
   const revisionDays = new Set(recent.map((entry) => entry.entry_date.slice(0, 10))).size
-  const juzTotal = juz.reduce((total, entry) => total + (entry.juz_portion ? portionValue(entry.juz_portion) : 0), 0)
+  const juzTotal = [...juz, ...recent.filter(entry => entry.juz_number)].reduce((total, entry) => total + (entry.juz_portion ? portionValue(entry.juz_portion) : 0), 0)
   return { index, days, summary: { pages, revisionDays, juz: juzTotal } }
 }
 
@@ -399,40 +329,14 @@ function emptyRangeDraft(): RangeDraft {
 }
 
 function compressEntriesToRanges(entries: DraftItem[]): RangeDraft[] {
-  const ranges: RangeDraft[] = []
-  let current: RangeDraft | null = null
-  let previous: DraftItem | null = null
-
-  for (const entry of entries) {
-    const surah = SURAH_BY_NAME.get(entry.surah_name)
-    const start = Number(entry.start_v)
-    const end = Number(entry.end_v)
-    if (!surah || !Number.isInteger(start) || !Number.isInteger(end)) continue
-
-    const previousSurah = previous ? SURAH_BY_NAME.get(previous.surah_name) : undefined
-    const previousEnd = Number(previous?.end_v)
-    const followsPrevious = !!current && !!previousSurah && (
-      (previousSurah.id === surah.id && previousEnd + 1 === start) ||
-      (previousSurah.id + 1 === surah.id && previousEnd === previousSurah.totalVerses && start === 1)
-    )
-
-    if (followsPrevious && current) {
-      current.toSurah = entry.surah_name
-      current.toAyah = entry.end_v
-      if (entry.id) current.entryIds = [...(current.entryIds || []), entry.id]
-    } else {
-      current = {
-        fromSurah: entry.surah_name,
-        fromAyah: entry.start_v,
-        toSurah: entry.surah_name,
-        toAyah: entry.end_v,
-        entryIds: entry.id ? [entry.id] : [],
-      }
-      ranges.push(current)
-    }
-    previous = entry
-  }
-
+  const ranges = groupContinuousSurahEntries(entries.filter(entry => entry.id || entry.surah_name || entry.start_v || entry.end_v))
+    .map(group => ({
+      fromSurah: group[0].surah_name,
+      fromAyah: group[0].start_v,
+      toSurah: group[group.length - 1].surah_name,
+      toAyah: group[group.length - 1].end_v,
+      entryIds: group.flatMap(entry => entry.id ? [entry.id] : []),
+    }))
   return ranges.length ? ranges : [emptyRangeDraft()]
 }
 
@@ -470,6 +374,28 @@ function expandRangeDrafts(ranges: RangeDraft[]): DraftItem[] {
   return expanded
 }
 
+function expandRangesWithSavedIds(ranges: RangeDraft[], originals: DraftItem[]) {
+  const originalById = new Map(originals.filter(item => item.id).map(item => [item.id!, item]))
+  const unusedIds = new Set(originals.flatMap(item => item.id ? [item.id] : []))
+  const items = ranges.flatMap(range => {
+    const expanded = expandRangeDrafts([range])
+    const saved = (range.entryIds || []).flatMap(id => originalById.has(id) ? [originalById.get(id)!] : [])
+    const previous = saved.length ? compressEntriesToRanges(saved) : []
+    if (previous.length === 1 && previous[0].fromSurah === range.fromSurah && previous[0].fromAyah === range.fromAyah
+      && previous[0].toSurah === range.toSurah && previous[0].toAyah === range.toAyah) {
+      // A view change alone must not rewrite or consolidate saved records.
+      saved.forEach(item => unusedIds.delete(item.id!))
+      return saved
+    }
+    return expanded.map(row => {
+      const original = saved.find(item => item.surah_name === row.surah_name && unusedIds.has(item.id!))
+      if (original?.id) unusedIds.delete(original.id)
+      return { ...original, ...row, id: original?.id }
+    })
+  })
+  return { items, removedIds: [...unusedIds] }
+}
+
 function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   target: EditorTarget
   onClose: () => void
@@ -480,6 +406,8 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   const existing = useMemo(() => (target ? target.day.entries[target.activity] || [] : []), [target])
   const allowed = target?.day.eligibility.allowed ?? false
   const isRange = activity?.kind === "range"
+  const [juzClear, setJuzClear] = useState(false)
+  const [juzItems, setJuzItems] = useState<DraftItem[]>([])
   const [items, setItems] = useState<DraftItem[]>([])
   const [removedIds, setRemovedIds] = useState<string[]>([])
   const [entryMode, setEntryMode] = useState<"individual" | "range">("individual")
@@ -489,14 +417,17 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const drafts = existing.length ? existing.map(toDraft) : [emptyDraft()]
+    const surahEntries = isRange ? existing.filter(entry => !entry.juz_number) : existing
+    const drafts = surahEntries.length ? surahEntries.map(toDraft) : [emptyDraft()]
+    setJuzItems(existing.filter(entry => entry.juz_number).map(toDraft))
+    setJuzClear(false)
     setItems(drafts)
     setRemovedIds([])
     setRangeRemovedIds([])
     // Restore range-entry records in their compact From → To form. Users can
     // still switch to Daily Entry if they need individual Surah control.
-    setEntryMode(isRange && existing.length ? "range" : "individual")
-    setRanges(isRange && existing.length ? compressEntriesToRanges(drafts) : [emptyRangeDraft()])
+    setEntryMode(isRange && surahEntries.length ? "range" : "individual")
+    setRanges(isRange && surahEntries.length ? compressEntriesToRanges(drafts) : [emptyRangeDraft()])
     setError(null)
   }, [existing, isRange, target?.day.date, target?.activity])
 
@@ -513,7 +444,7 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
       setError(null)
       try {
         const remaining = items.filter((_, i) => i !== index)
-        await onSave({ day: target.day, activity: target.activity }, remaining.filter((row) => row.id), [item.id])
+        await onSave({ day: target.day, activity: target.activity }, [...remaining, ...(target.activity === "recentRevision" ? juzItems : [])].filter((row) => row.id), [item.id, ...removedIds])
         if (remaining.some((row) => !row.id)) {
           setItems(remaining)
         } else {
@@ -536,14 +467,33 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
   const setRange = (index: number, patch: Partial<RangeDraft>) =>
     setRanges((current) => current.map((range, i) => (i === index ? { ...range, ...patch } : range)))
   const addRange = () => setRanges((current) => [...current, emptyRangeDraft()])
-  const removeRange = (index: number) => setRanges((current) => {
-    const removed = current[index]
+  const removeRange = (index: number) => {
+    const removed = ranges[index]
     if (removed?.entryIds?.length) {
       setRangeRemovedIds((ids) => Array.from(new Set([...ids, ...removed.entryIds!])))
     }
-    const next = current.filter((_, i) => i !== index)
-    return next
-  })
+    setRanges(current => current.filter((_, i) => i !== index))
+  }
+
+  const switchEntryMode = (next: "individual" | "range") => {
+    if (next === entryMode || saving) return
+    setError(null)
+    try {
+      if (next === "range") {
+        setRanges(compressEntriesToRanges(items))
+        setRangeRemovedIds([])
+      } else {
+        const nonempty = ranges.filter(range => range.fromSurah || range.fromAyah || range.toSurah || range.toAyah)
+        const expanded = expandRangesWithSavedIds(nonempty, items)
+        setItems(expanded.items.length ? expanded.items : [emptyDraft()])
+        setRemovedIds(ids => Array.from(new Set([...ids, ...rangeRemovedIds, ...expanded.removedIds])))
+        setRangeRemovedIds([])
+      }
+      setEntryMode(next)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Complete the range before switching entry views.")
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -551,27 +501,15 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
     try {
       let saveItems = items
       let deletedIds = removedIds
-      if (entryMode === "range") {
-        const existingById = new Map(items.filter((item) => item.id).map((item) => [item.id!, item]))
-        const unusedIds = new Set(items.flatMap((item) => item.id ? [item.id] : []))
-        const overflowIds: string[] = []
-        saveItems = ranges.flatMap((range) => {
-          const expanded = expandRangeDrafts([range])
-          const ids = range.entryIds || []
-          const rangeItems: DraftItem[] = expanded.map((row, index) => {
-            const id = ids[index]
-            if (id) unusedIds.delete(id)
-            const original = id ? existingById.get(id) : undefined
-            return { ...row, id, recorded_by_name: original?.recorded_by_name, created_at: original?.created_at, updated_at: original?.updated_at }
-          })
-          for (const id of ids.slice(expanded.length)) {
-            overflowIds.push(id)
-            unusedIds.delete(id)
-          }
-          return rangeItems
-        })
-        deletedIds = Array.from(new Set([...removedIds, ...rangeRemovedIds, ...overflowIds, ...unusedIds]))
+      if (target.activity === "recentRevision" && juzItems.some(item => (item.juz_number || item.juz_portion) && (!item.juz_number || !item.juz_portion))) {
+        throw new Error("Select both the Juz number and portion for each Juz Clear entry.")
       }
+      if (entryMode === "range") {
+        const expanded = expandRangesWithSavedIds(ranges.filter(range => range.fromSurah || range.fromAyah || range.toSurah || range.toAyah), items)
+        saveItems = expanded.items
+        deletedIds = Array.from(new Set([...removedIds, ...rangeRemovedIds, ...expanded.removedIds]))
+      }
+      if (target.activity === "recentRevision") saveItems = [...saveItems, ...juzItems]
       await onSave({ day: target.day, activity: target.activity }, saveItems, deletedIds)
       onClose()
     } catch (cause) {
@@ -584,14 +522,14 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
 
   const showFields = allowed || existing.length > 0
   const hasRangeValue = ranges.some((range) => range.fromSurah || range.toSurah || range.fromAyah || range.toAyah)
-  const canSave = showFields && (entryMode === "range"
+  const canSave = showFields && (juzItems.some(item => item.juz_number) || (entryMode === "range"
     ? hasRangeValue || removedIds.length > 0 || rangeRemovedIds.length > 0
-    : items.some((item) => (isRange ? item.surah_name : item.juz_number) || item.id) || removedIds.length > 0)
+    : items.some((item) => (isRange ? item.surah_name : item.juz_number) || item.id) || removedIds.length > 0))
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <DialogHeader className="shrink-0 border-b border-slate-100 px-5 py-4 text-left">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <DialogTitle className="flex items-center gap-2 font-semibold text-slate-900">
               <span dir="rtl" className="text-base">{activity.ar}</span>
@@ -599,17 +537,10 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">{format(dayObj(target.day.date), "EEE, d MMMM yyyy")}</DialogDescription>
           </div>
-          {isRange && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEntryMode((mode) => mode === "range" ? "individual" : "range")}
-              className="shrink-0 border-emerald-200 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-            >
-              {entryMode === "range" ? "Daily Entry" : "Range Entry"}
-            </Button>
-          )}
+          {isRange && <div role="group" aria-label="Entry layout" className="flex shrink-0 rounded-lg border border-emerald-100 bg-emerald-50/50 p-1">
+            {target.activity === "recentRevision" && <button type="button" aria-pressed={juzClear} disabled={saving} onClick={() => { setJuzClear(value => !value); setJuzItems(value => value.length ? value : [emptyDraft()]) }} className={cn('rounded-md px-2 py-1.5 text-[11px] font-semibold', juzClear ? 'bg-emerald-700 text-white' : 'text-emerald-700')}>Juz Clear</button>}
+            {([['individual', 'Daily Entry'], ['range', 'Range Entry']] as const).map(([mode, label]) => <button key={mode} type="button" aria-pressed={!juzClear && entryMode === mode} disabled={saving} onClick={() => { switchEntryMode(mode); setJuzClear(false) }} className={cn('rounded-md px-2 py-1.5 text-[11px] font-semibold transition', !juzClear && entryMode === mode ? 'bg-emerald-700 text-white shadow-sm' : 'text-emerald-700 hover:bg-emerald-100')}>{label}</button>)}
+          </div>}
         </div>
       </DialogHeader>
 
@@ -624,9 +555,19 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-5 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
 
         >
-          {entryMode === "range" ? (
+          {juzClear ? <>
+            <p className="text-xs text-slate-500">Earn one Recent Revision day plus proportional Juz Revision credit. The usual Juz eligibility and monthly limits apply.</p>
+            {juzItems.map((item, index) => <div key={item.id || index} className="space-y-2 rounded-lg border border-slate-200 p-3">
+              <div className="flex items-center justify-between"><Label>Juz Clear {index + 1}</Label><button type="button" disabled={saving} className="text-xs text-red-500" onClick={() => { if (item.id) setRemovedIds(ids => [...ids, item.id!]); setJuzItems(rows => rows.filter((_, i) => i !== index)) }}>Delete</button></div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1 text-xs">Juz number<select aria-label={`Juz Clear ${index + 1} number`} value={item.juz_number} onChange={event => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_number: event.target.value } : row))} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="">Select Juz</option>{Array.from({ length: 30 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}</select></label>
+                <label className="space-y-1 text-xs">Portion<select aria-label={`Juz Clear ${index + 1} portion`} value={item.juz_portion} onChange={event => setJuzItems(rows => rows.map((row, i) => i === index ? { ...row, juz_portion: event.target.value } : row))} className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"><option value="">Select portion</option>{PORTIONS.map(portion => <option key={portion}>{portion}</option>)}</select></label>
+              </div>
+            </div>)}
+            <Button type="button" variant="outline" size="sm" onClick={() => setJuzItems(rows => [...rows, emptyDraft()])} className="w-full border-dashed"><Plus className="mr-2 h-4 w-4" />Add another Juz</Button>
+          </> : entryMode === "range" ? (
             <>
-              <p className="text-xs text-slate-500">Saved range entries stay together here. Edit or delete the complete range at once.</p>
+              <p className="text-xs text-slate-500">Each continuous portion stays together from its starting Surah and Ayah to its ending Surah and Ayah.</p>
               {ranges.map((range, index) => (
                 <div key={index} className="rounded-lg border border-slate-200 p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -639,16 +580,17 @@ function HifzEntryEditor({ target, onClose, onSave, portalContainer }: {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-2">
-                      <Label className="text-xs">From</Label>
+                      <Label className="text-xs">Start Surah / Ayah</Label>
                       <SurahCombobox value={range.fromSurah} onChange={(name) => setRange(index, { fromSurah: name })} portalContainer={portalContainer} />
                       <Input type="number" min="1" placeholder="Verse" value={range.fromAyah} onChange={(event) => setRange(index, { fromAyah: event.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-xs">To</Label>
+                      <Label className="text-xs">End Surah / Ayah</Label>
                       <SurahCombobox value={range.toSurah} onChange={(name) => setRange(index, { toSurah: name })} portalContainer={portalContainer} />
                       <Input type="number" min="1" placeholder="Verse" value={range.toAyah} onChange={(event) => setRange(index, { toAyah: event.target.value })} />
                     </div>
                   </div>
+                  {range.fromSurah && range.toSurah && range.fromAyah && range.toAyah && <p className="mt-3 rounded-md bg-emerald-50 px-2.5 py-2 text-xs font-medium text-emerald-800">{range.fromSurah} {range.fromAyah} → {range.toSurah} {range.toAyah}</p>}
                 </div>
               ))}
               <Button type="button" variant="outline" size="sm" onClick={addRange} className="w-full border-dashed">
@@ -1017,10 +959,10 @@ export function HifzMonthlyRegister({ open, onClose, student, onChange }: Props)
       surah_name: meta.kind === "range" ? (item.surah_name || null) : null,
       start_v: meta.kind === "range" && item.start_v ? Number(item.start_v) : null,
       end_v: meta.kind === "range" && item.end_v ? Number(item.end_v) : null,
-      juz_number: meta.kind === "juz" && item.juz_number ? Number(item.juz_number) : null,
-      juz_portion: meta.kind === "juz" ? (item.juz_portion || null) : null,
+      juz_number: (meta.kind === "juz" || targetCell.activity === "recentRevision") && item.juz_number ? Number(item.juz_number) : null,
+      juz_portion: (meta.kind === "juz" || targetCell.activity === "recentRevision") ? (item.juz_portion || null) : null,
     })
-    const hasValue = (item: DraftItem) => (meta.kind === "range" ? !!item.surah_name : !!item.juz_number)
+    const hasValue = (item: DraftItem) => (meta.kind === "range" ? !!item.surah_name || (targetCell.activity === "recentRevision" && !!item.juz_number) : !!item.juz_number)
     const nullableNumber = (value: number | null | undefined) => value == null ? null : Number(value)
     const originals = new Map(targetCell.day.entries[targetCell.activity].map((entry) => [entry.id, entry]))
 

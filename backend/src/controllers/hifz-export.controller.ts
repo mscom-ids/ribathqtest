@@ -10,6 +10,9 @@ type MonthlyReportExportRow = {
     recent_days: number | string;
     juz_revision: number | string;
     point_days: number | string;
+    base_points: number | string;
+    bonus_points: number | string;
+    total_points: number | string;
     grade: string;
     attendance: string;
     usthad_name: string;
@@ -30,6 +33,9 @@ function getExportPayload(req: Request) {
         recent_days: Number.isFinite(Number(row?.recent_days)) ? Number(row.recent_days) : '',
         juz_revision: Number.isFinite(Number(row?.juz_revision)) ? Number(row.juz_revision) : '',
         point_days: Number.isFinite(Number(row?.point_days)) ? Number(row.point_days) : '',
+        base_points: Number.isFinite(Number(row?.base_points)) ? Number(row.base_points) : '',
+        bonus_points: Number.isFinite(Number(row?.bonus_points)) ? Number(row.bonus_points) : '',
+        total_points: Number.isFinite(Number(row?.total_points)) ? Number(row.total_points) : '',
         grade: String(row?.grade || ''),
         attendance: String(row?.attendance || ''),
         usthad_name: String(row?.usthad_name || ''),
@@ -49,10 +55,10 @@ function getExportPayload(req: Request) {
 export const exportMonthlyReportExcel = async (req: Request, res: Response) => {
     try {
         const report = getExportPayload(req);
-        const header = ['No.', 'Student', 'Admission No.', 'Standard', 'Hifz Pages', 'Recent Revision (Days)', 'Juz Revision (Juz)', 'Point Days', 'Grade', 'Attendance', 'Usthad'];
+        const header = ['No.', 'Student', 'Admission No.', 'Standard', 'Hifz Pages', 'Recent Revision (Days)', 'Juz Revision (Juz)', 'Point Days', 'Base Points', 'Bonus Points', 'Total Points', 'Grade', 'Attendance', 'Usthad'];
         const data = report.rows.map((row, index) => [
             index + 1, row.name, row.adm_no, row.standard, row.hifz_pages, row.recent_days,
-            row.juz_revision, row.point_days, row.grade, row.attendance, row.usthad_name,
+            row.juz_revision, row.point_days, row.base_points, row.bonus_points, row.total_points, row.grade, row.attendance, row.usthad_name,
         ]);
         const worksheet = XLSX.utils.aoa_to_sheet([
             [`Monthly Hifz Report - ${report.monthLabel}`],
@@ -62,9 +68,9 @@ export const exportMonthlyReportExcel = async (req: Request, res: Response) => {
         ]);
         worksheet['!cols'] = [
             { wch: 6 }, { wch: 30 }, { wch: 15 }, { wch: 14 }, { wch: 12 },
-            { wch: 23 }, { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 38 },
+            { wch: 23 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 38 },
         ];
-        worksheet['!autofilter'] = { ref: `A5:K${Math.max(5, data.length + 5)}` };
+        worksheet['!autofilter'] = { ref: `A5:N${Math.max(5, data.length + 5)}` };
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Monthly Report');
         const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
@@ -85,15 +91,17 @@ export const exportMonthlyReportPdf = async (req: Request, res: Response) => {
             title: `Monthly Hifz Report - ${report.monthLabel}`,
             subtitle: `${report.filterLabel} | ${report.rows.length} student${report.rows.length === 1 ? '' : 's'}`,
             columns: [
-                { label: 'No.', width: 26, align: 'right' }, { label: 'Student', width: 125 },
-                { label: 'Adm. No.', width: 52 }, { label: 'Standard', width: 50 },
-                { label: 'Hifz', width: 48, align: 'right' }, { label: 'Recent', width: 48, align: 'right' },
-                { label: 'Juz Rev.', width: 48, align: 'right' }, { label: 'Points', width: 48, align: 'right' },
-                { label: 'Grade', width: 42 }, { label: 'Attendance', width: 115 }, { label: 'Usthad', width: 180 },
+                { label: 'No.', width: 20, align: 'right' }, { label: 'Student', width: 120 },
+                { label: 'Adm. No.', width: 50 }, { label: 'Standard', width: 45 },
+                { label: 'Hifz', width: 38, align: 'right' }, { label: 'Recent', width: 40, align: 'right' },
+                { label: 'Juz Rev.', width: 44, align: 'right' }, { label: 'Days', width: 42, align: 'right' },
+                { label: 'Base', width: 42, align: 'right' }, { label: 'Bonus', width: 42, align: 'right' }, { label: 'Points', width: 48, align: 'right' },
+                { label: 'Grade', width: 38 }, { label: 'Attendance', width: 90 }, { label: 'Usthad', width: 100 },
             ],
             rows: report.rows.map((row, index) => [
                 String(index + 1), row.name, row.adm_no, row.standard, String(row.hifz_pages),
                 String(row.recent_days), String(row.juz_revision), String(row.point_days),
+                String(row.base_points), String(row.bonus_points), String(row.total_points),
                 row.grade, row.attendance, row.usthad_name,
             ]),
         });

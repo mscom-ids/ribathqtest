@@ -95,6 +95,7 @@ type HifzSummary = {
     completed_juz?: number
     grade?: string
     percentage?: number
+    points?: { totalPoints?: number; basePoints?: number; bonusPoints?: number }
 }
 
 type HifzReport = {
@@ -900,13 +901,14 @@ function HifzPanel({ report, logs, monthlyReports }: {
                             </Card>
 
                             {report?.summary.grade && (
-                                <Card className="rounded-xl border-slate-200 bg-gradient-to-br from-indigo-50 to-white">
+                                <Card className={report.summary.grade === 'O' ? "rounded-xl border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 ring-1 ring-amber-200" : "rounded-xl border-slate-200 bg-gradient-to-br from-indigo-50 to-white"}>
                                     <CardContent className="flex flex-col items-center py-5">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Monthly Grade</p>
-                                        <p className="mt-1 text-5xl font-black text-indigo-700">{report.summary.grade}</p>
+                                        <p className="mt-1 text-5xl font-black text-indigo-700">{report.summary.grade === 'O' ? '★ O' : report.summary.grade}</p>
                                         {report.summary.percentage != null && (
-                                            <p className="mt-1 text-sm text-slate-500">{report.summary.percentage}%</p>
+                                            <p className="mt-1 text-sm text-slate-500">{isHafiz ? `${report.summary.percentage}%` : `${report.summary.points?.totalPoints ?? report.summary.percentage} points · +${report.summary.points?.bonusPoints ?? 0} bonus`}</p>
                                         )}
+                                        {report.summary.grade === 'O' && <p className="mt-1 text-sm font-bold text-amber-800">Outstanding performance</p>}
                                     </CardContent>
                                 </Card>
                             )}

@@ -146,7 +146,7 @@ export default function UnifiedReportView() {
         const countryPhone = phone.length === 10 ? `91${phone}` : phone
         const performance = reportData?.performance
         const isHafiz = reportData?.hifz_stage === 'HAFIZ_REVISION'
-        const juzMax = Number(performance?.juzMax ?? (isHafiz ? 50 : 15))
+        const juzMax = Number(performance?.juzMax ?? (isHafiz ? 50 : 20))
         const firstJuzDate = performance?.firstJuzCompletionDate ?? null
         const juzZeroReason = firstJuzDate
             ? 'no class days recorded'
@@ -181,6 +181,7 @@ export default function UnifiedReportView() {
             ...perfLines,
             `Attendance: ${attendedSessions}/${effectiveSessions} sessions (${attendancePct}%)`,
             `Grade: ${performance?.grade || 'NO GRADE'}`,
+            ...(!isHafiz ? [`Points: ${performance?.totalPoints ?? 0} (base ${performance?.basePoints ?? 0} + New Hifz bonus ${performance?.bonusPoints ?? 0})`] : []),
         ].join("\n")
         window.open(`https://wa.me/${countryPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer")
     }
@@ -404,8 +405,9 @@ export default function UnifiedReportView() {
                         {/* Attendance Summary */}
                         <div>
                             <h3 className="text-lg font-bold border-b print:border-slate-300 pb-2 mb-4 text-slate-800">Session Attendance</h3>
+                            <p className="mb-3 text-xs text-slate-500">Late is included in attended, but earns half attendance points. Unconfirmed sessions remain in the total and earn no points until marked.</p>
                             {reportData.attendance_totals && (
-                                <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-3">
                                     <div className="rounded-lg border border-slate-200 p-3 print:border-slate-300">
                                         <p className="text-[10px] uppercase font-bold text-slate-500">Cancelled</p>
                                         <p className="text-xl font-black text-slate-800">{reportData.attendance_totals.cancelledClasses}</p>
@@ -418,6 +420,8 @@ export default function UnifiedReportView() {
                                         <p className="text-[10px] uppercase font-bold text-red-700">Not attended</p>
                                         <p className="text-xl font-black text-red-700">{reportData.attendance_totals.notAttendedClasses}</p>
                                     </div>
+                                    <div className="rounded-lg border border-orange-100 bg-orange-50 p-3"><p className="text-[10px] uppercase font-bold text-orange-700">Late (included in attended)</p><p className="text-xl font-black text-orange-700">{reportData.attendance_totals.lateClasses || 0}</p></div>
+                                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-3"><p className="text-[10px] uppercase font-bold text-blue-700">Unconfirmed</p><p className="text-xl font-black text-blue-700">{reportData.attendance_totals.pendingClasses || 0}</p></div>
                                     <div className="rounded-lg border border-slate-200 p-3 print:border-slate-300">
                                         <p className="text-[10px] uppercase font-bold text-slate-500">Counted</p>
                                         <p className="text-xl font-black text-slate-800">{reportData.attendance_totals.effectiveClasses}</p>
@@ -438,6 +442,7 @@ export default function UnifiedReportView() {
                                         ex.leave += Number(att.leave || 0)
                                         ex.attended += Number(att.attended ?? att.present ?? 0)
                                         ex.not_attended += Number(att.not_attended ?? att.absent ?? 0)
+                                        ex.pending += Number(att.pending || 0)
                                         ex.cancelled += Number(att.cancelled || 0)
                                         ex.total += Number(att.total || att.effective_total || 0)
                                         ex.planned += Number(att.planned || att.total || 0)
@@ -454,6 +459,7 @@ export default function UnifiedReportView() {
                                             leave: Number(att.leave || 0),
                                             attended: Number(att.attended ?? att.present ?? 0),
                                             not_attended: Number(att.not_attended ?? att.absent ?? 0),
+                                            pending: Number(att.pending || 0),
                                             cancelled: Number(att.cancelled || 0),
                                             total: Number(att.total || att.effective_total || 0),
                                             planned: Number(att.planned || att.total || 0),
@@ -465,7 +471,7 @@ export default function UnifiedReportView() {
                                     <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4">
                                         {Array.from(merged.values()).map((att: any, i: number) => {
                                             const countedTotal = att.effective_total || att.total || 0
-                                            const pct = countedTotal > 0 ? Math.round((att.attended / countedTotal) * 100) : 0
+                                            const pct = countedTotal > 0 ? Math.min(att.pending > 0 ? 99.9 : 100, Math.round((att.attended / countedTotal) * 1000) / 10) : 0
                                             return (
                                                 <div key={i} className="border border-slate-200 rounded-lg p-4 print:p-2.5 print:border-slate-300 print:break-inside-avoid">
                                                     <p className="text-sm print:text-xs font-bold text-slate-700 mb-2 print:mb-1">{att.session}</p>
@@ -473,6 +479,8 @@ export default function UnifiedReportView() {
                                                         <div className="space-y-1 print:space-y-0.5">
                                                             <p className="text-xs print:text-[10px] text-slate-600">Attended: <span className="font-semibold text-emerald-600">{att.attended}</span></p>
                                                             <p className="text-xs print:text-[10px] text-slate-600">Not attended: <span className="font-semibold text-red-600">{att.not_attended}</span></p>
+                                                            <p className="text-xs print:text-[10px] text-orange-600">Late (included above): {att.late}</p>
+                                                            <p className="text-xs print:text-[10px] text-blue-600">Unconfirmed: {att.pending}</p>
                                                             <p className="text-xs print:text-[10px] text-slate-600">Cancelled: <span className="font-semibold text-slate-500">{att.cancelled}</span></p>
                                                         </div>
                                                         <div className="text-right">
@@ -528,43 +536,48 @@ export default function UnifiedReportView() {
                                     <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                                         <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-blue-700">New Verses</p>
-                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/20</p>
+                                            <p className="mt-1 text-2xl font-black text-blue-900">{reportData.performance.newVersePoints}/30</p>
                                         </div>
                                         <div className="rounded-lg border border-orange-100 bg-orange-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-orange-700">Recent Revision</p>
-                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/15</p>
+                                            <p className="mt-1 text-2xl font-black text-orange-900">{reportData.performance.recentRevisionPoints}/20</p>
                                         </div>
                                         <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-violet-700">Juz Revision</p>
                                             <p className="mt-1 text-2xl font-black text-violet-900">
-                                                {(reportData.performance.juzMax ?? 15) > 0
-                                                    ? `${reportData.performance.juzPoints}/${reportData.performance.juzMax ?? 15}`
+                                                {(reportData.performance.juzMax ?? 20) > 0
+                                                    ? `${reportData.performance.juzPoints}/${reportData.performance.juzMax ?? 20}`
                                                     : 'N/A'}
                                             </p>
-                                            {(reportData.performance.juzMax ?? 15) === 0 ? (
+                                            {(reportData.performance.juzMax ?? 20) === 0 ? (
                                                 <p className="text-xs text-violet-700">
                                                     {reportData.performance.firstJuzCompletionDate
                                                         ? 'Excluded — no class days recorded'
                                                         : 'Available after first Juz'}
                                                 </p>
-                                            ) : (reportData.performance.juzMax ?? 15) < 15 ? (
+                                            ) : (reportData.performance.juzMax ?? 20) < 20 ? (
                                                 <p className="text-xs text-violet-700">Pro-rated from completion</p>
                                             ) : null}
                                         </div>
                                         <div className="rounded-lg border border-teal-100 bg-teal-50 p-4 print:border-slate-300 print:bg-transparent">
                                             <p className="text-xs font-semibold text-teal-700">Attendance</p>
-                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/20</p>
+                                            <p className="mt-1 text-2xl font-black text-teal-900">{reportData.performance.attendancePoints ?? 0}/{reportData.hifz_stage === 'HAFIZ_REVISION' ? 20 : 30}</p>
                                             <p className="text-xs text-teal-700">{reportData.performance.attendancePercentage ?? 0}%</p>
                                         </div>
-                                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 print:border-slate-300 print:bg-transparent">
-                                            <p className="text-xs font-semibold text-emerald-700">Total</p>
-                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}/{reportData.performance.totalMax ?? 70}</p>
-                                            <p className="text-xs text-emerald-700">{reportData.performance.percentage}%</p>
+                                        <div className={reportData.performance.grade === 'O' ? "rounded-lg border border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 p-4 shadow-sm ring-1 ring-amber-200" : "rounded-lg border border-emerald-100 bg-emerald-50 p-4"}>
+                                            <p className="text-xs font-semibold text-emerald-700">Total points</p>
+                                            <p className="mt-1 text-2xl font-black text-emerald-900">{reportData.performance.totalPoints}</p>
+                                            <p className="text-xs text-emerald-700">Base {reportData.performance.basePoints ?? 0} + bonus {reportData.performance.bonusPoints ?? 0}</p>
                                         </div>
                                         <div className="rounded-lg border border-slate-200 p-4 print:border-slate-300">
                                             <p className="text-xs font-semibold text-slate-600">Grade</p>
-                                            <p className="mt-1 text-2xl font-black text-slate-900">{reportData.performance.grade}</p>
-                                            <p className="text-xs text-slate-500">{reportData.performance.totalClassDays} point days</p>
+                                            <p className={reportData.performance.grade === 'O' ? "mt-1 text-3xl font-black text-amber-700" : "mt-1 text-2xl font-black text-slate-900"}>{reportData.performance.grade === 'O' ? '★ O' : reportData.performance.grade}</p>
+                                            <p className="text-xs text-slate-500">{reportData.performance.grade === 'O' ? 'Outstanding performance' : `${reportData.performance.totalClassDays} point days`}</p>
+                                        </div>
+                                        <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-4 md:col-span-6">
+                                            <p className="text-sm font-bold text-amber-900">New Hifz bonus <span className="ml-2 text-xl">+{reportData.performance.bonusPoints ?? 0}/20</span></p>
+                                            <p className="mt-1 text-xs text-amber-800">{reportData.performance.bonusEligible ? 'Unlocked: excess New Hifz pages earn additional points at the same page rate.' : 'Locked: reach 30 New Hifz points and at least 90% in both Recent and applicable Juz Revision. Juz must be applicable.'}</p>
+                                            <p className="mt-1 text-xs text-amber-800">New pages: {reportData.performance.newHifzPages ?? 0} / target {reportData.performance.expectedNewPages ?? 0}. Maximum total: 120 points.</p>
                                         </div>
                                     </div>
                                 )}
@@ -646,6 +659,8 @@ export default function UnifiedReportView() {
                                     const ex = merged.get(key)
                                     ex.attended += Number(att.attended ?? att.present ?? 0)
                                     ex.not_attended += Number(att.not_attended ?? att.absent ?? 0)
+                                    ex.late += Number(att.late || 0)
+                                    ex.pending += Number(att.pending || 0)
                                     ex.cancelled += Number(att.cancelled || 0)
                                     ex.planned += Number(att.planned || att.total || 0)
                                     ex.effective_total += Number(att.effective_total || att.total || 0)
@@ -654,6 +669,8 @@ export default function UnifiedReportView() {
                                         session: rawSession.replace(/^hifz/i, 'Hifz'),
                                         attended: Number(att.attended ?? att.present ?? 0),
                                         not_attended: Number(att.not_attended ?? att.absent ?? 0),
+                                        late: Number(att.late || 0),
+                                        pending: Number(att.pending || 0),
                                         cancelled: Number(att.cancelled || 0),
                                         planned: Number(att.planned || att.total || 0),
                                         effective_total: Number(att.effective_total || att.total || 0),
@@ -743,12 +760,13 @@ export default function UnifiedReportView() {
                                                 <p className="text-3xl font-black text-red-700 mt-1.5">{t.notAttendedClasses ?? 0}</p>
                                             </div>
                                             <div className="bg-[#1E293B] text-white rounded-xl p-4 text-center">
-                                                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Attendance Rate</p>
+                                                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider">Attendance score rate (Late = ½)</p>
                                                 <p className="text-3xl font-black mt-1.5">{reportData.performance?.attendancePercentage ?? 0}%</p>
                                             </div>
                                         </div>
                                     </div>
 
+                                    <p className="text-xs text-slate-600">Late (included in attended): <strong>{t.lateClasses || 0}</strong> · Unconfirmed: <strong>{t.pendingClasses || 0}</strong>. Unconfirmed sessions remain in the total, but are not confirmed absences.</p>
                                     {/* Learning Activity — parent-friendly labels and units */}
                                     <div className="break-inside-avoid">
                                         <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
@@ -788,7 +806,7 @@ export default function UnifiedReportView() {
                                                     <p className="text-slate-900 mt-1"><span className="text-3xl font-black">{completedLifetimeJuz}</span> <span className="text-xs font-semibold text-slate-500">of 30 Juz</span></p>
                                                 </div>
                                             </div>
-                                            <div className="bg-[#1E293B] text-white rounded-xl p-5 flex flex-col items-center justify-center text-center col-span-1 h-full min-h-[195px]">
+                                            <div className={grade === 'O' ? "bg-gradient-to-br from-amber-600 to-orange-800 text-white rounded-xl p-5 flex flex-col items-center justify-center text-center col-span-1 h-full min-h-[195px] ring-2 ring-amber-300" : "bg-[#1E293B] text-white rounded-xl p-5 flex flex-col items-center justify-center text-center col-span-1 h-full min-h-[195px]"}>
                                                 <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mb-2">Overall Grade Status</p>
                                                 {(() => {
                                                     const rawGrade = String(grade || '').trim();
@@ -810,6 +828,7 @@ export default function UnifiedReportView() {
                                                         </>
                                                     );
                                                 })()}
+                                                {reportData.hifz_stage !== 'HAFIZ_REVISION' && <p className="mt-2 text-sm font-bold">{reportData.performance?.totalPoints ?? 0} points · +{reportData.performance?.bonusPoints ?? 0} bonus{grade === 'O' ? ' · Outstanding' : ''}</p>}
                                             </div>
                                         </div>
                                     </div>

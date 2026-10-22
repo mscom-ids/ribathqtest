@@ -59,10 +59,21 @@ type StudentMonthlyStats = {
     cancelledClasses?: number
     attendedClasses?: number
     notAttendedClasses?: number
+    lateClasses?: number
+    pendingClasses?: number
     percentage?: number | string | null
     totalPoints?: number | string | null
     total_points?: number | string | null
     points?: number | string | null
+    basePoints?: number
+    bonusPoints?: number
+    bonusEligible?: boolean
+    totalMax?: number
+    newVersePoints?: number
+    recentRevisionPoints?: number
+    juzPoints?: number
+    juzMax?: number
+    attendancePoints?: number
 }
 
 function formatAttendanceText(student: StudentMonthlyStats) {
@@ -77,6 +88,8 @@ function formatAttendanceText(student: StudentMonthlyStats) {
     const parts = [
         `${student.attendedClasses || 0} attended`,
         `${student.notAttendedClasses || 0} not attended`,
+        `${student.lateClasses || 0} late (included in attended)`,
+        `${student.pendingClasses || 0} unconfirmed`,
     ]
 
     if ((student.cancelledClasses || 0) > 0) {
@@ -243,6 +256,7 @@ Hifz Pages: ${s.hifz_pages}
 Recent Revision: ${s.recent_days} (Days)
 Juz Revision: ${s.juz_revision} (Juz)
 Grade: *${s.grade}*
+Points: *${formatPerformancePoints(s)}* (base ${s.basePoints ?? s.totalPoints ?? 0}, bonus +${s.bonusPoints || 0})
 Attendance: ${s.attendance}
 
 _Generated from Ma'din Ribathul Quran ERP_
@@ -318,6 +332,7 @@ _Generated from Ma'din Ribathul Quran ERP_
 
     function gradeBadgeClass(grade: string) {
         const normalized = (grade || "").toUpperCase().trim()
+        if (normalized === "O") return "border-amber-300 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow-sm ring-1 ring-amber-200 font-black"
         if (normalized === "-" || normalized === "NO GRADE") {
             return "text-slate-400 border-slate-200"
         }
@@ -481,7 +496,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             <TableHead>Recent Rev (D)</TableHead>
                             <TableHead>Juz Rev (J)</TableHead>
                             <TableHead>Point Days</TableHead>
-                            <TableHead title="Same 70-point score used in Top Performers">Performance Points</TableHead>
+                            <TableHead title="Actual earned points, also used in Top Performers">Performance Points</TableHead>
                             <TableHead>Grade</TableHead>
                             <TableHead>Attendance</TableHead>
                             <TableHead>Usthad</TableHead>
@@ -506,7 +521,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                             </TableRow>
                         ) : (
                             memorizingStats.map((s) => (
-                                <TableRow key={s.adm_no} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                <TableRow key={s.adm_no} className={s.grade === "O" ? "bg-gradient-to-r from-amber-50 via-yellow-50/50 to-white dark:from-amber-950/40 dark:to-slate-900" : "hover:bg-slate-50/50 dark:hover:bg-slate-800/50"}>
                                     <TableCell className="pl-6 font-medium">
                                         <div>
                                             {s.name}
@@ -518,9 +533,15 @@ _Generated from Ma'din Ribathul Quran ERP_
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-orange-600'}`}>{s.recent_days}</TableCell>
                                     <TableCell className={`font-semibold ${s.is_manual ? 'text-slate-700 dark:text-slate-300' : 'text-emerald-600'}`}>{s.juz_revision}</TableCell>
                                     <TableCell className="font-semibold text-slate-700 dark:text-slate-300">{formatPointDays(s.pointClassDays)}</TableCell>
-                                    <TableCell className="font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{formatPerformancePoints(s)}</TableCell>
+                                    <TableCell className="min-w-40 tabular-nums">
+                                        <span className={s.grade === "O" ? "text-2xl font-black text-amber-700 dark:text-amber-300" : "text-lg font-bold text-indigo-600 dark:text-indigo-400"}>{formatPerformancePoints(s)}</span>
+                                        <span className="ml-1 text-xs text-slate-400">points</span>
+                                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={s.grade === "O" ? "h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" : "h-full rounded-full bg-indigo-500"} style={{ width: `${Math.min(100, Math.max(0, Number(s.totalPoints || 0) / 120 * 100))}%` }} /></div>
+                                        <p className="mt-1 text-[10px] font-medium text-slate-500">Base {s.basePoints ?? s.totalPoints ?? 0} · <span className={s.bonusPoints ? "font-bold text-amber-700" : ""}>Bonus +{s.bonusPoints || 0}/20</span></p>
+                                        <p className="mt-1 text-[10px] text-slate-500">New {s.newVersePoints ?? 0}/30 · Recent {s.recentRevisionPoints ?? 0}/20<br />Juz {s.juzMax ? `${s.juzPoints ?? 0}/${s.juzMax}` : "N/A"} · Attendance {s.attendancePoints ?? 0}/30</p>
+                                    </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade}</Badge>
+                                        <Badge variant="outline" className={gradeBadgeClass(s.grade)}>{s.grade === "O" ? "★ O · Outstanding" : s.grade}</Badge>
                                     </TableCell>
                                     <TableCell>{formatAttendanceText(s)}</TableCell>
                                     <TableCell className="text-slate-500 text-sm">{s.usthad_name}</TableCell>
@@ -571,7 +592,7 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 <TableHead>New Revision (J)</TableHead>
                                 <TableHead>Old Revision (J)</TableHead>
                                 <TableHead>Point Days</TableHead>
-                                <TableHead title="Same 70-point score used in Top Performers">Performance Points</TableHead>
+                                <TableHead title="Actual earned points, also used in Top Performers">Performance Points</TableHead>
                                 <TableHead>Grade</TableHead>
                                 <TableHead>Attendance</TableHead>
                                 <TableHead>Usthad</TableHead>
@@ -703,8 +724,10 @@ _Generated from Ma'din Ribathul Quran ERP_
                                 id="grade"
                                 className="col-span-3"
                                 value={editForm.grade}
+                                disabled={editingStudent?.hifz_stage !== 'HAFIZ_REVISION'}
+                                title="Non-Hafiz grades are calculated from earned points, including eligible bonus points."
                                 onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })}
-                                placeholder="e.g. 4.5"
+                                placeholder="Calculated from earned points"
                             />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">

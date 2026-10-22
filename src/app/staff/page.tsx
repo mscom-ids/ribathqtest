@@ -97,6 +97,8 @@ type MonthlyTopPerformer = {
     name: string
     standard: string
     totalPoints: number
+    bonusPoints: number
+    isHafiz: boolean
 }
 
 type MonthlyReportRow = {
@@ -105,6 +107,8 @@ type MonthlyReportRow = {
     total_points?: number | string | null
     points?: number | string | null
     percentage?: number | string | null
+    bonusPoints?: number
+    hifz_stage?: string
 }
 
 // ─── Helper: greeting ─────────────────────────────────────────────────────────
@@ -127,9 +131,8 @@ function buildPerformers(
             const report = reportByAdmNo.get(student.adm_no)
             if (!report) return null
 
-            // Juz Revision can now be non-applicable or pro-rated, so students
-            // have different raw maximums. Rank and display everyone on the
-            // same 70-point scale using their calculated percentage.
+            // Show earned points, not a normalized percentage: the same Present
+            // must not become more points merely because Juz is non-applicable.
             const totalPoints = getHifzPerformancePoints(report)
             if (totalPoints === null) return null
             return {
@@ -137,6 +140,8 @@ function buildPerformers(
                 name: student.name,
                 standard: student.standard,
                 totalPoints,
+                bonusPoints: Number(report.bonusPoints || 0),
+                isHafiz: report.hifz_stage === 'HAFIZ_REVISION',
             }
         })
         .filter((p): p is MonthlyTopPerformer => p !== null)
@@ -550,7 +555,7 @@ export default function StaffDashboard() {
                 <div className="space-y-4">
                     {monthlyTopPerformers[0] && (() => {
                         const winner = monthlyTopPerformers[0]
-                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / 70) * 100))
+                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / (winner.isHafiz ? 70 : 120)) * 100))
                         return (
                             <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-4 shadow-sm dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/5 dark:to-slate-900">
                                 <div className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-amber-300/15" />
@@ -568,7 +573,8 @@ export default function StaffDashboard() {
                                     </div>
                                     <div className="shrink-0 text-right">
                                         <p className="text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{winner.totalPoints.toFixed(2)}</p>
-                                        <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">points</p>
+                                        <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">{winner.totalPoints > 100 ? '★ O · Outstanding' : 'points'}</p>
+                                        {winner.bonusPoints > 0 && <p className="mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">+{winner.bonusPoints} bonus</p>}
                                     </div>
                                 </div>
                                 <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-slate-800">
@@ -614,7 +620,8 @@ export default function StaffDashboard() {
                                                     : "text-emerald-600 dark:text-emerald-400")}>
                                                     {stu.totalPoints.toFixed(2)}
                                                 </p>
-                                                <p className="text-[8px] uppercase tracking-wide text-slate-400">pts</p>
+                                                <p className="text-[8px] uppercase tracking-wide text-slate-400">{stu.totalPoints > 100 ? '★ O · Outstanding' : 'pts'}</p>
+                                                {stu.bonusPoints > 0 && <p className="text-[9px] font-bold text-amber-700">+{stu.bonusPoints} bonus</p>}
                                             </div>
                                         </div>
                                     )
