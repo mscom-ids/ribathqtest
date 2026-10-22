@@ -313,7 +313,7 @@ export function SupervisorHome({ role }: { role: string }) {
     // ── Top Performers sheet content (same visual as mentor portal) ──
     const topPerformersContent = (
         <>
-            <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
+            <div className="staff-gradient-surface relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
                 <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
                 <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
                 <div className="relative flex items-center justify-between gap-3">
@@ -435,10 +435,10 @@ export function SupervisorHome({ role }: { role: string }) {
     )
 
     return (
-        <div className="min-h-full bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
+        <div className="staff-dashboard-surface min-h-full bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
 
             {/* ── Welcome banner ── */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
+            <div className="staff-gradient-surface relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
                 <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5" />
                 <div className="absolute -bottom-12 -left-6 w-40 h-40 rounded-full bg-white/5" />
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 md:p-7">
@@ -598,9 +598,9 @@ export function SupervisorHome({ role }: { role: string }) {
 
             {/* ── Top Performers slide-in sheet ── */}
             <Sheet open={lbOpen} onOpenChange={setLbOpen}>
-                <SheetContent side="right" className="p-0 flex flex-col w-[85vw] sm:max-w-sm">
+                <SheetContent side="right" overlayClassName="staff-leaderboard-overlay" className="staff-leaderboard-sheet p-0 flex flex-col w-[85vw] sm:max-w-sm">
                     <SheetTitle className="sr-only">Top Performers</SheetTitle>
-                    <div className="flex-1 overflow-y-auto px-5 pt-12 pb-6">
+                    <div className="staff-leaderboard-scroll min-h-0 flex-1 overflow-y-auto px-5 pt-12 pb-6">
                         {topPerformersContent}
                     </div>
                 </SheetContent>

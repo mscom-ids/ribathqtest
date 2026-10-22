@@ -239,9 +239,9 @@ function SurahCombobox({
           trigger sits near the bottom of the dialog (dialog uses overflow-hidden
           and a bounded max-h). The higher z-index below keeps it above the dialog. */}
       <PopoverContent
-        className="glass-picker-panel z-[240] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-[22px] p-1.5"
+        className="glass-picker-panel z-[240] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-[20px] p-1.5"
         align="start"
-        sideOffset={8}
+        sideOffset={5}
         collisionPadding={12}
       >
         <Command

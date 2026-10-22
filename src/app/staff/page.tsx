@@ -509,7 +509,7 @@ export default function StaffDashboard() {
     // this component) so the ranking list doesn't push the student list down.
     const topPerformersContent = (
         <>
-            <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
+            <div className="staff-gradient-surface relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-4 text-white shadow-lg shadow-indigo-500/15">
                 <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" />
                 <div className="absolute -bottom-10 left-10 h-20 w-20 rounded-full bg-white/5" />
                 <div className="relative flex items-center justify-between gap-3">
@@ -627,14 +627,14 @@ export default function StaffDashboard() {
     )
 
     return (
-        <div className="h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
+        <div className="staff-dashboard-surface h-full overflow-y-auto bg-slate-50 dark:bg-[#020617]" suppressHydrationWarning>
 
             {/* ── Welcome Banner — sits close under the top bar on mobile (small
                  inset, still fully rounded) so it reads as a natural
                  continuation of the header rather than a separate card with a
                  big gap, without going flush/square (that read as an abrupt
                  slab). Reverts to the normal desktop inset at the lg breakpoint. ── */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
+            <div className="staff-gradient-surface relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-2xl ring-1 ring-white/10 rounded-2xl mx-3 mt-3 lg:mx-6 lg:mt-6">
                 <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-white/5" />
                 <div className="absolute -bottom-12 -left-6 w-40 h-40 rounded-full bg-white/5" />
                 <div className="absolute top-4 right-24 w-20 h-20 rounded-full bg-white/5" />
@@ -1017,11 +1017,11 @@ export default function StaffDashboard() {
                             <LiveBarsIcon />
                         </button>
                     </SheetTrigger>
-                    <SheetContent side="right" className="p-0 flex flex-col w-[85vw] sm:max-w-sm">
+                    <SheetContent side="right" overlayClassName="staff-leaderboard-overlay" className="staff-leaderboard-sheet p-0 flex flex-col w-[85vw] sm:max-w-sm">
                         {/* Visually hidden — the visible heading lives inside
                             topPerformersContent itself, so it isn't duplicated. */}
                         <SheetTitle className="sr-only">Top Performers</SheetTitle>
-                        <div className="flex-1 overflow-y-auto px-5 pt-12 pb-6">
+                        <div className="staff-leaderboard-scroll min-h-0 flex-1 overflow-y-auto px-5 pt-12 pb-6">
                             {topPerformersContent}
                         </div>
                     </SheetContent>

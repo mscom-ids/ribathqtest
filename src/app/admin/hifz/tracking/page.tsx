@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon, Search, BookOpen, Download, FileText } from "lucide-react"
 
@@ -104,6 +104,8 @@ export default function HifzTrackingPage() {
     const [students, setStudents] = useState<Student[]>([])
     const [hifzLogs, setHifzLogs] = useState<Record<string, HifzLog[]>>({})
     const [loading, setLoading] = useState(true)
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const loadRequest = useRef(0)
     const [searchQuery, setSearchQuery] = useState("")
     const [registerStudent, setRegisterStudent] = useState<Student | null>(null)
     const dateKey = format(date, "yyyy-MM-dd")
@@ -111,7 +113,9 @@ export default function HifzTrackingPage() {
 
     // Load students and hifz logs when date changes
     const loadData = useCallback(async (showSpinner = true) => {
+        const request = ++loadRequest.current
         if (showSpinner) setLoading(true)
+        setLoadError(null)
 
         try {
             // Fetch the Hifz roster and this date's logs in parallel.
@@ -120,30 +124,33 @@ export default function HifzTrackingPage() {
                 api.get('/hifz/logs', { params: { date: dateKey } }),
             ])
 
+            if (request !== loadRequest.current) return
             const studentsData = studentsRes.data?.students
-            if (studentsData) setStudents(studentsData)
 
             const logsData = logsRes.data?.logs as HifzLog[] | undefined
-            if (logsData) {
-                // Group logs by student_id - each student can have multiple logs (one per mode)
-                const logsMap: Record<string, HifzLog[]> = {}
-                for (const log of logsData) {
-                    (logsMap[log.student_id] ??= []).push(log)
-                }
-                setHifzLogs(logsMap)
-            } else {
-                setHifzLogs({})
+            if (!Array.isArray(studentsData) || !Array.isArray(logsData)) {
+                throw new Error("Invalid Hifz response")
             }
-        } catch (err) {
-            console.error("Failed to load hifz tracking data", err);
+            setStudents(studentsData)
+            // Group logs by student_id - each student can have multiple logs (one per mode)
+            const logsMap: Record<string, HifzLog[]> = {}
+            for (const log of logsData) {
+                (logsMap[log.student_id] ??= []).push(log)
+            }
+            setHifzLogs(logsMap)
+        } catch {
+            if (request !== loadRequest.current) return
+            setLoadError("Hifz records could not be loaded. Check that the backend service is running, then retry. No records have been changed.")
+            setStudents([])
             setHifzLogs({})
         } finally {
-            setLoading(false)
+            if (request === loadRequest.current) setLoading(false)
         }
     }, [dateKey])
 
     useEffect(() => {
         void loadData()
+        return () => { ++loadRequest.current }
     }, [loadData])
 
     const filteredStudents = students.filter(s =>
@@ -337,14 +344,14 @@ export default function HifzTrackingPage() {
                     <Button
                         variant="outline"
                         onClick={handleExportPdf}
-                        disabled={loading || exportRows.length === 0}
+                        disabled={loading || !!loadError || exportRows.length === 0}
                     >
                         <FileText className="mr-2 h-4 w-4" />
                         PDF
                     </Button>
                     <Button
                         onClick={handleExportExcel}
-                        disabled={loading || exportRows.length === 0}
+                        disabled={loading || !!loadError || exportRows.length === 0}
                     >
                         <Download className="mr-2 h-4 w-4" />
                         Excel
@@ -401,6 +408,11 @@ export default function HifzTrackingPage() {
                     {/* Students Table */}
                     {loading ? (
                         <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                    ) : loadError ? (
+                        <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                            <p>{loadError}</p>
+                            <Button variant="outline" className="mt-3" onClick={() => void loadData()}>Retry loading records</Button>
+                        </div>
                     ) : (
                         <div className="border rounded-lg overflow-x-auto">
                             <Table>
@@ -492,7 +504,7 @@ export default function HifzTrackingPage() {
                     )}
 
                     {/* Summary Stats */}
-                    {!loading && (
+                    {!loading && !loadError && (
                         <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Card className="bg-emerald-50">
                                 <CardContent className="pt-4">

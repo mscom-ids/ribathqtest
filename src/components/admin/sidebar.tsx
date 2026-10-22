@@ -381,6 +381,8 @@ export function AdminSidebar({
                 {/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Arrow Toggle Button ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â top-right edge, desktop only ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */}
                 <button 
                     onClick={onToggleCollapse}
+                    // Browser form extensions may inject fdprocessedid before hydration.
+                    suppressHydrationWarning
                     className="absolute -right-3.5 top-6 h-7 w-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-md hidden lg:flex items-center justify-center text-slate-500 hover:text-[#3d5ee1] hover:border-[#3d5ee1] transition-all duration-200 z-10"
                     title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 >
