@@ -21,7 +21,9 @@ the same gold treatment. Portraits come from the active student roster; missing
 or failed images fall back to initials. No movement arrows are invented without
 historical ranking data. Leadership alone uses a compact blue/indigo title card
 containing the month and mentor controls, one framed podium panel with individual
-muted gold/silver/bronze cards, and right-edge laurel place frames through rank 10.
+navy-to-gold/silver/bronze cards with large, full-width rectangular saved photos.
+Distinct code-native laurel banners distinguish first, second, third and fourth–tenth.
+Ranks 4–10 also receive a narrow gold accent and a subtle row tint in both themes.
 The mentor portal retains its existing champion-card leaderboard unchanged.
 Every opening defaults to all students; choosing a Hifz mentor passes `mentor_id`
 to the existing monthly-report endpoint and re-ranks that roster only.

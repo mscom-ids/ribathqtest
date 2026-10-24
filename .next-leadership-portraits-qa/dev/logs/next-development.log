@@ -1,0 +1,110 @@
+[00:00:04.019] Server  LOG     
+[00:00:04.020] Server  LOG       We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+[00:00:04.021] Server  LOG       The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+[00:00:04.022] Server  LOG       	- include was updated to add '.next-leadership-portraits-qa/types/**/*.ts'
+[00:00:04.022] Server  LOG       	- include was updated to add '.next-leadership-portraits-qa/dev/types/**/*.ts'
+[00:00:04.022] Server  LOG     
+[00:00:04.534] Server  LOG     ✓ Ready in 3.7s
+[00:01:24.910] Server  LOG     ○ Compiling /leadership ...
+[00:01:41.720] Server  LOG     >>> [api.ts] API_URL configured as: "/api"
+[00:01:45.930] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:01:45.930] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:01:47.781] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:01:47.781] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:01:47.781] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:01:47.781] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:01:47.781] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:01:47.782] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:01:47.782] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:01:53.562] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:01:56.361] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:02:00.372] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:02:09.575] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:02:09.575] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:02:09.575] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:02:17.177] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:06:50.238] Server  LOG     >>> [api.ts] API_URL configured as: "/api"
+[00:06:52.218] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:06:52.218] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:06:52.704] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:06:55.358] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:00.270] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:02.460] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:04.589] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:15.934] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:07:15.934] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:07:16.406] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:18.743] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:24.247] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:26.871] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:29.337] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:41.387] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:07:41.387] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:07:41.959] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:42.702] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:43.980] Browser WARN    [API ERROR] [GET /leaves/outside-students] Status: 500 Data: {"success":false}
+[00:07:43.980] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:43.980] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:07:49.256] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:51.651] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:07:55.310] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:08:02.894] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:08:02.894] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:08:03.404] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:06.049] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:08:09.990] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:14.932] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:14.933] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:08:21.855] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:08:21.855] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:08:22.308] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:24.721] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:08:28.999] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:33.480] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:08:35.836] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:10:52.743] Server  LOG     >>> [api.ts] API_URL configured as: "/api"
+[00:10:53.902] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:10:53.902] Browser LOG     >>> [api.ts] API_URL configured as: /api
+[00:10:54.302] Browser LOG     [API RESPONSE] [GET /auth/me] Status: 200
+[00:10:54.303] Browser LOG     [API RESPONSE] [GET /dashboard/admin] Status: 200
+[00:10:54.303] Browser LOG     [API RESPONSE] [GET /attendance/daily-stats] Status: 200
+[00:10:54.303] Browser LOG     [API RESPONSE] [GET /staff] Status: 200
+[00:10:54.303] Browser LOG     [API RESPONSE] [GET /students] Status: 200
+[00:10:54.303] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200
+[00:10:55.103] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:10:57.023] Browser WARN    [API ERROR] [GET /leaves/outside-students] Status: 500 Data: {"success":false}
+[00:10:57.023] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:10:57.023] Browser LOG     [API RESPONSE] [GET /leaves/outside-students] Status: 200
+[00:11:02.323] Browser LOG     [API RESPONSE] [GET /hifz/monthly-reports/calculate] Status: 200

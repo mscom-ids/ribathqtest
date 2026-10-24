@@ -6,6 +6,7 @@ import { GlassSelect } from "@/components/ui/glass-select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { rankLabel, rankLeaderboard } from "@/lib/leaderboard-ranking"
 import { resolveBackendUrl } from "@/lib/utils"
+import { LeaderboardPlaceFrame as PlaceFrame } from "@/components/leadership/LeaderboardPlaceFrame"
 
 type Performer = { adm_no: string; name: string; standard: string; totalPoints: number; bonusPoints: number; isHafiz: boolean; photo_url?: string | null }
 type Props = {
@@ -20,22 +21,6 @@ function StudentPortrait({ student, featured = false }: { student: Performer; fe
         <AvatarImage src={student.photo_url ? resolveBackendUrl(student.photo_url) : undefined} alt="" className="object-cover" />
         <AvatarFallback className="points-avatar-fallback">{student.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase()}</AvatarFallback>
     </Avatar>
-}
-
-/** Code-native laurel frame; the number is the shared rank, never the row index. */
-function PlaceFrame({ rank, tied }: { rank: number; tied: boolean }) {
-    const leaves = [{ x: 15, y: 12, a: -35 }, { x: 11, y: 20, a: -55 }, { x: 11, y: 29, a: -80 }, { x: 15, y: 37, a: -110 }, { x: 21, y: 43, a: -130 }]
-    return <span className="points-place-frame" data-place={rank} role="img" aria-label={`${rankLabel(rank, tied)} place distinction`}>
-        <svg viewBox="0 0 60 56" fill="none" aria-hidden="true">
-            {[false, true].map(mirror => <g key={String(mirror)} transform={mirror ? "translate(60 0) scale(-1 1)" : undefined}>
-                <path d="M28 48C10 42 6 22 18 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                {leaves.map(leaf => <ellipse key={leaf.y} cx={leaf.x} cy={leaf.y} rx="2" ry="4.5" transform={`rotate(${leaf.a} ${leaf.x} ${leaf.y})`} fill="currentColor" />)}
-            </g>)}
-            <path d="M25 49h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        <span className="points-frame-number">{rankLabel(rank)}</span>
-        {tied && <small>Joint</small>}
-    </span>
 }
 
 /** Report filters never switch identity. Every tie shares a place, including joint winners. */
@@ -72,8 +57,7 @@ export function LeadershipPointsTable(props: Props) {
                 <div className="points-podium-panel"><div className="points-podium-heading"><h3>Leading students</h3><span>Monthly honours</span></div>
                 <div role="group" aria-label="Leading students" className={`points-leaders ${classicPodium ? "is-podium" : "has-shared-places"}`} style={{ gridTemplateColumns: `repeat(${Math.min(featured.length, 3)}, minmax(0, 1fr))` }}>
                     {featured.map(student => <button key={student.adm_no} type="button" data-rank={student.rank} data-student-id={student.adm_no} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} onClick={() => onStudentClick(student)} className={`points-leader ${student.rank === 1 ? "is-first" : ""}`}>
-                        <PlaceFrame rank={student.rank} tied={student.tied} />
-                        <span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span>
+                        <span className="points-leader-visual"><PlaceFrame rank={student.rank} tied={student.tied} /><span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span></span>
                         <span className="points-leader-name">{student.name}</span>
                         <span className="points-place-label">{rankLabel(student.rank, student.tied)}</span>
                         <span className="points-leader-class">{student.standard}{student.isHafiz ? " · Hafiz" : ""}</span>
@@ -84,7 +68,7 @@ export function LeadershipPointsTable(props: Props) {
                 {remaining.length > 0 && <section className="points-list-surface" aria-label="Remaining rankings">
                     <div className="points-list-heading"><h3>The rankings</h3><span>Earned points</span></div>
                     <ol aria-label="Student point rankings" className="points-rankings">
-                        {remaining.map(student => <li key={student.adm_no}><button type="button" data-rank={student.rank} data-student-id={student.adm_no} onClick={() => onStudentClick(student)} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} className="points-student-row">
+                        {remaining.map(student => <li key={student.adm_no}><button type="button" data-rank={student.rank} data-student-id={student.adm_no} data-honour={student.rank <= 10 ? "true" : undefined} onClick={() => onStudentClick(student)} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} className="points-student-row">
                             <span className="points-row-rank" aria-label={rankLabel(student.rank, student.tied)}>{student.rank}</span>
                             <StudentPortrait student={student} />
                             <span className="points-row-identity"><span>{student.name}</span><small>{student.standard} · {student.adm_no}{student.tied ? ` · ${rankLabel(student.rank, true)}` : ""}</small></span>

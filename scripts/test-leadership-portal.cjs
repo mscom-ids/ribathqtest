@@ -4,7 +4,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/swabe/.c
 const assert = require('node:assert/strict')
 const origin = process.env.LEADERSHIP_TEST_ORIGIN || 'http://localhost:3020'
 assert(['localhost','127.0.0.1'].includes(new URL(origin).hostname),'Tests must only target a local isolated server')
-const students = Array.from({length:45},(_,i)=>({adm_no:`QA${i}`,name:`Preview student ${i+1}`,standard:'7th',photo_url:null,progress:0}))
+const students = Array.from({length:45},(_,i)=>({adm_no:`QA${i}`,name:`Preview student ${i+1}`,standard:'7th',photo_url:i===0?`${origin}/qa-portrait.svg`:null,progress:0}))
 const leader = {id:'qa-leader',name:'Preview Vice Principal',role:'vice_principal',photo_url:null}
 const mentor = {id:'qa-mentor',name:'Preview mentor',role:'usthad',is_active:true,photo_url:null,student_count:8,place:'Preview'}
 const reports = students.map((s,i)=>({...s,totalPoints:i<3?90:i===44?0:90-i,bonusPoints:i<3?20:0}))
@@ -21,6 +21,7 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
    page.setDefaultNavigationTimeout(120_000)
    let outsideMode='full'
    page.on('pageerror',error=>errors.push(error.message))
+   await page.route('**/qa-portrait.svg',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="180" height="240" viewBox="0 0 180 240"><rect width="180" height="240" fill="#a5b6c6"/><circle cx="90" cy="78" r="40" fill="#e3cfb3"/><path d="M15 240v-45c0-75 150-75 150 0v45" fill="#324b68"/></svg>'}))
    await page.route('**/api/**',route=>{
     const request=route.request(),url=new URL(request.url());requests.push(url.pathname)
     let body={success:true}
@@ -36,7 +37,7 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
     else if(url.pathname.endsWith('/supervisor-focus'))Object.assign(body,{delegationToken:'preview-focus-token',mentor})
     else if(url.pathname.endsWith('/dashboard/staff'))body.summary={profile:mentor,students:students.slice(0,8),schedules:[],monthly_report:reports.slice(0,8)}
     else if(url.pathname.endsWith('/students'))body.students=students
-    else if(url.pathname.endsWith('/calculate'))body.reports=url.searchParams.get('mentor_id')==='qa-mentor'?reports.slice(0,8):reports
+    else if(url.pathname.endsWith('/calculate')){const monthly=url.searchParams.get('month')==='2026-09'?reports.map((report,i)=>({...report,totalPoints:i<3?95-i:report.totalPoints})):reports;body.reports=url.searchParams.get('mentor_id')==='qa-mentor'?monthly.slice(0,8):monthly}
     else if(url.pathname.endsWith('/incidents'))body.incidents=[]
     else if(url.pathname.endsWith('/mentor-policies'))body.policies=[]
     else if(url.pathname.endsWith('/years'))body.years=[]
@@ -121,6 +122,21 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
    assert.equal(await panel.locator('[data-student-id][data-rank="11"] .points-place-frame').count(),0)
    assert((await panel.locator('.points-header-card').boundingBox()).height <= 180,'title and both selectors fit in a compact header card')
    assert.equal(await panel.locator('.points-podium-panel').count(),1,'all leading cards share one podium panel')
+   assert.equal(await leaders.locator('.points-leader-visual').count(),3)
+   assert.equal(await leaders.locator('[data-award="champion"]').count(),3,'tied firsts all get the champion banner')
+   const portrait=leaders.locator('.points-featured-avatar').first()
+   assert.equal(await portrait.evaluate(el=>getComputedStyle(el).borderRadius),'0px','featured photos are full rectangular panels, not avatars')
+   const portraitBounds=await portrait.boundingBox();assert(portraitBounds.height>=120&&portraitBounds.width>=60,'featured photo has substantial card area')
+   assert.equal(await panel.locator('.points-student-row[data-honour="true"]').count(),7,'ranks 4–10 have the subtle row highlight')
+   await leaders.locator('.points-featured-avatar img').first().waitFor()
+   assert(await leaders.locator('.points-featured-avatar img').first().evaluate(el=>el.naturalWidth>0),'saved photo is loaded into the rectangular panel')
+   await month.click();await page.getByRole('option',{name:'Sep 2026',exact:true}).click()
+   await leaders.locator('[data-award="silver"]').waitFor()
+   assert.equal(await leaders.locator('[data-award="champion"]').count(),1)
+   assert.equal(await leaders.locator('[data-award="bronze"]').count(),1)
+   if(process.env.LEADERSHIP_SCREENSHOTS==='1')await page.screenshot({path:`tmp/leadership-awards-${device.name}.png`})
+   await month.click();await page.getByRole('option',{name:'Oct 2026',exact:true}).click()
+   await page.waitForFunction(()=>document.querySelectorAll('.points-leader [data-award="champion"]').length===3)
    assert.equal(await panel.getByRole('list',{name:'Student point rankings'}).getByRole('listitem').first().locator('button').getAttribute('data-rank'),'4')
    await mentorFilter.click();await page.getByRole('option',{name:'Preview mentor',exact:true}).click()
    await panel.getByText('8 students',{exact:true}).waitFor()
