@@ -19,7 +19,10 @@ Equal two-decimal totals use competition ranks (90,90,90,89 = 1,1,1,4).
 All ties at the top-three-rank boundary are featured and every joint first gets
 the same gold treatment. Portraits come from the active student roster; missing
 or failed images fall back to initials. No movement arrows are invented without
-historical ranking data. The light theme uses lavender/white and dark uses charcoal/black.
+historical ranking data. Leadership alone uses a compact blue/indigo title card
+containing the month and mentor controls, one framed podium panel with individual
+muted gold/silver/bronze cards, and right-edge laurel place frames through rank 10.
+The mentor portal retains its existing champion-card leaderboard unchanged.
 Every opening defaults to all students; choosing a Hifz mentor passes `mentor_id`
 to the existing monthly-report endpoint and re-ranks that roster only.
 

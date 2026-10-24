@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Award, ChevronRight, Crown, Loader2 } from "lucide-react"
+import { Award, ChevronRight, Loader2 } from "lucide-react"
 import { GlassSelect } from "@/components/ui/glass-select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { rankLabel, rankLeaderboard } from "@/lib/leaderboard-ranking"
@@ -22,6 +22,22 @@ function StudentPortrait({ student, featured = false }: { student: Performer; fe
     </Avatar>
 }
 
+/** Code-native laurel frame; the number is the shared rank, never the row index. */
+function PlaceFrame({ rank, tied }: { rank: number; tied: boolean }) {
+    const leaves = [{ x: 15, y: 12, a: -35 }, { x: 11, y: 20, a: -55 }, { x: 11, y: 29, a: -80 }, { x: 15, y: 37, a: -110 }, { x: 21, y: 43, a: -130 }]
+    return <span className="points-place-frame" data-place={rank} role="img" aria-label={`${rankLabel(rank, tied)} place distinction`}>
+        <svg viewBox="0 0 60 56" fill="none" aria-hidden="true">
+            {[false, true].map(mirror => <g key={String(mirror)} transform={mirror ? "translate(60 0) scale(-1 1)" : undefined}>
+                <path d="M28 48C10 42 6 22 18 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                {leaves.map(leaf => <ellipse key={leaf.y} cx={leaf.x} cy={leaf.y} rx="2" ry="4.5" transform={`rotate(${leaf.a} ${leaf.x} ${leaf.y})`} fill="currentColor" />)}
+            </g>)}
+            <path d="M25 49h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        <span className="points-frame-number">{rankLabel(rank)}</span>
+        {tied && <small>Joint</small>}
+    </span>
+}
+
 /** Report filters never switch identity. Every tie shares a place, including joint winners. */
 export function LeadershipPointsTable(props: Props) {
     const { performers, loading, error, month, onMonthChange, months, mentors, mentor, onMentorChange, onStudentClick } = props
@@ -39,26 +55,32 @@ export function LeadershipPointsTable(props: Props) {
         {student.bonusPoints > 0 && <span className="points-bonus">incl. +{student.bonusPoints.toFixed(2)} bonus</span>}
     </>
     return <div className="leadership-points-table">
-        <div className="points-heading"><p>THE MONTHLY HONOUR BOARD</p><h2>Top Performers</h2><span>Every effort counts. Every shared place is celebrated.</span></div>
-        <div className="points-filters">
-            <div className="min-w-0"><label>Month</label><GlassSelect value={month} onValueChange={onMonthChange} options={months} label="Leaderboard month" className="min-h-11 w-full" /></div>
-            <div className="min-w-0"><label>Hifz mentor</label><GlassSelect value={mentor} onValueChange={onMentorChange} options={[{ value: "all", label: "All students" }, ...mentors.map(item => ({ value: item.id, label: item.name }))]} label="Leaderboard mentor" className="min-h-11 w-full min-w-0" /></div>
-        </div>
-        <div className="points-scope"><p>{scope}</p><span>{loading ? "Updating…" : `${ranked.length} students`}</span></div>
+        <header className="points-header-card">
+            <div className="points-header-top">
+                <div className="points-header-title"><span className="points-header-icon"><Award aria-hidden="true" /></span><div><h2>Top Performers</h2><p>Monthly leaderboard</p></div></div>
+                <GlassSelect value={month} onValueChange={onMonthChange} options={months} label="Leaderboard month" tone="inverse" className="points-month-picker min-h-11 w-full" align="end" />
+            </div>
+            <div className="points-header-bottom">
+                <div className="min-w-0" title={scope}><GlassSelect value={mentor} onValueChange={onMentorChange} options={[{ value: "all", label: "All students" }, ...mentors.map(item => ({ value: item.id, label: item.name }))]} label="Leaderboard mentor" tone="inverse" className="min-h-11 w-full min-w-0" /></div>
+                <span>{loading ? "Updating…" : `${ranked.length} students`}</span>
+            </div>
+        </header>
         {loading ? <div role="status" className="points-message"><Loader2 className="h-5 w-5 animate-spin" />Loading monthly points…</div>
             : error ? <p role="alert" className="points-message text-red-600 dark:text-red-300">{error}</p>
             : ranked.length === 0 ? <div className="points-message"><Award className="h-8 w-8" /><p>No students in this selection.</p><p>Choose another mentor or month.</p></div>
             : <>
+                <div className="points-podium-panel"><div className="points-podium-heading"><h3>Leading students</h3><span>Monthly honours</span></div>
                 <div role="group" aria-label="Leading students" className={`points-leaders ${classicPodium ? "is-podium" : "has-shared-places"}`} style={{ gridTemplateColumns: `repeat(${Math.min(featured.length, 3)}, minmax(0, 1fr))` }}>
                     {featured.map(student => <button key={student.adm_no} type="button" data-rank={student.rank} data-student-id={student.adm_no} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} onClick={() => onStudentClick(student)} className={`points-leader ${student.rank === 1 ? "is-first" : ""}`}>
-                        <span className="points-portrait-wrap">{student.rank === 1 && <Crown className="points-crown" aria-hidden="true" />}<StudentPortrait student={student} featured /><span className="points-place-badge" aria-hidden="true">{student.rank}</span></span>
+                        <PlaceFrame rank={student.rank} tied={student.tied} />
+                        <span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span>
                         <span className="points-leader-name">{student.name}</span>
                         <span className="points-place-label">{rankLabel(student.rank, student.tied)}</span>
                         <span className="points-leader-class">{student.standard}{student.isHafiz ? " · Hafiz" : ""}</span>
                         <span className="points-leader-score">{points(student)}</span>
                     </button>)}
-                </div>
-                {ranked.some(student => student.tied) && <p className="points-tie-note">Equal points share the same rank. The next place counts all students ahead.</p>}
+                </div></div>
+                {ranked.some(student => student.tied) && <p className="points-tie-note">Equal points share the same place.</p>}
                 {remaining.length > 0 && <section className="points-list-surface" aria-label="Remaining rankings">
                     <div className="points-list-heading"><h3>The rankings</h3><span>Earned points</span></div>
                     <ol aria-label="Student point rankings" className="points-rankings">
@@ -67,7 +89,7 @@ export function LeadershipPointsTable(props: Props) {
                             <StudentPortrait student={student} />
                             <span className="points-row-identity"><span>{student.name}</span><small>{student.standard} · {student.adm_no}{student.tied ? ` · ${rankLabel(student.rank, true)}` : ""}</small></span>
                             <span className="points-row-score">{points(student)}</span>
-                            <ChevronRight className="points-row-arrow" aria-hidden="true" />
+                            {student.rank <= 10 ? <PlaceFrame rank={student.rank} tied={student.tied} /> : <ChevronRight className="points-row-arrow" aria-hidden="true" />}
                         </button></li>)}
                     </ol>
                 </section>}
