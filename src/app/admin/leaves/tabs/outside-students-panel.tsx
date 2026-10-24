@@ -391,7 +391,8 @@ export function OutsideStudentsPanel() {
                 </div>
                 <div className="flex gap-2">
                     <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger className="flex-1 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl">
+                        {/* Tolerate extension-injected fdprocessedid on this button only. */}
+                        <SelectTrigger suppressHydrationWarning className="flex-1 bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 rounded-xl">
                             <Filter className="h-4 w-4 mr-2 text-gray-400" />
                             <SelectValue placeholder="All Types" />
                         </SelectTrigger>

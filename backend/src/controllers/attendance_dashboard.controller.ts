@@ -596,7 +596,23 @@ async function countStudentsForScheduleWithRules(
         const relevantGroups = mentorId
             ? linkedGroups.filter(group => !group.mentor_id || group.mentor_id === mentorId)
             : linkedGroups;
-        return relevantGroups.reduce((total, group) => total + Number(group.student_count || 0), 0);
+        if (!relevantGroups.length) return 0;
+        // Never count raw group links: departed pupils and closed memberships
+        // remain there intentionally for historical reporting.
+        const roster = await db.query(
+            `SELECT COUNT(DISTINCT s.adm_no)::int AS count
+             FROM attendance_group_students gs
+             JOIN attendance_groups g ON g.id = gs.group_id
+             JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+             JOIN academic_student_placements p ON p.student_id = s.adm_no
+               AND p.academic_year_id = g.academic_year_id AND p.status = 'active'
+               AND p.standard = g.standard AND COALESCE(p.division, '__none') = g.division
+             WHERE gs.group_id = ANY($1::uuid[])
+               AND gs.effective_from <= COALESCE($2::date, CURRENT_DATE)
+               AND (gs.effective_until IS NULL OR gs.effective_until >= COALESCE($2::date, CURRENT_DATE))`,
+            [relevantGroups.map(group => group.id), date || null],
+        );
+        return Number(roster.rows[0]?.count || 0);
     }
 
     const rosterMentorId = mentorId || schedule.mentor_id || null;

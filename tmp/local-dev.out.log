@@ -1,0 +1,1615 @@
+
+> institution-os@0.1.0 dev
+> concurrently "npm run dev:frontend" "npm run dev:backend"
+
+[0] 
+[0] > institution-os@0.1.0 dev:frontend
+[0] > next dev --webpack
+[0] 
+[1] 
+[1] > institution-os@0.1.0 dev:backend
+[1] > cd backend && npm run dev
+[1] 
+[1] 
+[1] > backend@1.0.0 dev
+[1] > nodemon --watch src --exec ts-node src/index.ts
+[1] 
+[1] [33m[nodemon] 3.1.14[39m
+[1] [33m[nodemon] to restart at any time, enter `rs`[39m
+[1] [33m[nodemon] watching path(s): src\**\*[39m
+[1] [33m[nodemon] watching extensions: ts,json[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0] ▲ Next.js 16.1.6 (webpack)
+[0] - Local:         http://localhost:3000
+[0] - Network:       http://10.214.40.233:3000
+[0] - Environments: .env.local
+[0] 
+[0] ✓ Starting...
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[0] ✓ Ready in 30.2s
+[1] [DB POOL] 8 connections ready in 3637ms
+[1] [STARTUP] Server is running on port 5000
+[0] ○ Compiling / ...
+[0]  GET / 200 in 19.8s (compile: 18.0s, proxy.ts: 1051ms, render: 687ms)
+[0] ○ Compiling /admin ...
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /admin 200 in 4.4s (compile: 3.9s, proxy.ts: 32ms, render: 538ms)
+[0]  GET /manifest.webmanifest 200 in 643ms (compile: 619ms, render: 24ms)
+[0] (node:14168) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+[0] (Use `node --trace-deprecation ...` to show where the warning was created)
+[1] [SLOW DB] 482ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 484ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 486ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 486ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 486ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 491ms params=0 sql="SELECT ay.*, ays.id AS settings_id, COALESCE(ays.year_locked, ay.is_locked, false) AS year_locked, ays.school_fee_plan_id, ays.madrasa_fee_plan_id, ays.updated_at AS settings_updated_at FROM academic_years ay LEFT JOIN a"
+[1] [SLOW DB] 497ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 200 501.2ms
+[0]  GET /admin 200 in 104ms (compile: 46ms, proxy.ts: 14ms, render: 44ms)
+[1] [SLOW DB] 891ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 410ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 892ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 200 896.2ms
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 9ms, render: 11ms)
+[0]  GET /admin 200 in 54ms (compile: 11ms, proxy.ts: 11ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 8ms, render: 7ms)
+[1] [SLOW DB] 2631ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 200 2653.2ms
+[0]  GET /admin 200 in 33ms (compile: 5ms, proxy.ts: 10ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 32ms (compile: 9ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 33ms (compile: 8ms, proxy.ts: 9ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 31ms (compile: 7ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0]  GET /admin 200 in 35ms (compile: 9ms, proxy.ts: 7ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 33ms (compile: 7ms, proxy.ts: 10ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 11ms, render: 10ms)
+[0]  GET /admin 200 in 32ms (compile: 5ms, proxy.ts: 7ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 34ms (compile: 7ms, proxy.ts: 8ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 61ms (compile: 12ms, proxy.ts: 14ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 1360ms (compile: 1351ms, render: 9ms)
+[0]  GET /admin 200 in 1815ms (compile: 1666ms, proxy.ts: 35ms, render: 114ms)
+[0]  GET /admin 200 in 1252ms (compile: 1201ms, proxy.ts: 30ms, render: 22ms)
+[0]  GET /admin 200 in 25ms (compile: 5ms, proxy.ts: 5ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 39ms (compile: 22ms, render: 17ms)
+[0]  GET /admin 200 in 74ms (compile: 15ms, proxy.ts: 13ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 7ms, render: 13ms)
+[1] [DB POOL] 2 connections ready in 527ms
+[0]  GET /admin 200 in 45ms (compile: 8ms, proxy.ts: 13ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 31ms (compile: 9ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 44ms (compile: 13ms, proxy.ts: 10ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 7ms, render: 10ms)
+[0]  GET /admin 200 in 27ms (compile: 5ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 5ms, render: 4ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 7ms, proxy.ts: 8ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 31ms (compile: 6ms, proxy.ts: 10ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 37ms (compile: 11ms, proxy.ts: 10ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 6ms, render: 10ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 8ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 9ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 29ms (compile: 6ms, proxy.ts: 10ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 37ms (compile: 10ms, proxy.ts: 11ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 35ms (compile: 7ms, proxy.ts: 10ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 25ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 33ms (compile: 8ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 37ms (compile: 12ms, proxy.ts: 12ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 2ms, render: 8ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 35ms (compile: 8ms, proxy.ts: 12ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /admin 200 in 46ms (compile: 13ms, proxy.ts: 9ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 28ms (compile: 8ms, proxy.ts: 8ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 33ms (compile: 7ms, proxy.ts: 8ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 33ms (compile: 7ms, proxy.ts: 7ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 7ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 37ms (compile: 10ms, proxy.ts: 8ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 7ms)
+[0]  GET /admin 200 in 34ms (compile: 7ms, proxy.ts: 10ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 7ms, render: 7ms)
+[0]  GET /admin 200 in 84ms (compile: 31ms, proxy.ts: 24ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 48ms (compile: 11ms, proxy.ts: 13ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 19ms, render: 7ms)
+[0]  GET /admin 200 in 26ms (compile: 5ms, proxy.ts: 8ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 7ms, render: 10ms)
+[0]  GET /admin 200 in 41ms (compile: 8ms, proxy.ts: 8ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 5ms)
+[0]  GET /admin 200 in 31ms (compile: 7ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 35ms (compile: 10ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 36ms (compile: 11ms, proxy.ts: 9ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 34ms (compile: 8ms, proxy.ts: 8ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /admin 200 in 27ms (compile: 8ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 7ms)
+[0]  GET /admin 200 in 33ms (compile: 10ms, proxy.ts: 10ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 32ms (compile: 8ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 49ms (compile: 7ms, proxy.ts: 14ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 28ms, render: 9ms)
+[0]  GET /admin 200 in 1847ms (compile: 1688ms, proxy.ts: 34ms, render: 125ms)
+[0]  GET /admin 200 in 1502ms (compile: 1328ms, proxy.ts: 26ms, render: 147ms)
+[0]  GET /admin 200 in 49ms (compile: 10ms, proxy.ts: 12ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 22ms, render: 11ms)
+[0]  GET /admin 200 in 1694ms (compile: 1551ms, proxy.ts: 31ms, render: 113ms)
+[0]  GET /admin 200 in 1557ms (compile: 45ms, proxy.ts: 1416ms, render: 96ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/admin'
+[0] }
+[0]  GET /admin 500 in 7.0s (compile: 4.2s, proxy.ts: 35ms, render: 2.8s)
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /admin 200 in 1157ms (compile: 263ms, proxy.ts: 21ms, render: 873ms)
+[0]  GET /admin 200 in 1161ms (compile: 229ms, proxy.ts: 37ms, render: 895ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 18ms, render: 12ms)
+[1] [SLOW DB] 515ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 520.7ms
+[1] [SLOW DB] 510ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 511ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 512ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 512ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 516ms params=0 sql="SELECT ay.*, ays.id AS settings_id, COALESCE(ays.year_locked, ay.is_locked, false) AS year_locked, ays.school_fee_plan_id, ays.madrasa_fee_plan_id, ays.updated_at AS settings_updated_at FROM academic_years ay LEFT JOIN a"
+[1] [SLOW API] GET /api/academic-history/years 304 518.9ms
+[1] [SLOW DB] 516ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 1013ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 1014ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 1017.0ms
+[1] [SLOW DB] 510ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 3089ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 3114.3ms
+[0]  GET /admin 200 in 59ms (compile: 14ms, proxy.ts: 15ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 19ms, render: 13ms)
+[1] [DB POOL] 2 connections ready in 458ms
+[0]  GET /admin 200 in 934ms (compile: 892ms, proxy.ts: 18ms, render: 24ms)
+[0]  GET /admin 200 in 26ms (compile: 4ms, proxy.ts: 6ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /admin 200 in 33ms (compile: 10ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /admin 200 in 33ms (compile: 8ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 514ms (compile: 509ms, render: 5ms)
+[0]  GET /admin 200 in 31ms (compile: 6ms, proxy.ts: 6ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 45ms (compile: 12ms, proxy.ts: 14ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin 200 in 28ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 26ms (compile: 7ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 31ms (compile: 7ms, proxy.ts: 11ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 35ms (compile: 8ms, proxy.ts: 7ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 35ms (compile: 8ms, proxy.ts: 7ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin 200 in 31ms (compile: 7ms, proxy.ts: 10ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /admin 200 in 34ms (compile: 8ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 26ms (compile: 5ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 2ms, render: 6ms)
+[0]  GET /admin 200 in 39ms (compile: 7ms, proxy.ts: 13ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 25ms (compile: 5ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 5ms (compile: 1894µs, render: 3ms)
+[0]  GET /admin 200 in 26ms (compile: 7ms, proxy.ts: 7ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 11ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 8ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 60ms (compile: 10ms, proxy.ts: 14ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /admin 200 in 36ms (compile: 10ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 8ms, render: 6ms)
+[0]  GET /admin 200 in 39ms (compile: 8ms, proxy.ts: 8ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 29ms (compile: 6ms, proxy.ts: 6ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 10ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 29ms (compile: 8ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 9ms, proxy.ts: 10ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 34ms (compile: 7ms, proxy.ts: 13ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 25ms (compile: 6ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 6ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 30ms (compile: 6ms, proxy.ts: 10ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 43ms (compile: 11ms, proxy.ts: 13ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 5ms)
+[0]  GET /admin 200 in 34ms (compile: 9ms, proxy.ts: 11ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 31ms (compile: 8ms, proxy.ts: 10ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 24ms (compile: 6ms, proxy.ts: 6ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 2ms, render: 6ms)
+[0]  GET /admin 200 in 38ms (compile: 10ms, proxy.ts: 11ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin 200 in 30ms (compile: 8ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 5ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 25ms (compile: 6ms, proxy.ts: 6ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 38ms (compile: 9ms, proxy.ts: 11ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 27ms (compile: 6ms, proxy.ts: 8ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 27ms (compile: 8ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 42ms (compile: 10ms, proxy.ts: 8ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 27ms (compile: 7ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin 200 in 32ms (compile: 7ms, proxy.ts: 10ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 27ms (compile: 6ms, proxy.ts: 8ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 7ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin 200 in 37ms (compile: 8ms, proxy.ts: 12ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 32ms (compile: 9ms, proxy.ts: 9ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 23ms (compile: 6ms, proxy.ts: 6ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /admin 200 in 42ms (compile: 9ms, proxy.ts: 13ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 32ms (compile: 8ms, proxy.ts: 7ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 7ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 43ms (compile: 11ms, proxy.ts: 9ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 31ms (compile: 8ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 33ms (compile: 8ms, proxy.ts: 8ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 5ms, proxy.ts: 6ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 9ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 25ms (compile: 6ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 29ms (compile: 7ms, proxy.ts: 8ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 9ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 24ms (compile: 5ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 33ms (compile: 7ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 43ms (compile: 11ms, proxy.ts: 13ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 5ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /admin 200 in 24ms (compile: 6ms, proxy.ts: 5ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 1750µs, render: 7ms)
+[0]  GET /admin 200 in 42ms (compile: 10ms, proxy.ts: 10ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /admin 200 in 31ms (compile: 6ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 23ms (compile: 4ms, proxy.ts: 5ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 10ms, render: 12ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 30ms (compile: 6ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 28ms (compile: 7ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 6ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 29ms (compile: 8ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 38ms (compile: 9ms, proxy.ts: 11ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 1867µs, render: 5ms)
+[0]  GET /admin 200 in 27ms (compile: 4ms, proxy.ts: 6ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 25ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 4ms)
+[0]  GET /admin 200 in 33ms (compile: 7ms, proxy.ts: 9ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 8ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 23ms (compile: 5ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 34ms (compile: 8ms, proxy.ts: 11ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 37ms (compile: 7ms, proxy.ts: 11ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 5ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 28ms (compile: 6ms, proxy.ts: 6ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 31ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin 200 in 25ms (compile: 5ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 47ms (compile: 9ms, proxy.ts: 9ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin 200 in 40ms (compile: 7ms, proxy.ts: 10ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 32ms (compile: 7ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 4ms)
+[0]  GET /admin 200 in 24ms (compile: 6ms, proxy.ts: 5ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin 200 in 36ms (compile: 8ms, proxy.ts: 11ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 26ms (compile: 6ms, proxy.ts: 6ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin 200 in 26ms (compile: 5ms, proxy.ts: 7ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /admin 200 in 33ms (compile: 8ms, proxy.ts: 8ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 5ms (compile: 1736µs, render: 3ms)
+[0]  GET /admin 200 in 43ms (compile: 10ms, proxy.ts: 10ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin 200 in 46ms (compile: 7ms, proxy.ts: 14ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 11ms, render: 21ms)
+[1] [DB POOL] 2 connections ready in 473ms
+[0] ○ Compiling /admin/attendance-setup ...
+[0]  GET /admin/attendance-setup 200 in 6.4s (compile: 6.2s, proxy.ts: 23ms, render: 119ms)
+[1] [SLOW DB] 526ms params=0 sql="SELECT id, name, start_date, end_date, is_current FROM academic_years ORDER BY start_date DESC"
+[1] [SLOW API] GET /api/academic-placements/academic-years 200 531.3ms
+[0]  GET /manifest.webmanifest 200 in 824ms (compile: 793ms, render: 31ms)
+[1] [SLOW DB] 642ms params=1 sql="SELECT s.adm_no, s.name, s.photo_url, COALESCE(p.standard, 'Non-class') AS standard, p.division, p.status AS placement_status FROM students s LEFT JOIN academic_student_placements p ON p.student_id = s.adm_no AND p.acade"
+[1] [SLOW API] GET /api/academic-placements 200 671.5ms
+[1] [SLOW DB] 425ms params=1 sql="SELECT g.id, g.academic_year_id, g.department, g.standard, g.division, g.mentor_id, st.name AS mentor_name, COUNT(gs.student_id)::int AS student_count, COALESCE(array_agg(gs.student_id ORDER BY s.name) FILTER (WHERE gs.s"
+[1] [SLOW DB] 426ms params=1 sql="SELECT id, name, role FROM staff WHERE is_active = true AND lower(role) = ANY($1::text[]) ORDER BY name"
+[1] [SLOW DB] 415ms params=1 sql="SELECT id, standard, name, created_at FROM academic_standard_divisions WHERE academic_year_id = $1 ORDER BY standard, name"
+[1] [SLOW DB] 435ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 410ms params=2 sql="SELECT * FROM attendance_subjects WHERE academic_year_id = $1 AND department = $2 ORDER BY name ASC"
+[1] [SLOW API] GET /api/attendance/subjects 200 855.9ms
+[1] [SLOW DB] 422ms params=2 sql="SELECT * FROM attendance_subjects WHERE academic_year_id = $1 AND department = $2 ORDER BY name ASC"
+[1] [SLOW DB] 1657ms params=1 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, '0'::text AS session_revision, NULL::jsonb AS attendance_cancellation, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.depart"
+[1] [SLOW DB] 410ms params=0 sql="SELECT id, name FROM staff"
+[1] [SLOW DB] 411ms params=0 sql="SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL"
+[1] [SLOW API] GET /api/attendance/schedules 200 2519.4ms
+[1] [SLOW DB] 403ms params=3 sql="SELECT * FROM attendance_subjects WHERE academic_year_id = $1 AND department = $2 AND (mentor_id = $3 OR mentor_id IS NULL) ORDER BY name ASC"
+[0]  GET /admin/attendance-setup 200 in 130ms (compile: 62ms, proxy.ts: 24ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 7ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 36ms (compile: 10ms, proxy.ts: 8ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 37ms (compile: 9ms, proxy.ts: 10ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 11ms, render: 10ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 5ms, proxy.ts: 7ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 1938µs, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 34ms (compile: 7ms, proxy.ts: 9ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 3ms, render: 11ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 45ms (compile: 7ms, proxy.ts: 15ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 7ms, render: 11ms)
+[0]  GET /admin/attendance-setup 200 in 62ms (compile: 8ms, proxy.ts: 9ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 7ms, render: 14ms)
+[0]  GET /admin/attendance-setup 200 in 34ms (compile: 7ms, proxy.ts: 8ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 11ms, render: 13ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 5ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 4ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 34ms (compile: 7ms, proxy.ts: 12ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 1776µs, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 5ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 5ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 36ms (compile: 6ms, proxy.ts: 8ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 6ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 6ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 5ms, proxy.ts: 10ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 26ms (compile: 6ms, proxy.ts: 6ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 6ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 6ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 5ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 8ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 1904µs, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 5ms, proxy.ts: 8ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 6ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 2ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 5ms, proxy.ts: 8ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 5ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 33ms (compile: 7ms, proxy.ts: 8ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 4ms, proxy.ts: 8ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 5ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 8ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 6ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 1999µs, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 5ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 26ms (compile: 5ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 5ms, proxy.ts: 8ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 3ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 7ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 4ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 5ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 1954µs, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 36ms (compile: 7ms, proxy.ts: 9ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 7ms, proxy.ts: 6ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 7ms, proxy.ts: 8ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 7ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 6ms, proxy.ts: 11ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 1964µs, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 6ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 35ms (compile: 9ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 5ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 7ms, proxy.ts: 10ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 4ms, render: 10ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 7ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 6ms, render: 3ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 6ms, proxy.ts: 10ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 6ms, proxy.ts: 11ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 7ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 5ms, render: 3ms)
+[0]  GET /admin/attendance-setup 200 in 25ms (compile: 6ms, proxy.ts: 5ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 5ms, proxy.ts: 7ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 6ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 1952µs, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 10ms, render: 10ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 9ms, render: 13ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 7ms, proxy.ts: 11ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 6ms, proxy.ts: 12ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 6ms, proxy.ts: 7ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 5ms (compile: 2ms, render: 3ms)
+[0]  GET /admin/attendance-setup 200 in 38ms (compile: 6ms, proxy.ts: 9ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 6ms, proxy.ts: 9ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 6ms, proxy.ts: 8ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 33ms (compile: 6ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 6ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 6ms, proxy.ts: 8ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 32ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[1] [DB POOL] 2 connections ready in 3555ms
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 6ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 26ms (compile: 6ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 3ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 4ms, proxy.ts: 7ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 6ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 40ms (compile: 8ms, proxy.ts: 14ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 5ms, proxy.ts: 8ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 7ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 30ms (compile: 6ms, proxy.ts: 8ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 1973µs, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 6ms, proxy.ts: 7ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 29ms (compile: 5ms, proxy.ts: 9ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 7ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 28ms (compile: 5ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 27ms (compile: 5ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 1988µs, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 33ms (compile: 6ms, proxy.ts: 9ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 34ms (compile: 8ms, proxy.ts: 11ms, render: 14ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 56ms (compile: 10ms, proxy.ts: 13ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 5ms, render: 14ms)
+[0]  GET /admin/attendance-setup 200 in 57ms (compile: 9ms, proxy.ts: 17ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 48ms (compile: 33ms, render: 15ms)
+[0]  GET /admin/attendance-setup 200 in 1648ms (compile: 1554ms, proxy.ts: 38ms, render: 55ms)
+[0]  GET /admin/attendance-setup 200 in 1757ms (compile: 49ms, proxy.ts: 1636ms, render: 72ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 15ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 1555ms (compile: 26ms, proxy.ts: 1487ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 1230ms (compile: 1223ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 1392ms (compile: 55ms, proxy.ts: 1268ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 1162ms (compile: 1155ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 1275ms (compile: 21ms, proxy.ts: 1204ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 14ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 1438ms (compile: 1318ms, proxy.ts: 45ms, render: 75ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 30ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 118ms (compile: 21ms, proxy.ts: 53ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 14ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 1581ms (compile: 58ms, proxy.ts: 1454ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 21ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 1596ms (compile: 1451ms, proxy.ts: 85ms, render: 61ms)
+[0]  GET /manifest.webmanifest 200 in 51ms (compile: 42ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 1587ms (compile: 1486ms, proxy.ts: 55ms, render: 46ms)
+[0]  GET /admin/attendance-setup 200 in 1584ms (compile: 1469ms, proxy.ts: 75ms, render: 41ms)
+[0]  GET /admin/attendance-setup 200 in 65ms (compile: 12ms, proxy.ts: 14ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 16ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 77ms (compile: 13ms, proxy.ts: 24ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 12ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 67ms (compile: 12ms, proxy.ts: 16ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 85ms (compile: 81ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 55ms (compile: 10ms, proxy.ts: 11ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 11ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 36ms (compile: 8ms, proxy.ts: 9ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 10ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 43ms (compile: 12ms, proxy.ts: 9ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 17ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 40ms (compile: 9ms, proxy.ts: 7ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 13ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 33ms (compile: 6ms, proxy.ts: 9ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 15ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 45ms (compile: 10ms, proxy.ts: 11ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 41ms (compile: 8ms, proxy.ts: 12ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 42ms (compile: 9ms, proxy.ts: 10ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 7ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 44ms (compile: 10ms, proxy.ts: 11ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 18ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 62ms (compile: 9ms, proxy.ts: 19ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 19ms, render: 13ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[0]  GET /admin/attendance-setup 200 in 273ms (compile: 171ms, proxy.ts: 25ms, render: 77ms)
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[0]  GET /manifest.webmanifest 200 in 46ms (compile: 34ms, render: 12ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[0]  GET /admin/attendance-setup 200 in 107ms (compile: 15ms, proxy.ts: 20ms, render: 72ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 17ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 845ms (compile: 753ms, proxy.ts: 59ms, render: 32ms)
+[0]  GET /admin/attendance-setup 200 in 63ms (compile: 12ms, proxy.ts: 23ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 11ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 55ms (compile: 9ms, proxy.ts: 12ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 8ms, render: 11ms)
+[0]  GET /admin/attendance-setup 200 in 80ms (compile: 16ms, proxy.ts: 26ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 23ms, render: 9ms)
+[0]  GET /admin/attendance-setup 200 in 1462ms (compile: 44ms, proxy.ts: 50ms, render: 1368ms)
+[0]  GET /admin/attendance-setup 200 in 68ms (compile: 14ms, proxy.ts: 13ms, render: 41ms)
+[1] [DB POOL] 8 connections ready in 3252ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /admin/attendance-setup 200 in 203ms (compile: 65ms, proxy.ts: 40ms, render: 98ms)
+[0]  GET /admin/attendance-setup 200 in 86ms (compile: 20ms, proxy.ts: 22ms, render: 45ms)
+[0]  GET /admin/attendance-setup 200 in 60ms (compile: 10ms, proxy.ts: 12ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 4ms, render: 9ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: ⚙️  override existing env vars with { override: true }
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[1] [DB POOL] 8 connections ready in 3288ms
+[1] [STARTUP] Server is running on port 5000
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[0]  GET /admin/attendance-setup 200 in 69ms (compile: 13ms, proxy.ts: 16ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 8ms)
+[0]  GET /admin/attendance-setup 200 in 61ms (compile: 11ms, proxy.ts: 13ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 19ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 1479ms (compile: 44ms, proxy.ts: 13ms, render: 1421ms)
+[0]  GET /admin/attendance-setup 200 in 1580ms (compile: 1482ms, proxy.ts: 42ms, render: 55ms)
+[1] [DB POOL] 8 connections ready in 6623ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /admin/attendance-setup 200 in 1571ms (compile: 37ms, proxy.ts: 1484ms, render: 49ms)
+[0]  GET /admin/attendance-setup 200 in 1470ms (compile: 1381ms, proxy.ts: 48ms, render: 41ms)
+[0]  GET /admin/attendance-setup 200 in 57ms (compile: 12ms, proxy.ts: 12ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 18ms, render: 12ms)
+[0]  GET /admin/attendance-setup 200 in 1642ms (compile: 1534ms, proxy.ts: 47ms, render: 61ms)
+[0]  GET /admin/attendance-setup 200 in 89ms (compile: 20ms, proxy.ts: 26ms, render: 44ms)
+[0]  GET /admin/attendance-setup 200 in 110ms (compile: 12ms, proxy.ts: 16ms, render: 82ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 26ms, render: 11ms)
+[0]  GET /admin/attendance-setup 200 in 116ms (compile: 20ms, proxy.ts: 58ms, render: 38ms)
+[0]  GET /admin/attendance-setup 200 in 50ms (compile: 13ms, proxy.ts: 12ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 6ms, render: 13ms)
+[1] [DB POOL] 2 connections ready in 416ms
+[0]  GET /admin/attendance-setup 200 in 42ms (compile: 10ms, proxy.ts: 13ms, render: 20ms)
+[0]  GET /admin/attendance-setup 200 in 31ms (compile: 6ms, proxy.ts: 7ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 39ms (compile: 10ms, proxy.ts: 9ms, render: 20ms)
+[0]  GET /admin/attendance-setup 200 in 47ms (compile: 8ms, proxy.ts: 11ms, render: 29ms)
+[0]  GET /admin/attendance-setup 200 in 44ms (compile: 8ms, proxy.ts: 13ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 8ms, render: 7ms)
+[0]  GET /admin/attendance-setup 200 in 91ms (compile: 28ms, proxy.ts: 19ms, render: 44ms)
+[0]  GET /admin/attendance-setup 200 in 48ms (compile: 5ms, proxy.ts: 9ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 6ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 34ms (compile: 6ms, proxy.ts: 9ms, render: 20ms)
+[0]  GET /admin/attendance-setup 200 in 45ms (compile: 9ms, proxy.ts: 11ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 42ms (compile: 8ms, proxy.ts: 10ms, render: 24ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /admin/attendance-setup 200 in 57ms (compile: 5ms, proxy.ts: 7ms, render: 45ms)
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0]  GET /admin/attendance-setup 200 in 37ms (compile: 8ms, proxy.ts: 11ms, render: 18ms)
+[0]  GET /admin/attendance-setup 200 in 42ms (compile: 6ms, proxy.ts: 11ms, render: 25ms)
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+[1] [STARTUP] Environment validated â€” all required variables present.
+[0]  GET /admin/attendance-setup 200 in 33ms (compile: 7ms, proxy.ts: 10ms, render: 16ms)
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  suppress all logs with { quiet: true }
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /admin/attendance-setup 200 in 47ms (compile: 6ms, proxy.ts: 12ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 53ms (compile: 7ms, proxy.ts: 6ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 5ms, render: 12ms)
+[0]  GET /admin/attendance-setup 200 in 55ms (compile: 8ms, proxy.ts: 15ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 11ms, render: 6ms)
+[0]  GET /admin/attendance-setup 200 in 53ms (compile: 12ms, proxy.ts: 12ms, render: 29ms)
+[1] [DB POOL] 8 connections ready in 3336ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /manifest.webmanifest 200 in 34ms (compile: 19ms, render: 15ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0]  GET /admin/attendance-setup 200 in 91ms (compile: 17ms, proxy.ts: 23ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 14ms, render: 17ms)
+[0] Failed to proxy http://127.0.0.1:5000/api/auth/logout Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0]  GET /admin 200 in 431ms (compile: 73ms, proxy.ts: 146ms, render: 212ms)
+[0] Failed to proxy http://127.0.0.1:5000/api/academic-history/years Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Failed to proxy http://127.0.0.1:5000/api/dashboard/admin Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Failed to proxy http://127.0.0.1:5000/api/attendance/daily-stats?start_date=2026-10-24&end_date=2026-10-24 Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Failed to proxy http://127.0.0.1:5000/api/academic-history/years Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚡️ secrets for agents: https://dotenvx.com/as2
+[1] [STARTUP] Environment validated â€” all required variables present.
+[0] ○ Compiling /_error ...
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[0]  GET /manifest.webmanifest 200 in 3.5s (compile: 3.4s, render: 45ms)
+[0] Failed to proxy http://127.0.0.1:5000/api/auth/logout Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0] Error: connect ECONNREFUSED 127.0.0.1:5000
+[0]     at <unknown> (Error: connect ECONNREFUSED 127.0.0.1:5000) {
+[0]   errno: -4078,
+[0]   code: 'ECONNREFUSED',
+[0]   syscall: 'connect',
+[0]   address: '127.0.0.1',
+[0]   port: 5000
+[0] }
+[0]  GET /admin 200 in 142ms (compile: 73ms, proxy.ts: 10ms, render: 59ms)
+[1] [DB POOL] 8 connections ready in 3698ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /admin 200 in 83ms (compile: 25ms, proxy.ts: 19ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 4ms, render: 13ms)
+[0]  GET /admin 200 in 170ms (compile: 23ms, proxy.ts: 97ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 29ms, render: 6ms)
+[0]  GET /admin 200 in 61ms (compile: 9ms, proxy.ts: 10ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 16ms, render: 9ms)
+[0]  GET /admin 200 in 1240ms (compile: 39ms, proxy.ts: 15ms, render: 1185ms)
+[0]  GET /manifest.webmanifest 200 in 43ms (compile: 32ms, render: 11ms)
+[0]  GET /admin 200 in 155ms (compile: 27ms, proxy.ts: 21ms, render: 108ms)
+[0]  GET /manifest.webmanifest 200 in 1777ms (compile: 1765ms, render: 11ms)
+[0]  GET /admin 200 in 1972ms (compile: 1818ms, proxy.ts: 55ms, render: 99ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 18ms, render: 11ms)
+[0]  GET /admin 200 in 2.0s (compile: 1797ms, proxy.ts: 91ms, render: 112ms)
+[0] ○ Compiling /login ...
+[0]  GET /login 200 in 7.0s (compile: 6.8s, proxy.ts: 40ms, render: 181ms)
+[0]  GET /login 200 in 1855ms (compile: 42ms, proxy.ts: 1699ms, render: 114ms)
+[0]  GET /manifest.webmanifest 200 in 117ms (compile: 103ms, render: 14ms)
+[0]  GET /login 200 in 104ms (compile: 17ms, proxy.ts: 46ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 7ms, render: 14ms)
+[0]  GET /login 200 in 67ms (compile: 9ms, proxy.ts: 17ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 20ms, render: 16ms)
+[0]  GET /login 200 in 1612ms (compile: 1510ms, proxy.ts: 47ms, render: 55ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 28ms, render: 9ms)
+[0]  GET /login 200 in 1529ms (compile: 1396ms, proxy.ts: 73ms, render: 61ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 23ms, render: 7ms)
+[0]  GET /login 200 in 1575ms (compile: 1454ms, proxy.ts: 49ms, render: 73ms)
+[0]  GET /manifest.webmanifest 200 in 41ms (compile: 29ms, render: 12ms)
+[0]  GET /login 200 in 1497ms (compile: 1395ms, proxy.ts: 51ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 67ms (compile: 56ms, render: 11ms)
+[0]  GET /login 200 in 1344ms (compile: 36ms, proxy.ts: 1256ms, render: 53ms)
+[0]  GET /manifest.webmanifest 200 in 39ms (compile: 31ms, render: 8ms)
+[0]  GET /login 200 in 80ms (compile: 9ms, proxy.ts: 19ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 10ms, render: 9ms)
+[0]  GET /login 200 in 1620ms (compile: 1442ms, proxy.ts: 96ms, render: 83ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 18ms, render: 7ms)
+[0]  GET /login 200 in 88ms (compile: 14ms, proxy.ts: 16ms, render: 58ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 9ms, render: 19ms)
+[1] [AUTH] Login attempt for email: "hswabeehm@rquran.in"
+[1] [SLOW DB] 612ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[1] [AUTH] Login completed for "hswabeehm@rquran.in" in 2385ms
+[1] [SLOW API] POST /api/auth/login 200 2961.0ms
+[0] ○ Compiling /staff ...
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /staff 200 in 7.8s (compile: 7.2s, proxy.ts: 23ms, render: 576ms)
+[0] ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[0]  GET /manifest.webmanifest 200 in 46ms (compile: 31ms, render: 16ms)
+[1] [SLOW DB] 438ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 433ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[1] [SLOW DB] 469ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[1] [SLOW API] GET /api/staff/me 200 908.8ms
+[1] [SLOW DB] 471ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 472ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 513ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 521ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 543ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 544ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 602ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[1] [SLOW DB] 1205ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[1] [SLOW DB] 1241ms params=1 sql="SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND mode = 'New Verses' AND deleted_at IS NULL ORDER BY student_id, entry"
+[1] [SLOW DB] 1259ms params=1 sql="SELECT student_id, leave_type, reason_category, remarks, end_datetime FROM student_leaves WHERE student_id = ANY($1) AND status = 'outside' AND leave_type <> 'outdoor' ORDER BY created_at DESC"
+[1] [SLOW DB] 1910ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[1] [SLOW DB] 1310ms params=2 sql="SELECT student_id, mode, start_page, end_page, juz_portion, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2 AND deleted_at IS NULL"
+[1] [SLOW DB] 1504ms params=1 sql="SELECT d.student_id, s.name as receiver_name FROM mentor_delegations d JOIN staff s ON d.to_staff_id = s.id WHERE d.from_staff_id = $1 AND d.status = 'approved'"
+[1] [SLOW DB] 1511ms params=2 sql="SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2"
+[1] [SLOW DB] 2129ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 400ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 417ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 429ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 2540ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 427ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 428ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 428ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 446ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 448ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 448ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 835ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 1030ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 1030ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 1035ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW API] GET /api/dashboard/staff 200 4856.6ms
+[1] [DB POOL] 2 connections ready in 489ms
+[0] ○ Compiling /staff/attendance ...
+[0]  GET /staff/attendance 200 in 5.9s (compile: 5.7s, proxy.ts: 28ms, render: 126ms)
+[1] [SLOW DB] 514ms params=1 sql="SELECT * FROM mentor_access_policies WHERE feature = ANY($1::text[]) ORDER BY feature"
+[1] [SLOW API] GET /api/access-control/mentor-policies 200 521.9ms
+[1] [SLOW DB] 517ms params=1 sql="SELECT * FROM academic_calendar WHERE date = $1"
+[1] [SLOW API] GET /api/academics/calendar/2026-10-24 200 521.5ms
+[1] [SLOW DB] 508ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 509ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[1] [SLOW DB] 511ms params=3 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3"
+[1] [SLOW DB] 518ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[1] [SLOW DB] 1010ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[1] [SLOW DB] 501ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 500ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 501ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW API] GET /api/attendance/schedules-for-date 200 1028.8ms
+[1] [SLOW API] GET /api/attendance/dashboard 200 1024.3ms
+[0]  GET /manifest.webmanifest 200 in 2.2s (compile: 2.2s, render: 27ms)
+[0]  GET /staff/attendance 200 in 171ms (compile: 107ms, proxy.ts: 14ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 6ms, render: 14ms)
+[0]  GET /staff/attendance 200 in 69ms (compile: 12ms, proxy.ts: 14ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 6ms, render: 12ms)
+[0] ○ Compiling /staff/disciplinary ...
+[0]  GET /staff/disciplinary 200 in 3.9s (compile: 3.7s, proxy.ts: 25ms, render: 165ms)
+[0]  GET /staff/disciplinary 200 in 103ms (compile: 22ms, proxy.ts: 45ms, render: 36ms)
+[1] [SLOW DB] 572ms params=3 sql="SELECT i.id,i.reference_no,i.student_id,s.name student_name,s.photo_url,i.status,i.severity, i.reported_at,i.location,i.repeat_offence,i.parent_notification_status, c.name category_name,o.name offence_name,r.name reporte"
+[1] [SLOW API] GET /api/discipline/incidents 200 577.7ms
+[1] [SLOW DB] 462ms params=3 sql="SELECT i.id,i.reference_no,i.student_id,s.name student_name,s.photo_url,i.status,i.severity, i.reported_at,i.location,i.repeat_offence,i.parent_notification_status, c.name category_name,o.name offence_name,r.name reporte"
+[0]  GET /manifest.webmanifest 200 in 2.4s (compile: 2.4s, render: 40ms)
+[0]  GET /staff/disciplinary/new 200 in 3.2s (compile: 3.0s, proxy.ts: 21ms, render: 113ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 20ms, render: 11ms)
+[1] [SLOW DB] 412ms params=0 sql="SELECT id,name,role FROM staff WHERE is_active = true ORDER BY name"
+[1] [SLOW DB] 423ms params=0 sql="SELECT key,value,updated_at FROM discipline_settings ORDER BY key"
+[1] [SLOW DB] 875ms params=0 sql="SELECT c.*,COALESCE(json_agg(o ORDER BY o.name) FILTER(WHERE o.id IS NOT NULL),'[]') offences FROM discipline_categories c LEFT JOIN discipline_offence_types o ON o.category_id=c.id GROUP BY c.id ORDER BY c.sort_order,c."
+[1] [SLOW API] GET /api/discipline/settings 200 881.0ms
+[1] [SLOW DB] 424ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 537ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 200 969.0ms
+[1] [SLOW DB] 458ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 524ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 200 987.3ms
+[1] [SLOW DB] 508ms params=4 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW API] GET /api/students 200 515.8ms
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 7ms, render: 23ms)
+[1] [SLOW DB] 434ms params=3 sql="SELECT i.id,i.reference_no,i.student_id,s.name student_name,s.photo_url,i.status,i.severity, i.reported_at,i.location,i.repeat_offence,i.parent_notification_status, c.name category_name,o.name offence_name,r.name reporte"
+[1] [SLOW DB] 497ms params=3 sql="SELECT i.id,i.reference_no,i.student_id,s.name student_name,s.photo_url,i.status,i.severity, i.reported_at,i.location,i.repeat_offence,i.parent_notification_status, c.name category_name,o.name offence_name,r.name reporte"
+[1] [SLOW API] GET /api/discipline/incidents 304 502.0ms
+[0]  GET /staff/attendance 200 in 126ms (compile: 44ms, proxy.ts: 20ms, render: 62ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 12ms, render: 10ms)
+[1] [SLOW DB] 493ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[1] [SLOW DB] 486ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 486ms params=3 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2 AND marked_by = $3"
+[1] [SLOW DB] 487ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[1] [SLOW DB] 441ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 926ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[1] [SLOW API] GET /api/attendance/dashboard 304 930.9ms
+[1] [SLOW DB] 445ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 446ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW API] GET /api/attendance/schedules-for-date 304 943.8ms
+[0]  GET /staff/leaves 200 in 3.0s (compile: 2.9s, proxy.ts: 18ms, render: 129ms)
+[1] [SLOW DB] 427ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 417ms params=2 sql="SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1"
+[1] [SLOW DB] 503ms params=0 sql="WITH leave_counts AS ( SELECT institutional_leave_id, COUNT(*) as total_students, COUNT(*) FILTER (WHERE status = 'returned') as returned_students FROM student_leaves WHERE institutional_leave_id IS NOT NULL GROUP BY ins"
+[1] [SLOW API] GET /api/leaves/institutional 200 510.8ms
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 18ms, render: 13ms)
+[1] [SLOW DB] 425ms params=2 sql="SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.reason_category, sl.remarks, sl.companion_name, sl.companion_relationship, sl.start_datetime, sl.end_datetime, sl.group_type, sl.group_value, sl.institutional_le"
+[1] [SLOW API] GET /api/leaves/outside-students 200 856.3ms
+[1] [SLOW DB] 844ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[1] [SLOW API] GET /api/staff/me/leaves 200 1271.7ms
+[1] [SLOW DB] 443ms params=2 sql="SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1"
+[1] [SLOW DB] 403ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[1] [SLOW API] GET /api/staff/me/leaves 304 853.7ms
+[1] [DB POOL] 2 connections ready in 509ms
+[0]  GET /staff/leaves 200 in 83ms (compile: 8ms, proxy.ts: 19ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 6ms, render: 20ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0]  GET /staff/leaves 200 in 51ms (compile: 7ms, proxy.ts: 12ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[0]  GET /staff/leaves 200 in 51ms (compile: 6ms, proxy.ts: 7ms, render: 38ms)
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[0]  GET /manifest.webmanifest 200 in 541ms (compile: 534ms, render: 7ms)
+[0]  GET /staff/leaves 200 in 630ms (compile: 18ms, proxy.ts: 584ms, render: 28ms)
+[0]  GET /staff/leaves 200 in 554ms (compile: 488ms, proxy.ts: 34ms, render: 31ms)
+[0]  GET /staff/leaves 200 in 486ms (compile: 9ms, proxy.ts: 454ms, render: 23ms)
+[0]  GET /staff/leaves 200 in 38ms (compile: 8ms, proxy.ts: 12ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /staff/leaves 200 in 105ms (compile: 21ms, proxy.ts: 49ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 11ms, render: 4ms)
+[0]  GET /staff/leaves 200 in 37ms (compile: 8ms, proxy.ts: 7ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 12ms, render: 4ms)
+[1] [DB POOL] 8 connections ready in 3277ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /staff/leaves 200 in 45ms (compile: 9ms, proxy.ts: 13ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 9ms)
+[0]  GET /staff/leaves 200 in 27ms (compile: 5ms, proxy.ts: 6ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /staff/leaves 200 in 37ms (compile: 5ms, proxy.ts: 8ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 4ms, render: 10ms)
+[0]  GET /staff/leaves 200 in 26ms (compile: 5ms, proxy.ts: 5ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 2ms, render: 7ms)
+[0]  GET /staff/leaves 200 in 37ms (compile: 9ms, proxy.ts: 7ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /staff/leaves 200 in 42ms (compile: 7ms, proxy.ts: 10ms, render: 26ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 7ms)
+[0]  GET /staff/leaves 200 in 36ms (compile: 7ms, proxy.ts: 7ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 6ms)
+[0]  GET /staff/leaves 200 in 657ms (compile: 545ms, proxy.ts: 81ms, render: 30ms)
+[0]  GET /staff/leaves 200 in 39ms (compile: 10ms, proxy.ts: 9ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 7ms, render: 9ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[0]  GET /staff/leaves 200 in 219ms (compile: 160ms, proxy.ts: 14ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 13ms, render: 7ms)
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: 🛡️ auth for agents: https://vestauth.com
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[1] [DB POOL] 8 connections ready in 3233ms
+[1] [STARTUP] Server is running on port 5000
+[0]  GET /staff/leaves 200 in 33ms (compile: 6ms, proxy.ts: 9ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /staff/leaves 200 in 30ms (compile: 6ms, proxy.ts: 6ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[1] [32m[nodemon] restarting due to changes...[39m
+[1] [32m[nodemon] starting `ts-node src/index.ts`[39m
+[1] [dotenv@17.3.1] injecting env (8) from ..\.env.local -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[1] [dotenv@17.3.1] injecting env (3) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+[1] [STARTUP] Environment validated â€” all required variables present.
+[1] [dotenv@17.3.1] injecting env (0) from ..\.env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[1] [dotenv@17.3.1] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+[0]  GET /staff/leaves 200 in 65ms (compile: 12ms, proxy.ts: 14ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[1] [DB POOL] 8 connections ready in 4283ms
+[1] [STARTUP] Server is running on port 5000
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /staff/leaves 200 in 688ms (compile: 23ms, proxy.ts: 33ms, render: 631ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 14ms, render: 7ms)
+[1] [SLOW DB] 414ms params=2 sql="SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1"
+[1] [SLOW DB] 425ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[1] [SLOW DB] 476ms params=0 sql="WITH leave_counts AS ( SELECT institutional_leave_id, COUNT(*) as total_students, COUNT(*) FILTER (WHERE status = 'returned') as returned_students FROM student_leaves WHERE institutional_leave_id IS NOT NULL GROUP BY ins"
+[1] [SLOW DB] 472ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 473ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[1] [SLOW API] GET /api/staff/me 304 814.4ms
+[1] [SLOW DB] 897ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[1] [SLOW API] GET /api/staff/me/leaves 304 1318.1ms
+[1] [SLOW DB] 723ms params=1 sql="SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.reason_category, sl.remarks, sl.companion_name, sl.companion_relationship, sl.start_datetime, sl.end_datetime, sl.group_type, sl.group_value, sl.institutional_le"
+[1] [SLOW API] GET /api/leaves/outside-students 200 1646.4ms
+[0]  GET /staff/leaves 200 in 61ms (compile: 12ms, proxy.ts: 12ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 13ms, render: 15ms)
+[0]  GET /staff/leaves 200 in 162ms (compile: 22ms, proxy.ts: 20ms, render: 120ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 14ms, render: 8ms)
+[1] [SLOW DB] 406ms params=2 sql="SELECT id FROM staff WHERE email = $1 OR profile_id = $2 OR id = $2 LIMIT 1"
+[1] [SLOW DB] 407ms params=0 sql="WITH leave_counts AS ( SELECT institutional_leave_id, COUNT(*) as total_students, COUNT(*) FILTER (WHERE status = 'returned') as returned_students FROM student_leaves WHERE institutional_leave_id IS NOT NULL GROUP BY ins"
+[1] [SLOW DB] 892ms params=1 sql="SELECT sl.*, s.name as student_name, s.standard, s.adm_no FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1) AND sl.lea"
+[1] [SLOW API] GET /api/staff/me/leaves 304 1312.0ms
+[0]  GET /staff/leaves 200 in 331ms (compile: 198ms, proxy.ts: 14ms, render: 118ms)
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 20ms, render: 13ms)
+[0]  GET /staff/leaves 200 in 79ms (compile: 13ms, proxy.ts: 16ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 27ms, render: 8ms)
+[0]  GET /staff/leaves 200 in 673ms (compile: 584ms, proxy.ts: 54ms, render: 36ms)
+[0]  GET /staff/leaves 200 in 44ms (compile: 7ms, proxy.ts: 8ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /staff/leaves 200 in 40ms (compile: 6ms, proxy.ts: 10ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /staff/leaves 200 in 36ms (compile: 7ms, proxy.ts: 10ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /staff/leaves 200 in 72ms (compile: 14ms, proxy.ts: 14ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 10ms, render: 12ms)
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /staff/leaves 200 in 422ms (compile: 15ms, proxy.ts: 20ms, render: 388ms)
+[0]  GET /manifest.webmanifest 200 in 69ms (compile: 60ms, render: 8ms)
+[1] [DB POOL] 2 connections ready in 474ms
+[1] [DB POOL] 2 connections ready in 432ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /staff 200 in 4.3s (compile: 766ms, proxy.ts: 62ms, render: 3.5s)
+[0] ○ Compiling /manifest.webmanifest ...
+[1] [SLOW DB] 439ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 566ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[1] [SLOW API] GET /api/staff/me 304 575.5ms
+[1] [SLOW DB] 654ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 444ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 446ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 512ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 509ms params=2 sql="SELECT s.adm_no AS id, s.adm_no, s.name, s.photo_url, s.batch_year, COALESCE(p.standard, assignment.school_standard, s.standard) AS standard, COALESCE(p.division, assignment.school_section) AS division, COALESCE(p.standa"
+[1] [SLOW DB] 521ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 573ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 416ms params=1 sql="SELECT student_id, leave_type, reason_category, remarks, end_datetime FROM student_leaves WHERE student_id = ANY($1) AND status = 'outside' AND leave_type <> 'outdoor' ORDER BY created_at DESC"
+[1] [SLOW DB] 445ms params=2 sql="SELECT student_id, mode, start_page, end_page, juz_portion, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND entry_date = $2 AND deleted_at IS NULL"
+[1] [SLOW DB] 953ms params=2 sql="WITH configured AS ( SELECT id, department, standard FROM attendance_groups WHERE academic_year_id = $2 AND mentor_id = $1 ), assigned AS ( SELECT gs.student_id, c.department, c.standard FROM configured c JOIN attendance"
+[1] [SLOW DB] 965ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 457ms params=2 sql="SELECT student_id, schedule_id, status FROM student_attendance_marks WHERE student_id = ANY($1) AND date = $2"
+[1] [SLOW DB] 475ms params=1 sql="SELECT d.student_id, s.name as receiver_name FROM mentor_delegations d JOIN staff s ON d.to_staff_id = s.id WHERE d.from_staff_id = $1 AND d.status = 'approved'"
+[1] [SLOW DB] 907ms params=1 sql="SELECT DISTINCT ON (student_id) student_id, surah_name, start_v, end_v, start_page, end_page, entry_date FROM hifz_logs WHERE student_id = ANY($1) AND mode = 'New Verses' AND deleted_at IS NULL ORDER BY student_id, entry"
+[1] [SLOW DB] 1457ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 1599ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[1] [SLOW DB] 379ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 418ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 419ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 453ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 460ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 462ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 832ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 832ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 839ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 844ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 871ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 1161ms params=2 sql="SELECT COUNT(DISTINCT s.adm_no)::int AS count FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active' JOIN academic_student_pla"
+[1] [SLOW DB] 1174ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/dashboard/staff 304 3928.5ms
+[0]  GET /manifest.webmanifest 200 in 11.4s (compile: 11.4s, render: 43ms)
+[0] ○ Compiling /login ...
+[0]  GET /login 200 in 10.7s (compile: 10.2s, proxy.ts: 482ms, render: 97ms)
+[0]  GET /login 200 in 85ms (compile: 9ms, proxy.ts: 22ms, render: 55ms)
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /login 200 in 757ms (compile: 9ms, proxy.ts: 27ms, render: 721ms)
+[0]  GET /login 200 in 161ms (compile: 33ms, proxy.ts: 39ms, render: 89ms)
+[0]  GET /manifest.webmanifest 200 in 60ms (compile: 35ms, render: 25ms)
+[0]  GET /login 200 in 79ms (compile: 11ms, proxy.ts: 20ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 8ms, render: 20ms)
+[0]  GET /login 200 in 80ms (compile: 14ms, proxy.ts: 21ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 14ms, render: 9ms)
+[0]  GET /login 200 in 2.1s (compile: 1956ms, proxy.ts: 62ms, render: 92ms)
+[0]  GET /manifest.webmanifest 200 in 244ms (compile: 236ms, render: 7ms)
+[0]  GET /login 200 in 128ms (compile: 25ms, proxy.ts: 41ms, render: 62ms)
+[0]  GET /login 200 in 151ms (compile: 29ms, proxy.ts: 35ms, render: 87ms)
+[0]  GET /login 200 in 109ms (compile: 19ms, proxy.ts: 35ms, render: 56ms)
+[0]  GET /login 200 in 117ms (compile: 16ms, proxy.ts: 31ms, render: 70ms)
+[0]  GET /login 200 in 1042ms (compile: 255ms, proxy.ts: 623ms, render: 165ms)
+[0]  GET /login 200 in 112ms (compile: 17ms, proxy.ts: 45ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 126ms (compile: 69ms, render: 57ms)
+[1] [AUTH] Login attempt for email: "sayyidfuadvpa@rquran.in"
+[1] [SLOW DB] 656ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[1] [AUTH] Login completed for "sayyidfuadvpa@rquran.in" in 936ms
+[1] [SLOW API] POST /api/auth/login 200 1623.0ms
+[1] [AUTH] Login attempt for email: "sayyidfuadvpa@rquran.in"
+[1] [SLOW DB] 515ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[1] [AUTH] Login completed for "sayyidfuadvpa@rquran.in" in 724ms
+[1] [SLOW API] POST /api/auth/login 200 724.9ms
+[0] ○ Compiling /leadership ...
+[1] [AUTH] Login attempt for email: "sayyidfuadvpa@rquran.in"
+[1] [SLOW DB] 384ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[1] [AUTH] Login completed for "sayyidfuadvpa@rquran.in" in 522ms
+[1] [SLOW API] POST /api/auth/login 200 523.9ms
+[1] [AUTH] Login attempt for email: "sayyidfuadvpa@rquran.in"
+[1] [SLOW DB] 410ms params=1 sql="SELECT id, email, name, role, photo_url, profile_id, password_hash FROM staff WHERE LOWER(TRIM(email)) = $1 LIMIT 1"
+[1] [AUTH] Login completed for "sayyidfuadvpa@rquran.in" in 500ms
+[1] [SLOW API] POST /api/auth/login 200 501.2ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 137ms (compile: 31ms, proxy.ts: 20ms, render: 86ms)
+[1] [SLOW DB] 533ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 200 534.7ms
+[1] [SLOW DB] 419ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 421ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 409ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 425ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 413ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 437ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 437ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 825ms params=1 sql="SELECT s.id, s.name, s.photo_url, s.role, s.place, COUNT(DISTINCT st.adm_no)::int AS student_count FROM staff s LEFT JOIN students st ON COALESCE(st.status, 'active') = 'active' AND (st.hifz_mentor_id = s.id OR st.school"
+[1] [SLOW API] GET /api/delegations/focusable-mentors 200 840.3ms
+[1] [SLOW DB] 842ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 843ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 1218ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 1224ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1229ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 1276ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 886ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 563ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 200 1829.5ms
+[1] [SLOW DB] 2652ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 200 2700.2ms
+[1] [SLOW DB] 3058ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 3620ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 493ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 529ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 530ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 530ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 537ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 537ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 933ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 934ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 1771ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /leadership 200 in 64ms (compile: 7ms, proxy.ts: 15ms, render: 41ms)
+[1] [SLOW DB] 2771ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /manifest.webmanifest 200 in 48ms (compile: 34ms, render: 14ms)
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 8445.4ms
+[0]  GET /leadership 200 in 107ms (compile: 16ms, proxy.ts: 15ms, render: 77ms)
+[0]  GET /manifest.webmanifest 200 in 53ms (compile: 40ms, render: 13ms)
+[0]  GET /leadership 200 in 1235ms (compile: 1059ms, proxy.ts: 41ms, render: 134ms)
+[0]  GET /leadership 200 in 106ms (compile: 27ms, proxy.ts: 33ms, render: 45ms)
+[0]  GET /leadership 200 in 64ms (compile: 9ms, proxy.ts: 13ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 1082ms (compile: 984ms, proxy.ts: 34ms, render: 64ms)
+[0]  GET /leadership 200 in 87ms (compile: 15ms, proxy.ts: 16ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 12ms, render: 6ms)
+[0]  GET /leadership 200 in 68ms (compile: 20ms, proxy.ts: 15ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 27ms, render: 10ms)
+[0]  GET /leadership 200 in 127ms (compile: 15ms, proxy.ts: 24ms, render: 88ms)
+[0]  GET /leadership 200 in 984ms (compile: 48ms, proxy.ts: 35ms, render: 900ms)
+[0]  GET /leadership 200 in 307ms (compile: 23ms, proxy.ts: 46ms, render: 239ms)
+[0]  GET /leadership 200 in 58ms (compile: 16ms, proxy.ts: 12ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 19ms, render: 6ms)
+[0]  GET /leadership 200 in 67ms (compile: 11ms, proxy.ts: 15ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[0]  GET /leadership 200 in 1005ms (compile: 859ms, proxy.ts: 44ms, render: 103ms)
+[0]  GET /leadership 200 in 54ms (compile: 12ms, proxy.ts: 13ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 11ms, render: 18ms)
+[0]  GET /leadership 200 in 83ms (compile: 13ms, proxy.ts: 32ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 14ms, render: 5ms)
+[0]  GET /leadership 200 in 774ms (compile: 677ms, proxy.ts: 44ms, render: 53ms)
+[0]  GET /leadership 200 in 89ms (compile: 9ms, proxy.ts: 12ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 16ms, render: 13ms)
+[0]  GET /leadership 200 in 924ms (compile: 837ms, proxy.ts: 52ms, render: 35ms)
+[0]  GET /leadership 200 in 201ms (compile: 17ms, proxy.ts: 19ms, render: 166ms)
+[0]  GET /leadership 200 in 967ms (compile: 17ms, proxy.ts: 905ms, render: 45ms)
+[0]  GET /leadership 200 in 1038ms (compile: 13ms, proxy.ts: 981ms, render: 45ms)
+[0]  GET /leadership 200 in 336ms (compile: 23ms, proxy.ts: 41ms, render: 273ms)
+[0]  GET /leadership 200 in 456ms (compile: 55ms, proxy.ts: 33ms, render: 369ms)
+[0]  GET /leadership 200 in 1321ms (compile: 1169ms, proxy.ts: 103ms, render: 49ms)
+[0]  GET /leadership 200 in 920ms (compile: 28ms, proxy.ts: 846ms, render: 46ms)
+[0]  GET /leadership 200 in 3.3s (compile: 512ms, proxy.ts: 1924ms, render: 893ms)
+[0]  GET /manifest.webmanifest 200 in 48ms (compile: 26ms, render: 22ms)
+[0]  GET /leadership 200 in 3.7s (compile: 1401ms, proxy.ts: 123ms, render: 2.2s)
+[0]  GET /leadership 200 in 181ms (compile: 13ms, proxy.ts: 25ms, render: 144ms)
+[0]  GET /leadership 200 in 193ms (compile: 24ms, proxy.ts: 18ms, render: 151ms)
+[0]  GET /leadership 200 in 209ms (compile: 19ms, proxy.ts: 16ms, render: 173ms)
+[0]  GET /leadership 200 in 165ms (compile: 14ms, proxy.ts: 13ms, render: 138ms)
+[0]  GET /leadership 200 in 168ms (compile: 17ms, proxy.ts: 14ms, render: 137ms)
+[0]  GET /leadership 200 in 193ms (compile: 20ms, proxy.ts: 33ms, render: 140ms)
+[0]  GET /leadership 200 in 169ms (compile: 16ms, proxy.ts: 23ms, render: 131ms)
+[0]  GET /leadership 200 in 182ms (compile: 14ms, proxy.ts: 24ms, render: 144ms)
+[0]  GET /leadership 200 in 148ms (compile: 13ms, proxy.ts: 16ms, render: 119ms)
+[0]  GET /leadership 200 in 71ms (compile: 16ms, proxy.ts: 13ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 1112ms (compile: 943ms, proxy.ts: 63ms, render: 106ms)
+[0]  GET /leadership 200 in 54ms (compile: 11ms, proxy.ts: 18ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 43ms (compile: 32ms, render: 11ms)
+[0]  GET /leadership 200 in 37ms (compile: 7ms, proxy.ts: 7ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /leadership 200 in 828ms (compile: 40ms, proxy.ts: 46ms, render: 742ms)
+[0]  GET /leadership 200 in 72ms (compile: 14ms, proxy.ts: 28ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 8ms, render: 8ms)
+[0]  GET /leadership 200 in 68ms (compile: 13ms, proxy.ts: 15ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[1] [DB POOL] 2 connections ready in 460ms
+[0]  GET /leadership 200 in 1054ms (compile: 68ms, proxy.ts: 69ms, render: 916ms)
+[0]  GET /leadership 200 in 58ms (compile: 9ms, proxy.ts: 13ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /leadership 200 in 86ms (compile: 13ms, proxy.ts: 30ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 11ms, render: 10ms)
+[0]  GET /leadership 200 in 979ms (compile: 69ms, proxy.ts: 49ms, render: 861ms)
+[0]  GET /manifest.webmanifest 200 in 4.6s (compile: 4.5s, render: 37ms)
+[0]  GET /leadership 200 in 171ms (compile: 64ms, proxy.ts: 44ms, render: 64ms)
+[0]  GET /manifest.webmanifest 200 in 495ms (compile: 477ms, render: 18ms)
+[0]  GET /leadership 200 in 869ms (compile: 129ms, proxy.ts: 39ms, render: 701ms)
+[0]  GET /leadership 200 in 40ms (compile: 8ms, proxy.ts: 10ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 25ms, render: 12ms)
+[0]  GET /leadership 200 in 819ms (compile: 37ms, proxy.ts: 41ms, render: 742ms)
+[0]  GET /leadership 200 in 57ms (compile: 10ms, proxy.ts: 12ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 9ms, render: 12ms)
+[0]  GET /leadership 200 in 66ms (compile: 12ms, proxy.ts: 17ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 14ms, render: 10ms)
+[0]  GET /leadership 200 in 2.7s (compile: 90ms, proxy.ts: 60ms, render: 2.6s)
+[0]  GET /leadership 200 in 180ms (compile: 34ms, proxy.ts: 62ms, render: 85ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 19ms, render: 9ms)
+[0]  GET /leadership 200 in 2.3s (compile: 102ms, proxy.ts: 80ms, render: 2.1s)
+[0]  GET /manifest.webmanifest 200 in 43ms (compile: 35ms, render: 9ms)
+[0]  GET /leadership 200 in 1969ms (compile: 133ms, proxy.ts: 152ms, render: 1684ms)
+[0]  GET /manifest.webmanifest 200 in 74ms (compile: 61ms, render: 13ms)
+[0]  GET /leadership 200 in 148ms (compile: 32ms, proxy.ts: 67ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 11ms, render: 11ms)
+[0]  GET /leadership 200 in 96ms (compile: 13ms, proxy.ts: 20ms, render: 63ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 5ms, render: 14ms)
+[0]  GET /leadership 200 in 154ms (compile: 105ms, proxy.ts: 11ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 11ms, render: 8ms)
+[0]  GET /leadership 200 in 61ms (compile: 12ms, proxy.ts: 15ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 13ms, render: 12ms)
+[0]  GET /leadership 200 in 803ms (compile: 54ms, proxy.ts: 31ms, render: 717ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 13ms, render: 7ms)
+[0]  GET /leadership 200 in 55ms (compile: 12ms, proxy.ts: 16ms, render: 26ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 3ms, render: 11ms)
+[0]  GET /leadership 200 in 48ms (compile: 11ms, proxy.ts: 15ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 3ms, render: 8ms)
+[0]  GET /leadership 200 in 1540ms (compile: 48ms, proxy.ts: 48ms, render: 1444ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 9ms, render: 8ms)
+[0]  GET /leadership 200 in 60ms (compile: 9ms, proxy.ts: 28ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0]  GET /leadership 200 in 35ms (compile: 7ms, proxy.ts: 9ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 7ms)
+[0]  GET /leadership 200 in 817ms (compile: 43ms, proxy.ts: 42ms, render: 732ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /leadership 200 in 65ms (compile: 17ms, proxy.ts: 20ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 3.4s (compile: 258ms, proxy.ts: 120ms, render: 3.0s)
+[0]  GET /manifest.webmanifest 200 in 39ms (compile: 14ms, render: 25ms)
+[1] [SLOW DB] 4144ms params=1 sql="SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.reason_category, sl.remarks, sl.companion_name, sl.companion_relationship, sl.start_datetime, sl.end_datetime, sl.group_type, sl.group_value, sl.institutional_le"
+[1] [SLOW API] GET /api/leaves/outside-students 304 4453.4ms
+[0] ○ Compiling /leadership/student/[id] ...
+[0]  GET /leadership/student/R092 200 in 19.8s (compile: 19.7s, proxy.ts: 32ms, render: 86ms)
+[0]  GET /leadership/student/R092 200 in 123ms (compile: 47ms, proxy.ts: 21ms, render: 56ms)
+[1] [SLOW DB] 503ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 200 551.2ms
+[1] [SLOW DB] 3338ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[1] [SLOW DB] 3363ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 467ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students/R092 200 3859.1ms
+[1] [SLOW DB] 427ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 429ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[0]  GET /manifest.webmanifest 200 in 51ms (compile: 30ms, render: 21ms)
+[1] [SLOW DB] 413ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 425ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[1] [SLOW DB] 403ms params=1 sql="SELECT sl.id FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.student_id = $1 AND sl.status = 'outside' AND s.status = 'active' LIMIT 1"
+[1] [SLOW DB] 405ms params=1 sql="SELECT * FROM students WHERE adm_no = $1"
+[0]  GET /leadership 200 in 100ms (compile: 40ms, proxy.ts: 29ms, render: 31ms)
+[1] [SLOW DB] 487ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 488ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 490ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 976ms params=1 sql="SELECT s.id, s.name, s.photo_url, s.role, s.place, COUNT(DISTINCT st.adm_no)::int AS student_count FROM staff s LEFT JOIN students st ON COALESCE(st.status, 'active') = 'active' AND (st.hifz_mentor_id = s.id OR st.school"
+[1] [SLOW API] GET /api/delegations/focusable-mentors 304 981.1ms
+[1] [SLOW DB] 1365ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [DB POOL] 2 connections ready in 859ms
+[1] [SLOW DB] 413ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 1793.7ms
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 8ms, render: 15ms)
+[1] [SLOW DB] 3266ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 3258ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 3287ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 3260ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 3279.8ms
+[1] [SLOW DB] 447ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 5506ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 5537.0ms
+[0]  GET /leadership 200 in 53ms (compile: 8ms, proxy.ts: 15ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 4ms, render: 10ms)
+[0]  GET /leadership 200 in 804ms (compile: 83ms, proxy.ts: 28ms, render: 692ms)
+[0]  GET /leadership 200 in 77ms (compile: 25ms, proxy.ts: 17ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /leadership 200 in 44ms (compile: 7ms, proxy.ts: 18ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /leadership 200 in 780ms (compile: 68ms, proxy.ts: 38ms, render: 673ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 16ms, render: 7ms)
+[0]  GET /leadership 200 in 56ms (compile: 11ms, proxy.ts: 24ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 5ms)
+[0]  GET /leadership 200 in 40ms (compile: 9ms, proxy.ts: 10ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 774ms (compile: 80ms, proxy.ts: 31ms, render: 662ms)
+[0]  GET /leadership 200 in 50ms (compile: 10ms, proxy.ts: 11ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 6ms, render: 15ms)
+[0]  GET /leadership 200 in 1334ms (compile: 94ms, proxy.ts: 139ms, render: 1101ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 13ms, render: 8ms)
+[0]  GET /leadership 200 in 80ms (compile: 23ms, proxy.ts: 20ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 5ms, render: 4ms)
+[0]  GET /leadership 200 in 908ms (compile: 88ms, proxy.ts: 47ms, render: 774ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /leadership 200 in 71ms (compile: 21ms, proxy.ts: 28ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 11ms, render: 10ms)
+[0]  GET /leadership 200 in 53ms (compile: 12ms, proxy.ts: 17ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 6ms)
+[0]  GET /leadership 200 in 53ms (compile: 10ms, proxy.ts: 11ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /leadership 200 in 983ms (compile: 109ms, proxy.ts: 53ms, render: 822ms)
+[0]  GET /leadership 200 in 65ms (compile: 16ms, proxy.ts: 18ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 43ms (compile: 9ms, proxy.ts: 10ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 5ms, render: 13ms)
+[0]  GET /leadership 200 in 32ms (compile: 5ms, proxy.ts: 9ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 5ms)
+[0]  GET /leadership 200 in 38ms (compile: 12ms, proxy.ts: 9ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /leadership 200 in 36ms (compile: 5ms, proxy.ts: 9ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0]  GET /leadership 200 in 32ms (compile: 7ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 50ms (compile: 17ms, proxy.ts: 11ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 126ms (compile: 11ms, proxy.ts: 37ms, render: 78ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 49ms (compile: 6ms, proxy.ts: 10ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 5ms)
+[0]  GET /leadership 200 in 41ms (compile: 8ms, proxy.ts: 14ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 42ms (compile: 4ms, proxy.ts: 11ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /leadership 200 in 145ms (compile: 17ms, proxy.ts: 35ms, render: 93ms)
+[0]  GET /manifest.webmanifest 200 in 56ms (compile: 26ms, render: 30ms)
+[0]  GET /leadership 200 in 83ms (compile: 21ms, proxy.ts: 23ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 7ms, render: 9ms)
+[0]  GET /leadership 200 in 62ms (compile: 17ms, proxy.ts: 12ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /leadership 200 in 50ms (compile: 7ms, proxy.ts: 14ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /leadership 200 in 45ms (compile: 12ms, proxy.ts: 13ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 5ms, render: 4ms)
+[0]  GET /leadership 200 in 40ms (compile: 9ms, proxy.ts: 10ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 12ms, render: 9ms)
+[0]  GET /leadership 200 in 57ms (compile: 9ms, proxy.ts: 13ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 14ms, render: 9ms)
+[0] ○ Compiling /leadership/attendance ...
+[0]  GET /leadership/attendance 200 in 13.1s (compile: 13.0s, proxy.ts: 20ms, render: 82ms)
+[1] [SLOW DB] 483ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 464ms params=1 sql="SELECT * FROM mentor_access_policies WHERE feature = ANY($1::text[]) ORDER BY feature"
+[1] [SLOW DB] 462ms params=0 sql="SELECT standard, hifz_mentor_id, school_mentor_id, madrasa_mentor_id FROM students WHERE status = 'active' AND standard IS NOT NULL"
+[1] [SLOW DB] 462ms params=0 sql="SELECT id, name FROM staff"
+[1] [SLOW DB] 451ms params=1 sql="SELECT * FROM academic_calendar WHERE date = $1"
+[1] [SLOW DB] 436ms params=2 sql="SELECT c.*, COALESCE(il.name, CASE WHEN c.reason LIKE 'Institutional Leave:%' THEN 'Institutional Leave' ELSE c.reason END) AS resolved_reason FROM attendance_cancellations c LEFT JOIN institutional_leaves il ON c.reason"
+[1] [SLOW DB] 450ms params=2 sql="SELECT * FROM attendance_marks WHERE date >= $1 AND date <= $2"
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 20ms, render: 11ms)
+[1] [SLOW DB] 901ms params=2 sql="SELECT id FROM staff WHERE id = $1 OR profile_id = $1 OR email = $2 LIMIT 1"
+[1] [SLOW DB] 917ms params=2 sql="SELECT id, name, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 951ms params=3 sql="SELECT a.*, s.name as mentor_name, s.photo_url as mentor_photo, COALESCE(( SELECT jsonb_agg( jsonb_build_object( 'id', ag.id, 'department', ag.department, 'standard', ag.standard, 'division', ag.division, 'mentor_id', ag"
+[1] [SLOW API] GET /api/attendance/schedules-for-date 200 978.5ms
+[1] [SLOW DB] 1337ms params=3 sql="SELECT id, standards, day_of_week, start_time, end_time FROM attendance_schedules WHERE (is_deleted = false OR is_deleted IS NULL) AND effective_from <= $2::date AND (effective_until IS NULL OR effective_until >= $1::dat"
+[1] [SLOW DB] 460ms params=1 sql="SELECT id, profile_id, name, role, phone, email, photo_url, address, place, phone_contacts, staff_id, is_active, created_at FROM staff WHERE id = $1 LIMIT 1"
+[1] [SLOW API] GET /api/staff/me 200 1363.7ms
+[1] [SLOW API] GET /api/attendance/dashboard 200 1384.0ms
+[0]  GET /leadership/attendance 200 in 81ms (compile: 13ms, proxy.ts: 16ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 8ms, render: 16ms)
+[0]  GET /leadership 200 in 116ms (compile: 56ms, proxy.ts: 22ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 6ms, render: 11ms)
+[1] [SLOW DB] 430ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 424ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 442ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 435ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 445ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 445ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 447ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 850ms params=1 sql="SELECT s.id, s.name, s.photo_url, s.role, s.place, COUNT(DISTINCT st.adm_no)::int AS student_count FROM staff s LEFT JOIN students st ON COALESCE(st.status, 'active') = 'active' AND (st.hifz_mentor_id = s.id OR st.school"
+[1] [SLOW API] GET /api/delegations/focusable-mentors 304 851.7ms
+[1] [SLOW DB] 422ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 1251ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 404ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 1661.6ms
+[1] [SLOW DB] 2547ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 2582.7ms
+[0]  GET /leadership 200 in 58ms (compile: 9ms, proxy.ts: 15ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 6ms, render: 14ms)
+[0]  GET /leadership 200 in 54ms (compile: 12ms, proxy.ts: 14ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /leadership 200 in 35ms (compile: 6ms, proxy.ts: 9ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 11ms, render: 11ms)
+[0]  GET /leadership 200 in 57ms (compile: 8ms, proxy.ts: 14ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 7ms, render: 14ms)
+[1] [DB POOL] 2 connections ready in 434ms
+[1] [DB POOL] 2 connections ready in 407ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 785ms (compile: 23ms, proxy.ts: 30ms, render: 731ms)
+[1] [SLOW DB] 442ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [DB POOL] 2 connections ready in 392ms
+[1] [SLOW DB] 419ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 443ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 451ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 473ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 473ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 487ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 516ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 820ms params=1 sql="SELECT s.id, s.name, s.photo_url, s.role, s.place, COUNT(DISTINCT st.adm_no)::int AS student_count FROM staff s LEFT JOIN students st ON COALESCE(st.status, 'active') = 'active' AND (st.hifz_mentor_id = s.id OR st.school"
+[1] [SLOW API] GET /api/delegations/focusable-mentors 200 836.9ms
+[1] [SLOW DB] 853ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 917ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 1216ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 1244ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1255ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 1258ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 951ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[0]  GET /leadership 200 in 1364ms (compile: 63ms, proxy.ts: 66ms, render: 1235ms)
+[1] [SLOW DB] 419ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 200 1686.0ms
+[1] [SLOW DB] 2517ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 2605ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 200 2628.1ms
+[1] [SLOW DB] 2991ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[0]  GET /leadership 200 in 1528ms (compile: 71ms, proxy.ts: 57ms, render: 1400ms)
+[0]  GET /manifest.webmanifest 200 in 45ms (compile: 32ms, render: 13ms)
+[0]  GET /leadership 200 in 1358ms (compile: 1189ms, proxy.ts: 98ms, render: 70ms)
+[1] [SLOW DB] 417ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 420ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 433ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 433ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 435ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 451ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 839ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 859ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 2140ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 7ms, render: 9ms)
+[0]  GET /leadership 200 in 1634ms (compile: 49ms, proxy.ts: 1526ms, render: 58ms)
+[1] [SLOW DB] 3234ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /leadership 200 in 1487ms (compile: 67ms, proxy.ts: 66ms, render: 1354ms)
+[0]  GET /leadership 200 in 1685ms (compile: 62ms, proxy.ts: 61ms, render: 1562ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 20ms, render: 8ms)
+[0]  GET /leadership 200 in 1746ms (compile: 1583ms, proxy.ts: 75ms, render: 88ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 6ms)
+[0]  GET /leadership 200 in 329ms (compile: 22ms, proxy.ts: 35ms, render: 272ms)
+[0]  GET /leadership 200 in 1719ms (compile: 79ms, proxy.ts: 59ms, render: 1581ms)
+[0]  GET /manifest.webmanifest 200 in 55ms (compile: 24ms, render: 31ms)
+[0]  GET /leadership 200 in 1565ms (compile: 65ms, proxy.ts: 34ms, render: 1466ms)
+[0]  GET /manifest.webmanifest 200 in 88ms (compile: 57ms, render: 31ms)
+[0]  GET /leadership 200 in 1789ms (compile: 77ms, proxy.ts: 80ms, render: 1633ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 19ms, render: 12ms)
+[0]  GET /leadership 200 in 1536ms (compile: 30ms, proxy.ts: 64ms, render: 1442ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 17ms, render: 8ms)
+[0]  GET /leadership 200 in 1542ms (compile: 1400ms, proxy.ts: 83ms, render: 59ms)
+[0]  GET /leadership 200 in 1535ms (compile: 57ms, proxy.ts: 45ms, render: 1433ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 29ms, render: 7ms)
+[0]  GET /leadership 200 in 1509ms (compile: 1408ms, proxy.ts: 59ms, render: 41ms)
+[0]  GET /leadership 200 in 1577ms (compile: 66ms, proxy.ts: 35ms, render: 1476ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 15ms, render: 13ms)
+[0]  GET /leadership 200 in 1567ms (compile: 65ms, proxy.ts: 38ms, render: 1464ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 15ms, render: 8ms)
+[0]  GET /leadership 200 in 1692ms (compile: 60ms, proxy.ts: 47ms, render: 1585ms)
+[0]  GET /leadership 200 in 1746ms (compile: 70ms, proxy.ts: 27ms, render: 1649ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 13ms, render: 11ms)
+[0]  GET /leadership 200 in 1573ms (compile: 71ms, proxy.ts: 51ms, render: 1452ms)
+[0]  GET /manifest.webmanifest 200 in 118ms (compile: 81ms, render: 37ms)
+[0]  GET /leadership 200 in 2.3s (compile: 284ms, proxy.ts: 1565ms, render: 422ms)
+[0]  GET /leadership 200 in 55ms (compile: 12ms, proxy.ts: 11ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 9ms, render: 12ms)
+[0]  GET /leadership 200 in 39ms (compile: 9ms, proxy.ts: 11ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 14ms, render: 6ms)
+[0]  GET /leadership 200 in 35ms (compile: 7ms, proxy.ts: 13ms, render: 16ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /leadership 200 in 49ms (compile: 7ms, proxy.ts: 10ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[0]  GET /leadership 200 in 47ms (compile: 7ms, proxy.ts: 19ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 6ms)
+[0]  GET /leadership 200 in 38ms (compile: 7ms, proxy.ts: 11ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 640ms (compile: 634ms, render: 6ms)
+[0]  GET /leadership 200 in 43ms (compile: 14ms, proxy.ts: 10ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /leadership 200 in 61ms (compile: 14ms, proxy.ts: 12ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 4ms, render: 8ms)
+[0]  GET /leadership 200 in 37ms (compile: 5ms, proxy.ts: 12ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 14ms, render: 7ms)
+[0]  GET /leadership 200 in 40ms (compile: 7ms, proxy.ts: 12ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)

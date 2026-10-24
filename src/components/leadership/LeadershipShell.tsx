@@ -86,10 +86,10 @@ export function LeadershipShell({ children }: { children: React.ReactNode }) {
       </div>
     </header>
     {focusedName && <div className="border-b border-indigo-200 bg-indigo-50 px-5 py-2 text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-200">Mentor Focus: {focusedName}<Link href="/leadership" className="ml-4 font-semibold underline">Exit focus</Link></div>}
-    <main className="mx-auto w-full max-w-[1600px] pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-8">
+    <main className="leadership-main mx-auto w-full max-w-[1600px] pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8">
       {error ? <div role="alert" className="m-6 rounded-xl border border-amber-200 p-5">{error}<button type="button" className="ml-3 font-semibold underline" onClick={() => setAttempt(value => value + 1)}>Retry</button></div> : identity ? <LeadershipContext.Provider value={identity}>{children}</LeadershipContext.Provider> : <div className="flex min-h-[50vh] items-center justify-center gap-3 text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Loading leadership portal…</div>}
     </main>
-    <nav aria-label="Leadership mobile navigation" className="leadership-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t border-slate-200 bg-white px-2 pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 lg:hidden">
+    <nav aria-label="Leadership mobile navigation" className="leadership-mobile-nav fixed inset-x-0 bottom-0 z-[60] grid grid-cols-5 border-t border-slate-200 bg-white px-2 pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900 md:hidden">
       {primaryItems.map(item => { const Icon = item.icon; const active = isActive(item.href); return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`leadership-mobile-nav-item ${active ? "is-active" : ""}`}><span className="leadership-mobile-nav-icon"><Icon className="h-5 w-5" /></span><span>{item.label}</span></Link> })}
       <LeadershipMobileMenu items={moreItems} pathname={pathname} />
     </nav>

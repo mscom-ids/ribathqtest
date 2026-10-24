@@ -245,16 +245,40 @@
 /* Leadership has its own document-flow shell and stationary leaderboard.
    These backgrounds deliberately have no masked/3D/filtered ancestor. */
 .leadership-welcome {
-  background: #142d57;
-  background-image: linear-gradient(115deg, #102a4d, #233d7c 60%, #4342a2);
-  border: 1px solid rgb(255 255 255 / 12%);
+  background: #142d45;
+  background-image: linear-gradient(110deg, #142d45, #21465a);
+  border: 1px solid #29495f;
 }
 .leadership-header-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.leadership-header-grid > :last-child { grid-column: 2; grid-row: 1; }
 .leadership-desktop-nav { display: none; min-width: 0; }
 .leadership-count { background: rgb(255 255 255 / 7%); border: 1px solid rgb(255 255 255 / 12%); }
 .leadership-outside-count { background: rgb(251 191 36 / 15%); border: 1px solid rgb(253 230 138 / 24%); transition: background-color 160ms ease; }
 .leadership-outside-count:hover, .leadership-outside-count[data-state="open"] { background: rgb(251 191 36 / 25%); }
-.leadership-stat, .leadership-section { border-radius: 24px; box-shadow: 0 4px 20px -12px rgb(15 23 42 / 18%); }
+.leadership-stat, .leadership-section { border-radius: 18px; box-shadow: 0 2px 8px -4px rgb(15 23 42 / 12%); }
+.leadership-stat { padding: 18px; height: 100%; }
+.leadership-stat > div:first-child { margin-bottom: 12px; }
+.leadership-stat > div:last-child { margin-top: 14px; height: 3px; }
+.leadership-dashboard { padding-bottom: 24px; }
+.leadership-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px 4px; }
+.leadership-actions a, .leadership-actions button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; border: 1px solid #dce4ec; border-radius: 10px; background: white; padding: 10px 14px; color: #334155; font-size: 12px; font-weight: 600; }
+.leadership-actions a:hover, .leadership-actions button:hover { background: #f1f5f9; border-color: #94a3b8; }
+.leadership-portal a:focus-visible, .leadership-portal button:focus-visible { outline: 2px solid #6366f1; outline-offset: 3px; }
+.leadership-section input { border-radius: 10px; box-shadow: none; }
+.leadership-section [style*="max-height"], .leadership-section .overflow-y-auto { overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+html.dark .leadership-actions a, html.dark .leadership-actions button { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+html.dark .leadership-actions a:hover, html.dark .leadership-actions button:hover { background: #1e293b; }
+@media (max-width: 479px) {
+  .leadership-progress-button { width: 44px; padding: 0; font-size: 0; gap: 0; }
+  .leadership-progress-button svg { width: 18px; height: 18px; }
+}
+@media (min-width: 768px) {
+  .leadership-directory-grid { grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); align-items: start; }
+  .leadership-welcome-body { flex-direction: row; align-items: center; gap: 20px; }
+  .leadership-welcome-body > :first-child { min-width: 0; }
+  .leadership-welcome-counts { width: 280px; flex-shrink: 0; border-top: 0; padding-top: 0; }
+  .leadership-welcome-counts > * { padding: 16px 8px; }
+}
 .leadership-mobile-nav { box-shadow: 0 -6px 28px -16px rgb(15 23 42 / 22%); }
 .leadership-mobile-nav-item { display: flex; min-height: 68px; min-width: 0; align-items: center; justify-content: center; flex-direction: column; gap: 3px; padding: 7px 2px; color: #64748b; font-size: 10px; font-weight: 600; outline-offset: -3px; }
 .leadership-mobile-nav-icon { display: flex; width: 44px; height: 30px; align-items: center; justify-content: center; border-radius: 12px; }
@@ -266,12 +290,15 @@ html.dark .leadership-mobile-nav-item.is-active .leadership-mobile-nav-icon { ba
 .leadership-mobile-menu { max-height: calc(100dvh - 24px); overflow-y: auto; }
 .leadership-mobile-menu[data-state="open"], .leadership-menu-overlay[data-state="open"], .leadership-outside-popover[data-state="open"] { animation: leadership-appear 140ms ease-out; }
 .leadership-mobile-menu[data-state="closed"], .leadership-menu-overlay[data-state="closed"], .leadership-outside-popover[data-state="closed"] { animation: leadership-disappear 120ms ease-in; }
-@media (min-width: 1024px) {
-  .leadership-desktop-nav { display: flex; grid-column: 1 / -1; grid-row: 2; justify-content: center; padding-top: 6px; }
+@media (min-width: 768px) {
+  .leadership-desktop-nav { display: flex; grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; overflow-x: auto; padding: 10px 0 0; border-top: 1px solid #edf1f5; }
+  .leadership-desktop-nav a { min-height: 44px; }
+  html.dark .leadership-desktop-nav { border-color: #1e293b; }
 }
 @media (min-width: 1440px) {
   .leadership-header-grid { grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; }
-  .leadership-desktop-nav { grid-column: auto; grid-row: auto; overflow-x: auto; padding-top: 0; }
+  .leadership-header-grid > :last-child { grid-column: 3; }
+  .leadership-desktop-nav { grid-column: 2; grid-row: 1; justify-content: center; padding-top: 0; border-top: 0; }
 }
 .leadership-ranking-header {
   background: #4930ee;

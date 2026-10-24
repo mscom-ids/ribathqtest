@@ -6,6 +6,7 @@ import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { applyAcademicSnapshot, getAcademicYearContext, getStudentYearSnapshotMap } from '../utils/academic-year';
 import { addReadmittedStudentToCurrentBilling } from '../modules/finance/finance.billing';
+import { disconnectAlumniAssignments } from '../services/student-exit.service';
 
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
 const ALUMNI_STATUSES = ['completed', 'dropout', 'stopped', 'higher_education'];
@@ -799,6 +800,16 @@ export const updateStudent = async (req: Request, res: Response) => {
         }
       }
 
+      if (isAlumniStatus(result.rows[0].status)) {
+        await disconnectAlumniAssignments(client, studentId,
+          syncExitDate ? incomingLeavingDate.slice(0, 10)
+            : (!becomingAlumni && currentRes.rows[0].exit_date)
+              || `${todayParts.year}-${todayParts.month}-${todayParts.day}`);
+        result.rows[0].hifz_mentor_id = null;
+        result.rows[0].school_mentor_id = null;
+        result.rows[0].madrasa_mentor_id = null;
+      }
+
       const readmissionBilling = beingReadmitted
         ? await addReadmittedStudentToCurrentBilling(client, studentId, await getStaffId(req), readmissionDate!)
         : null;
@@ -811,6 +822,10 @@ export const updateStudent = async (req: Request, res: Response) => {
       invalidateCacheByPrefix('attendance:');
       invalidateCacheByPrefix('mentor-students:');
       invalidateCacheByPrefix('leaves:');
+      invalidateCacheByPrefix('academic-placements:');
+      invalidateCacheByPrefix('staff:');
+      invalidateCacheByPrefix('reports:');
+      invalidateCacheByPrefix('schedules:');
       res.json({ success: true, student: result.rows[0], readmission_billing: readmissionBilling });
     } catch (err) {
       await client.query('ROLLBACK');

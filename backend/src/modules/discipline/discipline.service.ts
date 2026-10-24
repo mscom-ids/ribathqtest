@@ -102,17 +102,17 @@ export async function assertCanReportStudent(actor: { role: string; staffId: str
     if (isReviewRole(actor.role)) return;
     if (!actor.staffId) throw new Error('A linked staff profile is required');
 
-    const assigned = await queryable.query(
+    // Reporting is campus-wide; this does not grant access to other reporters' incidents.
+    const student = await queryable.query(
         `SELECT 1
          FROM students
          WHERE adm_no = $1
            AND status = 'active'
-           AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
          LIMIT 1`,
-        [studentId, actor.staffId],
+        [studentId],
     );
-    if (!assigned.rows[0]) {
-        const error = new Error('You can report disciplinary incidents only for your assigned students') as Error & { statusCode?: number };
+    if (!student.rows[0]) {
+        const error = new Error('Select an active student to report an incident') as Error & { statusCode?: number };
         error.statusCode = 403;
         throw error;
     }

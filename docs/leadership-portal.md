@@ -36,6 +36,18 @@ Overview snapshots are keyed by the signed-in leader ID.
 
 ## Verification
 
+### iPad-first overview
+
+Navigation uses fixed breakpoints, not content wrapping: phones below 768px use
+the bottom bar; tablets from 768–1439px use a dedicated second header row; wide
+screens from 1440px use a single header row. Focused-class navigation remains
+available in each layout. No backdrop filters or transformed ancestors are added.
+
+The overview retains student progress, outside presence, Mentor Focus and points.
+It adds class filtering, mentor/place search and direct attendance/report/points
+actions. Primary actions and search inputs have 44px minimum touch targets.
+The student and mentor workspaces sit side-by-side from 768px and stack on phones.
+
 - `node scripts/test-leadership-routing.cjs` tests roles, bookmarks, and focus scope.
 - `node scripts/test-leadership-portal.cjs` tests the real routes on tablet, phone,
   and laptop Chromium layouts. Run a separate Next server on localhost:3020 first;

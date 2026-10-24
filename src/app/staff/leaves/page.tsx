@@ -115,7 +115,7 @@ export default function StaffLeavesPage() {
                 <div>
                     <h1 className="text-xl font-bold text-slate-900 dark:text-white">Student Leaves</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                        Manage leave authorizations for your students.
+                        View all outside students and record returns. Exit authorizations are limited to your students.
                     </p>
                 </div>
 
@@ -161,6 +161,8 @@ export default function StaffLeavesPage() {
                         return (
                             <button
                                 key={tab.key}
+                                // Browser form-helper extensions may inject fdprocessedid before hydration.
+                                suppressHydrationWarning
                                 onClick={() => setActiveTab(tab.key)}
                                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-sm font-medium transition-all ${
                                     isActive

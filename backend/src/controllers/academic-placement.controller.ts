@@ -115,13 +115,17 @@ export const getAttendanceGroups = async (req: Request, res: Response) => {
                     db.query(
                         `SELECT g.id, g.academic_year_id, g.department, g.standard, g.division,
                                 g.mentor_id, st.name AS mentor_name,
-                                COUNT(gs.student_id)::int AS student_count,
+                                COUNT(DISTINCT s.adm_no)::int AS student_count,
                                 COALESCE(array_agg(gs.student_id ORDER BY s.name)
-                                    FILTER (WHERE gs.student_id IS NOT NULL), ARRAY[]::text[]) AS student_ids
+                                    FILTER (WHERE s.adm_no IS NOT NULL), ARRAY[]::text[]) AS student_ids
                          FROM attendance_groups g
                          LEFT JOIN staff st ON st.id = g.mentor_id
-                         LEFT JOIN attendance_group_students gs ON gs.group_id = g.id
-                         LEFT JOIN students s ON s.adm_no = gs.student_id
+                         LEFT JOIN attendance_group_students gs ON gs.group_id = g.id AND gs.effective_until IS NULL
+                         LEFT JOIN students s ON s.adm_no = gs.student_id AND s.status = 'active'
+                           AND EXISTS (SELECT 1 FROM academic_student_placements p
+                               WHERE p.student_id = s.adm_no AND p.academic_year_id = g.academic_year_id
+                                 AND p.status = 'active' AND p.standard = g.standard
+                                 AND COALESCE(p.division, '__none') = g.division)
                          WHERE g.academic_year_id = $1
                          GROUP BY g.id, st.name
                          ORDER BY g.department, g.standard, g.division`,

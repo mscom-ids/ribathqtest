@@ -14,10 +14,11 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
 ;(async()=>{
  const browser = await chromium.launch({channel:'chrome',headless:true})
  try {
-  for(const device of [{name:'tablet',width:834,height:1112,touch:true},{name:'phone',width:390,height:844,touch:true},{name:'compact-phone',width:320,height:740,touch:true},{name:'laptop',width:1440,height:1000,touch:false}]) {
+  for(const device of [{name:'tablet',width:834,height:1112,touch:true},{name:'ipad-landscape',width:1194,height:834,touch:true},{name:'phone',width:390,height:844,touch:true},{name:'compact-phone',width:320,height:740,touch:true},{name:'laptop',width:1440,height:1000,touch:false}]) {
    const context = await browser.newContext({viewport:{width:device.width,height:device.height},isMobile:device.touch,hasTouch:device.touch})
    await context.addCookies([{name:'auth_token',value:cookie,url:origin,httpOnly:true}])
    const page = await context.newPage(), errors=[], requests=[]
+   page.setDefaultNavigationTimeout(120_000)
    let outsideMode='full'
    page.on('pageerror',error=>errors.push(error.message))
    await page.route('**/api/**',route=>{
@@ -43,16 +44,24 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
    })
    await page.goto(origin+'/staff')
    await page.waitForURL('**/leadership')
-   await page.getByRole('heading',{name:/Good .*Preview Vice Principal/}).waitFor()
+   // Next's development-only badge overlaps the first phone navigation target.
+   // Hide only that debugging surface; runtime page errors are still collected.
+   await page.addStyleTag({content:'nextjs-portal { display: none !important; }'})
+   await page.getByRole('heading',{name:'Institution overview',exact:true}).waitFor()
    assert.equal(await page.locator('[data-portal="leadership"]').count(),1)
    assert.equal(requests.filter(p=>p.endsWith('/dashboard/staff')).length,0,'overview never loads mentor dashboard')
    assert.equal(requests.filter(p=>p.endsWith('/staff/me')).length,0,'overview uses real leader identity')
-   const mobile=device.width<1024
+   const mobile=device.width<768
    const bottomNav=page.getByRole('navigation',{name:'Leadership mobile navigation',exact:true})
    const desktopNav=page.getByRole('navigation',{name:'Leadership navigation',exact:true})
    assert.equal(await bottomNav.isVisible(),mobile);assert.equal(await desktopNav.isVisible(),!mobile)
+   if(!mobile){const header=await page.locator('.leadership-header-grid').boundingBox();const nav=await desktopNav.boundingBox();assert(device.width<1440?nav.y>header.y+40:nav.y<header.y+30,'tablet navigation has its own row; wide navigation shares the header row')}
+   await page.getByRole('textbox',{name:'Search mentors',exact:true}).fill('no-such-mentor');await page.getByText('No mentors found.',{exact:true}).waitFor();await page.getByRole('textbox',{name:'Search mentors',exact:true}).fill('')
+   await page.getByRole('combobox',{name:'Filter students by class',exact:true}).selectOption('7th')
+   await page.getByRole('combobox',{name:'Filter students by class',exact:true}).selectOption('all')
    if(mobile){const rect=await bottomNav.boundingBox();assert(Math.abs(rect.y+rect.height-device.height)<2,'mobile menu is at bottom');assert(await page.locator('.leadership-portal main').first().evaluate(el=>parseFloat(getComputedStyle(el).paddingBottom))>=100)}
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal page overflow')
+   await page.evaluate(()=>window.scrollTo(0,0))
    if(process.env.LEADERSHIP_SCREENSHOTS==='1')await page.screenshot({path:`tmp/leadership-premium-${device.name}.png`})
    assert.equal(requests.filter(p=>p.endsWith('/outside-students')).length,0,'outside list loads only when opened')
    const outsideTrigger=page.getByRole('button',{name:'View outside students',exact:true})
@@ -99,12 +108,13 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
    assert.equal(await page.locator('[data-portal="leadership"]').count(),1)
    assert.equal(await page.getByText('Mentor Portal',{exact:true}).count(),0)
    await page.getByRole('link',{name:'Exit focus',exact:true}).click();await page.waitForURL('**/leadership')
-   await page.getByRole('heading',{name:/Good .*Preview Vice Principal/}).waitFor()
+   await page.getByRole('heading',{name:'Institution overview',exact:true}).waitFor()
    assert.equal(await page.evaluate(()=>sessionStorage.getItem('delegationToken')),null)
    if(mobile){await page.getByRole('button',{name:'More leadership options',exact:true}).tap();const more=page.getByRole('dialog',{name:'More options',exact:true});await more.waitFor();await more.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished.catch(()=>{}))));assert.equal(await more.evaluate(el=>getComputedStyle(el).opacity),'1');if(process.env.LEADERSHIP_SCREENSHOTS==='1')await page.screenshot({path:`tmp/leadership-menu-${device.name}.png`});await more.getByRole('link',{name:'Discipline',exact:true}).click()}else await desktopNav.getByRole('link',{name:'Discipline',exact:true}).click();await page.waitForURL('**/leadership/disciplinary')
    await page.getByRole('heading',{name:'Disciplinary Actions'}).waitFor()
    assert.match(await page.getByRole('link',{name:'Report incident'}).getAttribute('href'),/^\/leadership\//)
-   await (mobile?bottomNav:desktopNav).getByRole('link',{name:'Overview',exact:true}).click();await page.getByRole('heading',{name:/Good .*Preview Vice Principal/}).waitFor()
+   await page.addStyleTag({content:'nextjs-portal { display: none !important; }'})
+   await (mobile?bottomNav:desktopNav).getByRole('link',{name:'Overview',exact:true}).click();await page.getByRole('heading',{name:'Institution overview',exact:true}).waitFor()
    await page.evaluate(()=>document.documentElement.classList.add('dark'));if(device.touch)await outsideTrigger.tap();else await outsideTrigger.click();await outsidePanel.getByText('3 students currently outside',{exact:true}).waitFor();assert(await outsidePanel.evaluate(el=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.fillStyle=getComputedStyle(el).backgroundColor;ctx.fillRect(0,0,1,1);const rgba=ctx.getImageData(0,0,1,1).data;return Math.max(...rgba.slice(0,3))<70&&rgba[3]===255}),'dark popup has a dark opaque background');if(process.env.LEADERSHIP_SCREENSHOTS==='1')await page.screenshot({path:`tmp/leadership-outside-${device.name}-dark.png`});await page.keyboard.press('Escape');await outsidePanel.waitFor({state:'hidden'});await page.emulateMedia({reducedMotion:'reduce'});if(device.touch)await trophy.tap();else await trophy.click();await panel.waitFor();assert.equal(await panel.evaluate(el=>getComputedStyle(el).animationName),'none');await page.keyboard.press('Escape');await panel.waitFor({state:'hidden'})
    assert.deepEqual(errors,[])
    console.log(JSON.stringify({device:device.name,passed:'premium shell, responsive bottom menu, anchored outside list, search/deduplication/error/empty handling, stable untransformed headers, leaderboard, glass picker, focus round-trip, feature links, reduced motion',paint}))

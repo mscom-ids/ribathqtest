@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
+import Link from "next/link"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
     Target, ChevronRight, Trophy, Star, Award, Gem, CalendarDays, ArrowUpRight, type LucideIcon,
@@ -157,6 +158,8 @@ export function LeadershipDashboard() {
     const [mentors, setMentors] = useState<Mentor[]>(initialSnapshot?.mentors || [])
     const [loading, setLoading] = useState(!initialSnapshot)
     const [search, setSearch] = useState("")
+    const [mentorSearch, setMentorSearch] = useState("")
+    const [classFilter, setClassFilter] = useState("all")
     const [focusingId, setFocusingId] = useState<string | null>(null)
 
     // Top Performers — same data as mentor portal, but for ALL students
@@ -274,9 +277,13 @@ export function LeadershipDashboard() {
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase()
-        if (!q) return students
-        return students.filter(s => s.name.toLowerCase().includes(q) || s.adm_no.toLowerCase().includes(q))
-    }, [students, search])
+        return students.filter(s => (classFilter === "all" || s.standard === classFilter)
+            && (!q || s.name.toLowerCase().includes(q) || s.adm_no.toLowerCase().includes(q)))
+    }, [students, search, classFilter])
+    const classOptions = useMemo(() => [...new Set(students.map(s => s.standard).filter((s): s is string => !!s))]
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [students])
+    const visibleMentors = useMemo(() => mentors.filter(m =>
+        `${m.name} ${m.place || ''}`.toLowerCase().includes(mentorSearch.trim().toLowerCase())), [mentors, mentorSearch])
 
     const attendancePct = attendance && attendance.total > 0 ? Math.round((attendance.present / attendance.total) * 100) : 0
     const roleLabel = role === "principal" ? "Principal" : "Vice Principal"
@@ -433,8 +440,8 @@ export function LeadershipDashboard() {
         <div className="leadership-dashboard">
 
             {/* ── Welcome banner ── */}
-            <div className="leadership-welcome relative rounded-[28px] mx-4 mt-4 text-white shadow-md lg:mx-6 lg:mt-6">
-                <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 sm:p-7">
+            <div className="leadership-welcome relative rounded-[20px] mx-4 mt-4 text-white lg:mx-6 lg:mt-6">
+                <div className="leadership-welcome-body relative flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 sm:p-7">
                     <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-xl ring-2 ring-white/20 shrink-0">
                             <AvatarImage src={getPhotoUrl(photo)} className="object-cover" />
@@ -443,10 +450,11 @@ export function LeadershipDashboard() {
                             </AvatarFallback>
                         </Avatar>
                         <div className="space-y-2">
-                            <p className="text-indigo-200 text-[10px] font-semibold tracking-[0.16em] uppercase">Institution overview · {roleLabel}</p>
+                            <p className="text-indigo-200 text-[10px] font-semibold tracking-[0.16em] uppercase">Leadership workspace · {roleLabel}</p>
                             <h1 className="text-[22px] sm:text-2xl font-bold leading-tight tracking-tight">
-                                {getGreeting(now ? now.getHours() : 12)}, {name || roleLabel} 👋
+                                Institution overview
                             </h1>
+                            <p className="text-sm text-slate-200">{getGreeting(now ? now.getHours() : 12)}, {name || roleLabel}</p>
                             <p className="flex items-center gap-1.5 text-indigo-100/80 text-[11px]"><CalendarDays className="h-3.5 w-3.5" />{now ? format(now, "EEEE, MMMM d, yyyy") : ""}</p>
                             <div className="flex items-center gap-2 text-indigo-100/80 text-[11px]">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
@@ -454,7 +462,7 @@ export function LeadershipDashboard() {
                             </div>
                         </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 border-t border-white/15 pt-4 lg:shrink-0 lg:border-t-0 lg:pt-0">
+                    <div className="leadership-welcome-counts grid grid-cols-3 gap-2 border-t border-white/15 pt-4 lg:shrink-0 lg:border-t-0 lg:pt-0">
                         <div className="leadership-count rounded-2xl px-4 py-3 text-center lg:min-w-[88px]">
                             <div className="text-2xl font-bold tracking-tight">{counts?.active ?? "—"}</div>
                             <div className="mt-1 text-indigo-100/80 text-[10px]">Students</div>
@@ -473,6 +481,15 @@ export function LeadershipDashboard() {
 
             <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-4">
 
+                <div className="leadership-actions" aria-label="Leadership quick actions">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Your daily workspace</span>
+                    <div className="flex flex-wrap gap-2">
+                        <Link href="/leadership/attendance"><CheckCircle2 className="h-4 w-4" />Attendance</Link>
+                        <Link href="/leadership/reports"><BookOpen className="h-4 w-4" />Student reports</Link>
+                        <button type="button" onClick={() => setLbOpen(true)}><Trophy className="h-4 w-4" />Points table</button>
+                    </div>
+                </div>
+
                 {/* ── School-wide stat strip ── */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     <StatTile icon={Users} color="blue" label="Total Students" value={String(counts?.active ?? 0)} sub={`${counts?.on_campus ?? 0} on campus`} pct={100} />
@@ -482,10 +499,10 @@ export function LeadershipDashboard() {
                 </div>
 
                 {/* ── Main: all students | mentors panel ── */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="leadership-directory-grid grid grid-cols-1 gap-4">
 
                     {/* Left: All students */}
-                    <div className="lg:col-span-2">
+                    <div className="min-w-0">
                         <div className="leadership-section rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex flex-wrap items-center gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="flex items-center gap-2 shrink-0">
@@ -496,8 +513,12 @@ export function LeadershipDashboard() {
                                 </div>
                                 <div className="relative flex-1 min-w-[160px]">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                                    <Input placeholder="Search name or admission no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-xs" />
+                                    <Input aria-label="Search students" placeholder="Search name or admission no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-11 text-sm" />
                                 </div>
+                                <select aria-label="Filter students by class" value={classFilter} onChange={e => setClassFilter(e.target.value)} className="min-h-11 max-w-full rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+                                    <option value="all">All classes</option>
+                                    {classOptions.map(standard => <option key={standard} value={standard}>{standard}</option>)}
+                                </select>
                             </div>
 
                             {loading && students.length === 0 ? (
@@ -519,7 +540,7 @@ export function LeadershipDashboard() {
                                                     <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
                                                     <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
                                                 </div>
-                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white shrink-0">
+                                                <Button aria-label={`Open progress for ${student.name}`} onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="leadership-progress-button min-h-11 text-xs bg-slate-900 hover:bg-slate-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white shrink-0">
                                                     <BookOpen className="h-3 w-3" /> Open progress
                                                 </Button>
                                             </div>
@@ -531,7 +552,7 @@ export function LeadershipDashboard() {
                     </div>
 
                     {/* Right: Mentors panel — click any mentor to focus */}
-                    <div className="lg:col-span-1">
+                    <div className="min-w-0">
                         <div className="leadership-section rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex items-center gap-2 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center">
@@ -539,14 +560,15 @@ export function LeadershipDashboard() {
                                 </div>
                                 <div className="min-w-0">
                                     <p className="text-sm font-bold text-slate-900 dark:text-white">Mentor Focus</p>
-                                    <p className="text-[11px] text-slate-400">Tap to open a mentor&apos;s class</p>
+                                    <p className="text-[11px] text-slate-500">Open a class workspace · {mentors.length} mentors</p>
                                 </div>
                             </div>
-                            {mentors.length === 0 ? (
+                            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800"><Input aria-label="Search mentors" placeholder="Find a mentor or place…" value={mentorSearch} onChange={e => setMentorSearch(e.target.value)} className="h-11 text-sm" /></div>
+                            {visibleMentors.length === 0 ? (
                                 <div className="text-center py-8 text-xs text-slate-400">No mentors found.</div>
                             ) : (
                                 <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-gray-800/50">
-                                    {mentors.map(m => (
+                                    {visibleMentors.map(m => (
                                         <button
                                             key={m.id}
                                             type="button"
@@ -561,7 +583,7 @@ export function LeadershipDashboard() {
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 min-w-0">
-                                                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{m.name}</p>
+                                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug">{m.name}</p>
                                                 <p className="truncate text-[11px] text-slate-400">
                                                     {m.place ? `${m.place} · ` : ""}{m.student_count} student{m.student_count !== 1 ? "s" : ""}
                                                 </p>
@@ -579,7 +601,7 @@ export function LeadershipDashboard() {
             </div>
 
             {/* ── Floating Trophy button — opens Top Performers sheet ── */}
-            <div className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 lg:bottom-6 lg:right-6">
+            <div className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 md:bottom-6 md:right-6">
                 <button
                     onClick={() => setLbOpen(true)}
                     aria-label="Open top performers"

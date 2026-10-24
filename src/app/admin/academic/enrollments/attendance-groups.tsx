@@ -155,7 +155,11 @@ export function AttendanceGroups({ academicYearId, students, onGroupsChanged }: 
 
     function openStudents(group: AttendanceGroup) {
         setManageGroup(group)
-        setSelectedIds(group.student_ids || [])
+        const eligible = new Set(students.filter(student =>
+            student.standard === group.standard
+            && (group.division === NO_DIVISION_ROSTER ? !student.division : student.division === group.division)
+        ).map(student => student.adm_no))
+        setSelectedIds((group.student_ids || []).filter(id => eligible.has(id)))
         setStudentSearch("")
     }
 

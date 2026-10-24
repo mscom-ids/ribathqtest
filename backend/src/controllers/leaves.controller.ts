@@ -692,9 +692,7 @@ export const bulkRecordReturn = async (req: Request, res: Response) => {
                     await client.query('ROLLBACK');
                     return res.status(403).json({ success: false, error: 'Staff profile not found' });
                 }
-                const idx = params.length + 1;
-                studentLeavesQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
-                params.push(staffId);
+                // A linked mentor may record returns across classes.
             }
 
             const pending = await client.query(studentLeavesQuery, params);
@@ -759,8 +757,7 @@ export const getGroupLeaveStudents = async (req: Request, res: Response) => {
             if (!staffId) {
                 return res.status(403).json({ success: false, error: 'Staff profile not found' });
             }
-            query += ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
-            params.push(staffId);
+            // Mentors can select any student in this group for a return.
         }
 
         query += ` ORDER BY s.name`;
@@ -810,9 +807,7 @@ export const bulkRecordGroupReturn = async (req: Request, res: Response) => {
                     await client.query('ROLLBACK');
                     return res.status(403).json({ success: false, error: 'Staff profile not found' });
                 }
-                const idx = params.length + 1;
-                studentLeavesQuery += ` AND (s.hifz_mentor_id = $${idx} OR s.school_mentor_id = $${idx} OR s.madrasa_mentor_id = $${idx})`;
-                params.push(staffId);
+                // A linked mentor may record returns across classes.
             }
 
             const pending = await client.query(studentLeavesQuery, params);
@@ -1206,11 +1201,11 @@ export const recordReturn = async (req: Request, res: Response) => {
         try {
             await client.query('BEGIN');
 
-            const leaveRes = await client.query(`SELECT * FROM student_leaves WHERE id = $1`, [leave_id]);
+            const leaveRes = await client.query(`SELECT * FROM student_leaves WHERE id = $1 FOR UPDATE`, [leave_id]);
             if (leaveRes.rows.length === 0) throw new Error('Leave not found');
             const leave = leaveRes.rows[0];
 
-            if (leave.leave_type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role)) {
+            if (leave.leave_type === 'outdoor' && !ADMIN_LEAVE_ROLES.includes(user.role) && !MENTOR_ROLES.includes(user.role)) {
                 await client.query('ROLLBACK');
                 return res.status(403).json({ success: false, error: 'Outdoor movements can only be controlled by admin users' });
             }
@@ -1221,17 +1216,7 @@ export const recordReturn = async (req: Request, res: Response) => {
                     await client.query('ROLLBACK');
                     return res.status(403).json({ success: false, error: 'Staff profile not found' });
                 }
-                const assignedRes = await client.query(
-                    `SELECT 1 FROM students
-                     WHERE adm_no = $1
-                       AND (hifz_mentor_id = $2 OR school_mentor_id = $2 OR madrasa_mentor_id = $2)
-                     LIMIT 1`,
-                    [leave.student_id, staffId]
-                );
-                if (assignedRes.rows.length === 0) {
-                    await client.query('ROLLBACK');
-                    return res.status(403).json({ success: false, error: 'Not authorized for this student' });
-                }
+                // A linked mentor may return any student; exit permissions stay assignment-scoped.
             }
 
             if (leave.status === 'returned' || leave.status === 'completed') throw new Error('Leave has already been closed');
@@ -1386,22 +1371,20 @@ export const getActiveLeaves = async (req: Request, res: Response) => {
 export const getOutsideStudents = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const canViewOutdoor = ADMIN_LEAVE_ROLES.includes(user.role);
+        const canViewOutdoor = ADMIN_LEAVE_ROLES.includes(user.role) || MENTOR_ROLES.includes(user.role);
         const params: any[] = [canViewOutdoor];
-        let assignmentFilter = '';
+        const assignmentFilter = '';
 
         if (MENTOR_ROLES.includes(user.role)) {
             const staffId = await getStaffId(req);
             if (!staffId) {
                 return res.status(403).json({ success: false, error: 'Staff profile not found' });
             }
-            assignmentFilter = ` AND (s.hifz_mentor_id = $2 OR s.school_mentor_id = $2 OR s.madrasa_mentor_id = $2)`;
-            params.push(staffId);
         }
 
         const cacheKey = makeCacheKey('leaves:outside-students', {
             role: user.role,
-            staff: MENTOR_ROLES.includes(user.role) ? String(params[1] || '') : 'all',
+            staff: 'all',
             outdoor: String(canViewOutdoor),
         });
 
