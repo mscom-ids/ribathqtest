@@ -19,6 +19,16 @@ Hifz entry remain shared feature modules, rendered inside the leadership layout.
 They do not bring StaffLayout with them. This avoids duplicating data and scoring
 logic. Backend authorization remains unchanged.
 
+On screens narrower than 1024px, navigation moves to a safe-area-aware bottom bar
+(Overview, Attendance, Leaves, Reports, More). The opaque More panel contains the
+remaining tools and the focused class when applicable. Desktop keeps top navigation.
+
+Both Outside count controls open an anchored, read-only presence list, loaded only
+on demand from `/leaves/outside-students`. Names/classes/admission numbers are
+searchable, duplicate leave rows are collapsed to people, and failures have a retry
+state rather than appearing as an empty list. No return or attendance mutation is
+performed. The endpoint retains its existing server-side presence cache.
+
 Mentor Focus is an explicit `/leadership/mentor` workflow, reusing the mentor class
 component, not the mentor layout. Entering/exiting focus invalidates cached data;
 returning to the overview clears the delegation context before fetching data.

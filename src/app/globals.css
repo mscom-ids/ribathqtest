@@ -245,8 +245,33 @@
 /* Leadership has its own document-flow shell and stationary leaderboard.
    These backgrounds deliberately have no masked/3D/filtered ancestor. */
 .leadership-welcome {
-  background: #174bdc;
-  background-image: linear-gradient(110deg, #185bfa, #1946db 55%, #4930d8);
+  background: #142d57;
+  background-image: linear-gradient(115deg, #102a4d, #233d7c 60%, #4342a2);
+  border: 1px solid rgb(255 255 255 / 12%);
+}
+.leadership-header-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.leadership-desktop-nav { display: none; min-width: 0; }
+.leadership-count { background: rgb(255 255 255 / 7%); border: 1px solid rgb(255 255 255 / 12%); }
+.leadership-outside-count { background: rgb(251 191 36 / 15%); border: 1px solid rgb(253 230 138 / 24%); transition: background-color 160ms ease; }
+.leadership-outside-count:hover, .leadership-outside-count[data-state="open"] { background: rgb(251 191 36 / 25%); }
+.leadership-stat, .leadership-section { border-radius: 24px; box-shadow: 0 4px 20px -12px rgb(15 23 42 / 18%); }
+.leadership-mobile-nav { box-shadow: 0 -6px 28px -16px rgb(15 23 42 / 22%); }
+.leadership-mobile-nav-item { display: flex; min-height: 68px; min-width: 0; align-items: center; justify-content: center; flex-direction: column; gap: 3px; padding: 7px 2px; color: #64748b; font-size: 10px; font-weight: 600; outline-offset: -3px; }
+.leadership-mobile-nav-icon { display: flex; width: 44px; height: 30px; align-items: center; justify-content: center; border-radius: 12px; }
+.leadership-mobile-nav-item.is-active { color: #4f46e5; }
+.leadership-mobile-nav-item.is-active .leadership-mobile-nav-icon { background: #eef2ff; }
+html.dark .leadership-mobile-nav-item { color: #94a3b8; }
+html.dark .leadership-mobile-nav-item.is-active { color: #c7d2fe; }
+html.dark .leadership-mobile-nav-item.is-active .leadership-mobile-nav-icon { background: #312e81; }
+.leadership-mobile-menu { max-height: calc(100dvh - 24px); overflow-y: auto; }
+.leadership-mobile-menu[data-state="open"], .leadership-menu-overlay[data-state="open"], .leadership-outside-popover[data-state="open"] { animation: leadership-appear 140ms ease-out; }
+.leadership-mobile-menu[data-state="closed"], .leadership-menu-overlay[data-state="closed"], .leadership-outside-popover[data-state="closed"] { animation: leadership-disappear 120ms ease-in; }
+@media (min-width: 1024px) {
+  .leadership-desktop-nav { display: flex; grid-column: 1 / -1; grid-row: 2; justify-content: center; padding-top: 6px; }
+}
+@media (min-width: 1440px) {
+  .leadership-header-grid { grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; }
+  .leadership-desktop-nav { grid-column: auto; grid-row: auto; overflow-x: auto; padding-top: 0; }
 }
 .leadership-ranking-header {
   background: #4930ee;
@@ -265,6 +290,7 @@
 @keyframes leadership-disappear { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .leadership-leaderboard[data-state], .leadership-leaderboard-overlay[data-state] { animation: none; }
+  .leadership-mobile-menu[data-state], .leadership-menu-overlay[data-state], .leadership-outside-popover[data-state] { animation: none; }
 }
 
 /* Touch WebKit can drop rounded gradient tiles when an animated, scrollable

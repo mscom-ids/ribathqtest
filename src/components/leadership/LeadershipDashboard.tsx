@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
-    Target, ChevronRight, Trophy, Star, Award, Gem, type LucideIcon,
+    Target, ChevronRight, Trophy, Star, Award, Gem, CalendarDays, ArrowUpRight, type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { LeadershipLeaderboard } from "@/components/leadership/LeadershipLeaderboard"
 import { useLeadershipIdentity } from "@/components/leadership/LeadershipShell"
 import { setMentorFocus } from "@/lib/mentor-focus"
+import { OutsideStudentsPopover } from "@/components/leadership/OutsideStudentsPopover"
 import api from "@/lib/api"
 import { getHifzPerformancePoints } from "@/lib/hifz-performance"
 import { GlassSelect } from "@/components/ui/glass-select"
@@ -88,16 +89,16 @@ function StatTile({ icon: Icon, color, label, value, sub, pct }: {
 }) {
     const c = STAT_COLORS[color]
     return (
-        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-                <div className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${c.bg}`}>
-                    <Icon className={`h-3.5 w-3.5 ${c.text}`} />
+        <div className="leadership-stat rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-4">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-gray-400">{label}</span>
+                <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${c.bg}`}>
+                    <Icon className={`h-4 w-4 ${c.text}`} />
                 </div>
-                <span className="text-[11px] text-slate-500 dark:text-gray-400 truncate">{label}</span>
             </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-white leading-none">{value}</p>
+            <p className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-white leading-none">{value}</p>
             <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-1.5 truncate">{sub}</p>
-            <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800 mt-2.5 overflow-hidden">
+            <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800 mt-4 overflow-hidden">
                 <div className={`h-full rounded-full ${c.bar}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
             </div>
         </div>
@@ -429,11 +430,11 @@ export function LeadershipDashboard() {
     )
 
     return (
-        <div className="leadership-dashboard bg-slate-50 dark:bg-[#020617]">
+        <div className="leadership-dashboard">
 
             {/* ── Welcome banner ── */}
-            <div className="leadership-welcome relative rounded-2xl mx-3 mt-3 text-white shadow-md lg:mx-6 lg:mt-6">
-                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 md:p-7">
+            <div className="leadership-welcome relative rounded-[28px] mx-4 mt-4 text-white shadow-md lg:mx-6 lg:mt-6">
+                <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 sm:p-7">
                     <div className="flex items-center gap-4">
                         <Avatar className="h-12 w-12 md:h-14 md:w-14 rounded-xl ring-2 ring-white/20 shrink-0">
                             <AvatarImage src={getPhotoUrl(photo)} className="object-cover" />
@@ -441,31 +442,31 @@ export function LeadershipDashboard() {
                                 {name ? name.substring(0, 2).toUpperCase() : "VP"}
                             </AvatarFallback>
                         </Avatar>
-                        <div className="space-y-1.5">
-                            <p className="text-blue-200 text-[11px] font-medium tracking-wide uppercase">Leadership Portal · {roleLabel}</p>
-                            <h1 className="text-xl md:text-2xl font-bold leading-tight">
+                        <div className="space-y-2">
+                            <p className="text-indigo-200 text-[10px] font-semibold tracking-[0.16em] uppercase">Institution overview · {roleLabel}</p>
+                            <h1 className="text-[22px] sm:text-2xl font-bold leading-tight tracking-tight">
                                 {getGreeting(now ? now.getHours() : 12)}, {name || roleLabel} 👋
                             </h1>
-                            <p className="text-blue-100 text-xs">{now ? format(now, "EEEE, MMMM d, yyyy") : ""}</p>
-                            <div className="flex items-center gap-2 bg-white/15 rounded-full px-3 py-1 w-fit text-xs">
+                            <p className="flex items-center gap-1.5 text-indigo-100/80 text-[11px]"><CalendarDays className="h-3.5 w-3.5" />{now ? format(now, "EEEE, MMMM d, yyyy") : ""}</p>
+                            <div className="flex items-center gap-2 text-indigo-100/80 text-[11px]">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
-                                Full access to every student and mentor
+                                All students. Every mentor. One clear view.
                             </div>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                        <div className="bg-white/15 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
-                            <div className="text-xl font-bold">{counts?.active ?? "—"}</div>
-                            <div className="text-blue-200 text-[11px]">Students</div>
+                    <div className="grid grid-cols-3 gap-2 border-t border-white/15 pt-4 lg:shrink-0 lg:border-t-0 lg:pt-0">
+                        <div className="leadership-count rounded-2xl px-4 py-3 text-center lg:min-w-[88px]">
+                            <div className="text-2xl font-bold tracking-tight">{counts?.active ?? "—"}</div>
+                            <div className="mt-1 text-indigo-100/80 text-[10px]">Students</div>
                         </div>
-                        <div className="bg-white/15 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
-                            <div className="text-xl font-bold">{counts?.on_campus ?? "—"}</div>
-                            <div className="text-blue-200 text-[11px]">On Campus</div>
+                        <div className="leadership-count rounded-2xl px-4 py-3 text-center lg:min-w-[88px]">
+                            <div className="text-2xl font-bold tracking-tight">{counts?.on_campus ?? "—"}</div>
+                            <div className="mt-1 text-indigo-100/80 text-[10px]">On Campus</div>
                         </div>
-                        <div className="bg-amber-500/30 rounded-xl px-4 py-2.5 text-center min-w-[76px]">
-                            <div className="text-xl font-bold">{counts?.out_campus ?? "—"}</div>
-                            <div className="text-amber-100 text-[11px]">Outside</div>
-                        </div>
+                        <OutsideStudentsPopover count={counts?.out_campus ?? null}><button type="button" aria-label="View outside students" className="leadership-outside-count relative rounded-2xl px-4 py-3 text-center outline-none focus-visible:ring-2 focus-visible:ring-amber-200 lg:min-w-[88px]">
+                            <ArrowUpRight className="absolute right-2 top-2 h-3 w-3 text-amber-200" /><span className="block text-2xl font-bold tracking-tight">{counts?.out_campus ?? "—"}</span>
+                            <span className="mt-1 block text-amber-100 text-[10px]">Outside</span>
+                        </button></OutsideStudentsPopover>
                     </div>
                 </div>
             </div>
@@ -473,10 +474,10 @@ export function LeadershipDashboard() {
             <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-4">
 
                 {/* ── School-wide stat strip ── */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     <StatTile icon={Users} color="blue" label="Total Students" value={String(counts?.active ?? 0)} sub={`${counts?.on_campus ?? 0} on campus`} pct={100} />
                     <StatTile icon={CheckCircle2} color="emerald" label="Attendance Today" value={`${attendancePct}%`} sub={attendance ? `${attendance.present} of ${attendance.total} marks` : "No marks yet"} pct={attendancePct} />
-                    <StatTile icon={DoorOpen} color="amber" label="Currently Outside" value={String(counts?.out_campus ?? 0)} sub={`of ${counts?.active ?? 0} students`} pct={counts && counts.active ? (counts.out_campus / counts.active) * 100 : 0} />
+                    <OutsideStudentsPopover count={counts?.out_campus ?? null}><button type="button" aria-label="View currently outside students" className="rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"><StatTile icon={DoorOpen} color="amber" label="Currently Outside" value={String(counts?.out_campus ?? 0)} sub="Tap to view students ↗" pct={counts && counts.active ? (counts.out_campus / counts.active) * 100 : 0} /></button></OutsideStudentsPopover>
                     <StatTile icon={GraduationCap} color="indigo" label="Active Mentors" value={String(counts?.mentors ?? 0)} sub="teaching & leadership" pct={100} />
                 </div>
 
@@ -485,13 +486,13 @@ export function LeadershipDashboard() {
 
                     {/* Left: All students */}
                     <div className="lg:col-span-2">
-                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div className="leadership-section rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex flex-wrap items-center gap-3 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="flex items-center gap-2 shrink-0">
                                     <div className="h-8 w-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center">
                                         <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                                     </div>
-                                    <span className="text-sm font-bold text-slate-900 dark:text-white">All Students</span>
+                                    <h2 className="text-sm font-bold text-slate-900 dark:text-white">All Students</h2>
                                 </div>
                                 <div className="relative flex-1 min-w-[160px]">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -531,7 +532,7 @@ export function LeadershipDashboard() {
 
                     {/* Right: Mentors panel — click any mentor to focus */}
                     <div className="lg:col-span-1">
-                        <div className="rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div className="leadership-section rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="flex items-center gap-2 p-5 border-b border-slate-100 dark:border-gray-700">
                                 <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center">
                                     <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -578,7 +579,7 @@ export function LeadershipDashboard() {
             </div>
 
             {/* ── Floating Trophy button — opens Top Performers sheet ── */}
-            <div className="fixed bottom-24 right-4 z-40">
+            <div className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 lg:bottom-6 lg:right-6">
                 <button
                     onClick={() => setLbOpen(true)}
                     aria-label="Open top performers"
