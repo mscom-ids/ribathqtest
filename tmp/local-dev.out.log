@@ -1613,3 +1613,1176 @@
 [0]  GET /manifest.webmanifest 200 in 21ms (compile: 14ms, render: 7ms)
 [0]  GET /leadership 200 in 40ms (compile: 7ms, proxy.ts: 12ms, render: 21ms)
 [0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /leadership 200 in 43ms (compile: 7ms, proxy.ts: 9ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 5ms, render: 4ms)
+[0]  GET /leadership 200 in 38ms (compile: 6ms, proxy.ts: 13ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 33ms (compile: 6ms, proxy.ts: 8ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 5ms)
+[0]  GET /leadership 200 in 37ms (compile: 5ms, proxy.ts: 14ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 5ms)
+[0]  GET /leadership 200 in 57ms (compile: 15ms, proxy.ts: 18ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 39ms (compile: 7ms, proxy.ts: 12ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 8ms, render: 5ms)
+[0]  GET /leadership 200 in 635ms (compile: 33ms, proxy.ts: 46ms, render: 556ms)
+[0]  GET /leadership 200 in 719ms (compile: 35ms, proxy.ts: 44ms, render: 640ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 14ms, render: 6ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 8ms, render: 6ms)
+[0]  GET /leadership 200 in 848ms (compile: 41ms, proxy.ts: 55ms, render: 751ms)
+[0]  GET /manifest.webmanifest 200 in 53ms (compile: 48ms, render: 5ms)
+[0]  GET /leadership 200 in 168ms (compile: 80ms, proxy.ts: 35ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 55ms (compile: 48ms, render: 7ms)
+[0]  GET /leadership 200 in 977ms (compile: 76ms, proxy.ts: 859ms, render: 43ms)
+[0]  GET /leadership 200 in 45ms (compile: 10ms, proxy.ts: 13ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 2ms, render: 9ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[0]  GET /leadership 200 in 66ms (compile: 13ms, proxy.ts: 15ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 10ms, render: 18ms)
+[0]  GET /leadership 200 in 82ms (compile: 14ms, proxy.ts: 23ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 13ms, render: 14ms)
+[0] ⨯ ./src/components/leadership/LeadershipDashboard.tsx:13:1
+[0] Module not found: Can't resolve '@/components/leadership/LeadershipPointsTable'
+[0]   11 | import { Input } from "@/components/ui/input"
+[0]   12 | import { LeadershipLeaderboard } from "@/components/leadership/LeadershipLeaderboard"
+[0] > 13 | import { LeadershipPointsTable } from "@/components/leadership/LeadershipPointsTable"
+[0]      | ^
+[0]   14 | import { useLeadershipIdentity } from "@/components/leadership/LeadershipShell"
+[0]   15 | import { OutsideStudentsPopover } from "@/components/leadership/OutsideStudentsPopover"
+[0]   16 | import { getHifzPerformancePoints } from "@/lib/hifz-performance"
+[0] 
+[0] https://nextjs.org/docs/messages/module-not-found
+[0] ⨯ ./src/components/leadership/LeadershipDashboard.tsx:13:1
+[0] Module not found: Can't resolve '@/components/leadership/LeadershipPointsTable'
+[0]   11 | import { Input } from "@/components/ui/input"
+[0]   12 | import { LeadershipLeaderboard } from "@/components/leadership/LeadershipLeaderboard"
+[0] > 13 | import { LeadershipPointsTable } from "@/components/leadership/LeadershipPointsTable"
+[0]      | ^
+[0]   14 | import { useLeadershipIdentity } from "@/components/leadership/LeadershipShell"
+[0]   15 | import { OutsideStudentsPopover } from "@/components/leadership/OutsideStudentsPopover"
+[0]   16 | import { getHifzPerformancePoints } from "@/lib/hifz-performance"
+[0] 
+[0] https://nextjs.org/docs/messages/module-not-found
+[1] [DB POOL] 2 connections ready in 3429ms
+[1] [SLOW DB] 388ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 401ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 772ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 782ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 786.2ms
+[1] [SLOW DB] 3097ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 3129ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 3138.4ms
+[1] [SLOW DB] 3142ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 3145ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 3425ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 441ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 419ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 3849.2ms
+[1] [SLOW DB] 5391ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 5406.7ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 742ms (compile: 269ms, proxy.ts: 25ms, render: 447ms)
+[0]  GET /leadership 200 in 772ms (compile: 276ms, proxy.ts: 39ms, render: 456ms)
+[0]  GET /manifest.webmanifest 200 in 39ms (compile: 27ms, render: 12ms)
+[0] ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 754ms (compile: 193ms, proxy.ts: 50ms, render: 511ms)
+[0]  GET /manifest.webmanifest 200 in 49ms (compile: 34ms, render: 16ms)
+[0]  GET /leadership 200 in 2.3s (compile: 222ms, proxy.ts: 46ms, render: 2.0s)
+[0] ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 1001ms (compile: 278ms, proxy.ts: 18ms, render: 704ms)
+[0]  GET /leadership 200 in 1021ms (compile: 285ms, proxy.ts: 26ms, render: 710ms)
+[0]  GET /manifest.webmanifest 200 in 38ms (compile: 26ms, render: 12ms)
+[1] [SLOW DB] 385ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 409ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 410ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 402ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 411ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 411ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 412ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 425ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 438ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 1230ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 410ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 1650.5ms
+[1] [SLOW DB] 2479ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 2499.8ms
+[1] [SLOW DB] 475ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 476ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 476ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 476ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 477ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 865ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 1248ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 414ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 426ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 418ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 436ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 451ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 457ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 815ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 828ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 862ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 1220ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 3512.6ms
+[0]  GET /leadership 200 in 2.0s (compile: 1915ms, proxy.ts: 57ms, render: 68ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 7ms)
+[0]  GET /leadership 200 in 84ms (compile: 22ms, proxy.ts: 20ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 12ms, render: 16ms)
+[1] [SLOW DB] 541ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 542ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 543ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 545ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 545ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 1463ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 1464ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 538ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 539ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 970ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 971ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 972ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 2865.8ms
+[1] [SLOW DB] 390ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 393ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 394ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 412ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 439ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 1220ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 1239ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 408ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 426ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 435ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 439ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 836ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 2532.3ms
+[1] [SLOW DB] 488ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 489ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 489ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 489ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 489ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 897ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 1408ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[1] [SLOW DB] 410ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 412ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 426ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 426ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 427ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 2015.3ms
+[0]  GET /leadership 200 in 1891ms (compile: 1729ms, proxy.ts: 52ms, render: 110ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 17ms, render: 12ms)
+[0]  GET /leadership 200 in 92ms (compile: 7ms, proxy.ts: 15ms, render: 70ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 6ms, render: 12ms)
+[0]  GET /leadership 200 in 232ms (compile: 116ms, proxy.ts: 57ms, render: 59ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 22ms, render: 12ms)
+[1] [SLOW DB] 518ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 519ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 519ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 519ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 978ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 1850ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 3681ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 390ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 391ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 441ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 441ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 845ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 6956.8ms
+[0]  GET /leadership 200 in 79ms (compile: 20ms, proxy.ts: 24ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 45ms (compile: 25ms, render: 20ms)
+[0]  GET /leadership 200 in 108ms (compile: 21ms, proxy.ts: 25ms, render: 62ms)
+[0]  GET /manifest.webmanifest 200 in 34ms (compile: 13ms, render: 22ms)
+[0]  GET /leadership 200 in 302ms (compile: 70ms, proxy.ts: 140ms, render: 93ms)
+[0]  GET /manifest.webmanifest 200 in 51ms (compile: 42ms, render: 9ms)
+[0]  GET /leadership 200 in 1309ms (compile: 1145ms, proxy.ts: 92ms, render: 72ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 13ms, render: 6ms)
+[0]  GET /leadership 200 in 850ms (compile: 751ms, proxy.ts: 62ms, render: 36ms)
+[0]  GET /leadership 200 in 91ms (compile: 19ms, proxy.ts: 32ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 7ms, render: 10ms)
+[0]  GET /leadership 200 in 84ms (compile: 11ms, proxy.ts: 23ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 43ms (compile: 31ms, render: 12ms)
+[0]  GET /leadership 200 in 1818ms (compile: 1684ms, proxy.ts: 47ms, render: 87ms)
+[0]  GET /manifest.webmanifest 200 in 59ms (compile: 42ms, render: 17ms)
+[0]  GET /leadership 200 in 197ms (compile: 23ms, proxy.ts: 88ms, render: 87ms)
+[0]  GET /manifest.webmanifest 200 in 986ms (compile: 980ms, render: 5ms)
+[0]  GET /leadership 200 in 69ms (compile: 15ms, proxy.ts: 18ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 19ms, render: 8ms)
+[0]  GET /leadership 200 in 1171ms (compile: 1042ms, proxy.ts: 72ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 31ms, render: 11ms)
+[0]  GET /leadership 200 in 2.1s (compile: 1866ms, proxy.ts: 39ms, render: 159ms)
+[0]  GET /manifest.webmanifest 200 in 45ms (compile: 34ms, render: 11ms)
+[0]  GET /leadership 200 in 1483ms (compile: 1311ms, proxy.ts: 124ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 12ms, render: 11ms)
+[0]  GET /leadership 200 in 1032ms (compile: 899ms, proxy.ts: 82ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 44ms (compile: 33ms, render: 11ms)
+[0]  GET /leadership 200 in 940ms (compile: 789ms, proxy.ts: 104ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 23ms, render: 7ms)
+[0]  GET /leadership 200 in 858ms (compile: 29ms, proxy.ts: 772ms, render: 58ms)
+[0]  GET /manifest.webmanifest 200 in 69ms (compile: 60ms, render: 9ms)
+[0]  GET /leadership 200 in 879ms (compile: 10ms, proxy.ts: 830ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 11ms, render: 14ms)
+[0]  GET /leadership 200 in 3.3s (compile: 2.4s, proxy.ts: 55ms, render: 789ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 18ms, render: 7ms)
+[0]  GET /leadership 200 in 1298ms (compile: 1142ms, proxy.ts: 78ms, render: 78ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 20ms, render: 4ms)
+[0]  GET /leadership 200 in 1061ms (compile: 41ms, proxy.ts: 969ms, render: 51ms)
+[0]  GET /leadership 200 in 65ms (compile: 10ms, proxy.ts: 24ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 26ms, render: 7ms)
+[0]  GET /leadership 200 in 701ms (compile: 640ms, proxy.ts: 32ms, render: 29ms)
+[0]  GET /leadership 200 in 34ms (compile: 5ms, proxy.ts: 9ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /leadership 200 in 40ms (compile: 8ms, proxy.ts: 14ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /leadership 200 in 34ms (compile: 7ms, proxy.ts: 8ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 12ms, render: 6ms)
+[0]  GET /leadership 200 in 59ms (compile: 11ms, proxy.ts: 19ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /leadership 200 in 39ms (compile: 5ms, proxy.ts: 15ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 12ms, render: 5ms)
+[0]  GET /leadership 200 in 67ms (compile: 13ms, proxy.ts: 19ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 56ms (compile: 6ms, proxy.ts: 10ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 45ms (compile: 5ms, proxy.ts: 11ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 53ms (compile: 4ms, proxy.ts: 11ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /leadership 200 in 42ms (compile: 5ms, proxy.ts: 10ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 39ms (compile: 9ms, proxy.ts: 11ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 6ms)
+[0]  GET /leadership 200 in 51ms (compile: 8ms, proxy.ts: 9ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 61ms (compile: 11ms, proxy.ts: 16ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 6ms, render: 8ms)
+[0]  GET /leadership 200 in 55ms (compile: 6ms, proxy.ts: 21ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 19ms, render: 7ms)
+[0]  GET /leadership 200 in 62ms (compile: 17ms, proxy.ts: 17ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 17ms, render: 6ms)
+[1] [DB POOL] 2 connections ready in 454ms
+[0]  GET /leadership 200 in 770ms (compile: 51ms, proxy.ts: 33ms, render: 686ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 7ms)
+[0]  GET /leadership 200 in 73ms (compile: 13ms, proxy.ts: 24ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 7ms, render: 11ms)
+[0]  GET /leadership 200 in 80ms (compile: 30ms, proxy.ts: 18ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /leadership 200 in 55ms (compile: 6ms, proxy.ts: 19ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 4ms, render: 10ms)
+[0]  GET /leadership 200 in 46ms (compile: 6ms, proxy.ts: 14ms, render: 26ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 16ms, render: 11ms)
+[0]  GET /leadership 200 in 158ms (compile: 37ms, proxy.ts: 67ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 909ms (compile: 905ms, render: 5ms)
+[0]  GET /leadership 200 in 757ms (compile: 54ms, proxy.ts: 36ms, render: 667ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 9ms, render: 7ms)
+[0]  GET /leadership 200 in 81ms (compile: 32ms, proxy.ts: 12ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 12ms, render: 5ms)
+[0]  GET /leadership 200 in 751ms (compile: 40ms, proxy.ts: 42ms, render: 669ms)
+[0]  GET /leadership 200 in 56ms (compile: 8ms, proxy.ts: 15ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 4ms, render: 5ms)
+[0]  GET /manifest.webmanifest 200 in 707ms (compile: 698ms, render: 9ms)
+[0]  GET /leadership 200 in 41ms (compile: 6ms, proxy.ts: 16ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[0]  GET /leadership 200 in 43ms (compile: 6ms, proxy.ts: 9ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 32ms, render: 4ms)
+[0]  GET /leadership 200 in 1127ms (compile: 52ms, proxy.ts: 40ms, render: 1035ms)
+[0]  GET /leadership 200 in 74ms (compile: 17ms, proxy.ts: 13ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 56ms (compile: 45ms, render: 11ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 13ms, render: 15ms)
+[0]  GET /leadership 200 in 944ms (compile: 790ms, proxy.ts: 91ms, render: 63ms)
+[0]  GET /manifest.webmanifest 200 in 39ms (compile: 34ms, render: 6ms)
+[0]  GET /leadership 200 in 983ms (compile: 886ms, proxy.ts: 50ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 754ms (compile: 750ms, render: 4ms)
+[0]  GET /leadership 200 in 899ms (compile: 801ms, proxy.ts: 57ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 51ms (compile: 34ms, render: 17ms)
+[0]  GET /leadership 200 in 1284ms (compile: 101ms, proxy.ts: 149ms, render: 1034ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 20ms, render: 6ms)
+[0]  GET /leadership 200 in 986ms (compile: 883ms, proxy.ts: 55ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 15ms, render: 10ms)
+[0]  GET /leadership 200 in 182ms (compile: 57ms, proxy.ts: 40ms, render: 85ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 15ms, render: 4ms)
+[0]  GET /leadership 200 in 173ms (compile: 16ms, proxy.ts: 25ms, render: 132ms)
+[0]  GET /leadership 200 in 26ms (compile: 4ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 24ms, render: 7ms)
+[0]  GET /leadership 200 in 39ms (compile: 7ms, proxy.ts: 12ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 14ms, render: 5ms)
+[0]  GET /leadership 200 in 63ms (compile: 6ms, proxy.ts: 11ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 11ms, render: 4ms)
+[0]  GET /leadership 200 in 41ms (compile: 11ms, proxy.ts: 10ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 14ms, render: 4ms)
+[0]  GET /leadership 200 in 40ms (compile: 6ms, proxy.ts: 11ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 5ms)
+[0]  GET /leadership 200 in 39ms (compile: 4ms, proxy.ts: 8ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 9ms, render: 10ms)
+[0]  GET /leadership 200 in 740ms (compile: 54ms, proxy.ts: 24ms, render: 662ms)
+[0]  GET /leadership 200 in 44ms (compile: 5ms, proxy.ts: 15ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 9ms, render: 7ms)
+[0]  GET /leadership 200 in 56ms (compile: 8ms, proxy.ts: 17ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 7ms, render: 11ms)
+[0]  GET /leadership 200 in 57ms (compile: 8ms, proxy.ts: 15ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 6ms, render: 11ms)
+[0]  GET /leadership 200 in 86ms (compile: 20ms, proxy.ts: 12ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 9ms, render: 17ms)
+[0]  GET /leadership 200 in 52ms (compile: 7ms, proxy.ts: 14ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 23ms, render: 6ms)
+[0]  GET /leadership 200 in 1992ms (compile: 65ms, proxy.ts: 50ms, render: 1877ms)
+[0]  GET /leadership 200 in 80ms (compile: 16ms, proxy.ts: 20ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /leadership 200 in 82ms (compile: 7ms, proxy.ts: 17ms, render: 58ms)
+[1] [SLOW DB] 432ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 461ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 475ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 691ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 16ms, render: 17ms)
+[1] [SLOW DB] 887ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 2507ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 2593ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 424ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 451ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 452ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 812ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 401ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 413ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 415ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 458ms params=2 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 531ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 834ms params=4 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL AND hifz_logs.s"
+[1] [SLOW DB] 1239ms params=2 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL AND hifz_logs.student_id IN ( SELECT s.adm_no FROM students s LEFT JOIN student_year_snapshots sys"
+[0]  GET /leadership 200 in 1256ms (compile: 83ms, proxy.ts: 61ms, render: 1113ms)
+[1] [SLOW DB] 434ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 2468ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 14ms, render: 7ms)
+[0]  GET /leadership 200 in 910ms (compile: 766ms, proxy.ts: 51ms, render: 93ms)
+[0]  GET /leadership 200 in 72ms (compile: 20ms, proxy.ts: 16ms, render: 36ms)
+[1] [SLOW DB] 1785ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 1785ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 1786ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 1787ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 10102.1ms
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 3248.0ms
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 33ms, render: 9ms)
+[0]  GET /leadership 200 in 787ms (compile: 37ms, proxy.ts: 53ms, render: 697ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 12ms, render: 3ms)
+[0]  GET /leadership 200 in 822ms (compile: 38ms, proxy.ts: 53ms, render: 732ms)
+[0]  GET /manifest.webmanifest 200 in 34ms (compile: 28ms, render: 5ms)
+[0]  GET /leadership 200 in 874ms (compile: 101ms, proxy.ts: 55ms, render: 718ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 11ms, render: 8ms)
+[0]  GET /leadership 200 in 842ms (compile: 47ms, proxy.ts: 61ms, render: 734ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 28ms, render: 6ms)
+[0]  GET /leadership 200 in 783ms (compile: 695ms, proxy.ts: 57ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 18ms, render: 10ms)
+[0]  GET /leadership 200 in 952ms (compile: 78ms, proxy.ts: 104ms, render: 770ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 852ms (compile: 47ms, proxy.ts: 89ms, render: 716ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 12ms, render: 5ms)
+[0]  GET /leadership 200 in 910ms (compile: 57ms, proxy.ts: 59ms, render: 794ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 14ms, render: 10ms)
+[0]  GET /leadership 200 in 75ms (compile: 8ms, proxy.ts: 35ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 2ms, render: 6ms)
+[0]  GET /leadership 200 in 34ms (compile: 10ms, proxy.ts: 9ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 15ms, render: 4ms)
+[0]  GET /leadership 200 in 58ms (compile: 7ms, proxy.ts: 10ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 39ms (compile: 10ms, proxy.ts: 10ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 13ms, render: 6ms)
+[0]  GET /leadership 200 in 44ms (compile: 10ms, proxy.ts: 12ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 44ms (compile: 11ms, proxy.ts: 11ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 2ms, render: 5ms)
+[0]  GET /leadership 200 in 36ms (compile: 6ms, proxy.ts: 10ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 37ms (compile: 5ms, proxy.ts: 8ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 29ms, render: 6ms)
+[0]  GET /leadership 200 in 834ms (compile: 68ms, proxy.ts: 52ms, render: 714ms)
+[0]  GET /leadership 200 in 74ms (compile: 24ms, proxy.ts: 20ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 5ms, render: 5ms)
+[0]  GET /leadership 200 in 37ms (compile: 7ms, proxy.ts: 10ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 6ms, render: 6ms)
+[0]  GET /leadership 200 in 860ms (compile: 73ms, proxy.ts: 39ms, render: 749ms)
+[0]  GET /leadership 200 in 52ms (compile: 8ms, proxy.ts: 17ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 7ms, render: 18ms)
+[0]  GET /leadership 200 in 49ms (compile: 13ms, proxy.ts: 9ms, render: 26ms)
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 27ms, render: 5ms)
+[0]  GET /leadership 200 in 51ms (compile: 7ms, proxy.ts: 13ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 23ms, render: 6ms)
+[0]  GET /leadership 200 in 1046ms (compile: 897ms, proxy.ts: 95ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 21ms, render: 14ms)
+[0]  GET /leadership 200 in 139ms (compile: 8ms, proxy.ts: 21ms, render: 110ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 5ms, render: 16ms)
+[0]  GET /leadership 200 in 54ms (compile: 10ms, proxy.ts: 14ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 7ms, render: 7ms)
+[0]  GET /leadership 200 in 80ms (compile: 12ms, proxy.ts: 22ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 8ms, render: 14ms)
+[0]  GET /leadership 200 in 2.4s (compile: 104ms, proxy.ts: 67ms, render: 2.2s)
+[0]  GET /manifest.webmanifest 200 in 56ms (compile: 46ms, render: 9ms)
+[0]  GET /leadership 200 in 74ms (compile: 9ms, proxy.ts: 15ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 6ms, render: 9ms)
+[0]  GET /leadership 200 in 431ms (compile: 30ms, proxy.ts: 27ms, render: 374ms)
+[0]  GET /leadership 200 in 69ms (compile: 14ms, proxy.ts: 15ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 27ms, render: 12ms)
+[0]  GET /leadership 200 in 60ms (compile: 8ms, proxy.ts: 17ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 7ms, render: 12ms)
+[0]  GET /leadership 200 in 62ms (compile: 12ms, proxy.ts: 17ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 12ms, render: 14ms)
+[0]  GET /leadership 200 in 67ms (compile: 12ms, proxy.ts: 13ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 7ms)
+[0]  GET /leadership 200 in 57ms (compile: 14ms, proxy.ts: 12ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 5ms, render: 6ms)
+[0]  GET /leadership 200 in 66ms (compile: 26ms, proxy.ts: 12ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 11ms, render: 14ms)
+[0]  GET /leadership 200 in 51ms (compile: 10ms, proxy.ts: 12ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 20ms, render: 7ms)
+[0]  GET /leadership 200 in 54ms (compile: 8ms, proxy.ts: 11ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 5ms, render: 8ms)
+[0]  GET /leadership 200 in 58ms (compile: 11ms, proxy.ts: 15ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0]  GET /leadership 200 in 547ms (compile: 426ms, proxy.ts: 18ms, render: 103ms)
+[0] ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 20ms, render: 9ms)
+[0]  GET /leadership 200 in 755ms (compile: 9ms, proxy.ts: 15ms, render: 731ms)
+[1] [SLOW DB] 422ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 406ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 397ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 426ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 415ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 445ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 449ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 452ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 780ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 800ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 817.4ms
+[1] [SLOW DB] 466ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 407ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 460ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 554ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 783ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 810ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 840ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 405ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 2008.0ms
+[1] [SLOW DB] 2580ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 2616.2ms
+[1] [SLOW DB] 3626ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 4458ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 455ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 463ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 492ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 505ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 527ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 887ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 916ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 917ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[0]  GET /leadership 200 in 2.5s (compile: 182ms, proxy.ts: 112ms, render: 2.2s)
+[0]  GET /manifest.webmanifest 200 in 52ms (compile: 42ms, render: 10ms)
+[1] [SLOW DB] 4614ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /leadership 200 in 1573ms (compile: 1348ms, proxy.ts: 156ms, render: 69ms)
+[1] [SLOW DB] 6693ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 24ms, render: 6ms)
+[0]  GET /leadership 200 in 364ms (compile: 200ms, proxy.ts: 36ms, render: 129ms)
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 200 15966.0ms
+[0]  GET /leadership 200 in 2.0s (compile: 120ms, proxy.ts: 108ms, render: 1788ms)
+[0]  GET /manifest.webmanifest 200 in 57ms (compile: 40ms, render: 17ms)
+[0]  GET /leadership 200 in 2.6s (compile: 134ms, proxy.ts: 167ms, render: 2.3s)
+[0]  GET /manifest.webmanifest 200 in 58ms (compile: 42ms, render: 16ms)
+[0]  GET /leadership 200 in 2.3s (compile: 54ms, proxy.ts: 114ms, render: 2.2s)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 22ms, render: 14ms)
+[0]  GET /leadership 200 in 2.1s (compile: 89ms, proxy.ts: 133ms, render: 1916ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 16ms, render: 13ms)
+[0]  GET /leadership 200 in 1989ms (compile: 123ms, proxy.ts: 94ms, render: 1771ms)
+[0]  GET /manifest.webmanifest 200 in 49ms (compile: 39ms, render: 10ms)
+[0]  GET /leadership 200 in 264ms (compile: 101ms, proxy.ts: 70ms, render: 93ms)
+[0]  GET /manifest.webmanifest 200 in 46ms (compile: 31ms, render: 16ms)
+[0]  GET /leadership 200 in 1109ms (compile: 980ms, proxy.ts: 86ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 23ms, render: 9ms)
+[0]  GET /leadership 200 in 716ms (compile: 338ms, proxy.ts: 71ms, render: 308ms)
+[0]  GET /leadership 200 in 2.5s (compile: 67ms, proxy.ts: 78ms, render: 2.4s)
+[0]  GET /leadership 200 in 2.5s (compile: 46ms, proxy.ts: 2.2s, render: 285ms)
+[0]  GET /leadership 200 in 628ms (compile: 370ms, proxy.ts: 54ms, render: 204ms)
+[0]  GET /leadership 200 in 10.3s (compile: 2.3s, proxy.ts: 143ms, render: 7.8s)
+[1] [DB POOL] 2 connections ready in 507ms
+[0]  GET /leadership 200 in 1310ms (compile: 836ms, proxy.ts: 163ms, render: 311ms)
+[0]  GET /leadership 200 in 1898ms (compile: 1758ms, proxy.ts: 66ms, render: 74ms)
+[0]  GET /leadership 200 in 424ms (compile: 221ms, proxy.ts: 28ms, render: 175ms)
+[0]  GET /leadership 200 in 62ms (compile: 9ms, proxy.ts: 11ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 49ms (compile: 32ms, render: 16ms)
+[0]  GET /leadership 200 in 69ms (compile: 7ms, proxy.ts: 17ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 4ms, render: 9ms)
+[0]  GET /leadership 200 in 58ms (compile: 11ms, proxy.ts: 16ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0]  GET /leadership 200 in 110ms (compile: 59ms, proxy.ts: 12ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 12ms, render: 15ms)
+[0]  GET /leadership 200 in 1132ms (compile: 59ms, proxy.ts: 110ms, render: 963ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 17ms, render: 8ms)
+[0]  GET /leadership 200 in 2.1s (compile: 54ms, proxy.ts: 85ms, render: 1980ms)
+[0]  GET /leadership 200 in 197ms (compile: 84ms, proxy.ts: 56ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 18ms, render: 17ms)
+[0]  GET /leadership 200 in 175ms (compile: 69ms, proxy.ts: 54ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 17ms, render: 13ms)
+[0]  GET /leadership 200 in 176ms (compile: 59ms, proxy.ts: 51ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 11ms, render: 3ms)
+[0]  GET /leadership 200 in 153ms (compile: 67ms, proxy.ts: 43ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 7ms, render: 5ms)
+[0]  GET /leadership 200 in 131ms (compile: 53ms, proxy.ts: 46ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 8ms, render: 7ms)
+[0]  GET /leadership 200 in 791ms (compile: 34ms, proxy.ts: 41ms, render: 717ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 13ms, render: 5ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/leadership'
+[0] }
+[0]  GET /leadership 500 in 4.8s (compile: 4.7s, proxy.ts: 27ms, render: 36ms)
+[0]  GET /leadership 200 in 170ms (compile: 99ms, proxy.ts: 6ms, render: 65ms)
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 299ms (compile: 6ms, proxy.ts: 14ms, render: 278ms)
+[0]  GET /leadership 200 in 301ms (compile: 6ms, proxy.ts: 14ms, render: 280ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 15ms, render: 7ms)
+[1] [SLOW DB] 408ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 412ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 415ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 416ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 392ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 444ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 454ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW DB] 787ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 799.1ms
+[1] [SLOW DB] 434ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 1169ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 406ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 1603.2ms
+[1] [SLOW DB] 2570ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 2613.4ms
+[0]  GET /leadership 200 in 69ms (compile: 12ms, proxy.ts: 22ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 8ms, render: 17ms)
+[0]  GET /leadership 200 in 128ms (compile: 10ms, proxy.ts: 50ms, render: 68ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 6ms, render: 10ms)
+[0]  GET /leadership 200 in 57ms (compile: 9ms, proxy.ts: 13ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 69ms (compile: 11ms, proxy.ts: 25ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 2ms, render: 4ms)
+[0]  GET /leadership 200 in 63ms (compile: 12ms, proxy.ts: 24ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /leadership 200 in 45ms (compile: 8ms, proxy.ts: 16ms, render: 22ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 19ms, render: 6ms)
+[0]  GET /leadership 200 in 57ms (compile: 15ms, proxy.ts: 13ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 22ms, render: 7ms)
+[0]  GET /leadership 200 in 186ms (compile: 69ms, proxy.ts: 46ms, render: 72ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 15ms, render: 6ms)
+[0]  GET /leadership 200 in 45ms (compile: 9ms, proxy.ts: 12ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 24ms, render: 7ms)
+[0]  GET /leadership 200 in 122ms (compile: 49ms, proxy.ts: 26ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 55ms (compile: 9ms, proxy.ts: 25ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 6ms)
+[0]  GET /leadership 200 in 102ms (compile: 20ms, proxy.ts: 46ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 16ms, render: 12ms)
+[0]  GET /leadership 200 in 136ms (compile: 58ms, proxy.ts: 29ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 17ms, render: 4ms)
+[0]  GET /leadership 200 in 46ms (compile: 6ms, proxy.ts: 16ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /leadership 200 in 132ms (compile: 49ms, proxy.ts: 33ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 168ms (compile: 76ms, proxy.ts: 26ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 1345ms (compile: 107ms, proxy.ts: 1168ms, render: 70ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 21ms, render: 4ms)
+[0]  GET /leadership 200 in 128ms (compile: 52ms, proxy.ts: 29ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 6ms)
+[0]  GET /leadership 200 in 1325ms (compile: 949ms, proxy.ts: 50ms, render: 325ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 20ms, render: 6ms)
+[0]  GET /leadership 200 in 388ms (compile: 208ms, proxy.ts: 47ms, render: 132ms)
+[0]  GET /leadership 200 in 133ms (compile: 37ms, proxy.ts: 55ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 38ms (compile: 31ms, render: 7ms)
+[0]  GET /leadership 200 in 217ms (compile: 78ms, proxy.ts: 60ms, render: 80ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 14ms, render: 5ms)
+[0]  GET /leadership 200 in 164ms (compile: 61ms, proxy.ts: 57ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 20ms, render: 5ms)
+[0]  GET /leadership 200 in 136ms (compile: 50ms, proxy.ts: 20ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 12ms, render: 5ms)
+[0]  GET /leadership 200 in 131ms (compile: 50ms, proxy.ts: 29ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 107ms (compile: 45ms, proxy.ts: 18ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 15ms, render: 6ms)
+[0]  GET /leadership 200 in 110ms (compile: 42ms, proxy.ts: 29ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 103ms (compile: 26ms, proxy.ts: 13ms, render: 64ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 18ms, render: 9ms)
+[0]  GET /leadership 200 in 124ms (compile: 49ms, proxy.ts: 25ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 12ms, render: 5ms)
+[0]  GET /leadership 200 in 127ms (compile: 42ms, proxy.ts: 39ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 128ms (compile: 49ms, proxy.ts: 29ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 7ms, render: 3ms)
+[0]  GET /leadership 200 in 116ms (compile: 35ms, proxy.ts: 21ms, render: 60ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 10ms, render: 6ms)
+[0]  GET /leadership 200 in 111ms (compile: 51ms, proxy.ts: 31ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 8ms, render: 5ms)
+[0]  GET /leadership 200 in 119ms (compile: 48ms, proxy.ts: 22ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 11ms, render: 5ms)
+[0]  GET /leadership 200 in 122ms (compile: 55ms, proxy.ts: 17ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 16ms, render: 5ms)
+[0]  GET /leadership 200 in 175ms (compile: 100ms, proxy.ts: 28ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 9ms, render: 6ms)
+[0]  GET /leadership 200 in 148ms (compile: 60ms, proxy.ts: 28ms, render: 61ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 121ms (compile: 52ms, proxy.ts: 32ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 111ms (compile: 52ms, proxy.ts: 30ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 125ms (compile: 44ms, proxy.ts: 19ms, render: 62ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 7ms, render: 5ms)
+[0]  GET /leadership 200 in 140ms (compile: 53ms, proxy.ts: 33ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 147ms (compile: 54ms, proxy.ts: 22ms, render: 72ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 14ms, render: 5ms)
+[0]  GET /leadership 200 in 66ms (compile: 12ms, proxy.ts: 10ms, render: 44ms)
+[0]  GET /leadership 200 in 109ms (compile: 41ms, proxy.ts: 26ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 8ms, render: 6ms)
+[0]  GET /leadership 200 in 120ms (compile: 37ms, proxy.ts: 44ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 13ms, render: 3ms)
+[0]  GET /leadership 200 in 116ms (compile: 43ms, proxy.ts: 19ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 17ms, render: 4ms)
+[0]  GET /leadership 200 in 134ms (compile: 38ms, proxy.ts: 39ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 17ms, render: 7ms)
+[0]  GET /leadership 200 in 227ms (compile: 110ms, proxy.ts: 70ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 11ms, render: 5ms)
+[0]  GET /leadership 200 in 154ms (compile: 33ms, proxy.ts: 35ms, render: 86ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 7ms, render: 4ms)
+[0]  GET /leadership 200 in 129ms (compile: 44ms, proxy.ts: 33ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 117ms (compile: 42ms, proxy.ts: 25ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 125ms (compile: 59ms, proxy.ts: 20ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 7ms, render: 7ms)
+[0]  GET /leadership 200 in 143ms (compile: 63ms, proxy.ts: 41ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 114ms (compile: 38ms, proxy.ts: 29ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 23ms, render: 4ms)
+[0]  GET /leadership 200 in 48ms (compile: 6ms, proxy.ts: 8ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 8ms, render: 6ms)
+[0]  GET /leadership 200 in 37ms (compile: 6ms, proxy.ts: 11ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 18ms, render: 4ms)
+[0]  GET /leadership 200 in 51ms (compile: 11ms, proxy.ts: 12ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 5ms, render: 13ms)
+[0]  GET /leadership 200 in 47ms (compile: 5ms, proxy.ts: 16ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 7ms, render: 14ms)
+[0]  GET /leadership 200 in 118ms (compile: 41ms, proxy.ts: 38ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 11ms, render: 6ms)
+[0]  GET /leadership 200 in 38ms (compile: 6ms, proxy.ts: 10ms, render: 21ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 37ms (compile: 7ms, proxy.ts: 10ms, render: 20ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 8ms, render: 13ms)
+[0]  GET /leadership 200 in 143ms (compile: 53ms, proxy.ts: 49ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 56ms (compile: 42ms, render: 14ms)
+[0]  GET /leadership 200 in 203ms (compile: 71ms, proxy.ts: 68ms, render: 64ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 20ms, render: 9ms)
+[0]  GET /leadership 200 in 192ms (compile: 76ms, proxy.ts: 41ms, render: 75ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 13ms, render: 8ms)
+[0]  GET /leadership 200 in 159ms (compile: 47ms, proxy.ts: 65ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 10ms, render: 5ms)
+[0]  GET /leadership 200 in 180ms (compile: 60ms, proxy.ts: 43ms, render: 78ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 10ms, render: 8ms)
+[0]  GET /leadership 200 in 215ms (compile: 74ms, proxy.ts: 95ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 25ms, render: 10ms)
+[0]  GET /leadership 200 in 288ms (compile: 85ms, proxy.ts: 111ms, render: 92ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 18ms, render: 10ms)
+[0]  GET /leadership 200 in 2.2s (compile: 2.0s, proxy.ts: 108ms, render: 106ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 28ms, render: 14ms)
+[0]  GET /leadership 200 in 101ms (compile: 9ms, proxy.ts: 34ms, render: 58ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 4ms, render: 9ms)
+[0]  GET /leadership 200 in 49ms (compile: 7ms, proxy.ts: 17ms, render: 25ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 8ms, render: 9ms)
+[0]  GET /leadership 200 in 191ms (compile: 31ms, proxy.ts: 69ms, render: 90ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 14ms, render: 9ms)
+[0]  GET /leadership 200 in 184ms (compile: 84ms, proxy.ts: 52ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 15ms, render: 10ms)
+[0]  GET /leadership 200 in 387ms (compile: 58ms, proxy.ts: 46ms, render: 282ms)
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 21ms, render: 10ms)
+[0]  GET /leadership 200 in 240ms (compile: 81ms, proxy.ts: 78ms, render: 81ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 14ms, render: 6ms)
+[0]  GET /leadership 200 in 226ms (compile: 76ms, proxy.ts: 81ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 13ms, render: 7ms)
+[0]  GET /leadership 200 in 238ms (compile: 62ms, proxy.ts: 103ms, render: 73ms)
+[0]  GET /manifest.webmanifest 200 in 36ms (compile: 25ms, render: 11ms)
+[0]  GET /leadership 200 in 182ms (compile: 66ms, proxy.ts: 72ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 6ms)
+[0]  GET /leadership 200 in 125ms (compile: 45ms, proxy.ts: 34ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 133ms (compile: 57ms, proxy.ts: 24ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 7ms, render: 4ms)
+[0]  GET /leadership 200 in 166ms (compile: 52ms, proxy.ts: 57ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 10ms, render: 6ms)
+[0]  GET /leadership 200 in 131ms (compile: 50ms, proxy.ts: 43ms, render: 38ms)
+[1] [DB POOL] 2 connections ready in 697ms
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 181ms (compile: 70ms, proxy.ts: 61ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 129ms (compile: 48ms, proxy.ts: 27ms, render: 53ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 9ms, render: 6ms)
+[0]  GET /leadership 200 in 138ms (compile: 52ms, proxy.ts: 29ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /leadership 200 in 144ms (compile: 47ms, proxy.ts: 43ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /leadership 200 in 143ms (compile: 53ms, proxy.ts: 31ms, render: 58ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 8ms, render: 4ms)
+[0]  GET /leadership 200 in 131ms (compile: 45ms, proxy.ts: 34ms, render: 52ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 5ms)
+[0]  GET /leadership 200 in 147ms (compile: 55ms, proxy.ts: 37ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 130ms (compile: 39ms, proxy.ts: 49ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 12ms, render: 3ms)
+[0]  GET /leadership 200 in 104ms (compile: 36ms, proxy.ts: 37ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 15ms, render: 6ms)
+[0]  GET /leadership 200 in 152ms (compile: 47ms, proxy.ts: 34ms, render: 71ms)
+[0]  GET /manifest.webmanifest 200 in 8ms (compile: 4ms, render: 4ms)
+[0]  GET /leadership 200 in 130ms (compile: 51ms, proxy.ts: 38ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 158ms (compile: 67ms, proxy.ts: 40ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 9ms, render: 9ms)
+[0]  GET /leadership 200 in 168ms (compile: 56ms, proxy.ts: 62ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 196ms (compile: 192ms, render: 4ms)
+[0]  GET /leadership 200 in 176ms (compile: 58ms, proxy.ts: 70ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 109ms (compile: 48ms, proxy.ts: 21ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 14ms, render: 4ms)
+[0]  GET /leadership 200 in 126ms (compile: 49ms, proxy.ts: 33ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 9ms (compile: 3ms, render: 5ms)
+[0]  GET /leadership 200 in 38ms (compile: 5ms, proxy.ts: 9ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 126ms (compile: 122ms, render: 4ms)
+[0]  GET /leadership 200 in 37ms (compile: 5ms, proxy.ts: 9ms, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 37ms (compile: 9ms, proxy.ts: 10ms, render: 18ms)
+[0]  GET /manifest.webmanifest 200 in 5ms (compile: 2ms, render: 3ms)
+[0]  GET /leadership 200 in 36ms (compile: 7ms, proxy.ts: 10ms, render: 19ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 18ms, render: 8ms)
+[0]  GET /leadership 200 in 125ms (compile: 35ms, proxy.ts: 47ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 22ms, render: 18ms)
+[0]  GET /leadership 200 in 126ms (compile: 41ms, proxy.ts: 51ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 115ms (compile: 108ms, render: 7ms)
+[0]  GET /leadership 200 in 131ms (compile: 50ms, proxy.ts: 40ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 24ms, render: 5ms)
+[0]  GET /leadership 200 in 870ms (compile: 787ms, proxy.ts: 34ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 8ms, render: 7ms)
+[0]  GET /leadership 200 in 166ms (compile: 57ms, proxy.ts: 61ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 10ms, render: 4ms)
+[0]  GET /leadership 200 in 140ms (compile: 51ms, proxy.ts: 54ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 112ms (compile: 108ms, render: 4ms)
+[0]  GET /leadership 200 in 112ms (compile: 45ms, proxy.ts: 35ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 114ms (compile: 110ms, render: 4ms)
+[0]  GET /leadership 200 in 123ms (compile: 31ms, proxy.ts: 51ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /leadership 200 in 110ms (compile: 43ms, proxy.ts: 27ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 127ms (compile: 121ms, render: 5ms)
+[0]  GET /leadership 200 in 53ms (compile: 10ms, proxy.ts: 13ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 12ms, render: 4ms)
+[0]  GET /leadership 200 in 60ms (compile: 10ms, proxy.ts: 18ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 7ms, render: 9ms)
+[0]  GET /leadership 200 in 170ms (compile: 53ms, proxy.ts: 70ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 31ms, render: 11ms)
+[0]  GET /leadership 200 in 68ms (compile: 15ms, proxy.ts: 17ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[0]  GET /leadership 200 in 142ms (compile: 46ms, proxy.ts: 60ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 184ms (compile: 178ms, render: 5ms)
+[0]  GET /leadership 200 in 139ms (compile: 51ms, proxy.ts: 46ms, render: 41ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 11ms, render: 6ms)
+[0]  GET /leadership 200 in 219ms (compile: 77ms, proxy.ts: 40ms, render: 102ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 16ms, render: 11ms)
+[0]  GET /leadership 200 in 190ms (compile: 79ms, proxy.ts: 68ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 158ms (compile: 153ms, render: 4ms)
+[0]  GET /leadership 200 in 175ms (compile: 75ms, proxy.ts: 37ms, render: 63ms)
+[0]  GET /manifest.webmanifest 200 in 245ms (compile: 233ms, render: 12ms)
+[0]  GET /leadership 200 in 175ms (compile: 65ms, proxy.ts: 58ms, render: 53ms)
+[0]  GET /manifest.webmanifest 200 in 210ms (compile: 161ms, render: 49ms)
+[0]  GET /leadership 200 in 311ms (compile: 102ms, proxy.ts: 98ms, render: 111ms)
+[0]  GET /manifest.webmanifest 200 in 216ms (compile: 209ms, render: 7ms)
+[0]  GET /leadership 200 in 174ms (compile: 66ms, proxy.ts: 39ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 22ms, render: 5ms)
+[0]  GET /leadership 200 in 178ms (compile: 61ms, proxy.ts: 61ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 169ms (compile: 164ms, render: 5ms)
+[0]  GET /leadership 200 in 155ms (compile: 76ms, proxy.ts: 38ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 146ms (compile: 140ms, render: 6ms)
+[0]  GET /leadership 200 in 178ms (compile: 72ms, proxy.ts: 40ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 125ms (compile: 120ms, render: 5ms)
+[0]  GET /leadership 200 in 146ms (compile: 56ms, proxy.ts: 43ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 182ms (compile: 59ms, proxy.ts: 48ms, render: 76ms)
+[0]  GET /manifest.webmanifest 200 in 148ms (compile: 143ms, render: 6ms)
+[0]  GET /leadership 200 in 156ms (compile: 62ms, proxy.ts: 45ms, render: 49ms)
+[0]  GET /manifest.webmanifest 200 in 426ms (compile: 416ms, render: 10ms)
+[0]  GET /leadership 200 in 360ms (compile: 134ms, proxy.ts: 99ms, render: 127ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 18ms, render: 5ms)
+[0]  GET /leadership 200 in 134ms (compile: 44ms, proxy.ts: 49ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 156ms (compile: 151ms, render: 5ms)
+[0]  GET /leadership 200 in 222ms (compile: 78ms, proxy.ts: 105ms, render: 40ms)
+[0]  GET /manifest.webmanifest 200 in 140ms (compile: 135ms, render: 5ms)
+[0]  GET /leadership 200 in 139ms (compile: 50ms, proxy.ts: 38ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 152ms (compile: 147ms, render: 5ms)
+[0]  GET /leadership 200 in 181ms (compile: 52ms, proxy.ts: 62ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 5ms)
+[0]  GET /leadership 200 in 159ms (compile: 45ms, proxy.ts: 73ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 140ms (compile: 135ms, render: 5ms)
+[0]  GET /leadership 200 in 193ms (compile: 64ms, proxy.ts: 62ms, render: 67ms)
+[0]  GET /manifest.webmanifest 200 in 231ms (compile: 225ms, render: 7ms)
+[0]  GET /leadership 200 in 233ms (compile: 111ms, proxy.ts: 67ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 166ms (compile: 159ms, render: 8ms)
+[0]  GET /leadership 200 in 166ms (compile: 83ms, proxy.ts: 34ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 308ms (compile: 299ms, render: 9ms)
+[0]  GET /leadership 200 in 188ms (compile: 71ms, proxy.ts: 72ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 9ms, render: 6ms)
+[0]  GET /leadership 200 in 139ms (compile: 52ms, proxy.ts: 35ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 13ms, render: 8ms)
+[0]  GET /leadership 200 in 157ms (compile: 55ms, proxy.ts: 50ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 202ms (compile: 198ms, render: 4ms)
+[0]  GET /leadership 200 in 130ms (compile: 59ms, proxy.ts: 35ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 179ms (compile: 175ms, render: 5ms)
+[0]  GET /leadership 200 in 150ms (compile: 60ms, proxy.ts: 35ms, render: 55ms)
+[0]  GET /manifest.webmanifest 200 in 198ms (compile: 193ms, render: 5ms)
+[0]  GET /leadership 200 in 156ms (compile: 57ms, proxy.ts: 46ms, render: 53ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 10ms, render: 17ms)
+[0]  GET /leadership 200 in 164ms (compile: 68ms, proxy.ts: 58ms, render: 38ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 13ms, render: 10ms)
+[0]  GET /leadership 200 in 574ms (compile: 129ms, proxy.ts: 35ms, render: 410ms)
+[0]  GET /leadership 200 in 133ms (compile: 30ms, proxy.ts: 45ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 17ms, render: 7ms)
+[0]  GET /manifest.webmanifest 200 in 343ms (compile: 293ms, render: 50ms)
+[0]  GET /leadership 200 in 1099ms (compile: 153ms, proxy.ts: 753ms, render: 193ms)
+[0]  GET /manifest.webmanifest 200 in 292ms (compile: 229ms, render: 63ms)
+[0]  GET /leadership 200 in 286ms (compile: 151ms, proxy.ts: 69ms, render: 66ms)
+[0]  GET /manifest.webmanifest 200 in 242ms (compile: 238ms, render: 4ms)
+[0]  GET /leadership 200 in 139ms (compile: 70ms, proxy.ts: 30ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 90ms (compile: 81ms, render: 9ms)
+[0]  GET /leadership 200 in 323ms (compile: 129ms, proxy.ts: 99ms, render: 96ms)
+[0]  GET /manifest.webmanifest 200 in 370ms (compile: 352ms, render: 18ms)
+[0]  GET /leadership 200 in 690ms (compile: 120ms, proxy.ts: 464ms, render: 106ms)
+[0]  GET /manifest.webmanifest 200 in 92ms (compile: 78ms, render: 14ms)
+[0]  GET /leadership 200 in 757ms (compile: 270ms, proxy.ts: 321ms, render: 166ms)
+[0]  GET /manifest.webmanifest 200 in 269ms (compile: 258ms, render: 11ms)
+[0]  GET /leadership 200 in 252ms (compile: 68ms, proxy.ts: 103ms, render: 81ms)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 24ms, render: 16ms)
+[0]  GET /leadership 200 in 270ms (compile: 95ms, proxy.ts: 82ms, render: 93ms)
+[0]  GET /manifest.webmanifest 200 in 255ms (compile: 244ms, render: 11ms)
+[0]  GET /leadership 200 in 194ms (compile: 53ms, proxy.ts: 70ms, render: 71ms)
+[0]  GET /manifest.webmanifest 200 in 201ms (compile: 190ms, render: 11ms)
+[0]  GET /leadership 200 in 194ms (compile: 53ms, proxy.ts: 77ms, render: 64ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 12ms, render: 7ms)
+[0]  GET /leadership 200 in 150ms (compile: 60ms, proxy.ts: 35ms, render: 55ms)
+[0]  GET /manifest.webmanifest 200 in 193ms (compile: 184ms, render: 9ms)
+[0]  GET /leadership 200 in 261ms (compile: 82ms, proxy.ts: 78ms, render: 101ms)
+[0]  GET /manifest.webmanifest 200 in 168ms (compile: 163ms, render: 5ms)
+[0]  GET /leadership 200 in 163ms (compile: 64ms, proxy.ts: 52ms, render: 47ms)
+[0]  GET /manifest.webmanifest 200 in 159ms (compile: 154ms, render: 5ms)
+[0]  GET /leadership 200 in 195ms (compile: 66ms, proxy.ts: 51ms, render: 79ms)
+[0]  GET /manifest.webmanifest 200 in 221ms (compile: 215ms, render: 6ms)
+[0]  GET /leadership 200 in 176ms (compile: 78ms, proxy.ts: 47ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 28ms (compile: 13ms, render: 15ms)
+[0]  GET /leadership 200 in 207ms (compile: 83ms, proxy.ts: 61ms, render: 62ms)
+[0]  GET /manifest.webmanifest 200 in 134ms (compile: 130ms, render: 5ms)
+[0]  GET /leadership 200 in 124ms (compile: 38ms, proxy.ts: 38ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 23ms, render: 4ms)
+[0]  GET /leadership 200 in 908ms (compile: 810ms, proxy.ts: 54ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 1865ms (compile: 1850ms, render: 15ms)
+[0]  GET /leadership 200 in 133ms (compile: 75ms, proxy.ts: 11ms, render: 48ms)
+[0]  GET /manifest.webmanifest 200 in 10ms (compile: 3ms, render: 7ms)
+[0]  GET /leadership 200 in 50ms (compile: 10ms, proxy.ts: 12ms, render: 28ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 145ms (compile: 10ms, proxy.ts: 10ms, render: 125ms)
+[0]  GET /manifest.webmanifest 200 in 184ms (compile: 178ms, render: 6ms)
+[0]  GET /leadership 200 in 166ms (compile: 10ms, proxy.ts: 6ms, render: 149ms)
+[0]  GET /leadership 200 in 129ms (compile: 43ms, proxy.ts: 39ms, render: 47ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/manifest.webmanifest'
+[0] }
+[0]  GET /leadership 200 in 451ms (compile: 337ms, proxy.ts: 45ms, render: 69ms)
+[0]  GET /manifest.webmanifest 500 in 2.3s (compile: 2.3s, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 16ms, render: 10ms)
+[0]  GET /leadership 200 in 89ms (compile: 15ms, proxy.ts: 31ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 16ms, render: 14ms)
+[0]  GET /leadership 200 in 48ms (compile: 5ms, proxy.ts: 12ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 15ms, render: 12ms)
+[0]  GET /leadership 200 in 159ms (compile: 71ms, proxy.ts: 33ms, render: 55ms)
+[0]  GET /manifest.webmanifest 200 in 167ms (compile: 160ms, render: 7ms)
+[0]  GET /leadership 200 in 228ms (compile: 109ms, proxy.ts: 39ms, render: 81ms)
+[0]  GET /manifest.webmanifest 200 in 197ms (compile: 191ms, render: 6ms)
+[0]  GET /leadership 200 in 192ms (compile: 73ms, proxy.ts: 46ms, render: 73ms)
+[0]  GET /manifest.webmanifest 200 in 179ms (compile: 174ms, render: 5ms)
+[0]  GET /leadership 200 in 165ms (compile: 55ms, proxy.ts: 26ms, render: 83ms)
+[0]  GET /manifest.webmanifest 200 in 155ms (compile: 146ms, render: 9ms)
+[0]  GET /leadership 200 in 166ms (compile: 63ms, proxy.ts: 27ms, render: 76ms)
+[0]  GET /manifest.webmanifest 200 in 203ms (compile: 196ms, render: 7ms)
+[0]  GET /leadership 200 in 132ms (compile: 59ms, proxy.ts: 39ms, render: 33ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/manifest.webmanifest'
+[0] }
+[0]  GET /leadership 200 in 209ms (compile: 114ms, proxy.ts: 41ms, render: 54ms)
+[0]  GET /manifest.webmanifest 500 in 2.8s (compile: 2.8s, render: 58ms)
+[0]  GET /leadership 200 in 150ms (compile: 46ms, proxy.ts: 49ms, render: 55ms)
+[0]  GET /manifest.webmanifest 200 in 120ms (compile: 114ms, render: 6ms)
+[0]  GET /leadership 200 in 154ms (compile: 52ms, proxy.ts: 40ms, render: 62ms)
+[0]  GET /manifest.webmanifest 200 in 128ms (compile: 122ms, render: 6ms)
+[0]  GET /leadership 200 in 121ms (compile: 45ms, proxy.ts: 26ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 132ms (compile: 127ms, render: 5ms)
+[0]  GET /leadership 200 in 125ms (compile: 44ms, proxy.ts: 46ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 9ms, render: 4ms)
+[0]  GET /leadership 200 in 93ms (compile: 25ms, proxy.ts: 41ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 158ms (compile: 150ms, render: 8ms)
+[0]  GET /leadership 200 in 159ms (compile: 65ms, proxy.ts: 66ms, render: 27ms)
+[0]  GET /manifest.webmanifest 200 in 145ms (compile: 141ms, render: 4ms)
+[0]  GET /leadership 200 in 91ms (compile: 17ms, proxy.ts: 41ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 14ms, render: 3ms)
+[0]  GET /leadership 200 in 97ms (compile: 18ms, proxy.ts: 44ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 6ms (compile: 3ms, render: 3ms)
+[0]  GET /leadership 200 in 41ms (compile: 13ms, proxy.ts: 10ms, render: 17ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 10ms, render: 8ms)
+[1] [DB POOL] 2 connections ready in 3781ms
+[0]  GET /leadership 200 in 42ms (compile: 9ms, proxy.ts: 9ms, render: 23ms)
+[0]  GET /manifest.webmanifest 200 in 143ms (compile: 138ms, render: 5ms)
+[0]  GET /leadership 200 in 30ms (compile: 8ms, proxy.ts: 7ms, render: 15ms)
+[0]  GET /manifest.webmanifest 200 in 7ms (compile: 3ms, render: 4ms)
+[0]  GET /leadership 200 in 38ms (compile: 5ms, proxy.ts: 5ms, render: 28ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/manifest.webmanifest'
+[0] }
+[0]  GET /leadership 200 in 243ms (compile: 166ms, proxy.ts: 24ms, render: 52ms)
+[0]  GET /manifest.webmanifest 500 in 3.1s (compile: 3.1s, render: 24ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 17ms, render: 9ms)
+[0]  GET /leadership 200 in 160ms (compile: 98ms, proxy.ts: 16ms, render: 46ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 14ms, render: 11ms)
+[1] [SLOW DB] 497ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 501ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[0]  GET /leadership 200 in 2.6s (compile: 2.4s, proxy.ts: 55ms, render: 126ms)
+[1] [SLOW DB] 1015ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 1027ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[0]  GET /manifest.webmanifest 200 in 31ms (compile: 18ms, render: 13ms)
+[1] [SLOW API] GET /api/staff 304 1037.2ms
+[0]  GET /leadership 200 in 108ms (compile: 17ms, proxy.ts: 47ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 8ms, render: 16ms)
+[1] [SLOW DB] 2038ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 3229ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 3626ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 3702ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 3709.8ms
+[1] [SLOW DB] 3740ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 3849ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 3850ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 4038ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 4114ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 4082ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 4116ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 4269ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[0]  GET /leadership 200 in 1489ms (compile: 1368ms, proxy.ts: 54ms, render: 67ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 9ms, render: 7ms)
+[0]  GET /leadership 200 in 71ms (compile: 9ms, proxy.ts: 29ms, render: 33ms)
+[1] [SLOW DB] 2964ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 2703ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 6840.1ms
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 10ms, render: 9ms)
+[1] [SLOW DB] 451ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 454ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 455ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 494ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 7668ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 200 7715.5ms
+[1] [SLOW DB] 901ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 902ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 904ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 967ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 2079ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 2826ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 304 10266.0ms
+[0]  GET /leadership 200 in 1777ms (compile: 1626ms, proxy.ts: 49ms, render: 102ms)
+[0]  GET /manifest.webmanifest 200 in 41ms (compile: 29ms, render: 12ms)
+[0]  GET /leadership 200 in 73ms (compile: 10ms, proxy.ts: 19ms, render: 44ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 14ms, render: 10ms)
+[0]  GET /leadership 200 in 292ms (compile: 145ms, proxy.ts: 67ms, render: 80ms)
+[0]  GET /manifest.webmanifest 200 in 50ms (compile: 27ms, render: 23ms)
+[1] [DB POOL] 2 connections ready in 415ms
+[0]  GET /leadership 200 in 60ms (compile: 7ms, proxy.ts: 16ms, render: 36ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 6ms, render: 10ms)
+[0]  GET /leadership 200 in 69ms (compile: 11ms, proxy.ts: 21ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 6ms, render: 11ms)
+[0]  GET /leadership 200 in 66ms (compile: 15ms, proxy.ts: 18ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 6ms, render: 14ms)
+[0]  GET /leadership 200 in 64ms (compile: 7ms, proxy.ts: 16ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 5ms, render: 7ms)
+[0]  GET /leadership 200 in 75ms (compile: 15ms, proxy.ts: 18ms, render: 42ms)
+[0]  GET /manifest.webmanifest 200 in 11ms (compile: 4ms, render: 7ms)
+[0]  GET /leadership 200 in 1707ms (compile: 1565ms, proxy.ts: 79ms, render: 64ms)
+[0]  GET /manifest.webmanifest 200 in 41ms (compile: 29ms, render: 12ms)
+[0]  GET /leadership 200 in 88ms (compile: 20ms, proxy.ts: 11ms, render: 57ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 4ms, render: 11ms)
+[0]  GET /leadership 200 in 109ms (compile: 24ms, proxy.ts: 40ms, render: 45ms)
+[0]  GET /manifest.webmanifest 200 in 20ms (compile: 5ms, render: 15ms)
+[0]  GET /leadership 200 in 9.0s (compile: 7.9s, proxy.ts: 134ms, render: 931ms)
+[0]  GET /manifest.webmanifest 200 in 112ms (compile: 92ms, render: 20ms)
+[0]  GET /leadership 200 in 2.2s (compile: 2.0s, proxy.ts: 71ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 76ms (compile: 48ms, render: 28ms)
+[0]  GET /leadership 200 in 2.1s (compile: 1960ms, proxy.ts: 101ms, render: 62ms)
+[0] ⨯ SyntaxError: Unexpected end of JSON input
+[0]     at JSON.parse (<anonymous>) {
+[0]   page: '/manifest.webmanifest'
+[0] }
+[0] ○ Compiling /_error ...
+[0]  GET /manifest.webmanifest 500 in 24.6s (compile: 24.5s, render: 75ms)
+[0]  GET /leadership 200 in 1711ms (compile: 1559ms, proxy.ts: 50ms, render: 102ms)
+[0]  GET /manifest.webmanifest 200 in 70ms (compile: 55ms, render: 15ms)
+[0]  GET /leadership 200 in 67ms (compile: 9ms, proxy.ts: 19ms, render: 39ms)
+[0]  GET /manifest.webmanifest 200 in 12ms (compile: 4ms, render: 9ms)
+[0]  GET /leadership 200 in 89ms (compile: 19ms, proxy.ts: 27ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 5ms, render: 12ms)
+[0]  GET /leadership 200 in 1751ms (compile: 1550ms, proxy.ts: 64ms, render: 137ms)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 22ms, render: 13ms)
+[0]  GET /leadership 200 in 87ms (compile: 10ms, proxy.ts: 26ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 18ms (compile: 5ms, render: 12ms)
+[0]  GET /leadership 200 in 2.2s (compile: 85ms, proxy.ts: 62ms, render: 2.1s)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 9ms)
+[0]  GET /leadership 200 in 76ms (compile: 13ms, proxy.ts: 28ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 19ms, render: 11ms)
+[0]  GET /leadership 200 in 2.2s (compile: 132ms, proxy.ts: 42ms, render: 1977ms)
+[0]  GET /manifest.webmanifest 200 in 81ms (compile: 68ms, render: 13ms)
+[0]  GET /leadership 200 in 2.1s (compile: 1947ms, proxy.ts: 81ms, render: 61ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 25ms, render: 12ms)
+[0]  GET /leadership 200 in 2.5s (compile: 83ms, proxy.ts: 41ms, render: 2.3s)
+[0]  GET /manifest.webmanifest 200 in 89ms (compile: 71ms, render: 18ms)
+[0]  GET /leadership 200 in 2.2s (compile: 1958ms, proxy.ts: 107ms, render: 89ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 19ms, render: 11ms)
+[0]  GET /leadership 200 in 1989ms (compile: 1859ms, proxy.ts: 61ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 44ms (compile: 25ms, render: 18ms)
+[0]  GET /leadership 200 in 3.5s (compile: 3.2s, proxy.ts: 91ms, render: 135ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 28ms, render: 14ms)
+[0]  GET /leadership 200 in 4.1s (compile: 150ms, proxy.ts: 63ms, render: 3.9s)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 26ms, render: 15ms)
+[0]  GET /leadership 200 in 3.3s (compile: 86ms, proxy.ts: 62ms, render: 3.2s)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 28ms, render: 12ms)
+[0]  GET /leadership 200 in 2.2s (compile: 92ms, proxy.ts: 64ms, render: 2.1s)
+[0]  GET /manifest.webmanifest 200 in 81ms (compile: 73ms, render: 8ms)
+[0]  GET /leadership 200 in 2.4s (compile: 2.1s, proxy.ts: 79ms, render: 154ms)
+[0]  GET /manifest.webmanifest 200 in 53ms (compile: 33ms, render: 20ms)
+[0]  GET /leadership 200 in 2.1s (compile: 128ms, proxy.ts: 80ms, render: 1892ms)
+[0]  GET /manifest.webmanifest 200 in 44ms (compile: 36ms, render: 9ms)
+[0]  GET /leadership 200 in 1752ms (compile: 91ms, proxy.ts: 37ms, render: 1624ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 19ms, render: 12ms)
+[0]  GET /leadership 200 in 18.8s (compile: 90ms, proxy.ts: 23ms, render: 18.7s)
+[0]  GET /manifest.webmanifest 200 in 142ms (compile: 74ms, render: 68ms)
+[0]  GET /leadership 200 in 1998ms (compile: 152ms, proxy.ts: 68ms, render: 1779ms)
+[0]  GET /manifest.webmanifest 200 in 38ms (compile: 28ms, render: 10ms)
+[0]  GET /leadership 200 in 57ms (compile: 12ms, proxy.ts: 13ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 15ms, render: 11ms)
+[0]  GET /leadership 200 in 2.7s (compile: 2.5s, proxy.ts: 146ms, render: 110ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 32ms, render: 10ms)
+[0]  GET /leadership 200 in 2.3s (compile: 2.1s, proxy.ts: 80ms, render: 100ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 5ms, render: 12ms)
+[0]  GET /leadership 200 in 2.0s (compile: 1809ms, proxy.ts: 122ms, render: 108ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 17ms, render: 8ms)
+[0]  GET /leadership 200 in 55ms (compile: 7ms, proxy.ts: 17ms, render: 30ms)
+[0]  GET /manifest.webmanifest 200 in 22ms (compile: 9ms, render: 14ms)
+[0]  GET /leadership 200 in 1759ms (compile: 1600ms, proxy.ts: 74ms, render: 85ms)
+[0]  GET /leadership 200 in 56ms (compile: 9ms, proxy.ts: 12ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 13ms (compile: 3ms, render: 9ms)
+[0]  GET /manifest.webmanifest 200 in 24ms (compile: 8ms, render: 16ms)
+[0]  GET /leadership 200 in 55ms (compile: 9ms, proxy.ts: 14ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 11ms, render: 18ms)
+[0]  GET /leadership 200 in 56ms (compile: 9ms, proxy.ts: 12ms, render: 34ms)
+[0]  GET /manifest.webmanifest 200 in 16ms (compile: 5ms, render: 11ms)
+[0]  GET /leadership 200 in 99ms (compile: 21ms, proxy.ts: 35ms, render: 43ms)
+[0]  GET /manifest.webmanifest 200 in 17ms (compile: 7ms, render: 10ms)
+[0]  GET /leadership 200 in 2.1s (compile: 69ms, proxy.ts: 67ms, render: 1920ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 17ms, render: 15ms)
+[0]  GET /leadership 200 in 2.1s (compile: 125ms, proxy.ts: 73ms, render: 1882ms)
+[0]  GET /manifest.webmanifest 200 in 130ms (compile: 120ms, render: 10ms)
+[0]  GET /leadership 200 in 1920ms (compile: 1784ms, proxy.ts: 67ms, render: 69ms)
+[0]  GET /manifest.webmanifest 200 in 59ms (compile: 46ms, render: 13ms)
+[0]  GET /leadership 200 in 2.1s (compile: 1922ms, proxy.ts: 64ms, render: 76ms)
+[0]  GET /manifest.webmanifest 200 in 42ms (compile: 23ms, render: 19ms)
+[0]  GET /leadership 200 in 1894ms (compile: 75ms, proxy.ts: 75ms, render: 1744ms)
+[0]  GET /manifest.webmanifest 200 in 47ms (compile: 39ms, render: 8ms)
+[0]  GET /leadership 200 in 2.2s (compile: 88ms, proxy.ts: 63ms, render: 2.1s)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 26ms, render: 9ms)
+[0]  GET /leadership 200 in 1790ms (compile: 83ms, proxy.ts: 56ms, render: 1651ms)
+[0]  GET /manifest.webmanifest 200 in 69ms (compile: 59ms, render: 10ms)
+[0]  GET /leadership 200 in 97ms (compile: 22ms, proxy.ts: 21ms, render: 54ms)
+[0]  GET /manifest.webmanifest 200 in 27ms (compile: 11ms, render: 16ms)
+[0]  GET /leadership 200 in 2.3s (compile: 86ms, proxy.ts: 88ms, render: 2.2s)
+[0]  GET /manifest.webmanifest 200 in 33ms (compile: 16ms, render: 16ms)
+[1] [DB POOL] 2 connections ready in 465ms
+[0]  GET /leadership 200 in 2.4s (compile: 237ms, proxy.ts: 158ms, render: 2.0s)
+[0]  GET /manifest.webmanifest 200 in 35ms (compile: 24ms, render: 10ms)
+[0]  GET /leadership 200 in 1737ms (compile: 90ms, proxy.ts: 43ms, render: 1603ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 16ms, render: 10ms)
+[0]  GET /leadership 200 in 1812ms (compile: 111ms, proxy.ts: 86ms, render: 1615ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 21ms, render: 9ms)
+[0]  GET /leadership 200 in 1650ms (compile: 69ms, proxy.ts: 72ms, render: 1508ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 24ms, render: 6ms)
+[0]  GET /leadership 200 in 1579ms (compile: 66ms, proxy.ts: 39ms, render: 1474ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 15ms, render: 7ms)
+[0]  GET /leadership 200 in 1746ms (compile: 69ms, proxy.ts: 47ms, render: 1630ms)
+[0]  GET /manifest.webmanifest 200 in 32ms (compile: 23ms, render: 9ms)
+[0]  GET /leadership 200 in 1746ms (compile: 70ms, proxy.ts: 43ms, render: 1632ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 17ms, render: 6ms)
+[0]  GET /leadership 200 in 2.4s (compile: 98ms, proxy.ts: 59ms, render: 2.2s)
+[0]  GET /manifest.webmanifest 200 in 165ms (compile: 106ms, render: 58ms)
+[0]  GET /leadership 200 in 1707ms (compile: 66ms, proxy.ts: 68ms, render: 1574ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 19ms, render: 7ms)
+[0]  GET /leadership 200 in 1727ms (compile: 1552ms, proxy.ts: 69ms, render: 106ms)
+[0]  GET /manifest.webmanifest 200 in 37ms (compile: 18ms, render: 20ms)
+[0]  GET /leadership 200 in 62ms (compile: 13ms, proxy.ts: 12ms, render: 37ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /leadership 200 in 85ms (compile: 14ms, proxy.ts: 15ms, render: 56ms)
+[0]  GET /manifest.webmanifest 200 in 26ms (compile: 17ms, render: 8ms)
+[0]  GET /leadership 200 in 54ms (compile: 10ms, proxy.ts: 13ms, render: 32ms)
+[0]  GET /manifest.webmanifest 200 in 29ms (compile: 19ms, render: 10ms)
+[0]  GET /leadership 200 in 62ms (compile: 10ms, proxy.ts: 18ms, render: 35ms)
+[0]  GET /manifest.webmanifest 200 in 15ms (compile: 5ms, render: 10ms)
+[0]  GET /leadership 200 in 2.3s (compile: 600ms, proxy.ts: 70ms, render: 1671ms)
+[0]  GET /manifest.webmanifest 200 in 49ms (compile: 37ms, render: 11ms)
+[0]  GET /leadership 200 in 52ms (compile: 6ms, proxy.ts: 12ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 19ms (compile: 5ms, render: 13ms)
+[0]  GET /leadership 200 in 58ms (compile: 14ms, proxy.ts: 12ms, render: 31ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 5ms, render: 9ms)
+[0] ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 909ms (compile: 183ms, proxy.ts: 13ms, render: 713ms)
+[0]  GET /leadership 200 in 931ms (compile: 188ms, proxy.ts: 22ms, render: 721ms)
+[0]  GET /manifest.webmanifest 200 in 46ms (compile: 31ms, render: 15ms)
+[1] [SLOW DB] 504ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 588.7ms
+[1] [SLOW DB] 444ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 445ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 513ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 515ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 515ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 515ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 517ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 718ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 728.7ms
+[1] [SLOW DB] 527ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 1124ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 414ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 1561.8ms
+[1] [SLOW DB] 2687ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 200 2722.5ms
+[0]  GET /leadership 200 in 1615ms (compile: 1493ms, proxy.ts: 49ms, render: 73ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 19ms, render: 6ms)
+[0]  GET /leadership 200 in 52ms (compile: 7ms, proxy.ts: 16ms, render: 29ms)
+[0]  GET /manifest.webmanifest 200 in 23ms (compile: 9ms, render: 14ms)
+[0]  GET /leadership 200 in 61ms (compile: 9ms, proxy.ts: 19ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 30ms (compile: 23ms, render: 7ms)
+[0]  GET /leadership 200 in 1607ms (compile: 1510ms, proxy.ts: 46ms, render: 51ms)
+[0]  GET /manifest.webmanifest 200 in 40ms (compile: 22ms, render: 18ms)
+[0]  GET /leadership 200 in 59ms (compile: 8ms, proxy.ts: 18ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 21ms (compile: 7ms, render: 13ms)
+[1] [DB POOL] 2 connections ready in 406ms
+[1] [DB POOL] 2 connections ready in 418ms
+[0]  GET /leadership 200 in 1354ms (compile: 1250ms, proxy.ts: 57ms, render: 47ms)
+[0]  GET /leadership 200 in 72ms (compile: 8ms, proxy.ts: 15ms, render: 50ms)
+[0]  GET /manifest.webmanifest 200 in 25ms (compile: 14ms, render: 11ms)
+[0]  GET /manifest.webmanifest 200 in 14ms (compile: 6ms, render: 8ms)
+[1] [DB POOL] 2 connections ready in 3806ms
+[1] [DB POOL] 2 connections ready in 503ms
+[1] [DB POOL] 2 connections ready in 424ms
+[1] [DB POOL] 2 connections ready in 1227ms
+[1] [DB POOL] 2 connections ready in 3406ms
+[1] [DB POOL] 2 connections ready in 412ms
+[1] [DB POOL] 2 connections ready in 502ms
+[1] [DB POOL] 2 connections ready in 443ms

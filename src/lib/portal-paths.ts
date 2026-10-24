@@ -6,5 +6,5 @@ export function getStaffPortalBase(pathname?: string): "/leadership" | "/staff" 
 
 export function getFocusDestination(role: string, entering: boolean): string {
   const leadership = role === "principal" || role === "vice_principal" || getStaffPortalBase() === "/leadership"
-  return leadership ? (entering ? "/leadership/mentor" : "/leadership") : "/staff"
+  return leadership ? "/leadership" : "/staff"
 }

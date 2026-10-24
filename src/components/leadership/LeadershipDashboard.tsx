@@ -2,27 +2,24 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
-import Link from "next/link"
 import {
     Users, DoorOpen, CheckCircle2, GraduationCap, BookOpen, Search, Loader2,
-    Target, ChevronRight, Trophy, Star, Award, Gem, CalendarDays, ArrowUpRight, type LucideIcon,
+    Trophy, CalendarDays, ArrowUpRight, type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { LeadershipLeaderboard } from "@/components/leadership/LeadershipLeaderboard"
+import { LeadershipPointsTable } from "@/components/leadership/LeadershipPointsTable"
 import { useLeadershipIdentity } from "@/components/leadership/LeadershipShell"
-import { setMentorFocus } from "@/lib/mentor-focus"
 import { OutsideStudentsPopover } from "@/components/leadership/OutsideStudentsPopover"
-import api from "@/lib/api"
 import { getHifzPerformancePoints } from "@/lib/hifz-performance"
-import { GlassSelect } from "@/components/ui/glass-select"
 import { cachedGet } from "@/lib/api-cache"
 import { HifzMonthlyRegister } from "@/components/staff/HifzMonthlyRegister"
 import { resolveBackendUrl as getPhotoUrl } from "@/lib/utils"
 
-type AllStudent = { adm_no: string; name: string; standard: string | null; status?: string }
-type Mentor = { id: string; name: string; photo_url: string | null; place: string | null; student_count: number }
+type AllStudent = { adm_no: string; name: string; standard: string | null; status?: string; photo_url?: string | null }
+type Mentor = { id: string; name: string }
 type SupervisorCounts = { active: number; on_campus: number; out_campus: number; mentors: number }
 type SupervisorAttendance = { present: number; total: number }
 type SupervisorSnapshot = {
@@ -35,7 +32,7 @@ type SupervisorSnapshot = {
     mentors: Mentor[]
 }
 
-const SUPERVISOR_SNAPSHOT_KEY = "__leadership_home_snapshot:"
+const SUPERVISOR_SNAPSHOT_KEY = "__leadership_home_snapshot:v2:"
 const SUPERVISOR_SNAPSHOT_MAX_AGE_MS = 5 * 60_000
 
 function readSupervisorSnapshot(userId: string): SupervisorSnapshot | null {
@@ -128,7 +125,7 @@ function buildPerformers(reports: MonthlyReportRow[]): TopPerformer[] {
                 isHafiz: r.hifz_stage === 'HAFIZ_REVISION',
             }
         })
-        .filter((p): p is TopPerformer => p !== null && p.totalPoints > 0)
+        .filter((p): p is TopPerformer => p !== null && p.totalPoints >= 0)
         .sort((a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name))
 }
 
@@ -144,7 +141,7 @@ function buildMonthOptions(anchor: Date): { value: string; label: string }[] {
 }
 
 /**
- * Leadership home for Principal / Vice Principal when NO Mentor Focus is set.
+ * Institution-wide leadership home. Mentor selection is a report filter only.
  */
 export function LeadershipDashboard() {
     const identity = useLeadershipIdentity()
@@ -158,9 +155,8 @@ export function LeadershipDashboard() {
     const [mentors, setMentors] = useState<Mentor[]>(initialSnapshot?.mentors || [])
     const [loading, setLoading] = useState(!initialSnapshot)
     const [search, setSearch] = useState("")
-    const [mentorSearch, setMentorSearch] = useState("")
+    const [selectedMentor, setSelectedMentor] = useState("all")
     const [classFilter, setClassFilter] = useState("all")
-    const [focusingId, setFocusingId] = useState<string | null>(null)
 
     // Top Performers — same data as mentor portal, but for ALL students
     const [lbOpen, setLbOpen] = useState(false)
@@ -195,7 +191,7 @@ export function LeadershipDashboard() {
             const [admin, daily, mentorList, studentList] = await Promise.allSettled([
                 cachedGet("/dashboard/admin", undefined, 60_000),
                 cachedGet("/attendance/daily-stats", { start_date: today, end_date: today }, 60_000),
-                cachedGet("/delegations/focusable-mentors", undefined, 60_000),
+                cachedGet("/staff", undefined, 60_000),
                 cachedGet("/students", { scope: "all", light: "true", status: "active", limit: 500, count: "false", sort: "name" }, 60_000),
             ])
             if (cancelled) return
@@ -216,8 +212,8 @@ export function LeadershipDashboard() {
             if (daily.status === "fulfilled" && daily.value.data?.students) {
                 nextAttendance = { present: daily.value.data.students.present ?? 0, total: daily.value.data.students.total ?? 0 }
             }
-            const nextMentors = mentorList.status === "fulfilled" && mentorList.value.data?.mentors
-                ? mentorList.value.data.mentors
+            const nextMentors = mentorList.status === "fulfilled" && mentorList.value.data?.staff
+                ? mentorList.value.data.staff.filter((m: Mentor & { role?: string; is_active?: boolean }) => m.is_active !== false && ["staff", "usthad", "mentor", "teacher"].includes(m.role || ""))
                 : initialSnapshot?.mentors || []
             const nextStudents = studentList.status === "fulfilled" && studentList.value.data?.students
                 ? studentList.value.data.students
@@ -249,15 +245,14 @@ export function LeadershipDashboard() {
     }, [])
 
     // ── Load top performers for the selected month ──────────────────
-    // Uses the SAME endpoint as the mentor portal: /hifz/monthly-reports/calculate
-    // Without mentor_id → returns ALL students.
+    // Report scope only: selecting a mentor never impersonates that mentor.
     useEffect(() => {
         if (!selectedMonth) return
         let cancelled = false
         setPerfLoading(true)
         setPerfError(null)
 
-        cachedGet("/hifz/monthly-reports/calculate", { month: selectedMonth }, 120_000)
+        cachedGet("/hifz/monthly-reports/calculate", { month: selectedMonth, ...(selectedMentor !== "all" ? { mentor_id: selectedMentor } : {}) }, 120_000)
             .then((res) => {
                 if (cancelled) return
                 const reports: MonthlyReportRow[] = Array.isArray(res.data?.reports) ? res.data.reports : []
@@ -273,7 +268,7 @@ export function LeadershipDashboard() {
                 if (!cancelled) setPerfLoading(false)
             })
         return () => { cancelled = true }
-    }, [selectedMonth])
+    }, [selectedMonth, selectedMentor])
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase()
@@ -282,26 +277,12 @@ export function LeadershipDashboard() {
     }, [students, search, classFilter])
     const classOptions = useMemo(() => [...new Set(students.map(s => s.standard).filter((s): s is string => !!s))]
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })), [students])
-    const visibleMentors = useMemo(() => mentors.filter(m =>
-        `${m.name} ${m.place || ''}`.toLowerCase().includes(mentorSearch.trim().toLowerCase())), [mentors, mentorSearch])
-
+    const performersWithPhotos = useMemo(() => {
+        const photos = new Map(students.map(student => [student.adm_no, student.photo_url]))
+        return performers.map(student => ({ ...student, photo_url: photos.get(student.adm_no) || null }))
+    }, [students, performers])
     const attendancePct = attendance && attendance.total > 0 ? Math.round((attendance.present / attendance.total) * 100) : 0
     const roleLabel = role === "principal" ? "Principal" : "Vice Principal"
-
-    async function focusMentor(m: Mentor) {
-        setFocusingId(m.id)
-        try {
-            const res = await api.post("/delegations/supervisor-focus", { mentorId: m.id })
-            if (res.data?.success) {
-                setMentorFocus(res.data.delegationToken, res.data.mentor.name)
-                window.location.href = "/leadership/mentor"
-            } else {
-                setFocusingId(null)
-            }
-        } catch {
-            setFocusingId(null)
-        }
-    }
 
     if (loading && !counts) {
         return (
@@ -314,127 +295,12 @@ export function LeadershipDashboard() {
         )
     }
 
-    // ── Top Performers sheet content (same visual as mentor portal) ──
-    const topPerformersContent = (
-        <>
-            <div className="leadership-ranking-header relative mb-5 rounded-2xl p-4 text-white shadow-md">
-                <div className="relative flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20">
-                            <Award className="h-5 w-5 text-amber-300" />
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="truncate text-base font-bold">Top Performers</h3>
-                            <p className="text-[11px] text-indigo-100">All students · Monthly leaderboard</p>
-                        </div>
-                    </div>
-                    <GlassSelect value={selectedMonth} onValueChange={setSelectedMonth} options={monthOptions} label="Leaderboard month" align="end" tone="inverse" className="h-10 w-auto min-w-[112px] shrink-0 rounded-full border-white/30 bg-white/15 px-3 text-xs font-semibold text-white shadow-none backdrop-blur-md hover:bg-white/25 [&_svg]:!text-white" />
-                </div>
-            </div>
-
-            {perfLoading ? (
-                <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-slate-800">
-                        <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
-                    </div>
-                    Loading monthly points...
-                </div>
-            ) : perfError ? (
-                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-8 text-center text-sm text-red-500 dark:border-red-900/40 dark:bg-red-950/20">
-                    {perfError}
-                </div>
-            ) : performers.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
-                    <Award className="mx-auto mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No points recorded</p>
-                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">Try selecting another month.</p>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {/* Champion card */}
-                    {performers[0] && (() => {
-                        const winner = performers[0]
-                        const progress = Math.min(100, Math.max(0, (winner.totalPoints / 120) * 100))
-                        return (
-                            <div className="relative overflow-hidden rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-4 shadow-sm dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/5 dark:to-slate-900">
-                                <div className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-amber-300/15" />
-                                <div className="relative flex items-center gap-3">
-                                    <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/25">
-                                        <Award className="h-6 w-6" />
-                                        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-amber-50 bg-gradient-to-br from-cyan-300 to-blue-500 shadow-sm dark:border-slate-900">
-                                            <Gem className="h-2.5 w-2.5 text-white" />
-                                        </span>
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Champion</span>
-                                        <p className="mt-1 truncate text-sm font-bold text-slate-900 dark:text-white" title={winner.name}>{winner.name}</p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{winner.standard}</p>
-                                    </div>
-                                    <div className="shrink-0 text-right">
-                                        <p className="text-xl font-black tabular-nums text-amber-600 dark:text-amber-400">{winner.totalPoints.toFixed(2)}</p>
-                                        <p className="text-[9px] font-medium uppercase tracking-wide text-slate-400">{winner.totalPoints > 100 ? '★ O · Outstanding' : 'points'}</p>
-                                        {winner.bonusPoints > 0 && <p className="mt-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">+{winner.bonusPoints} bonus</p>}
-                                    </div>
-                                </div>
-                                <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-amber-100 dark:bg-slate-800">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: String(progress) + "%" }} />
-                                </div>
-                            </div>
-                        )
-                    })()}
-
-                    {/* Rest of leaderboard */}
-                    {performers.length > 1 && (
-                        <div>
-                            <div className="mb-2 flex items-center justify-between px-1">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Leaderboard</p>
-                                <p className="text-[10px] text-slate-400">Score</p>
-                            </div>
-                            <div className="space-y-1.5">
-                                {performers.slice(1).map((stu, index) => {
-                                    const rank = index + 2
-                                    const medalClasses = rank === 2
-                                        ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white ring-amber-300/70 dark:ring-amber-500/40"
-                                        : rank === 3
-                                            ? "bg-gradient-to-br from-slate-300 to-slate-400 text-white ring-slate-300/70 dark:from-slate-400 dark:to-slate-500 dark:ring-slate-400/40"
-                                            : "bg-white text-slate-500 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700"
-                                    return (
-                                        <button
-                                            key={stu.adm_no}
-                                            type="button"
-                                            onClick={() => { setChartStudent({ adm_no: stu.adm_no, name: stu.name, standard: stu.standard }); setLbOpen(false) }}
-                                            className={"w-full group flex items-center gap-3 rounded-xl border px-2.5 py-2.5 transition-all text-left " + (rank <= 3
-                                                ? "border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
-                                                : "border-transparent hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60")}
-                                        >
-                                            <div className={"flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-black ring-1 " + medalClasses}>
-                                                {rank}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100" title={stu.name}>{stu.name}</p>
-                                                <p className="mt-0.5 text-[10px] text-slate-400">{stu.standard}</p>
-                                            </div>
-                                            <div className={"shrink-0 rounded-lg px-2.5 py-1.5 text-right " + (rank <= 3
-                                                ? "bg-indigo-50 dark:bg-indigo-500/10"
-                                                : "bg-emerald-50 dark:bg-emerald-500/10")}>
-                                                <p className={"text-xs font-bold tabular-nums " + (rank <= 3
-                                                    ? "text-indigo-600 dark:text-indigo-400"
-                                                    : "text-emerald-600 dark:text-emerald-400")}>
-                                                    {stu.totalPoints.toFixed(2)}
-                                                </p>
-                                                <p className="text-[8px] uppercase tracking-wide text-slate-400">{stu.totalPoints > 100 ? '★ O · Outstanding' : 'pts'}</p>
-                                                {stu.bonusPoints > 0 && <p className="text-[9px] font-bold text-amber-700">+{stu.bonusPoints} bonus</p>}
-                                            </div>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-        </>
-    )
+    const topPerformersContent = <LeadershipPointsTable
+        performers={performersWithPhotos} loading={perfLoading} error={perfError}
+        month={selectedMonth} onMonthChange={value => { if (value !== selectedMonth) setPerfLoading(true); setSelectedMonth(value) }} months={monthOptions}
+        mentors={mentors} mentor={selectedMentor} onMentorChange={value => { if (value !== selectedMentor) setPerfLoading(true); setSelectedMentor(value) }}
+        onStudentClick={student => { setChartStudent(student); setLbOpen(false) }}
+    />
 
     return (
         <div className="leadership-dashboard">
@@ -481,15 +347,6 @@ export function LeadershipDashboard() {
 
             <div className="w-full px-4 lg:px-6 py-4 lg:py-6 space-y-4">
 
-                <div className="leadership-actions" aria-label="Leadership quick actions">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Your daily workspace</span>
-                    <div className="flex flex-wrap gap-2">
-                        <Link href="/leadership/attendance"><CheckCircle2 className="h-4 w-4" />Attendance</Link>
-                        <Link href="/leadership/reports"><BookOpen className="h-4 w-4" />Student reports</Link>
-                        <button type="button" onClick={() => setLbOpen(true)}><Trophy className="h-4 w-4" />Points table</button>
-                    </div>
-                </div>
-
                 {/* ── School-wide stat strip ── */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     <StatTile icon={Users} color="blue" label="Total Students" value={String(counts?.active ?? 0)} sub={`${counts?.on_campus ?? 0} on campus`} pct={100} />
@@ -498,7 +355,7 @@ export function LeadershipDashboard() {
                     <StatTile icon={GraduationCap} color="indigo" label="Active Mentors" value={String(counts?.mentors ?? 0)} sub="teaching & leadership" pct={100} />
                 </div>
 
-                {/* ── Main: all students | mentors panel ── */}
+                {/* Institution-wide student directory */}
                 <div className="leadership-directory-grid grid grid-cols-1 gap-4">
 
                     {/* Left: All students */}
@@ -540,7 +397,7 @@ export function LeadershipDashboard() {
                                                     <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
                                                     <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
                                                 </div>
-                                                <Button aria-label={`Open progress for ${student.name}`} onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="leadership-progress-button min-h-11 text-xs bg-slate-900 hover:bg-slate-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white shrink-0">
+                                                <Button aria-label={`Open progress for ${student.name}`} onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} variant="outline" size="sm" className="leadership-progress-button min-h-11 text-xs shrink-0">
                                                     <BookOpen className="h-3 w-3" /> Open progress
                                                 </Button>
                                             </div>
@@ -551,59 +408,14 @@ export function LeadershipDashboard() {
                         </div>
                     </div>
 
-                    {/* Right: Mentors panel — click any mentor to focus */}
-                    <div className="min-w-0">
-                        <div className="leadership-section rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                            <div className="flex items-center gap-2 p-5 border-b border-slate-100 dark:border-gray-700">
-                                <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center">
-                                    <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white">Mentor Focus</p>
-                                    <p className="text-[11px] text-slate-500">Open a class workspace · {mentors.length} mentors</p>
-                                </div>
-                            </div>
-                            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800"><Input aria-label="Search mentors" placeholder="Find a mentor or place…" value={mentorSearch} onChange={e => setMentorSearch(e.target.value)} className="h-11 text-sm" /></div>
-                            {visibleMentors.length === 0 ? (
-                                <div className="text-center py-8 text-xs text-slate-400">No mentors found.</div>
-                            ) : (
-                                <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-gray-800/50">
-                                    {visibleMentors.map(m => (
-                                        <button
-                                            key={m.id}
-                                            type="button"
-                                            disabled={focusingId !== null}
-                                            onClick={() => focusMentor(m)}
-                                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors disabled:opacity-60"
-                                        >
-                                            <Avatar className="h-9 w-9 shrink-0">
-                                                <AvatarImage src={getPhotoUrl(m.photo_url)} className="object-cover" />
-                                                <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold">
-                                                    {m.name.substring(0, 2).toUpperCase()}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug">{m.name}</p>
-                                                <p className="truncate text-[11px] text-slate-400">
-                                                    {m.place ? `${m.place} · ` : ""}{m.student_count} student{m.student_count !== 1 ? "s" : ""}
-                                                </p>
-                                            </div>
-                                            {focusingId === m.id
-                                                ? <Loader2 className="h-4 w-4 animate-spin text-indigo-500 shrink-0" />
-                                                : <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+
                 </div>
             </div>
 
             {/* ── Floating Trophy button — opens Top Performers sheet ── */}
             <div className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 md:bottom-6 md:right-6">
                 <button
-                    onClick={() => setLbOpen(true)}
+                    onClick={() => { if (selectedMentor !== "all") setPerfLoading(true); setSelectedMentor("all"); setLbOpen(true) }}
                     aria-label="Open top performers"
                     className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-lg flex items-center justify-center transition-all active:scale-95"
                 >

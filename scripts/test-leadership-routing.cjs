@@ -32,7 +32,7 @@ async function destination(path, role, host = 'localhost:3000') {
     assert.equal(await destination('/staff/attendance?date=2026-10-22',role),'http://localhost:3000/leadership/attendance?date=2026-10-22')
     assert.equal(await destination('/leadership',role),null)
     assert.equal(await destination('/leadership/mentor',role),null)
-    assert.equal(paths.getFocusDestination(role,true),'/leadership/mentor')
+    assert.equal(paths.getFocusDestination(role,true),'/leadership')
     assert.equal(paths.getFocusDestination(role,false),'/leadership')
   }
   assert.equal(await destination('/leadership',null),'http://localhost:3000/login')

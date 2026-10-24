@@ -1,15 +1,6 @@
-"use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import MentorDashboard from "@/components/staff/MentorDashboard"
+import { redirect } from "next/navigation"
 
-/** The mentor workflow is entered explicitly, never overlaid on the overview. */
+/** Old bookmarks remain safe; leadership no longer has a Mentor Focus workflow. */
 export default function FocusedMentorPage() {
-  const [ready, setReady] = useState(false)
-  const router = useRouter()
-  useEffect(() => {
-    if (sessionStorage.getItem("mentorFocus") === "1" && sessionStorage.getItem("delegationToken")) setReady(true)
-    else router.replace("/leadership")
-  }, [router])
-  return ready ? <MentorDashboard /> : <p className="p-6 text-slate-500">Opening focused class…</p>
+  redirect("/leadership")
 }
