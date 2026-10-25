@@ -1,7 +1,7 @@
 # Student departure and arrival WhatsApp notifications
 
-NewRQP queues family notifications only for actual Out-Campus movements or
-institutional leaves explicitly marked Outside Campus. Outdoor, On-Campus,
+NewRQP queues family notifications for actual Out-Campus or Outdoor movements,
+and institutional leaves explicitly marked Outside Campus. On-Campus,
 internal, personal, and institutional Inside Campus leaves are excluded.
 This rule applies to both departure and arrival notifications. The worker
 rechecks the current leave type and institutional location before claiming an
@@ -188,45 +188,29 @@ for the original departure notification only, after the matching n8n execution
 confirmed Cevox rejected it with `no_number` before sending. It requires that
 record to have exactly one attempt and never resets other uncertain records.
 
-### Five departure-template previews
+### Single departure template
 
-`docs/n8n-student-movement-message.js` provides the five longer departure
-templates signed "Ribathul Quran". Each normal departure independently chooses
-one of the five with `Math.floor(Math.random() * 5) + 1`, then fills the actual
-student name, companion, relationship, departure date and Indian local time.
-The formatter explicitly uses `Asia/Kolkata` but does not display an IST suffix. Repeats
-are allowed, including across different parents. Arrival messages keep a single
-arrival format signed "Ribathul Quran". Message variation is for presentation,
-not a guarantee against WhatsApp restrictions.
+`docs/n8n-student-movement-message.js` now uses one fixed departure message,
+with no random selection, variant indexes or bundles. It starts "Dear Parent",
+lists student, companion, relationship, date and time, and signs "Ribathul Quran".
+WhatsApp bold labels use single asterisks. The latest requested departure format
+includes the visible IST suffix; dates and times still use `Asia/Kolkata`.
+Arrival remains the existing "Dear Parent, {student_name} arrived back on campus
+on {return_date} at {return_time}." message, without an IST suffix.
 
-Explicit preview selection requires `test_template_index` from 1 to 5,
-`test_notification: true`, R999, and the originally authorized test recipient.
-The node exposes `selected_template_index` for inspection without including it
-in the WhatsApp text. Publishing template changes does not enable the ERP's
-master sending flag or disable the existing test-only safeguards.
+The node still returns `notification_id` and the Cevox `payload`. Publish the
+updated code in n8n's Validate and Build Message node without executing it.
+Local source changes alone do not update the live workflow. Preserve the
+webhook path, credentials and production cutoff. Obsolete `test_template_index`
+and `test_template_bundle` requests are rejected rather than sending variants.
 
-Before testing, deploy the updated `tmp/cevox-student-movements.n8n.json` to n8n,
-preserving the webhook path and both credentials. Its response node must echo
-`test_template_index` so the tester can confirm the updated template was used.
-From `backend`, run
-`node node_modules/ts-node/dist/bin.js src/scripts/test-whatsapp-templates.ts --workflow-updated`.
-This reads the marked test student's existing synthetic departure without
-creating new movement records. It sends sequentially, stops on any unconfirmed
-result, and never replays previously attempted previews. The ignored local
-ledger is `tmp/whatsapp-template-test-state.json`; do not delete it to retry an
-uncertain send. Parent notifications remain disabled.
-
-Use `--bundle` to deliver all five previews together as one numbered test
-message, respecting Cevox's per-contact cooldown and hourly ceiling without
-changing its safeguards. Bundle attempts use a separate ignored ledger with
-the `.bundle` suffix. Individual previews wait 125 seconds between messages
-and still stop if Cevox rejects a request; its configured hourly ceiling may
-prevent all five individual previews from being sent in the same hour.
-
-Use `--random` instead of `--bundle` for one randomly selected R999 departure
-preview, following the same selection path as normal departures. It does not
-send a template index or create any new movement records. Its separate ignored
-`.random` ledger prevents an accepted or uncertain preview from being replayed.
+For an explicitly authorized isolated CLI preview, run from `backend`:
+`node node_modules/ts-node/dist/bin.js src/scripts/test-whatsapp-templates.ts --workflow-updated --single`.
+It reads only the marked R999 synthetic departure, forces the verified personal
+test recipient and sends at most one preview. Its ignored ledger is
+`tmp/whatsapp-template-test-state.json.single`. Accepted or uncertain attempts
+are never automatically replayed. Old `--random` and `--bundle` modes are no
+longer supported. The portal's R999-only test also uses the fixed template.
 
 After deployment with the test-only settings, record departure and return for
 **R999 only** in the ERP. Turn `N8N_STUDENT_MOVEMENT_TEST_ENABLED=false` and

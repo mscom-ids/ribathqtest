@@ -65,7 +65,7 @@ async function run() {
   assert.equal(getMovementNotificationConfig({ ...environment, N8N_STUDENT_MOVEMENT_PRODUCTION_START_AT: '2026-10-12T05:30:00+05:30' })?.productionStartAt,
     config.productionStartAt, 'Production cutoff must be a fixed timezone-aware instant');
 
-  const eligibilityPattern = /sl\.leave_type = 'out-campus'\s+OR \(sl\.leave_type = 'institutional' AND EXISTS \(\s+SELECT 1 FROM institutional_leaves il\s+WHERE il\.id = sl\.institutional_leave_id AND il\.campus_location = 'outside'/;
+  const eligibilityPattern = /sl\.leave_type IN \('out-campus', 'outdoor'\)\s+OR \(sl\.leave_type = 'institutional' AND EXISTS \(\s+SELECT 1 FROM institutional_leaves il\s+WHERE il\.id = sl\.institutional_leave_id AND il\.campus_location = 'outside'/;
   const priorEnvironment = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
   Object.assign(process.env, environment);
   try {
@@ -79,11 +79,11 @@ async function run() {
           return { rows: [] };
         },
       }, ['test-leave'], event, payload.occurred_at);
-      assert.match(insertion, eligibilityPattern, `${event} must allow only Out-Campus or explicitly outside institutional leaves`);
+      assert.match(insertion, eligibilityPattern, `${event} must allow Out-Campus, Outdoor or explicitly outside institutional leaves`);
       assert.ok(insertion.includes('sl.created_at >= $6::timestamptz'));
       assert.ok(insertion.includes('sl.start_datetime >= $6::timestamptz'));
       assert.ok(insertion.includes("COALESCE(s.comprehensive_details->>'whatsapp_notification_test', 'false') <> 'true'"));
-      for (const excludedType of ['outdoor', 'on-campus', 'internal', 'personal']) {
+      for (const excludedType of ['on-campus', 'internal', 'personal']) {
         assert.ok(!insertion.includes(`'${excludedType}'`), `${excludedType} must not be included in notification eligibility`);
       }
       await enqueueMovementNotifications({ query: async () => { throw new Error('Historical movements must not be queued'); } },

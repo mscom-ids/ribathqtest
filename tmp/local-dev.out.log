@@ -3282,3 +3282,235 @@
 [0]  GET /manifest.webmanifest 200 in 21ms (compile: 15ms, render: 6ms)
 [0]  GET /leadership 200 in 1277ms (compile: 40ms, proxy.ts: 122ms, render: 1115ms)
 [0]  GET /leadership 200 in 1235ms (compile: 1151ms, proxy.ts: 39ms, render: 45ms)
+[0]  GET /leadership 200 in 1483ms (compile: 1412ms, proxy.ts: 23ms, render: 48ms)
+[0]  GET /leadership 200 in 51ms (compile: 7ms, proxy.ts: 11ms, render: 33ms)
+[0]  GET /manifest.webmanifest 200 in 114ms (compile: 69ms, render: 45ms)
+[1] [DB POOL] 2 connections ready in 3684ms
+[1] [DB POOL] 2 connections ready in 469ms
+[1] [SLOW DB] 756ms params=1 sql="SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.reason_category, sl.remarks, sl.companion_name, sl.companion_relationship, sl.start_datetime, sl.end_datetime, sl.group_type, sl.group_value, sl.institutional_le"
+[1] [SLOW API] GET /api/leaves/outside-students 200 860.9ms
+[1] [DB POOL] 2 connections ready in 578ms
+[1] [DB POOL] transient connection reset; failed client will be replaced
+[1] [DB POOL] transient connection reset; failed client will be replaced
+[1] [DB POOL] 2 connections ready in 3775ms
+[1] [DB POOL] 2 connections ready in 468ms
+[1] [DB POOL] 2 connections ready in 434ms
+[1] [DB POOL] 2 connections ready in 434ms
+[1] [DB POOL] 2 connections ready in 3383ms
+[1] [DB POOL] 2 connections ready in 399ms
+[1] [DB POOL] 2 connections ready in 423ms
+[1] [DB POOL] 2 connections ready in 406ms
+[1] [DB POOL] 2 connections ready in 4052ms
+[1] [DB POOL] 2 connections ready in 436ms
+[1] [DB POOL] 2 connections ready in 423ms
+[1] [DB POOL] 2 connections ready in 418ms
+[1] [DB POOL] 2 connections ready in 3186ms
+[1] [DB POOL] 2 connections ready in 403ms
+[1] [DB POOL] 2 connections ready in 406ms
+[1] [DB POOL] 2 connections ready in 489ms
+[1] [DB POOL] 2 connections ready in 3576ms
+[1] [DB POOL] 2 connections ready in 413ms
+[1] [DB POOL] 2 connections ready in 427ms
+[1] [DB POOL] 2 connections ready in 437ms
+[1] [DB POOL] 2 connections ready in 3542ms
+[1] [DB POOL] 2 connections ready in 397ms
+[1] [DB POOL] 2 connections ready in 483ms
+[1] [DB POOL] 2 connections ready in 412ms
+[1] [DB POOL] 2 connections ready in 9637ms
+[1] [DB POOL] 2 connections ready in 1773ms
+[1] [DB POOL] 2 connections ready in 457ms
+[1] [DB POOL] 2 connections ready in 469ms
+[1] [DB POOL] 2 connections ready in 3336ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 4.4s (compile: 209ms, proxy.ts: 376ms, render: 3.8s)
+[0]  GET /manifest.webmanifest 200 in 166ms (compile: 33ms, render: 133ms)
+[1] [SLOW DB] 444ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 496ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 499ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 840ms params=0 sql="SELECT id, name FROM academic_years WHERE is_current = true ORDER BY start_date DESC LIMIT 1"
+[1] [SLOW DB] 1367ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 1376.9ms
+[1] [SLOW DB] 1444ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 2089ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 2994ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 3155ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 3256ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 3257ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 2662ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 2667ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 859ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 4343ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 200 4355.3ms
+[1] [SLOW DB] 1410ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 4359.1ms
+[1] [SLOW DB] 3695ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 3757ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 8614ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 20153ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 20208.3ms
+[1] [SLOW DB] 25711ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 549ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 565ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 575ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 591ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 963ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 965ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 992ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 1009ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[0] Failed to proxy http://127.0.0.1:5000/api/hifz/monthly-reports/calculate?month=2026-10 Error: socket hang up
+[0]     at ignore-listed frames {
+[0]   code: 'ECONNRESET'
+[0] }
+[0] Error: socket hang up
+[0]     at ignore-listed frames {
+[0]   code: 'ECONNRESET'
+[0] }
+[0] ○ Compiling /_error ...
+[1] [SLOW DB] 12208ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 18341ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [DB POOL] 2 connections ready in 504ms
+[1] [DB POOL] 2 connections ready in 1736ms
+[0] >>> [api.ts] API_URL configured as: /api
+[0]  GET /leadership 200 in 10.2s (compile: 6.4s, proxy.ts: 765ms, render: 3.1s)
+[1] [SLOW DB] 431ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW API] GET /api/auth/me 304 568.3ms
+[1] [SLOW DB] 441ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 447ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 448ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 451ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 452ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 409ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 408ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 785ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 799.7ms
+[1] [SLOW DB] 441ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 1980ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 801ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 304 2803.2ms
+[1] [SLOW DB] 7155ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 7266.8ms
+[1] [DB POOL] 2 connections ready in 433ms
+[0]  GET /leadership 200 in 2.4s (compile: 59ms, proxy.ts: 43ms, render: 2.3s)
+[0] ○ Compiling /manifest.webmanifest ...
+[1] [DB POOL] 2 connections ready in 436ms
+[0]  GET /manifest.webmanifest 200 in 25.5s (compile: 25.5s, render: 63ms)
+[1] [SLOW DB] 427ms params=1 sql="SELECT id, email, name, role, photo_url FROM staff WHERE id = $1"
+[1] [SLOW DB] 439ms params=0 sql="SELECT COUNT(*) FILTER (WHERE is_active = true OR is_active IS NULL) as active, COUNT(*) FILTER (WHERE is_active = false) as inactive, COUNT(*) as total FROM staff"
+[1] [SLOW DB] 442ms params=0 sql="SELECT * FROM events WHERE start_date >= CURRENT_DATE - INTERVAL '30 days' ORDER BY start_date ASC LIMIT 50"
+[1] [SLOW DB] 443ms params=0 sql="SELECT COUNT(*)::integer as count FROM mentor_delegations WHERE status = 'pending'"
+[1] [SLOW DB] 444ms params=0 sql="SELECT to_regclass('public.student_current_presence') AS table_name"
+[1] [SLOW DB] 532ms params=0 sql="SELECT COUNT(*) FILTER (WHERE status = 'active' OR status IS NULL) AS active, COUNT(*) FILTER (WHERE status = 'completed') AS completed, COUNT(*) FILTER (WHERE status IN ('dropout', 'stopped', 'higher_education')) AS dro"
+[1] [SLOW DB] 776ms params=0 sql="WITH responsibility_counts AS ( SELECT mentor_id, COUNT(DISTINCT adm_no) AS assigned_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsibility = 'hifz') AS hifz_students, COUNT(DISTINCT adm_no) FILTER (WHERE responsi"
+[1] [SLOW API] GET /api/staff 304 781.7ms
+[1] [SLOW DB] 1181ms params=1 sql="SELECT * FROM monthly_reports WHERE report_month = $1::date"
+[1] [SLOW DB] 1186ms params=1 sql="SELECT s.adm_no, s.name, COALESCE(sys.school_standard, s.standard) AS attendance_standard, COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard, st.name as usthad_name, st.phone as usthad_phon"
+[1] [SLOW DB] 1718ms params=3 sql="SELECT adm_no, name, dob, standard, batch_year, phone, email, father_name, photo_url, status, gender, admission_date AS admission_date, admission_date AS date_of_join, place, hifz_mentor_id, school_mentor_id, madrasa_men"
+[1] [SLOW DB] 1713ms params=2 sql="SELECT COUNT(DISTINCT entry_date::date) AS log_days FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 1717ms params=2 sql="SELECT COUNT(DISTINCT date) AS class_days FROM attendance WHERE date >= $1::date AND date <= $2::date AND department = 'Hifz' AND COALESCE(LOWER(status), '') NOT IN ('cancelled', 'leave')"
+[1] [SLOW DB] 2157ms params=1 sql="SELECT expected_class_days FROM hifz_monthly_report_settings WHERE report_month = $1::date LIMIT 1"
+[1] [SLOW DB] 1808ms params=0 sql="SELECT COUNT(DISTINCT student_id) AS out_campus FROM student_leaves sl JOIN students s ON sl.student_id = s.adm_no WHERE sl.status = 'outside' AND s.status = 'active'"
+[1] [SLOW DB] 2952ms params=0 sql="SELECT student_id, surah_name, start_v, end_v, entry_date FROM hifz_logs WHERE mode = 'New Verses' AND deleted_at IS NULL ORDER BY entry_date ASC, created_at ASC"
+[1] [SLOW DB] 1254ms params=2 sql="SELECT student_id, academic_year_id, school_standard, school_section, madrasa_standard, madrasa_section, hifz_mentor_id, status FROM student_year_snapshots WHERE academic_year_id = $1 AND student_id = ANY($2::text[])"
+[1] [SLOW API] GET /api/students 200 2987.3ms
+[1] [SLOW DB] 3331ms params=2 sql="SELECT status, count(*) as count FROM staff_attendance WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW DB] 3391ms params=2 sql="SELECT status, count(*) as count FROM student_attendance_marks WHERE date >= $1 AND date <= $2 GROUP BY status"
+[1] [SLOW API] GET /api/attendance/daily-stats 304 3396.6ms
+[1] [SLOW DB] 8069ms params=2 sql="SELECT student_id, mode, entry_date, surah_name, start_v, end_v, start_page, end_page, juz_number, juz_portion FROM hifz_logs WHERE entry_date >= $1::date AND entry_date <= $2::date AND deleted_at IS NULL"
+[1] [SLOW DB] 12605ms params=0 sql="SELECT s.adm_no AS student_id, h.surah_name, h.start_v, h.end_v FROM students s LEFT JOIN hifz_logs h ON h.student_id = s.adm_no AND h.mode = 'New Verses' AND h.deleted_at IS NULL WHERE (s.status = 'active' OR s.status I"
+[1] [SLOW API] GET /api/dashboard/admin 304 12623.4ms
+[1] [SLOW DB] 412ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 429ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 451ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 452ms params=4 sql="SELECT gs.student_id, gs.group_id, gs.effective_from, gs.effective_until FROM attendance_group_students gs JOIN attendance_groups g ON g.id = gs.group_id WHERE gs.student_id = ANY($1::text[]) AND ($2::uuid IS NULL OR g.a"
+[1] [SLOW DB] 508ms params=2 sql="SELECT schedule_id, date, cancelled_standards, cancelled_students FROM attendance_cancellations WHERE date >= $1::date AND date <= $2::date"
+[1] [SLOW DB] 915ms params=2 sql="SELECT id, start_datetime, end_datetime, target_classes, target_student_ids, is_entire_institution FROM institutional_leaves WHERE start_datetime < ($2::date + 1) AND end_datetime >= $1::date"
+[1] [SLOW DB] 930ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 1878ms params=4 sql="SELECT a.id, a.class_type, a.name, a.standards, a.day_of_week, a.start_time, a.end_time, a.effective_from, a.effective_until, COALESCE(array_agg(DISTINCT asg.group_id) FILTER (WHERE asg.group_id IS NOT NULL), ARRAY[]::uu"
+[1] [SLOW DB] 2886ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW DB] 5538ms params=3 sql="SELECT student_id, schedule_id, date, status FROM student_attendance_marks WHERE date >= $1::date AND date <= $2::date AND student_id = ANY($3::text[])"
+[1] [SLOW API] GET /api/hifz/monthly-reports/calculate 304 19724.8ms
+[1] [DB POOL] 2 connections ready in 453ms
+[1] [DB POOL] 2 connections ready in 431ms
+[1] [DB POOL] 2 connections ready in 488ms
+[1] [DB POOL] 2 connections ready in 3368ms
+[1] [DB POOL] 2 connections ready in 519ms
+[1] [DB POOL] 2 connections ready in 441ms
+[1] [DB POOL] 2 connections ready in 424ms
+[1] [DB POOL] 2 connections ready in 3245ms
+[1] [DB POOL] 2 connections ready in 604ms
+[1] [DB POOL] 2 connections ready in 466ms
+[1] [DB POOL] 2 connections ready in 421ms
+[1] [DB POOL] 2 connections ready in 3609ms
+[1] [DB POOL] keep-alive failed: getaddrinfo ENOTFOUND aws-1-ap-southeast-2.pooler.supabase.com
+[1] [DB POOL] 2 connections ready in 3953ms
+[1] [DB POOL] 2 connections ready in 470ms
+[1] [DB POOL] 2 connections ready in 491ms
+[1] [DB POOL] 2 connections ready in 401ms
+[1] [DB POOL] 2 connections ready in 3793ms
+[1] [DB POOL] 2 connections ready in 437ms
+[1] [DB POOL] 2 connections ready in 449ms
+[1] [DB POOL] 2 connections ready in 462ms
+[1] [DB POOL] 2 connections ready in 3961ms
+[1] [DB POOL] 2 connections ready in 486ms
+[1] [DB POOL] 2 connections ready in 712ms
+[1] [DB POOL] 2 connections ready in 625ms
+[1] [DB POOL] 2 connections ready in 4534ms
+[1] [DB POOL] 2 connections ready in 448ms
+[1] [DB POOL] 2 connections ready in 465ms
+[1] [DB POOL] 2 connections ready in 595ms
+[1] [DB POOL] 2 connections ready in 3361ms
+[1] [DB POOL] 2 connections ready in 512ms
+[1] [DB POOL] 2 connections ready in 527ms
+[1] [DB POOL] transient connection reset; failed client will be replaced
+[1] [DB POOL] transient connection reset; failed client will be replaced
+[1] [DB POOL] 2 connections ready in 3594ms
+[1] [DB POOL] 2 connections ready in 534ms
+[1] [DB POOL] 2 connections ready in 2203ms
+[1] [DB POOL] 2 connections ready in 475ms
+[1] [DB POOL] 2 connections ready in 8782ms
+[1] [DB POOL] 2 connections ready in 466ms
+[1] [DB POOL] 2 connections ready in 1846ms
+[1] [DB POOL] 2 connections ready in 424ms
+[1] [DB POOL] 2 connections ready in 3399ms
+[1] [DB POOL] 2 connections ready in 451ms
+[1] [DB POOL] 2 connections ready in 1363ms
+[1] [DB POOL] 2 connections ready in 498ms
+[1] [DB POOL] 2 connections ready in 7602ms
+[1] [DB POOL] 2 connections ready in 504ms
+[1] [DB POOL] 2 connections ready in 452ms
+[1] [DB POOL] 2 connections ready in 882ms
+[1] [DB POOL] 2 connections ready in 3142ms
+[1] [DB POOL] 2 connections ready in 413ms
+[1] [DB POOL] 2 connections ready in 507ms
+[1] [DB POOL] 2 connections ready in 425ms
+[1] [DB POOL] 2 connections ready in 3107ms
+[1] [DB POOL] 2 connections ready in 470ms
+[1] [DB POOL] 2 connections ready in 414ms
+[1] [DB POOL] 2 connections ready in 506ms
+[1] [DB POOL] 2 connections ready in 3284ms
+[1] [DB POOL] 2 connections ready in 448ms
+[1] [DB POOL] 2 connections ready in 455ms
+[1] [DB POOL] 2 connections ready in 472ms
+[1] [DB POOL] 2 connections ready in 3249ms
+[1] [DB POOL] 2 connections ready in 499ms
+[1] [DB POOL] 2 connections ready in 419ms
+[1] [DB POOL] 2 connections ready in 504ms
+[1] [DB POOL] 2 connections ready in 3316ms
+[1] [DB POOL] transient connection reset; failed client will be replaced
+[1] [PROCESS] uncaught exception: Error: write ECONNRESET
+[1]     at WriteWrap.onWriteComplete [as oncomplete] (node:internal/stream_base_commons:87:19)
+[1]     at handleWriteReq (node:internal/stream_base_commons:52:26)
+[1]     at writeGeneric (node:internal/stream_base_commons:148:15)
+[1]     at TLSSocket.Socket._writeGeneric (node:net:971:11)
+[1]     at TLSSocket.Socket._write (node:net:983:8)
+[1]     at writeOrBuffer (node:internal/streams/writable:572:12)
+[1]     at _write (node:internal/streams/writable:501:10)
+[1]     at TLSSocket.Writable.write (node:internal/streams/writable:510:10)
+[1]     at Connection._send (D:\NewRQP\backend\node_modules\pg\lib\connection.js:147:24)
+[1]     at Connection.query (D:\NewRQP\backend\node_modules\pg\lib\connection.js:151:10) {
+[1]   errno: -4077,
+[1]   code: 'ECONNRESET',
+[1]   syscall: 'write'
+[1] }
+[1] [31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[1] npm run dev:backend exited with code 1073807364

@@ -64,6 +64,31 @@ an emergency stop and does require redeployment.
 
 ## Authorization
 
+### Forgotten passcode or a new sender
+
+The old passcode cannot be recovered from its hash. In Coolify, set the backend
+runtime `WHATSAPP_SENDING_ENABLED=false` and redeploy before recovering access
+or changing senders. Do not reset WhatsApp QR sessions, production cutoff,
+message history or uncertain attempts.
+
+Run `node D:\NewRQP\scripts\generate-whatsapp-passcode.cjs` in an interactive
+local terminal. It prompts for and confirms a new passcode with hidden input,
+generates a cost-12 bcrypt hash, and prints only that hash. It does not store
+the passcode, change live settings, or enable notifications. Copy the complete
+hash into `WHATSAPP_ADMIN_PASSCODE_HASH` in the backend's production runtime
+variables with Literal interpolation and build-time availability off, then
+redeploy. Use the newly chosen passcode in the portal, not the hash. If a
+fifteen-minute lockout is active, wait until it expires rather than deleting
+security records.
+
+After unlocking, choose Pause sending, select the new connected number from
+the same Cevox workspace and Save paused. Verify the configured test recipient
+is your own number and use the R999-only test. Review pending/uncertain records
+before re-enabling; changing a sender preserves the original launch cutoff and
+does not itself clear pending messages. Only after the test is confirmed should
+the master switch be re-armed and the portal enabled again. Do not rotate keys
+just to switch a number in the same workspace.
+
 - Every request validates the login JWT and reads the current staff role.
   Only `admin` is allowed; parents, staff, controllers, principals, mobile
   access tokens and delegated sessions are rejected.
@@ -112,16 +137,16 @@ been recorded before dispatch, or if their recorded event time expires. Arrival
 notifications use the actual return event, even days after departure, and have
 their own message-age window. API acceptance is not proof of parent delivery.
 
-Only new Out-Campus or institutional Outside Campus student leaves qualify
+Only new Out-Campus, Outdoor or institutional Outside Campus student leaves qualify
 after the first production enable. Earlier leaves and their later returns,
-marked test students, On-Campus, Outdoor and institutional Inside Campus leaves
+marked test students, On-Campus and institutional Inside Campus leaves
 remain excluded. Pausing prevents new leaves from being queued and holds
 existing pending messages; after resume they can send only if still eligible
 and fresh. There is no history backfill.
 
 The ERP switch does not pause independent Cevox campaigns, or authenticated
 manual requests made directly to n8n. Keep those separately controlled. Random
-wording is a presentation feature, not a ban-prevention guarantee.
+wording is not used: departure notifications now use one fixed template.
 
 ## Validation
 

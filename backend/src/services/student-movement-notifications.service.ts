@@ -9,7 +9,7 @@ type MovementEvent = 'student_exit' | 'student_return';
 type NotificationStatus = 'api_accepted' | 'failed' | 'uncertain' | 'skipped' | 'pending';
 
 const eligibleMovementLeaveSql = `(
-  sl.leave_type = 'out-campus'
+  sl.leave_type IN ('out-campus', 'outdoor')
   OR (sl.leave_type = 'institutional' AND EXISTS (
     SELECT 1 FROM institutional_leaves il
     WHERE il.id = sl.institutional_leave_id AND il.campus_location = 'outside'

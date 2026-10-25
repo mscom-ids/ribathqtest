@@ -87,7 +87,7 @@ export default function WhatsAppNotificationsPage() {
   }
 
   const test = async () => {
-    if (!window.confirm(`Send one random departure preview for R999 only to the configured test number ${readiness?.test_recipient_hint}? No other parents are targeted.`)) return
+    if (!window.confirm(`Send the departure template preview for R999 only to the configured test number ${readiness?.test_recipient_hint}? No other parents are targeted.`)) return
     setBusy(true); setError(""); setNotice("")
     testRequest.current ||= crypto.randomUUID()
     try {
@@ -167,12 +167,12 @@ export default function WhatsAppNotificationsPage() {
           {dashboard.provider?.policy.inQuietHours && <p className="text-sm text-amber-700">Cevox quiet hours are active ({dashboard.provider.policy.quietHours}). Messages wait.</p>}
           <p className="text-sm text-slate-500">Institutional leave days use the persistent queue, not simultaneous sends. Expired departure notifications or departures already followed by a recorded return are skipped.</p>
           <button className={`${buttonClass} bg-blue-600 text-white`} disabled={busy || testBlocked || !dashboard.settings.sender_id || !dashboard.provider || !readiness?.test_recipient_configured || draft.sender_id !== dashboard.settings.sender_id} onClick={test}><Send size={16} /> Send R999 test only</button>
-          <p className="text-xs text-slate-500">One random preview to the backend-configured test number {readiness?.test_recipient_hint}. Save the sender first. This does not enable parent sending.</p>
+          <p className="text-xs text-slate-500">One fixed-template preview to the backend-configured test number {readiness?.test_recipient_hint}. Save the sender first. This does not enable parent sending.</p>
         </div>
       </section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-bold">Recent attempts</h2><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Time (India)</th><th>Type</th><th>Outcome</th><th>Reason</th></tr></thead><tbody>{dashboard.recent.map(attempt => <tr key={attempt.id} className="border-b border-slate-100"><td className="p-2">{dateText(attempt.created_at)}</td><td>{attempt.kind}</td><td>{attempt.status}</td><td>{attempt.error_code?.replaceAll('_', ' ') || '—'}</td></tr>)}</tbody></table>{!dashboard.recent.length && <p className="py-3 text-slate-500">No portal-controlled attempts yet.</p>}</div><p className="mt-3 text-xs text-slate-500">API acceptance is not proof of delivery. Uncertain attempts require review and are not automatically resent.</p></section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-bold">Control audit history</h2><ul className="mt-3 space-y-2 text-sm text-slate-500">{dashboard.audit.map((entry, index) => <li key={index}>{dateText(entry.created_at)} · {entry.action.replaceAll('_', ' ')} · Admin {entry.actor_id}</li>)}</ul></section>
-      <p className="text-sm text-slate-500">Only Out-Campus and Institutional → Outside Campus departures and actual returns are eligible. Message variation does not guarantee protection from WhatsApp restrictions.</p>
+      <p className="text-sm text-slate-500">Out-Campus, Outdoor and Institutional → Outside Campus departures and actual returns are eligible. On-Campus and Institutional → Inside Campus leaves are excluded.</p>
     </>}
   </div>
 }
