@@ -7,14 +7,15 @@ assert(['localhost','127.0.0.1'].includes(new URL(origin).hostname),'Tests must 
 const students = Array.from({length:45},(_,i)=>({adm_no:`QA${i}`,name:`Preview student ${i+1}`,standard:'7th',photo_url:i===0?`${origin}/qa-portrait.svg`:null,progress:0}))
 const leader = {id:'qa-leader',name:'Preview Vice Principal',role:'vice_principal',photo_url:null}
 const mentor = {id:'qa-mentor',name:'Preview mentor',role:'usthad',is_active:true,photo_url:null,student_count:8,place:'Preview'}
-const reports = students.map((s,i)=>({...s,totalPoints:i<3?90:i===44?0:90-i,bonusPoints:i<3?20:0}))
+const reports = students.map((s,i)=>({...s,totalPoints:i<3?90:i===44?0:90-i,bonusPoints:i<3?20:0,grade:i<3?'A+':i===44?'NO GRADE':'A'}))
 const outside = students.slice(0,3).map((student,i)=>({adm_no:student.adm_no,student_name:student.name,standard:student.standard,leave_type:i===0?'institutional':'personal',institutional_leave_name:i===0?'Preview programme':null,actual_exit_datetime:'2026-10-22T04:00:00Z',end_datetime:'2026-10-23T12:00:00Z',hifz_mentor_name:mentor.name}))
 const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).toString('base64')}.not-a-real-signature`
 
 ;(async()=>{
  const browser = await chromium.launch({channel:'chrome',headless:true})
  try {
-  for(const device of [{name:'tablet',width:834,height:1112,touch:true},{name:'ipad-landscape',width:1194,height:834,touch:true},{name:'phone',width:390,height:844,touch:true},{name:'compact-phone',width:320,height:740,touch:true},{name:'laptop',width:1440,height:1000,touch:false}]) {
+  const devices=[{name:'tablet',width:834,height:1112,touch:true},{name:'ipad-landscape',width:1194,height:834,touch:true},{name:'phone',width:390,height:844,touch:true},{name:'compact-phone',width:320,height:740,touch:true},{name:'laptop',width:1440,height:1000,touch:false}]
+  for(const device of process.env.LEADERSHIP_DEVICE ? devices.filter(item=>item.name===process.env.LEADERSHIP_DEVICE) : devices) {
    const context = await browser.newContext({viewport:{width:device.width,height:device.height},isMobile:device.touch,hasTouch:device.touch})
    await context.addCookies([{name:'auth_token',value:cookie,url:origin,httpOnly:true}])
    const page = await context.newPage(), errors=[], requests=[]
@@ -37,7 +38,7 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
     else if(url.pathname.endsWith('/supervisor-focus'))Object.assign(body,{delegationToken:'preview-focus-token',mentor})
     else if(url.pathname.endsWith('/dashboard/staff'))body.summary={profile:mentor,students:students.slice(0,8),schedules:[],monthly_report:reports.slice(0,8)}
     else if(url.pathname.endsWith('/students'))body.students=students
-    else if(url.pathname.endsWith('/calculate')){const monthly=url.searchParams.get('month')==='2026-09'?reports.map((report,i)=>({...report,totalPoints:i<3?95-i:report.totalPoints})):reports;body.reports=url.searchParams.get('mentor_id')==='qa-mentor'?monthly.slice(0,8):monthly}
+    else if(url.pathname.endsWith('/calculate')){const monthly=url.searchParams.get('month')==='2026-09'?reports.map((report,i)=>({...report,totalPoints:i<3?95-i:report.totalPoints,grade:i===0?'A++':i===1?'A+':i===2?'A':'A'})):reports;body.reports=url.searchParams.get('mentor_id')==='qa-mentor'?monthly.slice(0,8):monthly}
     else if(url.pathname.endsWith('/incidents'))body.incidents=[]
     else if(url.pathname.endsWith('/mentor-policies'))body.policies=[]
     else if(url.pathname.endsWith('/years'))body.years=[]
@@ -128,6 +129,7 @@ const cookie = `preview.${Buffer.from(JSON.stringify({role:'vice_principal'})).t
    assert.equal(await portrait.evaluate(el=>getComputedStyle(el).borderRadius),'0px','featured photos are full rectangular panels, not avatars')
    const portraitBounds=await portrait.boundingBox();assert(portraitBounds.height>=120&&portraitBounds.width>=60,'featured photo has substantial card area')
    assert.equal(await panel.locator('.points-student-row[data-honour="true"]').count(),7,'ranks 4–10 have the subtle row highlight')
+   assert.equal(await panel.locator('.points-grade').count(),45,'every ranked student shows a grade, not just Outstanding performers')
    await leaders.locator('.points-featured-avatar img').first().waitFor()
    assert(await leaders.locator('.points-featured-avatar img').first().evaluate(el=>el.naturalWidth>0),'saved photo is loaded into the rectangular panel')
    await month.click();await page.getByRole('option',{name:'Sep 2026',exact:true}).click()

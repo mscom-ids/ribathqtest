@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
 
 async function main() {
   process.env.JWT_SECRET = 'route-test-only-signing-secret';
@@ -9,16 +8,13 @@ async function main() {
   process.env.WHATSAPP_SENDING_ENABLED = 'false';
   process.env.N8N_STUDENT_MOVEMENT_ENABLED = 'false';
   process.env.N8N_STUDENT_MOVEMENT_ADMIN_CONTROLS_ENABLED = 'true';
-  process.env.WHATSAPP_ADMIN_PASSCODE_HASH = await bcrypt.hash('route-test-only-passcode', 10);
   const { db, closeDatabasePool } = await import('../config/db');
   const savedQuery = db.query;
   let role = 'admin';
-  let failures = 0;
   (db as any).query = async (sql: string) => {
     if (sql.includes('SELECT role FROM staff')) return { rows: [{ role }] };
     if (sql.includes('to_regclass')) return { rows: [{ settings: 'whatsapp_notification_settings', attempts: 'whatsapp_notification_attempts' }] };
-    if (sql.includes('RETURNING failures')) return { rows: [{ failures: ++failures }] };
-    if (sql.includes('DELETE FROM whatsapp_notification_unlock_attempts')) failures = 0;
+    if (sql.includes('SELECT * FROM whatsapp_notification_settings')) return { rows: [{ enabled: false, sender_id: null, hourly_limit: 30, daily_limit: 100, min_interval_seconds: 60, max_age_hours: 24, production_started_at: null }] };
     return { rows: [] };
   };
   const router = (await import('../routes/whatsapp-admin.routes')).default;
@@ -48,23 +44,8 @@ async function main() {
     assert.equal(readiness.status, 200);
     assert.equal(readiness.headers.get('cache-control'), 'no-store');
     assert.equal((await readiness.json()).production_environment_ready, false);
-    assert.equal((await fetch(base, { headers })).status, 403, 'Admin login alone must not unlock settings');
-    const lockedTest = await fetch(base + '/test', { method: 'POST', headers, body: JSON.stringify({ request_id: '11111111-1111-4111-8111-111111111111' }) });
-    assert.equal(lockedTest.status, 403);
-    const unlock = await fetch(base + '/unlock', { method: 'POST', headers, body: JSON.stringify({ passcode: 'route-test-only-passcode' }) });
-    assert.equal(unlock.status, 200);
-    const unlocked = await unlock.json();
-    assert.equal(unlocked.expires_in_seconds, 600);
-    assert.ok(unlocked.token);
-    const otherSession = jwt.sign({ id: 'admin-test', role: 'admin', name: 'different session' }, process.env.JWT_SECRET);
-    assert.equal((await fetch(base, { headers: { ...headers, Authorization: `Bearer ${otherSession}`, 'x-whatsapp-admin-unlock': unlocked.token } })).status, 403);
-    process.env.WHATSAPP_ADMIN_PASSCODE_HASH = await bcrypt.hash('different-passcode', 10);
-    assert.equal((await fetch(base, { headers: { ...headers, 'x-whatsapp-admin-unlock': unlocked.token } })).status, 403);
-    for (let attempt = 0; attempt < 5; attempt++) {
-      assert.equal((await fetch(base + '/unlock', { method: 'POST', headers, body: JSON.stringify({ passcode: 'wrong-passcode' }) })).status, 403);
-    }
-    assert.equal((await fetch(base + '/unlock', { method: 'POST', headers, body: JSON.stringify({ passcode: 'different-passcode' }) })).status, 429);
-    console.log('Admin-only routes, current role checks, session-bound passcodes, secret rotation and lockout passed; no remote requests or messages.');
+    assert.equal((await fetch(base, { headers })).status, 200, 'An authenticated current admin can access settings without a separate passcode');
+    console.log('Admin-only routes and current role checks passed without a separate passcode or live messages.');
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     db.query = savedQuery;

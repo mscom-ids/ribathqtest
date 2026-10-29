@@ -1,15 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcrypt';
 import { db } from '../config/db';
 import { verifyToken } from '../middleware/auth.middleware';
-import { createUnlockToken, verifyUnlockToken, readWhatsAppSettings, readCevoxStatus,
+import { readWhatsAppSettings, readCevoxStatus,
   validateSettingsInput, reserveWhatsAppSend, finishWhatsAppSend, WhatsAppControlError } from '../services/whatsapp-admin.service';
 import { getMovementNotificationConfig, prepareMovementNotification, classifyMovementWebhookResult } from '../services/student-movement-notifications.service';
 
 const router = Router();
-const passcodeHash = () => process.env.WHATSAPP_ADMIN_PASSCODE_HASH || '';
-const hashConfigured = () => /^\$2[ab]\$(1[0-5])\$[./A-Za-z0-9]{53}$/.test(passcodeHash());
-const sessionToken = (req: Request) => req.headers.authorization?.replace(/^Bearer /, '') || req.cookies?.auth_token || '';
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => {
   handler(req, res).catch(next);
 };
@@ -28,45 +24,15 @@ router.use((req, res, next) => { (async () => {
 
 router.get('/session', wrap(async (req, res) => {
   const migration = await db.query("SELECT to_regclass('public.whatsapp_notification_settings') AS settings, to_regclass('public.whatsapp_notification_attempts') AS attempts");
-  const configured = hashConfigured();
-  res.json({ success: true, passcode_configured: configured, migration_ready: !!migration.rows[0]?.settings && !!migration.rows[0]?.attempts,
+  res.json({ success: true, migration_ready: !!migration.rows[0]?.settings && !!migration.rows[0]?.attempts,
     control_mode: process.env.N8N_STUDENT_MOVEMENT_ADMIN_CONTROLS_ENABLED === 'true',
     production_environment_ready: process.env.WHATSAPP_SENDING_ENABLED === 'true' && process.env.N8N_STUDENT_MOVEMENT_ENABLED === 'true'
       && process.env.N8N_STUDENT_MOVEMENT_TEST_ENABLED !== 'true',
     cevox_configured: !!process.env.CEVOX_CONTROL_API_KEY,
     test_recipient_configured: /^\+[1-9]\d{7,14}$/.test(process.env.N8N_STUDENT_MOVEMENT_TEST_PHONE || ''),
     test_recipient_hint: process.env.N8N_STUDENT_MOVEMENT_TEST_PHONE ? `ending ${process.env.N8N_STUDENT_MOVEMENT_TEST_PHONE.slice(-4)}` : 'not configured',
-    unlocked: configured && verifyUnlockToken(String(req.headers['x-whatsapp-admin-unlock'] || ''), (req as any).whatsappAdmin,
-      sessionToken(req), passcodeHash(), process.env.JWT_SECRET!),
   });
 }));
-
-router.post('/unlock', wrap(async (req, res) => {
-  if (!hashConfigured()) throw new WhatsAppControlError('passcode_not_configured', 503);
-  if (typeof req.body?.passcode !== 'string' || Buffer.byteLength(req.body.passcode) > 72 || req.body.passcode.length < 8) {
-    throw new WhatsAppControlError('invalid_passcode', 403);
-  }
-  const actor = (req as any).whatsappAdmin;
-  const attempt = await db.query(
-    `INSERT INTO whatsapp_notification_unlock_attempts(actor_id, failures) VALUES ($1, 1)
-     ON CONFLICT(actor_id) DO UPDATE SET
-       failures = CASE WHEN whatsapp_notification_unlock_attempts.window_started_at < now() - interval '15 minutes'
-         THEN 1 ELSE whatsapp_notification_unlock_attempts.failures + 1 END,
-       window_started_at = CASE WHEN whatsapp_notification_unlock_attempts.window_started_at < now() - interval '15 minutes'
-         THEN now() ELSE whatsapp_notification_unlock_attempts.window_started_at END RETURNING failures`, [actor],
-  );
-  if (attempt.rows[0].failures > 5) throw new WhatsAppControlError('too_many_passcode_attempts_wait_15_minutes', 429);
-  if (!await bcrypt.compare(req.body.passcode, passcodeHash())) throw new WhatsAppControlError('invalid_passcode', 403);
-  await db.query('DELETE FROM whatsapp_notification_unlock_attempts WHERE actor_id = $1', [actor]);
-  await db.query('INSERT INTO whatsapp_notification_audit(actor_id, action) VALUES ($1, $2)', [actor, 'unlock']);
-  res.json({ success: true, token: createUnlockToken(actor, sessionToken(req), passcodeHash(), process.env.JWT_SECRET!), expires_in_seconds: 600 });
-}));
-
-router.use((req, _res, next) => {
-  if (!hashConfigured() || !verifyUnlockToken(String(req.headers['x-whatsapp-admin-unlock'] || ''), (req as any).whatsappAdmin,
-    sessionToken(req), passcodeHash(), process.env.JWT_SECRET!)) return next(new WhatsAppControlError('passcode_unlock_required', 403));
-  next();
-});
 
 router.get('/', wrap(async (_req, res) => {
   const settings = await readWhatsAppSettings(db);

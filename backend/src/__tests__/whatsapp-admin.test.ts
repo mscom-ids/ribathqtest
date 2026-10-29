@@ -1,23 +1,10 @@
 import assert from 'node:assert/strict';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { createUnlockToken, verifyUnlockToken, validateSettingsInput, readCevoxStatus,
+import { validateSettingsInput, readCevoxStatus,
   reserveWhatsAppSend, WhatsAppControlError, PortalDatabase } from '../services/whatsapp-admin.service';
 import { getActiveMovementNotificationConfig, getMovementNotificationConfig, classifyMovementWebhookResult,
   processMovementNotification } from '../services/student-movement-notifications.service';
 
 async function main() {
-  const hash = await bcrypt.hash('test-only-separate-passcode', 10);
-  const secret = 'test-only-jwt-signing-secret';
-  const token = createUnlockToken('admin-1', 'login-session', hash, secret);
-  assert.equal(verifyUnlockToken(token, 'admin-1', 'login-session', hash, secret), true);
-  assert.equal(verifyUnlockToken(token, 'admin-2', 'login-session', hash, secret), false);
-  assert.equal(verifyUnlockToken(token, 'admin-1', 'different-login', hash, secret), false);
-  assert.equal(verifyUnlockToken(token, 'admin-1', 'login-session', 'rotated-hash', secret), false);
-  assert.equal(verifyUnlockToken(token + 'x', 'admin-1', 'login-session', hash, secret), false);
-  const expired = jwt.sign({ purpose: 'whatsapp_admin', exp: Math.floor(Date.now() / 1000) - 1 }, secret,
-    { subject: 'admin-1', audience: 'whatsapp-admin' });
-  assert.equal(verifyUnlockToken(expired, 'admin-1', 'login-session', hash, secret), false);
   const senderId = '11111111-1111-4111-8111-111111111111';
   const settings = { enabled: false, sender_id: senderId, hourly_limit: 30, daily_limit: 100,
     min_interval_seconds: 60, max_age_hours: 24, production_started_at: null as string | null };
@@ -102,6 +89,6 @@ async function main() {
     for (const key of Object.keys(process.env)) if (!(key in previousEnvironment)) delete process.env[key];
     Object.assign(process.env, previousEnvironment);
   }
-  console.log('WhatsApp admin unlock, fail-closed settings, sender checks, queue limits and safe deferral tests passed without live sends.');
+  console.log('WhatsApp admin role protection, fail-closed settings, sender checks, queue limits and safe deferral tests passed without live sends.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

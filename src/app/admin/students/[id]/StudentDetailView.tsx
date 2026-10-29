@@ -808,7 +808,19 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                                                             <Input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={photoUploading} />
                                                             {photoUploading && <p className="text-xs text-slate-400 mt-1">Uploading...</p>}
                                                         </div>
+                                                        {photoUrl && (
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                className="shrink-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                                onClick={() => setPhotoUrl(null)}
+                                                                disabled={photoUploading}
+                                                            >
+                                                                Remove photo
+                                                            </Button>
+                                                        )}
                                                     </div>
+                                                    {photoUrl === null && <p className="mt-2 text-xs text-slate-500">No photo will be shown after you save this profile.</p>}
                                                 </div>
 
                                                 {/* Personal Info */}

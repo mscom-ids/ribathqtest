@@ -63,6 +63,7 @@ type MonthlyReportRow = {
     points?: number | string | null
     percentage?: number | string | null
     bonusPoints?: number
+    grade?: string | null
     hifz_stage?: string
 }
 
@@ -72,6 +73,7 @@ type TopPerformer = {
     standard: string
     totalPoints: number
     bonusPoints: number
+    grade: string
     isHafiz: boolean
 }
 
@@ -122,6 +124,7 @@ function buildPerformers(reports: MonthlyReportRow[]): TopPerformer[] {
                 standard: r.standard || "",
                 totalPoints,
                 bonusPoints: Number(r.bonusPoints || 0),
+                grade: r.grade || "NO GRADE",
                 isHafiz: r.hifz_stage === 'HAFIZ_REVISION',
             }
         })

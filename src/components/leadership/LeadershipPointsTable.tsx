@@ -8,7 +8,7 @@ import { rankLabel, rankLeaderboard } from "@/lib/leaderboard-ranking"
 import { resolveBackendUrl } from "@/lib/utils"
 import { LeaderboardPlaceFrame as PlaceFrame } from "@/components/leadership/LeaderboardPlaceFrame"
 
-type Performer = { adm_no: string; name: string; standard: string; totalPoints: number; bonusPoints: number; isHafiz: boolean; photo_url?: string | null }
+type Performer = { adm_no: string; name: string; standard: string; totalPoints: number; bonusPoints: number; grade: string; isHafiz: boolean; photo_url?: string | null }
 type Props = {
     performers: Performer[]; loading: boolean; error: string | null
     month: string; onMonthChange: (month: string) => void; months: { value: string; label: string }[]
@@ -36,7 +36,7 @@ export function LeadershipPointsTable(props: Props) {
     const featured = classicPodium ? [leaders[1], leaders[0], leaders[2]] : leaders
     const points = (student: Performer) => <>
         <span className="points-value">{student.totalPoints.toFixed(2)}<span className="points-unit"> pts</span></span>
-        {student.totalPoints > 100 && <span className="points-outstanding">O · Outstanding</span>}
+        <span className={`points-grade ${student.grade === "O" ? "is-outstanding" : ""}`}>{student.grade === "O" ? "O · Outstanding" : `Grade ${student.grade}`}</span>
         {student.bonusPoints > 0 && <span className="points-bonus">incl. +{student.bonusPoints.toFixed(2)} bonus</span>}
     </>
     return <div className="leadership-points-table">
@@ -58,7 +58,7 @@ export function LeadershipPointsTable(props: Props) {
                 <div role="group" aria-label="Leading students" className={`points-leaders ${classicPodium ? "is-podium" : "has-shared-places"}`} style={{ gridTemplateColumns: `repeat(${Math.min(featured.length, 3)}, minmax(0, 1fr))` }}>
                     {featured.map(student => <button key={student.adm_no} type="button" data-rank={student.rank} data-student-id={student.adm_no} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} onClick={() => onStudentClick(student)} className={`points-leader ${student.rank === 1 ? "is-first" : ""}`}>
                         <span className="points-leader-visual"><PlaceFrame rank={student.rank} tied={student.tied} /><span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span></span>
-                        <span className="points-leader-name">{student.name}</span>
+                        <span className="points-leader-name" title={student.name}>{student.name}</span>
                         <span className="points-place-label">{rankLabel(student.rank, student.tied)}</span>
                         <span className="points-leader-class">{student.standard}{student.isHafiz ? " · Hafiz" : ""}</span>
                         <span className="points-leader-score">{points(student)}</span>

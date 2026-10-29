@@ -1,5 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
-import jwt from 'jsonwebtoken';
+import { randomUUID } from 'node:crypto';
 
 type Queryable = { query(sql: string, params?: any[]): Promise<{ rows: any[] }> };
 export type PortalDatabase = Queryable & { getClient(): Promise<Queryable & { release(): void }> };
@@ -11,23 +10,6 @@ export type Sender = { id: string; displayName: string; phone: string; status: s
   cap: number; used: number; remaining: number; coldCap: number; coldUsed: number };
 export class WhatsAppControlError extends Error {
   constructor(public code: string, public status = 409) { super(code); }
-}
-
-export function passcodeFingerprint(hash: string) {
-  return createHash('sha256').update(hash).digest('hex');
-}
-
-export function createUnlockToken(actor: string, session: string, hash: string, secret: string) {
-  return jwt.sign({ purpose: 'whatsapp_admin', session: passcodeFingerprint(session), fingerprint: passcodeFingerprint(hash) },
-    secret, { subject: actor, expiresIn: '10m', audience: 'whatsapp-admin' });
-}
-
-export function verifyUnlockToken(token: string, actor: string, session: string, hash: string, secret: string) {
-  try {
-    const data = jwt.verify(token, secret, { audience: 'whatsapp-admin', algorithms: ['HS256'] });
-    return typeof data !== 'string' && data.sub === actor && data.purpose === 'whatsapp_admin'
-      && data.session === passcodeFingerprint(session) && data.fingerprint === passcodeFingerprint(hash);
-  } catch { return false; }
 }
 
 export function validateSettingsInput(input: any) {
