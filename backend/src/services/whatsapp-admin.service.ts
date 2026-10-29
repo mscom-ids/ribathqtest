@@ -7,7 +7,7 @@ export type WhatsAppSettings = {
   hourly_limit: number; daily_limit: number; min_interval_seconds: number; max_age_hours: number;
 };
 export type Sender = { id: string; displayName: string; phone: string; status: string; liveStatus: string;
-  cap: number; used: number; remaining: number; coldCap: number; coldUsed: number };
+  cap: number; used: number; remaining: number; coldCap: number | null; coldLimitEnabled: boolean; coldUsed: number };
 export class WhatsAppControlError extends Error {
   constructor(public code: string, public status = 409) { super(code); }
 }
@@ -50,13 +50,18 @@ export async function readCevoxStatus(request: typeof fetch = fetch) {
     throw new WhatsAppControlError('invalid_cevox_status', 503);
   }
   const numbers: Sender[] = body.numbers.map((number: any) => {
+    const coldLimitEnabled = typeof number.coldLimitEnabled === 'boolean'
+      ? number.coldLimitEnabled : number.coldCap !== null;
+    const validColdCap = Number.isFinite(number.coldCap)
+      || (number.coldCap === null && coldLimitEnabled === false);
     if (typeof number.id !== 'string' || typeof number.status !== 'string' || typeof number.liveStatus !== 'string'
-      || !['cap', 'used', 'remaining', 'coldCap', 'coldUsed'].every(field => Number.isFinite(number[field]) && number[field] >= 0)) {
+      || !['cap', 'used', 'remaining', 'coldUsed'].every(field => Number.isFinite(number[field]) && number[field] >= 0)
+      || !validColdCap) {
       throw new WhatsAppControlError('invalid_cevox_status', 503);
     }
     return { id: number.id, displayName: String(number.displayName || 'WhatsApp sender'), phone: String(number.phone || ''),
       status: number.status, liveStatus: number.liveStatus, cap: number.cap, used: number.used,
-      remaining: number.remaining, coldCap: number.coldCap, coldUsed: number.coldUsed };
+      remaining: number.remaining, coldCap: number.coldCap, coldLimitEnabled, coldUsed: number.coldUsed };
   });
   return { numbers, policy: { inQuietHours: body.policy.inQuietHours, perContactHourly: body.policy.perContactHourly,
     quietHours: typeof body.policy.quietHours === 'string' ? body.policy.quietHours : null } };

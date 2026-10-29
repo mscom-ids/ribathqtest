@@ -239,6 +239,57 @@ export function classifyMovementWebhookResult(
   return { status: 'uncertain', error: 'unrecognized_cevox_response' };
 }
 
+/**
+ * Makes one explicitly reviewed, unacknowledged production notification
+ * eligible for the normal worker again.  This deliberately does not alter the
+ * original attempt: it remains part of the audit trail and the next worker
+ * run creates a new attempt with the ordinary provider, rate, and leave-state
+ * checks.
+ */
+export async function requeueVerifiedUnsentMovementNotification(
+  database: PortalDatabase,
+  input: { attemptId: string; actorId: string },
+) {
+  const client = await database.getClient();
+  try {
+    await client.query('BEGIN');
+    const selected = await client.query(
+      `SELECT notification.id AS notification_id
+       FROM whatsapp_notification_attempts attempt
+       JOIN student_movement_notifications notification ON notification.id = attempt.notification_id
+       WHERE attempt.id = $1
+         AND attempt.kind = 'production'
+         AND attempt.status = 'uncertain'
+         AND attempt.error_code = 'invalid_webhook_response'
+         AND notification.status = 'uncertain'
+         AND NOT EXISTS (
+           SELECT 1 FROM whatsapp_notification_attempts accepted
+           WHERE accepted.notification_id = notification.id AND accepted.status = 'api_accepted'
+         )
+       FOR UPDATE OF attempt, notification`,
+      [input.attemptId],
+    );
+    const notificationId = selected.rows[0]?.notification_id as string | undefined;
+    if (!notificationId) throw new WhatsAppControlError('uncertain_attempt_not_retryable', 409);
+    await client.query(
+      `UPDATE student_movement_notifications
+       SET status = 'pending', next_attempt_at = now(), processing_started_at = NULL,
+           last_error = NULL, updated_at = now()
+       WHERE id = $1 AND status = 'uncertain'`,
+      [notificationId],
+    );
+    await client.query(
+      'INSERT INTO whatsapp_notification_audit(actor_id, action, details) VALUES ($1, $2, $3::jsonb)',
+      [input.actorId, 'retry_verified_unsent', JSON.stringify({ attempt_id: input.attemptId, notification_id: notificationId })],
+    );
+    await client.query('COMMIT');
+    return notificationId;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+
 export async function processMovementNotification(
   database: Database,
   config: MovementNotificationConfig,

@@ -21,7 +21,6 @@ Notifications** for administrator accounts only. The Express API is
    N8N_STUDENT_MOVEMENT_ENABLED=true
    N8N_STUDENT_MOVEMENT_ADMIN_CONTROLS_ENABLED=true
    N8N_STUDENT_MOVEMENT_TEST_ENABLED=false
-   WHATSAPP_ADMIN_PASSCODE_HASH=<bcrypt hash of a separate strong passcode>
    CEVOX_CONTROL_API_BASE_URL=https://rqwaps.ribathulquran.in
    CEVOX_CONTROL_API_KEY=<private Cevox workspace API key>
    N8N_STUDENT_MOVEMENT_WEBHOOK_URL=https://server.n8n.zvntorai.in/webhook/erp-student-movement
@@ -31,10 +30,8 @@ Notifications** for administrator accounts only. The Express API is
    N8N_STUDENT_MOVEMENT_TEST_PHONE=<verified personal test number in +countrycode format>
    ```
 
-   Use a unique passcode of at least 12 characters and at most 72 UTF-8 bytes,
-   with a bcrypt cost of 12 (supported costs 10–15). Store only its hash in the
-   backend environment. Do not put passcodes or keys in frontend variables,
-   Git, chat, URL parameters, or the settings form. The control API key must
+   Do not put keys in frontend variables, Git, chat, URL parameters, or the
+   settings form. The control API key must
    belong to the same workspace as the n8n send credential. `/api/stats` is
    used to read sender metadata and provider limits; QR/session secrets are
    not copied to NewRQP.
@@ -45,7 +42,7 @@ Notifications** for administrator accounts only. The Express API is
    explicit Cevox rejections available to the ERP's classifier rather than
    stopping before the response node. Existing credentials and the webhook
    path must remain unchanged.
-4. Redeploy, sign in as an actual administrator, unlock the controls, select
+4. Redeploy, sign in as an actual administrator, open the controls, select
    a connected sender and choose **Save paused**. Test only with the marked
    R999 student and the backend-configured personal test number. A test is
    an explicit send action and does not enable real-parent sending.
@@ -62,26 +59,19 @@ settings database fails closed. Sender selection and portal pause/resume do
 not require subsequent redeployments. The master environment switch remains
 an emergency stop and does require redeployment.
 
+The Cevox `GET /api/stats` response must include numeric sender `cap`, `used`,
+`remaining`, and `coldUsed` values. When its separate cold-contact quota is
+disabled, Cevox may return `coldLimitEnabled: false` with `coldCap: null`; the
+ERP displays this as **First-contact limit: disabled** and continues to enforce
+the ordinary sender and per-parent limits.
+
 ## Authorization
 
-### Forgotten passcode or a new sender
+To change a sender, set the backend runtime `WHATSAPP_SENDING_ENABLED=false`
+and redeploy before making the change. Do not reset WhatsApp QR sessions,
+production cutoff, message history or uncertain attempts.
 
-The old passcode cannot be recovered from its hash. In Coolify, set the backend
-runtime `WHATSAPP_SENDING_ENABLED=false` and redeploy before recovering access
-or changing senders. Do not reset WhatsApp QR sessions, production cutoff,
-message history or uncertain attempts.
-
-Run `node D:\NewRQP\scripts\generate-whatsapp-passcode.cjs` in an interactive
-local terminal. It prompts for and confirms a new passcode with hidden input,
-generates a cost-12 bcrypt hash, and prints only that hash. It does not store
-the passcode, change live settings, or enable notifications. Copy the complete
-hash into `WHATSAPP_ADMIN_PASSCODE_HASH` in the backend's production runtime
-variables with Literal interpolation and build-time availability off, then
-redeploy. Use the newly chosen passcode in the portal, not the hash. If a
-fifteen-minute lockout is active, wait until it expires rather than deleting
-security records.
-
-After unlocking, choose Pause sending, select the new connected number from
+After signing in as an administrator, choose Pause sending, select the new connected number from
 the same Cevox workspace and Save paused. Verify the configured test recipient
 is your own number and use the R999-only test. Review pending/uncertain records
 before re-enabling; changing a sender preserves the original launch cutoff and
@@ -92,14 +82,9 @@ just to switch a number in the same workspace.
 - Every request validates the login JWT and reads the current staff role.
   Only `admin` is allowed; parents, staff, controllers, principals, mobile
   access tokens and delegated sessions are rejected.
-- The separate passcode unlocks controls for ten minutes. The unlock token is
-  kept only in browser memory, tied to that admin's login session and the
-  current passcode hash, and sent in a custom header. It is never stored in
-  browser local/session storage. Passcode rotation invalidates existing
-  unlocks. Five attempts per admin are allowed in a fifteen-minute window.
-- API responses are non-cacheable. Keys, passcode hashes, webhook secrets,
+- API responses are non-cacheable. Keys, webhook secrets,
   message text and family contacts are not returned in the dashboard.
-- Enables, configuration changes, pauses, unlocks and tests have audit records.
+- Enables, configuration changes, pauses and tests have audit records.
   Pause first before switching senders; a recent reserved/in-flight send also
   blocks sender changes. Already-submitted messages cannot be recalled.
 

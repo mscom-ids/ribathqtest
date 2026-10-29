@@ -12,7 +12,7 @@ leaves, and edits to already-processed notifications do not create new messages.
 
 ## Enable in the NewRQP backend
 
-For the passcode-protected admin page, sender dropdown, persistent pause/resume
+For the admin-restricted page, sender dropdown, persistent pause/resume
 and app usage limits, follow `docs/WHATSAPP_ADMIN_CONTROLS.md` instead of the
 legacy environment-only activation steps below. Admin-control mode records its
 permanent production cutoff on first portal enable and starts paused.
@@ -204,6 +204,22 @@ Local source changes alone do not update the live workflow. Preserve the
 webhook path, credentials and production cutoff. Obsolete `test_template_index`
 and `test_template_bundle` requests are rejected rather than sending variants.
 
+The production n8n **Webhook** node must use **Using Respond to Webhook node**
+as its response mode. Its final **Return Cevox Result** node must return JSON,
+not an empty response, using this shape:
+
+```json
+{
+  "notification_id": "the incoming notification_id",
+  "cevox_http_status": 200,
+  "cevox_response": { "status": "sent" }
+}
+```
+
+The status and body must be the real Cevox response. A blank, HTML, or
+unrelated JSON response is deliberately classified as `uncertain` so the ERP
+does not unknowingly send the same parent message twice.
+
 For an explicitly authorized isolated CLI preview, run from `backend`:
 `node node_modules/ts-node/dist/bin.js src/scripts/test-whatsapp-templates.ts --workflow-updated --single`.
 It reads only the marked R999 synthetic departure, forces the verified personal
@@ -237,8 +253,12 @@ ORDER BY created_at DESC
 LIMIT 50;
 ```
 
-Do not reset uncertain rows until checking Cevox's message history. For rows
-confirmed not sent, an administrator can reset an individual record:
+Do not reset uncertain rows until checking Cevox's message history. For an
+`invalid webhook response` attempt confirmed not sent, use **Requeue verified
+unsent** on the WhatsApp Notifications page after Cevox shows a connected
+sender. The action creates an audit entry and sends only through the normal
+queue safeguards. If emergency database access is required, an administrator
+can instead reset one individual record:
 
 ```sql
 UPDATE public.student_movement_notifications

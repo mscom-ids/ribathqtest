@@ -3,7 +3,7 @@ import { db } from '../config/db';
 import { verifyToken } from '../middleware/auth.middleware';
 import { readWhatsAppSettings, readCevoxStatus,
   validateSettingsInput, reserveWhatsAppSend, finishWhatsAppSend, WhatsAppControlError } from '../services/whatsapp-admin.service';
-import { getMovementNotificationConfig, prepareMovementNotification, classifyMovementWebhookResult } from '../services/student-movement-notifications.service';
+import { getMovementNotificationConfig, prepareMovementNotification, classifyMovementWebhookResult, requeueVerifiedUnsentMovementNotification } from '../services/student-movement-notifications.service';
 
 const router = Router();
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => {
@@ -46,7 +46,7 @@ router.get('/', wrap(async (_req, res) => {
      FROM whatsapp_notification_attempts`,
   );
   const queue = await db.query('SELECT status, count(*)::int AS count FROM student_movement_notifications GROUP BY status');
-  const recent = await db.query('SELECT id, kind, status, error_code, created_at FROM whatsapp_notification_attempts ORDER BY created_at DESC LIMIT 15');
+  const recent = await db.query('SELECT id, notification_id, kind, status, error_code, created_at FROM whatsapp_notification_attempts ORDER BY created_at DESC LIMIT 15');
   const audit = await db.query('SELECT actor_id, action, details, created_at FROM whatsapp_notification_audit ORDER BY created_at DESC LIMIT 10');
   res.json({ success: true, settings, provider, provider_error: providerError, usage: usage.rows[0], queue: queue.rows,
     recent: recent.rows, audit: audit.rows, effective_environment_enabled: !!getMovementNotificationConfig() });
@@ -119,6 +119,27 @@ router.post('/test', wrap(async (req, res) => {
     [(req as any).whatsappAdmin, 'test', JSON.stringify({ request_id: requestId, status: outcome.status })]);
   res.json({ success: true, status: outcome.status, error: outcome.error, request_id: requestId,
     message: 'Only the configured R999 test recipient was targeted. API acceptance does not confirm delivery.' });
+}));
+
+router.post('/retry-uncertain', wrap(async (req, res) => {
+  const attemptId = req.body?.attempt_id;
+  if (typeof attemptId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(attemptId)) {
+    throw new WhatsAppControlError('invalid_retry_request', 400);
+  }
+  if (req.body?.confirmed !== true) throw new WhatsAppControlError('retry_confirmation_required', 400);
+  if (process.env.N8N_STUDENT_MOVEMENT_ADMIN_CONTROLS_ENABLED !== 'true') {
+    throw new WhatsAppControlError('admin_control_mode_required', 503);
+  }
+  const settings = await readWhatsAppSettings(db);
+  if (!settings.enabled || !settings.sender_id || !settings.production_started_at) throw new WhatsAppControlError('sending_paused');
+  const provider = await readCevoxStatus();
+  const sender = provider.numbers.find(number => number.id === settings.sender_id
+    && number.status === 'connected' && number.liveStatus === 'connected');
+  if (!sender) throw new WhatsAppControlError('sender_not_connected');
+  const notificationId = await requeueVerifiedUnsentMovementNotification(db, {
+    attemptId, actorId: (req as any).whatsappAdmin,
+  });
+  res.json({ success: true, notification_id: notificationId });
 }));
 
 router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

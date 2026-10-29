@@ -5,11 +5,11 @@ import { MessageCircle, Pause, RefreshCw, Send, ShieldCheck } from "lucide-react
 import api from "@/lib/api"
 
 type Settings = { enabled: boolean; sender_id: string | null; production_started_at: string | null; hourly_limit: number; daily_limit: number; min_interval_seconds: number; max_age_hours: number }
-type Sender = { id: string; displayName: string; phone: string; status: string; liveStatus: string; cap: number; used: number; remaining: number; coldCap: number; coldUsed: number }
+type Sender = { id: string; displayName: string; phone: string; status: string; liveStatus: string; cap: number; used: number; remaining: number; coldCap: number | null; coldLimitEnabled: boolean; coldUsed: number }
 type Readiness = { migration_ready: boolean; control_mode: boolean; production_environment_ready: boolean; cevox_configured: boolean; test_recipient_configured: boolean; test_recipient_hint: string }
 type Dashboard = { settings: Settings; provider: { numbers: Sender[]; policy: { inQuietHours: boolean; quietHours: string | null; perContactHourly: number } } | null; provider_error: string | null;
   usage: { sent_today: number; hourly_reserved: number; daily_reserved: number }; queue: { status: string; count: number }[];
-  recent: { id: string; kind: string; status: string; error_code: string | null; created_at: string }[];
+  recent: { id: string; notification_id: string | null; kind: string; status: string; error_code: string | null; created_at: string }[];
   audit: { actor_id: string; action: string; details: Record<string, unknown>; created_at: string }[] }
 
 const dateText = (value: string | null) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "Not activated yet"
@@ -28,6 +28,7 @@ export default function WhatsAppNotificationsPage() {
   const [notice, setNotice] = useState("")
   const [error, setError] = useState("")
   const [loaded, setLoaded] = useState(false)
+  const [retryingAttempt, setRetryingAttempt] = useState<string | null>(null)
   const testRequest = useRef<string | null>(null)
   const [testBlocked, setTestBlocked] = useState(false)
   const refresh = useCallback(async (resetDraft = false) => {
@@ -87,6 +88,16 @@ export default function WhatsAppNotificationsPage() {
     } finally { setBusy(false) }
   }
 
+  const retryVerifiedUnsent = async (attemptId: string) => {
+    if (!window.confirm("Requeue this message only if its matching n8n execution confirms Cevox was never called. This creates a new WhatsApp send attempt and cannot be undone.")) return
+    setRetryingAttempt(attemptId); setError(""); setNotice("")
+    try {
+      await api.post("/whatsapp-admin/retry-uncertain", { attempt_id: attemptId, confirmed: true })
+      await refresh()
+      setNotice("The verified-unsent notification has been requeued. It will use the normal sender, rate, and leave checks before it is sent.")
+    } catch (reason) { setError(errorText(reason)) } finally { setRetryingAttempt(null) }
+  }
+
   const connected = dashboard?.provider?.numbers.filter(number => number.status === "connected" && number.liveStatus === "connected") || []
   const selected = dashboard?.provider?.numbers.find(number => number.id === (draft?.sender_id || dashboard.settings.sender_id))
   const canEnable = readiness?.control_mode && readiness.production_environment_ready && !!dashboard?.provider && !!draft?.sender_id
@@ -140,14 +151,17 @@ export default function WhatsAppNotificationsPage() {
         <div className="space-y-4"><h2 className="font-bold">Capacity and safe testing</h2>
           <div className="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-900"><p>ERP hourly reserved: {dashboard.usage.hourly_reserved} / {dashboard.settings.hourly_limit}</p><p>ERP daily reserved: {dashboard.usage.daily_reserved} / {dashboard.settings.daily_limit} (Indian calendar day)</p>
             <p className="mt-2 text-xs text-slate-500">Uncertain and in-flight attempts count against the allowance to prevent accidental repeat sends.</p></div>
-          {selected && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><p>Cevox daily usage: {selected.used} / {selected.cap} · Remaining: {selected.remaining}</p><p>First-contact usage: {selected.coldUsed} / {selected.coldCap}</p><p>Per-parent hourly ceiling: {dashboard.provider?.policy.perContactHourly}</p><p className="mt-2 text-xs">Cevox reports its own provider-day totals (UTC). These limits cannot be overridden here.</p></div>}
+          {selected && <div className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><p>Cevox daily usage: {selected.used} / {selected.cap} · Remaining: {selected.remaining}</p><p>{selected.coldLimitEnabled ? `First-contact usage: ${selected.coldUsed} / ${selected.coldCap}` : "First-contact limit: disabled"}</p><p>Per-parent hourly ceiling: {dashboard.provider?.policy.perContactHourly}</p><p className="mt-2 text-xs">Cevox reports its own provider-day totals (UTC). These limits cannot be overridden here.</p></div>}
           {dashboard.provider?.policy.inQuietHours && <p className="text-sm text-amber-700">Cevox quiet hours are active ({dashboard.provider.policy.quietHours}). Messages wait.</p>}
           <p className="text-sm text-slate-500">Institutional leave days use the persistent queue, not simultaneous sends. Expired departure notifications or departures already followed by a recorded return are skipped.</p>
           <button className={`${buttonClass} bg-blue-600 text-white`} disabled={busy || testBlocked || !dashboard.settings.sender_id || !dashboard.provider || !readiness?.test_recipient_configured || draft.sender_id !== dashboard.settings.sender_id} onClick={test}><Send size={16} /> Send R999 test only</button>
           <p className="text-xs text-slate-500">One fixed-template preview to the backend-configured test number {readiness?.test_recipient_hint}. Save the sender first. This does not enable parent sending.</p>
         </div>
       </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-bold">Recent attempts</h2><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Time (India)</th><th>Type</th><th>Outcome</th><th>Reason</th></tr></thead><tbody>{dashboard.recent.map(attempt => <tr key={attempt.id} className="border-b border-slate-100"><td className="p-2">{dateText(attempt.created_at)}</td><td>{attempt.kind}</td><td>{attempt.status}</td><td>{attempt.error_code?.replaceAll('_', ' ') || '—'}</td></tr>)}</tbody></table>{!dashboard.recent.length && <p className="py-3 text-slate-500">No portal-controlled attempts yet.</p>}</div><p className="mt-3 text-xs text-slate-500">API acceptance is not proof of delivery. Uncertain attempts require review and are not automatically resent.</p></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-bold">Recent attempts</h2><div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-2">Time (India)</th><th>Type</th><th>Outcome</th><th>Reason</th><th>n8n reference</th><th className="p-2 text-right">Action</th></tr></thead><tbody>{dashboard.recent.map(attempt => {
+        const canRetry = attempt.kind === "production" && attempt.status === "uncertain" && attempt.error_code === "invalid_webhook_response" && !!dashboard.provider && dashboard.settings.enabled && !!readiness?.control_mode
+        return <tr key={attempt.id} className="border-b border-slate-100"><td className="p-2">{dateText(attempt.created_at)}</td><td>{attempt.kind}</td><td>{attempt.status}</td><td>{attempt.error_code?.replaceAll('_', ' ') || '—'}</td><td>{attempt.notification_id ? <code className="text-xs text-slate-600">{attempt.notification_id}</code> : '—'}</td><td className="p-2 text-right">{canRetry && <button className={`${buttonClass} bg-amber-50 px-3 py-2 text-amber-800`} disabled={busy || retryingAttempt === attempt.id} onClick={() => void retryVerifiedUnsent(attempt.id)}>{retryingAttempt === attempt.id ? "Requeueing…" : "Requeue verified unsent"}</button>}</td></tr>
+      })}</tbody></table>{!dashboard.recent.length && <p className="py-3 text-slate-500">No portal-controlled attempts yet.</p>}</div><p className="mt-3 text-xs text-slate-500">API acceptance is not proof of delivery. Uncertain attempts are never retried automatically. Requeue is available only after the matching n8n execution confirms Cevox was not called.</p></section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950"><h2 className="font-bold">Control audit history</h2><ul className="mt-3 space-y-2 text-sm text-slate-500">{dashboard.audit.map((entry, index) => <li key={index}>{dateText(entry.created_at)} · {entry.action.replaceAll('_', ' ')} · Admin {entry.actor_id}</li>)}</ul></section>
       <p className="text-sm text-slate-500">Out-Campus, Outdoor and Institutional → Outside Campus departures and actual returns are eligible. On-Campus and Institutional → Inside Campus leaves are excluded.</p>
     </>}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { validateSettingsInput, readCevoxStatus,
   reserveWhatsAppSend, WhatsAppControlError, PortalDatabase } from '../services/whatsapp-admin.service';
 import { getActiveMovementNotificationConfig, getMovementNotificationConfig, classifyMovementWebhookResult,
-  processMovementNotification } from '../services/student-movement-notifications.service';
+  processMovementNotification, requeueVerifiedUnsentMovementNotification } from '../services/student-movement-notifications.service';
 
 async function main() {
   const senderId = '11111111-1111-4111-8111-111111111111';
@@ -36,13 +36,20 @@ async function main() {
     assert.equal(active?.senderId, senderId);
     assert.equal(active?.productionStartAt, '2026-10-14T08:00:00.000Z');
     const provider = { numbers: [{ id: senderId, displayName: 'School', phone: '919000000001', status: 'connected',
-      liveStatus: 'connected', cap: 100, used: 0, remaining: 100, coldCap: 20, coldUsed: 0 }],
+      liveStatus: 'connected', cap: 100, used: 0, remaining: 100, coldCap: 20 as number | null, coldLimitEnabled: true, coldUsed: 0 }],
       policy: { inQuietHours: false, perContactHourly: 4, quietHours: '21:00–8:00' } };
     globalThis.fetch = async (_url, options) => {
       assert.equal((options?.headers as Record<string, string>)['x-api-key'], 'test-only-api-key');
       return new Response(JSON.stringify(provider), { status: 200 });
     };
     assert.equal((await readCevoxStatus()).numbers[0].cap, 100);
+    provider.numbers[0].coldCap = null;
+    provider.numbers[0].coldLimitEnabled = false;
+    const coldLimitDisabled = (await readCevoxStatus()).numbers[0];
+    assert.equal(coldLimitDisabled.coldCap, null);
+    assert.equal(coldLimitDisabled.coldLimitEnabled, false);
+    provider.numbers[0].coldCap = 20;
+    provider.numbers[0].coldLimitEnabled = true;
     let hourly = 0;
     let daily = 0;
     let contactHourly = 0;
@@ -84,6 +91,24 @@ async function main() {
     assert.equal(classifyMovementWebhookResult(200, rejected, 'id').status, 'pending');
     assert.equal(classifyMovementWebhookResult(200, { ...rejected, cevox_response: { code: 'unknown', error: 'Unknown' } }, 'id').status, 'uncertain');
     assert.equal(classifyMovementWebhookResult(200, { ...rejected, cevox_http_status: 500 }, 'id').status, 'uncertain');
+
+    const retryStatements: string[] = [];
+    const retryParameters: any[][] = [];
+    const retryDatabase: PortalDatabase = {
+      query: async () => ({ rows: [] }),
+      getClient: async () => ({
+        release() {},
+        async query(sql: string, params?: any[]) {
+          retryStatements.push(sql);
+          retryParameters.push(params || []);
+          if (sql.includes('FROM whatsapp_notification_attempts attempt')) return { rows: [{ notification_id: 'notification-id' }] };
+          return { rows: [] };
+        },
+      }),
+    };
+    assert.equal(await requeueVerifiedUnsentMovementNotification(retryDatabase, { attemptId: 'attempt-id', actorId: 'admin-id' }), 'notification-id');
+    assert.ok(retryStatements.some(sql => sql.includes("SET status = 'pending'")), 'Only an explicitly reviewed uncertainty is requeued');
+    assert.ok(retryParameters.some(params => params.includes('retry_verified_unsent')), 'Requeue is recorded in the audit log');
   } finally {
     globalThis.fetch = previousFetch;
     for (const key of Object.keys(process.env)) if (!(key in previousEnvironment)) delete process.env[key];
