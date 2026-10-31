@@ -57,7 +57,7 @@ export function LeadershipPointsTable(props: Props) {
                 <div className="points-podium-panel"><div className="points-podium-heading"><h3>Leading students</h3><span>Monthly honours</span></div>
                 <div role="group" aria-label="Leading students" className={`points-leaders ${classicPodium ? "is-podium" : "has-shared-places"}`} style={{ gridTemplateColumns: `repeat(${Math.min(featured.length, 3)}, minmax(0, 1fr))` }}>
                     {featured.map(student => <button key={student.adm_no} type="button" data-rank={student.rank} data-student-id={student.adm_no} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} onClick={() => onStudentClick(student)} className={`points-leader ${student.rank === 1 ? "is-first" : ""}`}>
-                        <span className="points-leader-visual"><PlaceFrame rank={student.rank} tied={student.tied} /><span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span></span>
+                        <span className="points-podium-slot"><span className="points-leader-visual"><PlaceFrame rank={student.rank} tied={student.tied} /><span className="points-portrait-wrap"><StudentPortrait student={student} featured /></span></span></span>
                         <span className="points-leader-name" title={student.name}>{student.name}</span>
                         <span className="points-place-label">{rankLabel(student.rank, student.tied)}</span>
                         <span className="points-leader-class">{student.standard}{student.isHafiz ? " · Hafiz" : ""}</span>
@@ -69,11 +69,11 @@ export function LeadershipPointsTable(props: Props) {
                     <div className="points-list-heading"><h3>The rankings</h3><span>Earned points</span></div>
                     <ol aria-label="Student point rankings" className="points-rankings">
                         {remaining.map(student => <li key={student.adm_no}><button type="button" data-rank={student.rank} data-student-id={student.adm_no} data-honour={student.rank <= 10 ? "true" : undefined} onClick={() => onStudentClick(student)} aria-label={`Open progress for ${rankLabel(student.rank, student.tied)}: ${student.name}`} className="points-student-row">
-                            <span className="points-row-rank" aria-label={rankLabel(student.rank, student.tied)}>{student.rank}</span>
+                            {student.rank <= 10 ? <PlaceFrame rank={student.rank} tied={student.tied} /> : <span className="points-row-rank" aria-label={rankLabel(student.rank, student.tied)}>{student.rank}</span>}
                             <StudentPortrait student={student} />
                             <span className="points-row-identity"><span>{student.name}</span><small>{student.standard} · {student.adm_no}{student.tied ? ` · ${rankLabel(student.rank, true)}` : ""}</small></span>
                             <span className="points-row-score">{points(student)}</span>
-                            {student.rank <= 10 ? <PlaceFrame rank={student.rank} tied={student.tied} /> : <ChevronRight className="points-row-arrow" aria-hidden="true" />}
+                            <ChevronRight className="points-row-arrow" aria-hidden="true" />
                         </button></li>)}
                     </ol>
                 </section>}

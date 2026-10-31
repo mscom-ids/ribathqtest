@@ -51,21 +51,31 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ notification_id: $('Validate and Build Message').first().json.notification_id, cevox_http_status: $json.statusCode, cevox_response: $json.body, ...($('Validate and Build Message').first().json.test_template_index === undefined ? {} : { test_template_index: $('Validate and Build Message').first().json.test_template_index, ...($('Validate and Build Message').first().json.test_template_bundle === true ? { test_template_bundle: true } : {}) }) }) }}",
+        "jsCode": "const source = $('Validate and Build Message').first().json;\nreturn [{ json: {\n  notification_id: source.notification_id,\n  cevox_http_status: $json.statusCode,\n  cevox_response: $json.body,\n} }];\n"
+      },
+      "id": "build-erp-response",
+      "name": "Build ERP Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
         "options": { "responseCode": 200 }
       },
       "id": "erp-response",
       "name": "Return Cevox Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
-      "position": [780, 0]
+      "position": [1040, 0]
     }
   ],
   "connections": {
     "ERP Webhook": { "main": [[{ "node": "Validate and Build Message", "type": "main", "index": 0 }]] },
     "Validate and Build Message": { "main": [[{ "node": "Send through Cevox", "type": "main", "index": 0 }]] },
-    "Send through Cevox": { "main": [[{ "node": "Return Cevox Result", "type": "main", "index": 0 }]] }
+    "Send through Cevox": { "main": [[{ "node": "Build ERP Response", "type": "main", "index": 0 }]] },
+    "Build ERP Response": { "main": [[{ "node": "Return Cevox Result", "type": "main", "index": 0 }]] }
   },
   "settings": {
     "executionOrder": "v1",

@@ -205,8 +205,22 @@ webhook path, credentials and production cutoff. Obsolete `test_template_index`
 and `test_template_bundle` requests are rejected rather than sending variants.
 
 The production n8n **Webhook** node must use **Using Respond to Webhook node**
-as its response mode. Its final **Return Cevox Result** node must return JSON,
-not an empty response, using this shape:
+as its response mode. After **Send through Cevox**, add a Code node named
+**Build ERP Response** with:
+
+```js
+const source = $('Validate and Build Message').first().json;
+return [{ json: {
+  notification_id: source.notification_id,
+  cevox_http_status: $json.statusCode,
+  cevox_response: $json.body,
+} }];
+```
+
+Connect that node to **Return Cevox Result**. Set its **Respond With** value to
+**First Incoming Item** and its response code to `200`. This returns the
+following JSON object without trying to parse a JSON string in the response
+field:
 
 ```json
 {

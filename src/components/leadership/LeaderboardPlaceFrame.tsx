@@ -8,6 +8,7 @@ export function LeaderboardPlaceFrame({ rank, tied }: { rank: number; tied: bool
     const id = useId().replace(/:/g, "")
     const silver = rank === 2
     const bronze = rank === 3
+    const honour = rank > 3
     const kind = rank === 1 ? "champion" : silver ? "silver" : bronze ? "bronze" : "honour"
     const count = bronze ? 10 : 9
     const leaves = Array.from({ length: count }, (_, index) => 102 + index * 128 / (count - 1))
@@ -36,11 +37,11 @@ export function LeaderboardPlaceFrame({ rank, tied }: { rank: number; tied: bool
     return <span className="points-place-frame" data-place={rank} data-award={kind} role="img" aria-label={`${rankLabel(rank, tied)} place distinction`}>
         <svg viewBox="0 0 120 112" fill="none" aria-hidden="true">
             <defs><linearGradient id={`laurel-${id}`} x1="22" y1="12" x2="94" y2="98" gradientUnits="userSpaceOnUse">
-                <stop stopColor={silver ? "#e2eafa" : "#ffe17a"} /><stop offset=".48" stopColor={silver ? "#a5b9d7" : "#ffc224"} /><stop offset="1" stopColor={silver ? "#839fc3" : "#e5a21c"} />
+                <stop stopColor={honour ? "var(--points-honour-light, #99c8c2)" : silver ? "#e2eafa" : "#ffe17a"} /><stop offset=".48" stopColor={honour ? "var(--points-honour-mid, #5a9696)" : silver ? "#a5b9d7" : "#ffc224"} /><stop offset="1" stopColor={honour ? "var(--points-honour-deep, #376e78)" : silver ? "#839fc3" : "#e5a21c"} />
             </linearGradient></defs>
             {[false, true].map(mirror => <g key={String(mirror)} transform={mirror ? "translate(120 0) scale(-1 1)" : undefined} fill={`url(#laurel-${id})`}>
                 <path d="M52.7 95.1A35 42 0 0 1 37.5 21.8" fill="none" stroke={`url(#laurel-${id})`} strokeWidth={rank === 1 ? 1.8 : 1.3} strokeLinecap="round" />
-                {leaves.map(angle => <g key={angle} stroke={silver ? "#6984ad" : "#ae7816"} strokeWidth=".4" strokeLinejoin="round"><path d={leafPath(angle, false)} />{rank <= 3 && <path d={leafPath(angle, true)} />}</g>)}
+                {leaves.map(angle => <g key={angle} stroke={honour ? "var(--points-honour-deep, #376e78)" : silver ? "#6984ad" : "#ae7816"} strokeWidth=".4" strokeLinejoin="round"><path d={leafPath(angle, false)} />{rank <= 3 && <path d={leafPath(angle, true)} />}</g>)}
             </g>)}
             {rank === 1 ? <g fill={`url(#laurel-${id})`}><rect x="51" y="92" width="5" height="11" rx="2" /><rect x="58" y="90" width="5" height="15" rx="2" /><rect x="65" y="92" width="5" height="11" rx="2" /></g>
                 : rank <= 3 ? <g stroke={silver ? "#a5bad7" : "#9aa8bb"} strokeWidth="2" strokeLinecap="round"><path d="M48 94l24 10M72 94l-24 10" /><path d="M60 96c-15-12-17 3-5 2M60 96c15-12 17 3 5 2" /></g>

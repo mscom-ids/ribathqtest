@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -26,7 +26,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import api from "@/lib/api"
-import { cachedGet } from "@/lib/api-cache"
+import { cachedGet, invalidateCache } from "@/lib/api-cache"
+import { resolveBackendUrl } from "@/lib/utils"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 // ── Constants ────────────────────────────────────────────────
@@ -145,6 +146,10 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
     const [hifzLogsLoading, setHifzLogsLoading] = useState(false)
     const [photoUploading, setPhotoUploading] = useState(false)
     const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+    const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
+    const [photoError, setPhotoError] = useState<string | null>(null)
+    const photoUploadRequest = useRef<AbortController | null>(null)
+    const photoInput = useRef<HTMLInputElement | null>(null)
     const [pincodeLoading, setPincodeLoading] = useState(false)
     const [pincodeError, setPincodeError] = useState<string | null>(null)
 
@@ -244,29 +249,62 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
     }
 
     // ── Photo upload ──────────────────────────────────────────
+    useEffect(() => () => { if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl) }, [photoPreviewUrl])
+    useEffect(() => () => { photoUploadRequest.current?.abort() }, [])
+
     async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        if (!e.target.files?.length) return
-        const studentName = String(studentData?.name || form.getValues("name") || "").trim()
-        if (!studentName || !/^R\d{3}$/.test(id)) {
-            console.error("Student name or admission number is unavailable for the R2 photo upload")
+        const input = e.currentTarget
+        const file = input.files?.[0]
+        if (!file) return
+        setPhotoError(null)
+        if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+            setPhotoError("Choose a JPG, PNG, GIF or WebP photo smaller than 5 MB.")
+            input.value = ""
             return
         }
+        const studentName = String(studentData?.name || form.getValues("name") || "").trim()
+        if (!studentName || !/^R\d{3}$/.test(id)) {
+            setPhotoError("The student's name and admission number are required before uploading a photo.")
+            input.value = ""
+            return
+        }
+        photoUploadRequest.current?.abort()
+        const request = new AbortController()
+        photoUploadRequest.current = request
+        // Show the selected bytes immediately, independently of storage caches.
+        setPhotoPreviewUrl(URL.createObjectURL(file))
         setPhotoUploading(true)
         const fd = new FormData()
-        fd.append('avatar', e.target.files[0])
+        fd.append('avatar', file)
         fd.append('student_name', studentName)
         fd.append('student_admission_number', id.toUpperCase())
         try {
-            const res = await api.post('/upload/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-            if (res.data.success) {
-                setPhotoUrl(res.data.filePath)
+            const res = await api.post('/upload/avatar', fd, { signal: request.signal, headers: { 'Content-Type': 'multipart/form-data' } })
+            if (request.signal.aborted) return
+            if (!res.data.success || typeof res.data.filePath !== "string" || !res.data.filePath.trim()) {
+                throw new Error("The photo upload did not finish. Select the photo again to retry.")
             }
-        } catch (err) { console.error("Upload error:", err) }
-        finally { setPhotoUploading(false) }
+            setPhotoUrl(res.data.filePath)
+        } catch (err: any) {
+            if (request.signal.aborted) return
+            setPhotoError(err.response?.data?.error || err.message || "Photo upload failed. Select the photo again to retry.")
+            input.value = ""
+        } finally {
+            if (photoUploadRequest.current === request) {
+                photoUploadRequest.current = null
+                setPhotoUploading(false)
+            }
+        }
     }
 
     // ── Load data ─────────────────────────────────────────────
     useEffect(() => {
+        let cancelled = false
+        photoUploadRequest.current?.abort()
+        photoUploadRequest.current = null
+        setPhotoUploading(false)
+        setPhotoPreviewUrl(null)
+        setPhotoError(null)
         async function loadData() {
             setFetching(true)
             setError(null)
@@ -275,11 +313,12 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                     cachedGet('/staff', undefined, 5 * 60_000).catch(() => null),
                     api.get(`/students/${id}`, { params: { academic_year_id: searchParams.get('academic_year_id') || undefined } }),
                 ])
+                if (cancelled) return
                 if (staffRes?.data?.success) setStaff(staffRes.data.staff)
                 if (res.data.success) {
                     const s = res.data.student
                     setStudentData(s)
-                    if (s.photo_url) setPhotoUrl(s.photo_url)
+                    setPhotoUrl(s.photo_url || null)
                     
                     form.reset({
                         name: s.name,
@@ -310,6 +349,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                     return
                 }
             } catch (err: any) {
+                if (cancelled) return
                 console.error("Failed to load student details:", err)
                 setError("Unable to process student data. Please ensure the backend is running and data is valid.")
                 setFetching(false)
@@ -319,6 +359,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
             setFetching(false)
         }
         loadData()
+        return () => { cancelled = true }
     }, [id, form])
 
     useEffect(() => {
@@ -346,6 +387,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
 
     // ── Save ──────────────────────────────────────────────────
     async function onSubmit(values: z.infer<typeof formSchema>) {
+        if (photoUploadRequest.current || photoUploading || photoError) return
         setLoading(true)
         const updates = {
             name: values.name, dob: values.dob || null,
@@ -396,6 +438,9 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                     comprehensive_details: { ...prev?.comprehensive_details, basic: updates.comprehensive_details.basic }
                 }))
                 setEditing(false)
+                setPhotoPreviewUrl(null)
+                invalidateCache('/students')
+                invalidateCache(`/students/${id}`)
                 setSaveSuccess(true)
                 setTimeout(() => setSaveSuccess(false), 3000)
             }
@@ -404,6 +449,12 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
     }
 
     function handleCancelEdit() {
+        photoUploadRequest.current?.abort()
+        photoUploadRequest.current = null
+        setPhotoUploading(false)
+        setPhotoPreviewUrl(null)
+        setPhotoError(null)
+        setPhotoUrl(studentData?.photo_url || null)
         const s = studentData
         if (!s) { setEditing(false); return }
         form.reset({
@@ -521,6 +572,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
     const hifzMentorName = staff.find(s => s.id === studentData?.hifz_mentor_id)?.name || null
     const schoolMentorName = staff.find(s => s.id === studentData?.school_mentor_id)?.name || null
     const madrasaMentorName = staff.find(s => s.id === studentData?.madrasa_mentor_id)?.name || null
+    const displayedPhotoUrl = photoPreviewUrl || resolveBackendUrl(photoUrl)
 
     // ── Render ────────────────────────────────────────────────
     return (
@@ -560,8 +612,8 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                         <div className="px-6 pt-6 pb-5 flex flex-col items-center text-center">
                             <div className="relative">
                                 <div className="h-[88px] w-[88px] rounded-xl overflow-hidden bg-[#e8ebfd] flex items-center justify-center text-4xl font-bold text-[#3d5ee1]">
-                                    {photoUrl
-                                        ? <img src={photoUrl} alt="Profile" className="h-full w-full object-cover" />
+                                    {displayedPhotoUrl
+                                        ? <img src={displayedPhotoUrl} alt="Profile" className="h-full w-full object-cover" />
                                         : studentData?.name?.charAt(0).toUpperCase()
                                     }
                                 </div>
@@ -719,7 +771,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                                         </Button>
                                     ) : (
                                         <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-                                            <Button size="sm" onClick={() => form.handleSubmit(onSubmit)()} disabled={loading}
+                                            <Button size="sm" onClick={() => form.handleSubmit(onSubmit)()} disabled={loading || photoUploading || Boolean(photoError)}
                                                 className="w-full md:w-auto bg-[#3d5ee1] hover:bg-[#3d5ee1]/90 text-white text-sm md:text-xs min-h-[44px] md:min-h-0">
                                                 {loading ? <><Loader2 className="mr-1.5 h-4 w-4 md:h-3.5 md:w-3.5 animate-spin" />Saving...</> : "Save Changes"}
                                             </Button>
@@ -735,9 +787,9 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                                         /* ── VIEW MODE ──────────────────────── */
                                         <div className="space-y-4 md:space-y-7">
                                             {/* Photo row */}
-                                            {photoUrl && (
+                                            {displayedPhotoUrl && (
                                                 <div className="p-4 md:p-0 bg-white md:bg-transparent border md:border-0 border-slate-200 rounded-xl md:rounded-none shadow-sm md:shadow-none flex items-center gap-4 md:pb-5 md:border-b dark:border-slate-800">
-                                                    <img src={photoUrl} alt="Student" className="h-16 w-16 rounded-xl object-cover ring-4 ring-slate-50 md:ring-slate-100 dark:ring-slate-700 shadow-sm" />
+                                                    <img src={displayedPhotoUrl} alt="Student" className="h-16 w-16 rounded-xl object-cover ring-4 ring-slate-50 md:ring-slate-100 dark:ring-slate-700 shadow-sm" />
                                                     <div>
                                                         <p className="text-[12px] md:text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Profile Photo</p>
                                                         <p className="text-xs text-slate-500">Photo on file</p>
@@ -803,24 +855,26 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">Student Photo</p>
                                                     <div className="flex items-center gap-4">
-                                                        {photoUrl && <img src={photoUrl} alt="Preview" className="h-14 w-14 rounded-xl object-cover ring-2 ring-slate-200 shadow-sm" />}
+                                                        {displayedPhotoUrl && <img src={displayedPhotoUrl} alt="Selected student photo preview" className="h-20 w-16 rounded-xl bg-slate-50 object-contain ring-2 ring-slate-200 shadow-sm dark:bg-slate-800" />}
                                                         <div className="flex-1">
-                                                            <Input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={photoUploading} />
-                                                            {photoUploading && <p className="text-xs text-slate-400 mt-1">Uploading...</p>}
+                                                            <Input ref={photoInput} aria-label="Choose student photo" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={handlePhotoUpload} disabled={photoUploading || loading} />
+                                                            {photoUploading && <p role="status" className="text-xs text-slate-500 mt-1">Uploading selected photo… Please wait before saving.</p>}
+                                                            {photoError && <p role="alert" className="text-xs text-red-600 mt-1">{photoError}</p>}
+                                                            {photoPreviewUrl && !photoUploading && !photoError && <p className="text-xs text-emerald-700 mt-1">New photo ready. Save Changes to update the student profile.</p>}
                                                         </div>
-                                                        {photoUrl && (
+                                                        {displayedPhotoUrl && (
                                                             <Button
                                                                 type="button"
                                                                 variant="outline"
                                                                 className="shrink-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                                onClick={() => setPhotoUrl(null)}
-                                                                disabled={photoUploading}
+                                                                onClick={() => { setPhotoUrl(null); setPhotoPreviewUrl(null); setPhotoError(null); if (photoInput.current) photoInput.current.value = "" }}
+                                                                disabled={photoUploading || loading}
                                                             >
                                                                 Remove photo
                                                             </Button>
                                                         )}
                                                     </div>
-                                                    {photoUrl === null && <p className="mt-2 text-xs text-slate-500">No photo will be shown after you save this profile.</p>}
+                                                    {!displayedPhotoUrl && <p className="mt-2 text-xs text-slate-500">No photo will be shown after you save this profile.</p>}
                                                 </div>
 
                                                 {/* Personal Info */}
@@ -1060,7 +1114,7 @@ export function StudentDetailView({ canEdit = true, backTo }: { canEdit?: boolea
 
                                                 {/* Action buttons */}
                                                 <div className="flex gap-3 pt-1">
-                                                    <Button type="submit" disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                                    <Button type="submit" disabled={loading || photoUploading || Boolean(photoError)} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                                                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                                         Save Changes
                                                     </Button>

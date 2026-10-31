@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { createHash } from 'node:crypto';
 
 const required = (key: string) => {
     const value = String(process.env[key] || '').trim();
@@ -40,7 +41,10 @@ export async function uploadStudentPhoto(input: {
     const bucket = required('R2_STUDENT_PHOTOS_BUCKET');
     const publicBaseUrl = required('R2_STUDENT_PHOTOS_PUBLIC_URL').replace(/\/+$/, '');
     const safeExtension = input.extension.replace(/[^a-z0-9]/gi, '').toLowerCase();
-    const key = `students/${admissionNumber}/${slug(input.studentName)}-${admissionNumber.toLowerCase()}.${safeExtension}`;
+    // Replacement images need a different URL: immutable browser/CDN caches must
+    // never serve an earlier student's photo for newly uploaded bytes.
+    const version = createHash('sha256').update(input.body).digest('hex').slice(0, 16);
+    const key = `students/${admissionNumber}/${slug(input.studentName)}-${admissionNumber.toLowerCase()}-${version}.${safeExtension}`;
 
     await client().send(new PutObjectCommand({
         Bucket: bucket,
