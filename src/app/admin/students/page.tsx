@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
+import { resolveBackendUrl } from "@/lib/utils"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 export type Student = {
@@ -181,7 +182,7 @@ function StudentTableRow({ student, returnPath, selectedYearId }: { student: Stu
                     <div className="relative flex-shrink-0">
                         {student.photo_url ? (
                             <img
-                                src={student.photo_url}
+                                src={resolveBackendUrl(student.photo_url)}
                                 alt={student.name}
                                 className="h-9 w-9 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-sm"
                             />
@@ -271,7 +272,7 @@ function StudentGridCard({ student, returnPath, selectedYearId }: { student: Stu
             <div className="flex items-center gap-3 px-4 py-3">
                 {student.photo_url ? (
                     <img
-                        src={student.photo_url}
+                        src={resolveBackendUrl(student.photo_url)}
                         alt={student.name}
                         className="h-10 w-10 rounded-full object-cover shadow-sm bg-slate-50"
                     />

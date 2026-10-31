@@ -28,6 +28,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { ProgressRing } from "@/components/parent/progress-ring"
 import { LeaveRequestModal } from "./leave-request-modal"
 import api from "@/lib/api"
+import { resolveBackendUrl } from "@/lib/utils"
 
 type StudentProfile = {
     adm_no: string
@@ -381,7 +382,7 @@ export default function ParentDashboard() {
                             </div>
                             <div className="flex shrink-0 flex-col items-center gap-3">
                                 <Avatar className="h-16 w-16 border-4 border-white/30 shadow-lg sm:h-20 sm:w-20">
-                                    <AvatarImage src={student.photo_url || undefined} alt={student.name} />
+                                    <AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.name} className="object-cover" />
                                     <AvatarFallback className="bg-white/15 text-xl font-black text-white">
                                         {student.name?.slice(0, 2).toUpperCase() || "ST"}
                                     </AvatarFallback>

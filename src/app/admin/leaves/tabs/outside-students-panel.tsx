@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { resolveBackendUrl } from "@/lib/utils"
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog"
@@ -119,7 +121,9 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
 
             {/* Student header */}
             <div className="flex items-center gap-3">
-                <div className={`h-11 w-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 ${
+                <Avatar className="h-11 w-11 rounded-xl shrink-0">
+                    <AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.student_name} className="object-cover" />
+                    <AvatarFallback className={`rounded-xl text-sm font-bold text-white ${
                     student.leave_type === 'institutional'
                         ? 'bg-gradient-to-br from-purple-500 to-indigo-600'
                         : student.leave_type === 'outdoor'
@@ -128,8 +132,9 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
                         ? 'bg-gradient-to-br from-orange-400 to-amber-500'
                         : 'bg-gradient-to-br from-blue-400 to-cyan-500'
                 }`}>
-                    {initials}
-                </div>
+                        {initials}
+                    </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{student.student_name}</p>
                     <p className="text-[11px] text-slate-500">

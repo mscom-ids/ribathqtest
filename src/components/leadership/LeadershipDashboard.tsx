@@ -168,7 +168,7 @@ export function LeadershipDashboard() {
     const [perfError, setPerfError] = useState<string | null>(null)
     const [selectedMonth, setSelectedMonth] = useState("")
 
-    type ChartStudent = { adm_no: string; name: string; standard: string | null }
+    type ChartStudent = { adm_no: string; name: string; standard: string | null; photo_url?: string | null }
     const [chartStudent, setChartStudent] = useState<ChartStudent | null>(null)
 
     const [now, setNow] = useState<Date | null>(null)
@@ -393,14 +393,15 @@ export function LeadershipDashboard() {
                                     <div className="overflow-y-auto divide-y divide-slate-100 dark:divide-gray-800/50" style={{ maxHeight: 560 }}>
                                         {filtered.map(student => (
                                             <div key={student.adm_no} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                                <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
-                                                    {student.name.charAt(0).toUpperCase()}
-                                                </div>
+                                                <Avatar className="h-10 w-10 shrink-0">
+                                                    <AvatarImage src={getPhotoUrl(student.photo_url)} alt={student.name} className="object-cover" />
+                                                    <AvatarFallback className="bg-[#e8ebfd] text-[#3d5ee1] font-bold text-sm">{student.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                </Avatar>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
                                                     <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
                                                 </div>
-                                                <Button aria-label={`Open progress for ${student.name}`} onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} variant="outline" size="sm" className="leadership-progress-button min-h-11 text-xs shrink-0">
+                                                <Button aria-label={`Open progress for ${student.name}`} onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })} variant="outline" size="sm" className="leadership-progress-button min-h-11 text-xs shrink-0">
                                                     <BookOpen className="h-3 w-3" /> Open progress
                                                 </Button>
                                             </div>

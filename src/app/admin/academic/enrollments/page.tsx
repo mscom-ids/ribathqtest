@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { resolveBackendUrl } from "@/lib/utils"
 
 
 const STANDARDS = ["Non-class", "5th", "6th", "7th", "8th", "9th", "10th", "Plus One", "Plus Two"] as const
@@ -198,7 +200,7 @@ export default function StudentPlacementPage() {
                     <p className="mt-3 text-xs text-slate-500">Changes apply only to the selected academic year. Earlier year placements are preserved.</p>
                 </div>
                 <div className="flex items-center justify-between px-5 py-3 text-sm"><button className="flex items-center gap-2 font-semibold text-blue-700" onClick={toggleVisible}>{allVisibleSelected ? <CheckSquare2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}{allVisibleSelected ? "Clear visible" : "Select visible"}</button><span className="text-slate-500">{selectedIds.length} selected</span></div>
-                {loading ? <div className="flex items-center justify-center py-24"><Loader2 className="h-7 w-7 animate-spin text-slate-400" /></div> : <div className="divide-y divide-slate-100">{filteredStudents.map(student => <button key={student.adm_no} onClick={() => toggleStudent(student.adm_no)} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-slate-50"><span className="text-blue-600">{selectedSet.has(student.adm_no) ? <CheckSquare2 className="h-5 w-5" /> : <Square className="h-5 w-5 text-slate-300" />}</span><span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-600">{student.name.slice(0, 1)}</span><span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-900">{student.name}</span><span className="text-xs text-slate-500">{student.adm_no}</span></span><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{student.standard}{student.division ? ` - ${student.division}` : ""}</span></button>)}</div>}
+                {loading ? <div className="flex items-center justify-center py-24"><Loader2 className="h-7 w-7 animate-spin text-slate-400" /></div> : <div className="divide-y divide-slate-100">{filteredStudents.map(student => <button key={student.adm_no} onClick={() => toggleStudent(student.adm_no)} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-slate-50"><span className="text-blue-600">{selectedSet.has(student.adm_no) ? <CheckSquare2 className="h-5 w-5" /> : <Square className="h-5 w-5 text-slate-300" />}</span><Avatar className="h-9 w-9 shrink-0"><AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.name} className="object-cover" /><AvatarFallback className="bg-slate-100 text-xs font-black text-slate-600">{student.name.slice(0, 1)}</AvatarFallback></Avatar><span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-900">{student.name}</span><span className="text-xs text-slate-500">{student.adm_no}</span></span><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{student.standard}{student.division ? ` - ${student.division}` : ""}</span></button>)}</div>}
             </section>
 
 

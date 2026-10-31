@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -56,6 +57,7 @@ type AllStudent = {
     name: string
     standard: string | null
     status: string
+    photo_url?: string | null
     hifz_mentor_id: string | null
     school_mentor_id: string | null
     madrasa_mentor_id: string | null
@@ -162,7 +164,7 @@ function SectionTable({
                                         <div className="flex items-center gap-2.5">
                                             <div className={`h-7 w-7 rounded-md flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden ${st.pill}`}>
                                                 {s.photo_url
-                                                    ? <img src={s.photo_url} alt={s.name} className="h-full w-full object-cover" />
+                                                    ? <img src={resolveBackendUrl(s.photo_url)} alt={s.name} className="h-full w-full object-cover" />
                                                     : s.name.charAt(0)
                                                 }
                                             </div>
@@ -778,9 +780,10 @@ export default function MentorDetailPage() {
                                                     {isSelected && <svg viewBox="0 0 10 8" className="h-2.5 w-2.5 fill-none stroke-white stroke-2"><polyline points="1,4 4,7 9,1" /></svg>}
                                                 </div>
                                                 {/* Avatar */}
-                                                <div className="h-7 w-7 rounded-md bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center text-xs font-bold shrink-0">
-                                                    {s.name.charAt(0)}
-                                                </div>
+                                                <Avatar className="h-7 w-7 rounded-md shrink-0">
+                                                    <AvatarImage src={resolveBackendUrl(s.photo_url)} alt={s.name} className="object-cover" />
+                                                    <AvatarFallback className="rounded-md bg-[#e8ebfd] text-[#3d5ee1] text-xs font-bold">{s.name.charAt(0)}</AvatarFallback>
+                                                </Avatar>
                                                 {/* Name / class */}
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[13px] font-medium text-slate-800 dark:text-slate-200 truncate">{s.name}</p>

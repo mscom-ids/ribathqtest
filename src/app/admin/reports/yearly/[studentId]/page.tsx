@@ -21,6 +21,7 @@ import {
     BookMarked,
 } from "lucide-react"
 import api from "@/lib/api"
+import { resolveBackendUrl } from "@/lib/utils"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types
@@ -299,7 +300,7 @@ export default function StudentYearlyReportPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                         {student.photo_url ? (
-                            <img src={student.photo_url} alt={student.name} className="h-14 w-14 rounded-xl object-cover border border-slate-200" />
+                            <img src={resolveBackendUrl(student.photo_url)} alt={student.name} className="h-14 w-14 rounded-xl object-cover border border-slate-200" />
                         ) : (
                             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-100 text-blue-700 text-xl font-black">
                                 {student.name?.charAt(0)}

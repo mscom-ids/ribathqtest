@@ -68,6 +68,7 @@ type AllStudent = {
     name: string
     standard: string | null
     status: string
+    photo_url?: string | null
 }
 
 type Session = {
@@ -919,9 +920,10 @@ export default function MentorDashboard() {
                                                     <div key={student.adm_no} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                                                         {/* Mobile */}
                                                         <div className="md:hidden flex items-center gap-3 px-4 py-3">
-                                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
-                                                                {student.name.charAt(0).toUpperCase()}
-                                                            </div>
+                                                            <Avatar className="h-10 w-10 shrink-0">
+                                                                <AvatarImage src={getPhotoUrl(student.photo_url)} alt={student.name} className="object-cover" />
+                                                                <AvatarFallback className="bg-[#e8ebfd] text-[#3d5ee1] font-bold text-sm">{student.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                            </Avatar>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-semibold text-sm text-slate-900 dark:text-white break-words leading-snug" style={{ wordBreak: "break-word" }}>
                                                                     {student.name}
@@ -931,22 +933,23 @@ export default function MentorDashboard() {
                                                                 </p>
                                                             </div>
                                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-8 text-[11px] bg-green-600 hover:bg-green-700 text-white px-3">
+                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })} size="sm" className="h-8 text-[11px] bg-green-600 hover:bg-green-700 text-white px-3">
                                                                     <BookOpen className="h-3 w-3 mr-1" /> Open progress
                                                                 </Button>
                                                             </div>
                                                         </div>
                                                         {/* Desktop */}
                                                         <div className="hidden md:flex items-center gap-3 px-5 py-3.5">
-                                                            <div className="h-10 w-10 rounded-full bg-[#e8ebfd] text-[#3d5ee1] flex items-center justify-center font-bold text-sm shrink-0">
-                                                                {student.name.charAt(0).toUpperCase()}
-                                                            </div>
+                                                            <Avatar className="h-10 w-10 shrink-0">
+                                                                <AvatarImage src={getPhotoUrl(student.photo_url)} alt={student.name} className="object-cover" />
+                                                                <AvatarFallback className="bg-[#e8ebfd] text-[#3d5ee1] font-bold text-sm">{student.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                            </Avatar>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{student.name}</p>
                                                                 <p className="text-[11px] text-slate-400 dark:text-gray-400">{student.adm_no}{student.standard ? ` · ${student.standard}` : ""}</p>
                                                             </div>
                                                             <div className="flex items-center gap-2 shrink-0">
-                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard })} size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
+                                                                <Button onClick={() => setChartStudent({ adm_no: student.adm_no, name: student.name, standard: student.standard, photo_url: student.photo_url })} size="sm" className="h-7 text-[11px] bg-green-600 hover:bg-green-700 text-white">
                                                                     <BookOpen className="h-3 w-3" /> Open progress
                                                                 </Button>
                                                             </div>

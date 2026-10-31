@@ -857,7 +857,7 @@ export const getMyLeaves = async (req: Request, res: Response) => {
         // Mentors can view and close leaves only for their assigned students.
         // This matches the authorization enforced by recordReturn.
         const assignedLeavesRes = await db.query(
-            `SELECT sl.*, s.name as student_name, s.standard, s.adm_no
+            `SELECT sl.*, s.name as student_name, s.standard, s.adm_no, s.photo_url
              FROM student_leaves sl
              JOIN students s ON sl.student_id = s.adm_no
              WHERE (s.hifz_mentor_id = $1 OR s.school_mentor_id = $1 OR s.madrasa_mentor_id = $1)
@@ -870,7 +870,7 @@ export const getMyLeaves = async (req: Request, res: Response) => {
 
         const leaves = allRows.map((row: any) => ({
             ...row,
-            student: { name: row.student_name, standard: row.standard, adm_no: row.adm_no }
+            student: { name: row.student_name, standard: row.standard, adm_no: row.adm_no, photo_url: row.photo_url }
         }));
 
         res.json({ success: true, leaves });

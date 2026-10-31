@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table"
 import api from "@/lib/api"
 import { cachedGet, invalidateCache } from "@/lib/api-cache"
-import { cn } from "@/lib/utils"
+import { cn, resolveBackendUrl } from "@/lib/utils"
 
 type SessionInfo = {
     id: string
@@ -888,7 +888,7 @@ export default function StaffAttendancePage() {
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar className="h-8 w-8 border">
-                                                        <AvatarImage src={student.photo_url || ""} />
+                                                        <AvatarImage src={resolveBackendUrl(student.photo_url)} className="object-cover" />
                                                         <AvatarFallback className="text-xs">{student.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                                                     </Avatar>
                                                     <div>

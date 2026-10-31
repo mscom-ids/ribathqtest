@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ThreeBallLoader } from "@/components/ui/three-ball-loader"
 
 type AlumniStatus = "all" | "completed" | "dropout" | "higher_education"
@@ -409,9 +410,10 @@ export default function AlumniPage() {
                                             <TableCell className="text-slate-400 text-xs font-medium">{pageStart + idx + 1}</TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
-                                                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center text-xs font-bold uppercase shrink-0">
-                                                        {(student.name || '?').charAt(0)}
-                                                    </div>
+                                                    <Avatar className="h-8 w-8 shrink-0">
+                                                        <AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.name} className="object-cover" />
+                                                        <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-blue-600 text-white text-xs font-bold uppercase">{(student.name || '?').charAt(0)}</AvatarFallback>
+                                                    </Avatar>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 uppercase truncate">{student.name}</p>
                                                         {student.father_name && (

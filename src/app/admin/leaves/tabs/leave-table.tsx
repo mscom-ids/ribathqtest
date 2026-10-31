@@ -3,6 +3,8 @@ import { ArrowRightLeft, Outdent, AlertTriangle, Building2, MapPin, CheckCircle2
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { resolveBackendUrl } from "@/lib/utils"
 import {
     Table,
     TableBody,
@@ -27,6 +29,7 @@ export interface StudentLeave {
         name: string
         adm_no: string
         standard: string
+        photo_url?: string | null
     }
 }
 
@@ -234,13 +237,16 @@ export function LeaveTable({ leaves, isLoading, onMarkExit, onMarkReturn, showGa
 
                                 {/* Header */}
                                 <div className="flex items-center gap-3">
-                                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 ${
+                                    <Avatar className="h-11 w-11 rounded-xl shrink-0">
+                                        <AvatarImage src={resolveBackendUrl(leave.student?.photo_url)} alt={leave.student?.name} className="object-cover" />
+                                        <AvatarFallback className={`rounded-xl text-sm font-bold text-white ${
                                         leave.leave_type === 'institutional' ? 'bg-gradient-to-br from-purple-500 to-indigo-600' :
                                         (leave.leave_type === 'out-campus' || leave.leave_type === 'personal') ? 'bg-gradient-to-br from-orange-400 to-amber-500' :
                                         'bg-gradient-to-br from-blue-400 to-cyan-500'
                                     }`}>
-                                        {initials}
-                                    </div>
+                                            {initials}
+                                        </AvatarFallback>
+                                    </Avatar>
                                     <div className="flex-1 min-w-0 pr-12">
                                         <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
                                             {(leave as any).is_group ? `${(leave as any).count} Students Released` : leave.student?.name}

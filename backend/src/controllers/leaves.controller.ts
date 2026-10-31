@@ -1115,7 +1115,7 @@ export const getLeavesFilter = async (req: Request, res: Response) => {
                         AND sl.actual_return_datetime IS NOT NULL
                         AND sl.status IN ('returned', 'completed')
                         AND NOW() <= COALESCE(return_edit.return_marked_at, sl.updated_at) + interval '6 hours') AS can_edit_return,
-                       s.name as student_name,
+                       s.name as student_name, s.photo_url as student_photo_url,
                        COALESCE(s.standard, s.school_standard, s.hifz_standard) as school_standard,
                        s.adm_no as student_adm_no
                 FROM student_leaves sl
@@ -1146,7 +1146,7 @@ export const getLeavesFilter = async (req: Request, res: Response) => {
             const grouped: any[] = [];
 
             for (const row of result.rows) {
-                const { student_name, school_standard, student_adm_no, ...rest } = row;
+                const { student_name, student_photo_url, school_standard, student_adm_no, ...rest } = row;
 
                 if (rest.group_id) {
                     if (!leavesMap.has(rest.group_id)) {
@@ -1169,7 +1169,7 @@ export const getLeavesFilter = async (req: Request, res: Response) => {
                     grouped.push({
                         ...rest,
                         is_group: false,
-                        student: { name: student_name, standard: school_standard || '', adm_no: student_adm_no }
+                        student: { name: student_name, standard: school_standard || '', adm_no: student_adm_no, photo_url: student_photo_url }
                     });
                 }
             }
