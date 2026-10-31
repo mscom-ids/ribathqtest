@@ -340,9 +340,12 @@ async function computeStudentAttendanceSummaries(
         schedulesByDay.set(day, [...(schedulesByDay.get(day) || []), schedule]);
     });
 
-    const cancellationsByScheduleDate = new Map<string, any>();
+    const cancellationsByScheduleDate = new Map<string, any[]>();
     cancellationsRes.rows.forEach(row => {
-        cancellationsByScheduleDate.set(`${row.schedule_id}|${toDateKey(row.date)}`, row);
+        const key = `${row.schedule_id}|${toDateKey(row.date)}`;
+        const rows = cancellationsByScheduleDate.get(key) || [];
+        rows.push(row);
+        cancellationsByScheduleDate.set(key, rows);
     });
 
     const marksByStudentScheduleDate = new Map<string, any>();
@@ -440,9 +443,14 @@ async function computeStudentAttendanceSummaries(
                 summary.plannedClasses += 1;
                 session.planned += 1;
 
-                const cancellation = cancellationsByScheduleDate.get(`${schedule.id}|${dateStr}`)
-                    || institutionalLeaveCancellationForStudent(schedule, student, dateStr, institutionalLeavesRes.rows);
-                if (isStandardCancelled(cancellation, student.attendance_standard || student.standard || '', student.adm_no)) {
+                // A cancellation for another student/class must not mask a
+                // matching cancellation or the institution's holiday.
+                const standard = student.attendance_standard || student.standard || '';
+                const explicitlyCancelled = (cancellationsByScheduleDate.get(`${schedule.id}|${dateStr}`) || [])
+                    .some(row => isStandardCancelled(row, standard, student.adm_no));
+                const institutionalCancellation = explicitlyCancelled ? null
+                    : institutionalLeaveCancellationForStudent(schedule, student, dateStr, institutionalLeavesRes.rows);
+                if (explicitlyCancelled || isStandardCancelled(institutionalCancellation, standard, student.adm_no)) {
                     summary.cancelledClasses += 1;
                     session.cancelled += 1;
                     summaries.set(studentId, summary);
@@ -526,7 +534,7 @@ export async function getStudentAttendanceSummaries(
     if (students.length === 0) return new Map<string, StudentAttendanceSummary>();
 
     return cachedResult(
-        makeCacheKey('attendance:student-summaries:v3', {
+        makeCacheKey('attendance:student-summaries:v4', {
             startDate,
             endDate,
             classType: classType || 'all',
