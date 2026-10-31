@@ -449,7 +449,12 @@ html.dark .points-podium-panel .points-grade:not(.is-outstanding) { color: #c7d4
 .leadership-leaderboard-overlay[data-state="closed"] { animation: leadership-disappear 120ms ease-in; }
 @keyframes leadership-appear { from { opacity: 0; } to { opacity: 1; } }
 @keyframes leadership-disappear { from { opacity: 1; } to { opacity: 0; } }
+.admin-leaderboard[data-state="open"] { animation: admin-leaderboard-enter 240ms ease-out; }
+.admin-leaderboard[data-state="closed"] { animation: admin-leaderboard-exit 180ms ease-in; }
+@keyframes admin-leaderboard-enter { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes admin-leaderboard-exit { from { transform: translateX(0); } to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) {
+  .admin-leaderboard[data-state] { animation: none; }
   .leadership-leaderboard[data-state], .leadership-leaderboard-overlay[data-state] { animation: none; }
   .leadership-mobile-menu[data-state], .leadership-menu-overlay[data-state], .leadership-outside-popover[data-state] { animation: none; }
 }

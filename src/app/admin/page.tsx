@@ -19,6 +19,7 @@ import {
     ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
 import EventModal from "@/components/shared/EventModal"
+import { AdminDashboardLeaderboard } from "@/components/admin/AdminDashboardLeaderboard"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n: number) { return n.toLocaleString() }
@@ -405,9 +406,12 @@ export default function AdminDashboardPage() {
                     <p className="mt-0.5 text-[13px] font-medium text-blue-100">Your institution's performance and operations for today.</p>
                 </div>
                 
-                <div className="z-10 flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-blue-50 backdrop-blur-sm">
-                    <CalendarDays className="h-4 w-4" />
-                    <DashboardUpdatedDate />
+                <div className="z-10 flex flex-wrap items-center gap-3">
+                    <AdminDashboardLeaderboard />
+                    <div className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-blue-50 backdrop-blur-sm">
+                        <CalendarDays className="h-4 w-4" />
+                        <DashboardUpdatedDate />
+                    </div>
                 </div>
             </div>
 
