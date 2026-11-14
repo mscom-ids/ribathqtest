@@ -185,7 +185,7 @@ function getJuzPortionValue(portion?: string | null) {
 }
 
 function formatHifzEntry(log: any) {
-    if (log.mode?.startsWith('Juz Revision')) {
+    if (log.mode?.startsWith('Juz Revision') || (log.mode === 'Recent Revision' && log.juz_number)) {
         return `Juz ${log.juz_number || '-'} ${log.juz_portion || log.juz_part || ''}`.trim();
     }
 
@@ -453,7 +453,7 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             db.query(
                 `SELECT hl.id, hl.student_id, hl.mode, hl.entry_date,
                         hl.surah_name, hl.start_v, hl.end_v, hl.start_page, hl.end_page,
-                        hl.juz_number, hl.juz_portion,
+                        hl.juz_number, hl.juz_portion, hl.juz_part,
                         st.name AS usthad_name
                  FROM hifz_logs hl
                  LEFT JOIN staff st ON hl.usthad_id = st.id

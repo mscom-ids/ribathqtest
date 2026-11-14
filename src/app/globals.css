@@ -1340,36 +1340,6 @@ html.dark .group:hover .group-hover\:bg-white {
   color: white !important;
 }
 
-@media (max-width: 639px) {
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) {
-    width: 100% !important;
-    min-width: 100% !important;
-    table-layout: fixed !important;
-    font-size: 0.75rem !important;
-  }
-
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) th:nth-child(1),
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) td:nth-child(1) {
-    width: 34% !important;
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) th:nth-child(2),
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) td:nth-child(2),
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) th:nth-child(3),
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) td:nth-child(3) {
-    width: 33% !important;
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) th:nth-child(4),
-  .parent-portal table:has(tbody tr td:nth-child(4):last-child) td:nth-child(4) {
-    display: none !important;
-  }
-}
-
 /* ── Print / PDF: isolate the report card, strip app chrome & browser header/footer ── */
 @media print {
   /* margin:0 removes Chrome's auto URL/date/title/page-number header & footer */

@@ -7,8 +7,8 @@ configured to give parents a separate, simple address:
 
 The application recognizes this hostname and presents only the parent login and
 parent home. It redirects `/parent` on the subdomain to the canonical parent
-home at `/home`. The existing `https://ribathulquran.in/parent` address remains
-available as a fallback.
+home at `/home`. The existing `https://ribathulquran.in/parent` address redirects
+visitors to the parent subdomain.
 
 ## 1. Configure the frontend deployment
 
@@ -34,7 +34,7 @@ create the record requested by the hosting provider:
 
 | Hosting setup | DNS record for `parents` |
 | --- | --- |
-| Vercel | `CNAME` → `cname.vercel-dns.com` |
+| Vercel | `CNAME` → the project-specific target shown in Settings → Domains |
 | Cloudflare Pages | `CNAME` → the provider-generated `<project>.pages.dev` target |
 | Same self-hosted server as the main website | `CNAME` → `ribathulquran.in` (or an `A`/`AAAA` record to the same server IP) |
 
@@ -75,6 +75,7 @@ After DNS propagation and deployment, check these URLs in an incognito window:
    `https://parents.ribathulquran.in/home`.
 3. `https://parents.ribathulquran.in/parent` redirects to `/home`.
 4. An admin or mentor account is not allowed to use the parent subdomain.
+5. Open the parent URL on Android Chrome and use **Install app** or **Add to home screen**. On iPhone Safari, use **Share → Add to Home Screen** and enable **Open as Web App** if shown. Launch the icon and confirm it opens the Parent Portal.
 
 DNS records cannot be created by an application deployment: the Cloudflare/DNS
 account owner must add the record and the hosting account owner must attach the

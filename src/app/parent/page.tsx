@@ -28,6 +28,8 @@ import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { ProgressRing } from "@/components/parent/progress-ring"
 import { LeaveRequestModal } from "./leave-request-modal"
 import api from "@/lib/api"
+import { SURAH_LIST } from "@/lib/data/surah-list"
+import { formatHifzLogLabel, getSurahId, toArabicNum } from "@/lib/hifz-progress"
 import { resolveBackendUrl } from "@/lib/utils"
 
 type StudentProfile = {
@@ -201,20 +203,44 @@ function shiftMonth(monthKey: string, direction: number) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 }
 
-function formatLogDetail(log: HifzLog) {
-    if (log.mode?.startsWith("Juz Revision")) {
-        return `Juz ${log.juz_number || "-"} ${log.juz_portion || log.juz_part || ""}`.trim()
+function formatLogDetail(log: Partial<HifzLog>) {
+    if (log.mode?.startsWith("Juz Revision") || (log.mode === "Recent Revision" && log.juz_number)) {
+        const juzPortion = log.juz_portion || log.juz_part
+        const juz = `جزء ${toArabicNum(log.juz_number || "–")}`
+        if (!juzPortion) return juz
+        if (juzPortion.toLowerCase() === "full") return `${juz} كامل`
+        return formatHifzLogLabel({ ...log, mode: "Juz Revision" })
     }
 
-    if (log.surah_name && log.start_v && log.end_v) {
-        return `${log.surah_name}: ${log.start_v}-${log.end_v}`
+    if (log.surah_name) {
+        const surahId = getSurahId(log.surah_name)
+        const surahName = SURAH_LIST[surahId - 1]?.name || log.surah_name
+        return formatHifzLogLabel({ ...log, surah_name: surahName })
     }
 
     if (log.start_page && log.end_page) {
-        return `Pages ${log.start_page}-${log.end_page}`
+        return `ص ${toArabicNum(log.start_page)}–${toArabicNum(log.end_page)}`
     }
 
-    return "Recorded session"
+    return "مُسجّل"
+}
+
+function formatWeeklyHifzEntry(entry: string) {
+    // Weekly reports return display strings, while recent entries contain the underlying fields.
+    const juz = /^Juz (\d+|-)(?: (.+))?$/.exec(entry)
+    if (juz) {
+        return formatLogDetail({ mode: "Juz Revision", juz_number: Number(juz[1]) || undefined, juz_portion: juz[2] })
+    }
+
+    const pages = /^Pages (\d+)-(\d+)$/.exec(entry)
+    if (pages) return formatLogDetail({ start_page: Number(pages[1]), end_page: Number(pages[2]) })
+
+    const verses = /^(.+) (\d+)-(\d+)$/.exec(entry)
+    if (verses) {
+        return formatLogDetail({ surah_name: verses[1], start_v: Number(verses[2]), end_v: Number(verses[3]) })
+    }
+
+    return entry === "Recorded" ? formatLogDetail({}) : entry
 }
 
 function percentage(part: number, total: number) {
@@ -344,13 +370,13 @@ export default function ParentDashboard() {
                         <h1 className="text-2xl font-black text-slate-950">Parent Progress Portal</h1>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button onClick={() => changeMonth(-1)} variant="outline" size="icon" className="h-11 w-11 rounded-2xl">
+                        <Button onClick={() => changeMonth(-1)} aria-label="Previous month" variant="outline" size="icon" className="h-11 w-11 rounded-2xl">
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <div className="flex h-11 min-w-[170px] items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black">
                             {formatMonth(month)}
                         </div>
-                        <Button onClick={() => changeMonth(1)} variant="outline" size="icon" className="h-11 w-11 rounded-2xl">
+                        <Button onClick={() => changeMonth(1)} aria-label="Next month" variant="outline" size="icon" className="h-11 w-11 rounded-2xl">
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                         <Button onClick={() => loadDashboard({ silent: true })} disabled={refreshing} variant="outline" className="h-11 gap-2 rounded-2xl">
@@ -364,76 +390,93 @@ export default function ParentDashboard() {
                     </div>
                 </header>
 
-                <section className="no-print grid gap-4 lg:grid-cols-[1fr_360px]">
-                    <div className="relative overflow-hidden rounded-[34px] bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 p-5 text-white shadow-xl shadow-blue-200/70 sm:p-7 lg:min-h-[285px]">
-                        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10" />
-                        <div className="pointer-events-none absolute -left-16 bottom-0 h-52 w-52 rounded-full bg-sky-300/20" />
-                        <div className="relative flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                                <button onClick={() => router.back()} className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur transition hover:bg-white/25 lg:hidden" aria-label="Back">
+                {tab === "summary" ? (
+                    <section className="no-print grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                        <div className="relative overflow-hidden rounded-[34px] bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 p-5 text-white shadow-xl shadow-blue-200/70 sm:p-7 lg:min-h-[285px]">
+                            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10" />
+                            <div className="pointer-events-none absolute -left-16 bottom-0 h-52 w-52 rounded-full bg-sky-300/20" />
+                            <div className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 lg:items-start">
+                                <button onClick={() => router.back()} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur transition hover:bg-white/25 lg:hidden" aria-label="Back">
                                     <ChevronLeft className="h-5 w-5" />
                                 </button>
-                                <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-100">Welcome back</p>
-                                <h2 className="mt-2 truncate text-3xl font-black leading-tight sm:text-5xl">{student.name}</h2>
-                                <p className="mt-3 text-sm font-bold text-blue-100 sm:text-base">
-                                    {(student.hifz_standard || student.standard || "Standard not set")} - {student.adm_no}
-                                </p>
-                                <p className="mt-1 text-sm font-semibold text-blue-100/90">{formatMonth(month)} progress report</p>
+                                <div className="col-start-2 row-start-1 flex items-center gap-3">
+                                    <Avatar className="h-16 w-16 border-4 border-white/30 shadow-lg sm:h-20 sm:w-20">
+                                        <AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.name} className="object-cover" />
+                                        <AvatarFallback className="bg-white/15 text-xl font-black text-white">
+                                            {student.name?.slice(0, 2).toUpperCase() || "ST"}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <button
+                                        onClick={() => loadDashboard({ silent: true })}
+                                        disabled={refreshing}
+                                        aria-label="Refresh"
+                                        className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur transition hover:bg-white/25 lg:hidden"
+                                    >
+                                        <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                                    </button>
+                                </div>
+                                <div className="col-span-2 min-w-0 lg:col-span-1 lg:col-start-1 lg:row-start-1">
+                                    <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-100">Welcome back</p>
+                                    <h2 className="mt-2 wrap-anywhere text-3xl font-black leading-tight sm:text-5xl">{student.name}</h2>
+                                    <p className="mt-3 text-sm font-bold text-blue-100 sm:text-base">
+                                        {(student.hifz_standard || student.standard || "Standard not set")} - {student.adm_no}
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold text-blue-100/90">{formatMonth(month)} progress report</p>
+                                </div>
                             </div>
-                            <div className="flex shrink-0 flex-col items-center gap-3">
-                                <Avatar className="h-16 w-16 border-4 border-white/30 shadow-lg sm:h-20 sm:w-20">
-                                    <AvatarImage src={resolveBackendUrl(student.photo_url)} alt={student.name} className="object-cover" />
-                                    <AvatarFallback className="bg-white/15 text-xl font-black text-white">
-                                        {student.name?.slice(0, 2).toUpperCase() || "ST"}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <button
-                                    onClick={() => loadDashboard({ silent: true })}
-                                    disabled={refreshing}
-                                    aria-label="Refresh"
-                                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur transition hover:bg-white/25 lg:hidden"
-                                >
-                                    <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+
+                            <div className="relative mt-6 grid items-center gap-3 sm:mt-8 sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-5">
+                                <div className="flex justify-center">
+                                    <ProgressRing percentage={attendancePercent} size={116} strokeWidth={11} color="text-yellow-300" trackColor="text-white/20" labelColor="text-white" />
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <HeroMini label="Attendance" value={`${attendance?.attendedClasses || 0}/${totalClasses}`} />
+                                    <HeroMini label="Hifz" value={`${Math.round(progress)}%`} />
+                                    <HeroMini label="Grade" value={hifzSummary?.grade || "-"} />
+                                </div>
+                            </div>
+
+                            <div className="relative mt-5 flex items-center justify-between gap-2 rounded-2xl bg-white/12 p-2 backdrop-blur lg:hidden">
+                                <button onClick={() => changeMonth(-1)} aria-label="Previous month" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20">
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <p className="flex-1 text-center text-sm font-black">{formatMonth(month)}</p>
+                                <button onClick={() => changeMonth(1)} aria-label="Next month" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20">
+                                    <ChevronRight className="h-4 w-4" />
                                 </button>
                             </div>
                         </div>
 
-                        <div className="relative mt-8 grid grid-cols-[112px_1fr] items-center gap-5 sm:grid-cols-[140px_1fr]">
-                            <div className="flex justify-center">
-                                <ProgressRing percentage={attendancePercent} size={116} strokeWidth={11} color="text-yellow-300" trackColor="text-white/20" labelColor="text-white" />
+                        <aside className="hidden rounded-[34px] border border-white/80 bg-white/85 p-5 shadow-sm shadow-blue-100/70 backdrop-blur lg:block">
+                            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Quick actions</p>
+                            <div className="mt-4 grid gap-3">
+                                <ActionButton icon={ClipboardList} label="Request leave" onClick={() => setLeaveOpen(true)} />
+                                <ActionButton icon={Download} label="Download report" onClick={() => window.print()} />
+                                <ActionButton icon={RefreshCw} label="Refresh progress" onClick={() => loadDashboard({ silent: true })} loading={refreshing} />
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                                <HeroMini label="Attendance" value={`${attendance?.attendedClasses || 0}/${totalClasses}`} />
-                                <HeroMini label="Hifz" value={`${Math.round(progress)}%`} />
-                                <HeroMini label="Grade" value={hifzSummary?.grade || "-"} />
+                            <div className="mt-5 rounded-[26px] bg-gradient-to-br from-slate-950 to-slate-800 p-5 text-white">
+                                <p className="text-sm font-black">Current mentor</p>
+                                <p className="mt-2 text-xl font-black leading-snug">{student.hifz_mentor || "Unassigned"}</p>
+                                <p className="mt-3 text-xs font-semibold text-slate-300">Reports are generated from approved attendance, Hifz, and exam records.</p>
                             </div>
-                        </div>
-
-                        <div className="relative mt-5 flex items-center justify-between gap-2 rounded-2xl bg-white/12 p-2 backdrop-blur lg:hidden">
-                            <button onClick={() => changeMonth(-1)} aria-label="Previous month" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20">
+                        </aside>
+                    </section>
+                ) : (
+                    <div className="no-print flex items-center gap-2 rounded-2xl border border-white/80 bg-white/90 p-2 shadow-sm shadow-blue-100/70 lg:hidden">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <Button onClick={() => changeMonth(-1)} aria-label="Previous month" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl">
                                 <ChevronLeft className="h-4 w-4" />
-                            </button>
+                            </Button>
                             <p className="flex-1 text-center text-sm font-black">{formatMonth(month)}</p>
-                            <button onClick={() => changeMonth(1)} aria-label="Next month" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20">
+                            <Button onClick={() => changeMonth(1)} aria-label="Next month" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-xl">
                                 <ChevronRight className="h-4 w-4" />
-                            </button>
+                            </Button>
                         </div>
+                        <Button onClick={() => loadDashboard({ silent: true })} disabled={refreshing} aria-label="Refresh" variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl">
+                            <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                        </Button>
                     </div>
-
-                    <aside className="hidden rounded-[34px] border border-white/80 bg-white/85 p-5 shadow-sm shadow-blue-100/70 backdrop-blur lg:block">
-                        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Quick actions</p>
-                        <div className="mt-4 grid gap-3">
-                            <ActionButton icon={ClipboardList} label="Request leave" onClick={() => setLeaveOpen(true)} />
-                            <ActionButton icon={Download} label="Download report" onClick={() => window.print()} />
-                            <ActionButton icon={RefreshCw} label="Refresh progress" onClick={() => loadDashboard({ silent: true })} loading={refreshing} />
-                        </div>
-                        <div className="mt-5 rounded-[26px] bg-gradient-to-br from-slate-950 to-slate-800 p-5 text-white">
-                            <p className="text-sm font-black">Current mentor</p>
-                            <p className="mt-2 text-xl font-black leading-snug">{student.hifz_mentor || "Unassigned"}</p>
-                            <p className="mt-3 text-xs font-semibold text-slate-300">Reports are generated from approved attendance, Hifz, and exam records.</p>
-                        </div>
-                    </aside>
-                </section>
+                )}
 
                 <Tabs value={tab} onValueChange={setTab} className="no-print mt-5">
                     <div className="hidden rounded-[26px] border border-white/80 bg-white/85 p-2 shadow-sm shadow-blue-100/70 backdrop-blur lg:flex">
@@ -484,7 +527,7 @@ export default function ParentDashboard() {
                                 <InfoTile icon={ClipboardList} label="Month" value={formatMonth(data.period.month)} />
                             </div>
 
-                            <div className="grid gap-2 lg:hidden">
+                            <div className="grid gap-2 lg:grid-cols-2">
                                 <Button onClick={() => setLeaveOpen(true)} variant="outline" className="h-12 justify-start gap-3 rounded-2xl">
                                     <ClipboardList className="h-4 w-4 text-blue-700" />
                                     Request leave
@@ -493,7 +536,7 @@ export default function ParentDashboard() {
                                     <Download className="h-4 w-4" />
                                     Download monthly report PDF
                                 </Button>
-                                <Button onClick={handleLogout} variant="outline" className="h-12 justify-start gap-3 rounded-2xl text-red-600">
+                                <Button onClick={handleLogout} variant="outline" className="h-12 justify-start gap-3 rounded-2xl text-red-600 lg:hidden">
                                     <LogOut className="h-4 w-4" />
                                     Logout
                                 </Button>
@@ -524,9 +567,9 @@ export default function ParentDashboard() {
 
 function HeroMini({ label, value }: { label: string; value: string }) {
     return (
-        <div className="min-h-[78px] rounded-2xl bg-white/15 px-3 py-3 text-center backdrop-blur">
-            <p className="truncate text-2xl font-black leading-none">{value}</p>
-            <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-blue-100 sm:text-[11px]">{label}</p>
+        <div className="flex min-h-[78px] min-w-0 flex-col justify-center rounded-2xl bg-white/15 px-1 py-3 text-center backdrop-blur sm:px-3">
+            <p className="wrap-anywhere text-lg font-black leading-none sm:text-2xl">{value}</p>
+            <p className="mt-2 wrap-anywhere text-[9px] font-black uppercase tracking-wide text-blue-100 sm:text-[11px]">{label}</p>
         </div>
     )
 }
@@ -727,6 +770,28 @@ function AttendancePanel({ attendance, attendancePercent, totalClasses }: {
 
 type HifzRangeFilter = 'this_week' | 'last_week' | 'this_month' | 'year_summary'
 
+type HifzWeekColumn = {
+    key: 'new_verses' | 'recent_revision' | 'juz_revision' | 'new_revision' | 'old_revision'
+    label: string
+    arabic: string
+    color: string
+    total: (summary: HifzSummary) => string
+}
+
+const HIFZ_WEEK_COLUMNS: HifzWeekColumn[] = [
+    { key: 'new_verses', label: 'New Verses', arabic: 'حفظ يومي', color: 'text-indigo-700', total: (summary) => `${summary.new_pages} pages` },
+    {
+        key: 'recent_revision', label: 'Recent Revision', arabic: 'تسميع', color: 'text-violet-700',
+        total: (summary) => summary.recent_pages ? `${summary.recent_pages} pages` : `${summary.recent_days} days`,
+    },
+    { key: 'juz_revision', label: 'Juz Revision', arabic: 'مراجعة', color: 'text-sky-700', total: (summary) => `${summary.juz_revision} juz` },
+]
+
+const HAFIZ_WEEK_COLUMNS: HifzWeekColumn[] = [
+    { key: 'new_revision', label: 'New Revision', arabic: 'مراجعة جديدة', color: 'text-emerald-700', total: (summary) => `${summary.new_revision} juz` },
+    { key: 'old_revision', label: 'Old Revision', arabic: 'مراجعة قديمة', color: 'text-amber-700', total: (summary) => `${summary.old_revision} juz` },
+]
+
 function todayStr() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
 }
@@ -758,6 +823,108 @@ function filterSummary(weekly: HifzWeek[], filter: HifzRangeFilter): HifzSummary
     }), { new_pages: 0, recent_pages: 0, recent_days: 0, juz_revision: 0, new_revision: 0, old_revision: 0 })
 }
 
+function HifzWeekCard({ week, columns }: { week: HifzWeek; columns: HifzWeekColumn[] }) {
+    const firstDate = week.days[0]?.date
+    const lastDate = week.days[week.days.length - 1]?.date
+
+    return (
+        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b bg-slate-50 px-3 py-2.5 sm:px-4">
+                <h3 className="text-sm font-bold text-slate-700">Week {week.week}</h3>
+                {firstDate && lastDate && (
+                    <span className="text-xs text-slate-500">{formatDate(firstDate)} – {formatDate(lastDate)}</span>
+                )}
+            </div>
+
+            <ul className="divide-y divide-slate-100 md:hidden">
+                {week.days.map((day) => {
+                    const entries = columns.filter(({ key }) => day[key].length > 0)
+                    return (
+                        <li key={day.date} className="px-3 py-2.5 sm:px-4">
+                            <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                                <time dateTime={day.date} className={entries.length ? "font-bold text-slate-800" : "font-semibold text-slate-500"}>
+                                    {formatDate(day.date)}
+                                </time>
+                                <span className="text-xs text-slate-500">{day.day}</span>
+                            </div>
+                            {entries.length > 0 && (
+                                <dl className="mt-2 space-y-1.5 text-sm">
+                                    {entries.map(({ key, label, arabic, color }) => (
+                                        <div key={key} className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-2">
+                                            <dt className="text-xs font-medium text-slate-500">
+                                                {label}
+                                                <span lang="ar" dir="rtl" className="block text-left font-normal">{arabic}</span>
+                                            </dt>
+                                            <dd className={`${color} [overflow-wrap:anywhere]`}>{joinEntries(day[key])}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            )}
+                            {day.recorded_by?.length > 0 && (
+                                <p className="mt-2 text-xs text-slate-500 [overflow-wrap:anywhere]">Recorded by {day.recorded_by.join(', ')}</p>
+                            )}
+                        </li>
+                    )
+                })}
+            </ul>
+            <div className="border-t bg-indigo-50 px-3 py-2.5 text-xs sm:px-4 md:hidden">
+                <p className="font-bold text-indigo-800">Week Total</p>
+                <dl className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {columns.map(({ key, label, color, total }) => (
+                        <div key={key}>
+                            <dt className="text-slate-600">{label}</dt>
+                            <dd className={`font-bold ${color}`}>{total(week.summary)}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </div>
+
+            <table className="hidden w-full table-fixed text-sm md:table">
+                <thead>
+                    <tr className="border-b bg-slate-50/50 text-left text-xs text-slate-500">
+                        <th scope="col" className="w-32 px-3 py-3 font-semibold uppercase tracking-wide">Date</th>
+                        {columns.map(({ key, label, arabic }) => (
+                            <th key={key} scope="col" className="px-3 py-3 font-semibold uppercase tracking-wide">
+                                {label}
+                                <span lang="ar" dir="rtl" className="block text-left font-normal text-slate-500">{arabic}</span>
+                            </th>
+                        ))}
+                        <th scope="col" className="px-3 py-3 font-semibold uppercase tracking-wide">Recorded by</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {week.days.map((day) => {
+                        const hasEntry = columns.some(({ key }) => day[key].length > 0)
+                        return (
+                            <tr key={day.date} className={`border-t ${hasEntry ? 'hover:bg-slate-50' : 'opacity-60'}`}>
+                                <td className="px-3 py-3">
+                                    <time dateTime={day.date} className="block font-bold text-slate-800">{formatDate(day.date)}</time>
+                                    <span className="text-xs font-medium text-slate-500">{day.day}</span>
+                                </td>
+                                {columns.map(({ key, color }) => (
+                                    <td key={key} className={`px-3 py-3 [overflow-wrap:anywhere] ${color}`}>{joinEntries(day[key])}</td>
+                                ))}
+                                <td className="px-3 py-3 text-xs font-medium text-slate-600 [overflow-wrap:anywhere]">
+                                    {day.recorded_by?.join(', ') || <span className="text-slate-300">–</span>}
+                                </td>
+                            </tr>
+                        )
+                    })}
+                </tbody>
+                <tfoot>
+                    <tr className="border-t bg-indigo-50 font-bold">
+                        <th scope="row" className="px-3 py-2.5 text-left text-indigo-800">Week Total</th>
+                        {columns.map(({ key, color, total }) => (
+                            <td key={key} className={`px-3 py-2.5 ${color}`}>{total(week.summary)}</td>
+                        ))}
+                        <td />
+                    </tr>
+                </tfoot>
+            </table>
+        </section>
+    )
+}
+
 function HifzPanel({ report, logs, monthlyReports }: {
     report?: HifzReport
     logs: HifzLog[]
@@ -779,15 +946,17 @@ function HifzPanel({ report, logs, monthlyReports }: {
     ]
 
     return (
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-4 sm:space-y-5">
             {/* ── Filter bar ── */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm w-full sm:flex sm:w-auto sm:items-center sm:gap-1.5">
+                <div className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-4" role="group" aria-label="Hifz report period">
                     {RANGE_OPTS.map(opt => (
                         <button
+                            type="button"
                             key={opt.key}
                             onClick={() => setRangeFilter(opt.key)}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all w-full text-center sm:w-auto ${
+                            aria-pressed={rangeFilter === opt.key}
+                            className={`min-h-9 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition-colors ${
                                 rangeFilter === opt.key
                                     ? 'bg-indigo-600 text-white shadow'
                                     : 'text-slate-500 hover:bg-slate-100'
@@ -797,26 +966,23 @@ function HifzPanel({ report, logs, monthlyReports }: {
                         </button>
                     ))}
                 </div>
-                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-                    <Badge variant="outline" className="text-xs">{formatMonth(report?.month)}</Badge>
-                    {isHafiz && (
-                        <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                            ✦ Hafiz
-                        </span>
-                    )}
-                </div>
+                {isHafiz && (
+                    <span className="self-start rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 sm:self-auto">
+                        ✦ Hafiz
+                    </span>
+                )}
             </div>
 
             {/* ── Year Summary view ── */}
             {rangeFilter === 'year_summary' ? (
-                <Card className="rounded-xl border-slate-200">
-                    <CardHeader className="pb-3">
+                <Card className="min-w-0 gap-4 rounded-xl border-slate-200 py-4 sm:py-6">
+                    <CardHeader className="px-3 sm:px-6">
                         <CardTitle className="text-base">Year Summary</CardTitle>
                         <p className="text-xs text-slate-500">Available monthly hifz data</p>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-3 sm:px-6">
                         {monthlyReports.length ? (
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Year summary table">
                                 <table className="min-w-[600px] w-full text-sm">
                                     <thead>
                                         <tr className="border-b text-left text-xs uppercase text-slate-500">
@@ -867,17 +1033,15 @@ function HifzPanel({ report, logs, monthlyReports }: {
                 </Card>
             ) : (
                 <>
-                    {/* ── Desktop two-column layout: Stats sidebar + Weekly table ── */}
-                    <div className="grid gap-5 md:grid-cols-[260px_1fr] lg:grid-cols-[280px_1fr] items-start">
-                        {/* ── Left: stat cards ── */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-col gap-4">
-                            <Card className="rounded-xl border-slate-200">
-                                <CardHeader className="pb-2">
+                    <div className="grid items-start gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+                        <div className="grid min-w-0 gap-3 min-[550px]:grid-cols-2 xl:grid-cols-1">
+                            <Card className="min-w-0 gap-3 rounded-xl border-slate-200 py-4">
+                                <CardHeader className="px-3 sm:px-4">
                                     <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
                                         {rangeFilter === 'this_week' ? 'This Week' : rangeFilter === 'last_week' ? 'Last Week' : 'This Month'}
                                     </CardTitle>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
+                                <CardContent className="space-y-3 px-3 sm:px-4">
                                     {isHafiz ? (
                                         <>
                                             <StatRow label="New Revision" arabic="مراجعة جديدة" value={valueText(activeSummary?.new_revision, " juz")} color="text-emerald-600" />
@@ -902,10 +1066,10 @@ function HifzPanel({ report, logs, monthlyReports }: {
                             </Card>
 
                             {report?.summary.grade && (
-                                <Card className={report.summary.grade === 'O' ? "rounded-xl border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 ring-1 ring-amber-200" : "rounded-xl border-slate-200 bg-gradient-to-br from-indigo-50 to-white"}>
-                                    <CardContent className="flex flex-col items-center py-5">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Monthly Grade</p>
-                                        <p className="mt-1 text-5xl font-black text-indigo-700">{report.summary.grade === 'O' ? '★ O' : report.summary.grade}</p>
+                                <Card className={`min-w-0 justify-center rounded-xl py-4 ${report.summary.grade === 'O' ? "border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 ring-1 ring-amber-200" : "border-slate-200 bg-gradient-to-br from-indigo-50 to-white"}`}>
+                                    <CardContent className="flex flex-col items-center px-3 text-center sm:px-4">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monthly Grade</p>
+                                        <p className="mt-1 text-3xl font-black leading-tight text-indigo-700 sm:text-4xl">{report.summary.grade === 'O' ? '★ O' : report.summary.grade}</p>
                                         {report.summary.percentage != null && (
                                             <p className="mt-1 text-sm text-slate-500">{report.summary.points?.totalPoints ?? report.summary.percentage} points · +{report.summary.points?.bonusPoints ?? 0} bonus</p>
                                         )}
@@ -915,122 +1079,11 @@ function HifzPanel({ report, logs, monthlyReports }: {
                             )}
                         </div>
 
-                        {/* ── Right: Weekly breakdown ── */}
-                        <div className="space-y-4">
+                        <div className="min-w-0 space-y-4">
                             {visibleWeeks.length ? visibleWeeks.map((week) => (
-                                <div key={week.week} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                                    {/* Week header */}
-                                    <div className="flex flex-col gap-1 border-b bg-slate-50 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                                        <span className="text-sm font-bold text-slate-700">Week {week.week}</span>
-                                        <span className="text-xs text-slate-400">
-                                            {week.days[0]?.date && week.days[week.days.length - 1]?.date &&
-                                                `${formatDate(week.days[0].date)} – ${formatDate(week.days[week.days.length - 1].date)}`}
-                                        </span>
-                                    </div>
-
-                                    <div className="overflow-x-auto">
-                                        {isHafiz ? (
-                                            <table className="w-full table-fixed text-xs sm:min-w-[560px] sm:text-sm">
-                                                <thead>
-                                                    <tr className="border-b bg-slate-50/50 text-left text-xs font-semibold text-slate-500">
-                                                        <th className="w-[34%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-44 sm:px-4">Date</th>
-                                                        <th className="w-[33%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-auto sm:px-4">
-                                                            New Revision <span className="font-normal normal-case text-slate-300">مراجعة جديدة</span>
-                                                        </th>
-                                                        <th className="w-[33%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-auto sm:px-4">
-                                                            Old Revision <span className="font-normal normal-case text-slate-300">مراجعة قديمة</span>
-                                                        </th>
-                                                        <th className="hidden px-4 py-3 font-semibold uppercase tracking-wide sm:table-cell">Recorded by</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {week.days.map((day) => {
-                                                        const hasEntry = day.new_revision.length > 0 || day.old_revision.length > 0
-                                                        return (
-                                                            <tr key={day.date} className={`border-t transition-colors ${
-                                                                hasEntry ? 'hover:bg-slate-50' : 'opacity-50'
-                                                            }`}>
-                                                                <td className="px-3 py-3 sm:px-4">
-                                                                    <span className="font-bold text-slate-800">{formatDate(day.date)}</span>
-                                                                    <span className="ml-1.5 text-xs font-medium text-slate-400">{day.day}</span>
-                                                                </td>
-                                                                <td className="px-3 py-3 text-emerald-700 sm:px-4">{joinEntries(day.new_revision) || <span className="text-slate-300">–</span>}</td>
-                                                                <td className="px-3 py-3 text-amber-700 sm:px-4">{joinEntries(day.old_revision) || <span className="text-slate-300">–</span>}</td>
-                                                                <td className="hidden px-4 py-3 sm:table-cell">
-                                                                    {day.recorded_by?.length ? (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                                                            {day.recorded_by.join(', ')}
-                                                                        </span>
-                                                                    ) : <span className="text-slate-300">–</span>}
-                                                                </td>
-                                                            </tr>
-                                                        )
-                                                    })}
-                                                    <tr className="border-t bg-indigo-50 font-bold text-sm">
-                                                        <td className="px-3 py-2.5 text-indigo-800 sm:px-4">Week Total</td>
-                                                        <td className="px-3 py-2.5 text-emerald-700 sm:px-4">{week.summary.new_revision} juz</td>
-                                                        <td className="px-3 py-2.5 text-amber-700 sm:px-4">{week.summary.old_revision} juz</td>
-                                                        <td className="hidden px-4 py-2.5 sm:table-cell" />
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        ) : (
-                                            <table className="w-full table-fixed text-xs sm:min-w-[640px] sm:text-sm">
-                                                <thead>
-                                                    <tr className="border-b bg-slate-50/50 text-left text-xs font-semibold text-slate-500">
-                                                        <th className="w-[30%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-44 sm:px-4">Date</th>
-                                                        <th className="w-[23.33%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-auto sm:px-4">
-                                                            New Verses <span className="font-normal normal-case text-slate-300">حفظ يومي</span>
-                                                        </th>
-                                                        <th className="w-[23.33%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-auto sm:px-4">
-                                                            Recent Rev <span className="font-normal normal-case text-slate-300">تسميع</span>
-                                                        </th>
-                                                        <th className="w-[23.33%] px-3 py-3 font-semibold uppercase tracking-wide sm:w-auto sm:px-4">
-                                                            Juz Rev <span className="font-normal normal-case text-slate-300">مراجعة</span>
-                                                        </th>
-                                                        <th className="hidden px-4 py-3 font-semibold uppercase tracking-wide sm:table-cell">Recorded by</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {week.days.map((day) => {
-                                                        const hasEntry = day.new_verses.length > 0 || day.recent_revision.length > 0 || day.juz_revision.length > 0
-                                                        return (
-                                                            <tr key={day.date} className={`border-t transition-colors ${
-                                                                hasEntry ? 'hover:bg-slate-50' : 'opacity-50'
-                                                            }`}>
-                                                                <td className="px-3 py-3 sm:px-4">
-                                                                    <span className="font-bold text-slate-800">{formatDate(day.date)}</span>
-                                                                    <span className="ml-1.5 text-xs font-medium text-slate-400">{day.day}</span>
-                                                                </td>
-                                                                <td className="px-3 py-3 text-indigo-700 sm:px-4">{joinEntries(day.new_verses) || <span className="text-slate-300">–</span>}</td>
-                                                                <td className="px-3 py-3 text-violet-700 sm:px-4">{joinEntries(day.recent_revision) || <span className="text-slate-300">–</span>}</td>
-                                                                <td className="px-3 py-3 text-sky-700 sm:px-4">{joinEntries(day.juz_revision) || <span className="text-slate-300">–</span>}</td>
-                                                                <td className="hidden px-4 py-3 sm:table-cell">
-                                                                    {day.recorded_by?.length ? (
-                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                                                            {day.recorded_by.join(', ')}
-                                                                        </span>
-                                                                    ) : <span className="text-slate-300">–</span>}
-                                                                </td>
-                                                            </tr>
-                                                        )
-                                                    })}
-                                                    <tr className="border-t bg-indigo-50 font-bold text-sm">
-                                                        <td className="px-3 py-2.5 text-indigo-800 sm:px-4">Week Total</td>
-                                                        <td className="px-3 py-2.5 text-indigo-700 sm:px-4">{week.summary.new_pages} pages</td>
-                                                        <td className="px-3 py-2.5 text-violet-700 sm:px-4">
-                                                            {week.summary.recent_pages ? `${week.summary.recent_pages} pages` : `${week.summary.recent_days} days`}
-                                                        </td>
-                                                        <td className="px-3 py-2.5 text-sky-700 sm:px-4">{week.summary.juz_revision} juz</td>
-                                                        <td className="hidden px-4 py-2.5 sm:table-cell" />
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        )}
-                                    </div>
-                                </div>
+                                <HifzWeekCard key={week.week} week={week} columns={isHafiz ? HAFIZ_WEEK_COLUMNS : HIFZ_WEEK_COLUMNS} />
                             )) : (
-                                <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 py-16 text-sm text-slate-400">
+                                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-16 text-center text-sm text-slate-500">
                                     No hifz report data for the selected period.
                                 </div>
                             )}
@@ -1038,44 +1091,40 @@ function HifzPanel({ report, logs, monthlyReports }: {
                     </div>
 
                     {/* ── Recent log entries ── */}
-                    <Card className="rounded-xl border-slate-200">
-                        <CardHeader className="pb-3">
+                    <Card className="min-w-0 gap-3 rounded-xl border-slate-200 py-4 sm:py-6">
+                        <CardHeader className="px-3 sm:px-6">
                             <CardTitle className="text-base">Recent Hifz Entries</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-3 sm:px-6">
                             {logs.length ? (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full table-fixed text-xs sm:min-w-[480px] sm:text-sm">
-                                        <thead>
-                                            <tr className="border-b text-left text-xs uppercase text-slate-400">
-                                                <th className="w-[32%] px-3 py-2 font-semibold sm:w-auto">Date</th>
-                                                <th className="w-[26%] px-3 py-2 font-semibold sm:w-auto">Mode</th>
-                                                <th className="w-[42%] px-3 py-2 font-semibold sm:w-auto">Details</th>
-                                                <th className="hidden px-3 py-2 font-semibold sm:table-cell">Recorded by</th>
+                                <table className="w-full table-fixed text-xs sm:text-sm">
+                                    <thead>
+                                        <tr className="border-b text-left text-xs uppercase text-slate-400">
+                                            <th scope="col" className="w-[36%] px-2 py-2 font-semibold md:w-32 md:px-3">Date</th>
+                                            <th scope="col" className="hidden px-3 py-2 font-semibold md:table-cell">Mode</th>
+                                            <th scope="col" className="px-2 py-2 font-semibold md:px-3">Details</th>
+                                            <th scope="col" className="hidden px-3 py-2 font-semibold md:table-cell">Recorded by</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {logs.slice(0, 10).map((log) => (
+                                            <tr key={log.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                                                <td className="px-2 py-2.5 align-top font-semibold text-slate-700 md:px-3">
+                                                    <time dateTime={log.entry_date}>{formatDate(log.entry_date)}</time>
+                                                </td>
+                                                <td className="hidden px-3 py-2.5 align-top text-xs font-semibold text-indigo-700 md:table-cell">{log.mode}</td>
+                                                <td className="px-2 py-2.5 align-top text-slate-600 [overflow-wrap:anywhere] md:px-3">
+                                                    <span className="mb-1 block text-xs font-semibold text-indigo-700 md:hidden">{log.mode}</span>
+                                                    <bdi lang="ar" dir="rtl">{formatLogDetail(log)}</bdi>
+                                                    {log.usthad_name && <span className="mt-1 block text-xs text-slate-500 md:hidden">Recorded by {log.usthad_name}</span>}
+                                                </td>
+                                                <td className="hidden px-3 py-2.5 align-top text-xs font-medium text-slate-600 [overflow-wrap:anywhere] md:table-cell">
+                                                    {log.usthad_name || <span className="text-slate-300">–</span>}
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {logs.slice(0, 10).map((log) => (
-                                                <tr key={log.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
-                                                    <td className="px-3 py-2.5 font-semibold text-slate-700 whitespace-nowrap">{formatDate(log.entry_date)}</td>
-                                                    <td className="hidden px-3 py-2.5 sm:table-cell">
-                                                        <span className="inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
-                                                            {log.mode}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 text-slate-600">{formatLogDetail(log)}</td>
-                                                    <td className="px-3 py-2.5">
-                                                        {log.usthad_name ? (
-                                                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                                                                {log.usthad_name}
-                                                            </span>
-                                                        ) : <span className="text-slate-300">–</span>}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        ))}
+                                    </tbody>
+                                </table>
                             ) : (
                                 <p className="py-8 text-center text-sm text-slate-500">No hifz records found.</p>
                             )}
@@ -1100,9 +1149,9 @@ function StatRow({
         <div className="flex items-center justify-between gap-2">
             <div>
                 <p className={`text-sm font-semibold ${bold ? 'text-slate-900' : 'text-slate-600'}`}>{label}</p>
-                {arabic && <p className="text-[10px] text-slate-400" dir="rtl">{arabic}</p>}
+                {arabic && <p className="text-left text-[10px] text-slate-500" lang="ar" dir="rtl">{arabic}</p>}
             </div>
-            <p className={`text-sm font-bold ${color ?? 'text-slate-700'}`}>{value}</p>
+            <p className={`shrink-0 text-right text-sm font-bold ${color ?? 'text-slate-700'}`}>{value}</p>
         </div>
     )
 }
@@ -1228,7 +1277,9 @@ function ReportPanel({ data, attendancePercent, totalClasses, isHafiz }: {
 }
 
 function joinEntries(entries: string[]) {
-    return entries.length ? entries.join(", ") : <span className="text-slate-300">-</span>
+    return entries.length ? (
+        <bdi lang="ar" dir="rtl">{entries.map(formatWeeklyHifzEntry).join("، ")}</bdi>
+    ) : <span className="text-slate-300">–</span>
 }
 
 function InfoTile({ icon: Icon, label, value }: {

@@ -148,10 +148,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(getParentPortalUrl(request, '/home'));
     }
 
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = '/login';
-    loginUrl.search = '';
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(getParentPortalUrl(request, '/'));
   }
 
   if (currentPath === '/login' || currentPath === '/') {
