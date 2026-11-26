@@ -45,6 +45,8 @@ export type EditableLeave = {
     companion_name?: string | null
     companion_relationship?: string | null
     actual_exit_datetime?: string | null
+    scheduled_start_datetime?: string | null
+    exit_status?: "early" | "normal" | null
     actual_return_datetime?: string | null
     can_edit_exit_details?: boolean
     exit_editable_until?: string | null

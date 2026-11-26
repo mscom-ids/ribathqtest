@@ -107,6 +107,7 @@ export function MovementHistoryTab() {
                             <TableRow>
                                 <TableHead className="w-[50px]">#</TableHead>
                                 <TableHead>Exit At</TableHead>
+                                <TableHead>Exit Status</TableHead>
                                 <TableHead>Student Name</TableHead>
                                 <TableHead>Batch</TableHead>
                                 <TableHead>Reason</TableHead>
@@ -119,9 +120,9 @@ export function MovementHistoryTab() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={10} className="text-center h-32 text-slate-500">Loading...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={11} className="text-center h-32 text-slate-500">Loading...</TableCell></TableRow>
                             ) : paginatedData.length === 0 ? (
-                                <TableRow><TableCell colSpan={10} className="text-center h-48 text-slate-500">
+                                <TableRow><TableCell colSpan={11} className="text-center h-48 text-slate-500">
                                     <div className="flex flex-col items-center justify-center">
                                         <AlertCircle className="h-8 w-8 mb-2 opacity-20" />
                                         <p>No movement history found</p>
@@ -140,6 +141,18 @@ export function MovementHistoryTab() {
                                     </TableCell>
                                     <TableCell className="font-mono text-xs whitespace-nowrap">
                                         {formatDateTime(leave.actual_exit_datetime || leave.start_datetime)}
+                                        {leave.exit_status === 'early' && leave.scheduled_start_datetime && (
+                                            <p className="mt-1 text-[10px] text-slate-500">
+                                                Scheduled: {formatDateTime(leave.scheduled_start_datetime)}
+                                            </p>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {leave.exit_status === 'early' ? (
+                                            <Badge variant="outline" className="whitespace-nowrap bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">Early Exit</Badge>
+                                        ) : leave.exit_status === 'normal' ? (
+                                            <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">Normal</Badge>
+                                        ) : <span className="text-slate-400">—</span>}
                                     </TableCell>
                                     <TableCell>
                                         <p className="font-medium text-slate-900 dark:text-slate-100">{leave.student_name}</p>

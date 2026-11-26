@@ -4,6 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const source = fs.readFileSync(path.join(__dirname, '../backend/src/controllers/leaves.controller.ts'), 'utf8');
+const exitTimingSource = fs.readFileSync(path.join(__dirname, '../backend/src/utils/institutional-exit-timing.ts'), 'utf8');
+const exitTimingExports = {};
+vm.runInNewContext(ts.transpileModule(exitTimingSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, {
+  exports: exitTimingExports,
+});
 const calls = [];
 let leaveType = 'out-campus';
 const db = {
@@ -25,6 +30,7 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.Mo
     if (name.endsWith('/server-cache')) return { cachedResult: async (_key, _ttl, load) => load(), makeCacheKey: JSON.stringify, invalidateCacheByPrefix() {} };
     if (name.endsWith('/student-movement-notifications.service')) return { enqueueMovementNotifications: async () => {} };
     if (name.endsWith('/attendance-session-lock.service')) return { lockAttendanceSessions: async () => {} };
+    if (name.endsWith('/institutional-exit-timing')) return exitTimingExports;
     return require(name);
   },
 });

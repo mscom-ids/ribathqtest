@@ -103,6 +103,8 @@ export function InstitutionalExitModal({
         return classMatches && searchMatches
     })
 
+    const isEarlyExit = Boolean(leave && exitDatetime && new Date(exitDatetime) < new Date(leave.start_datetime))
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!leave) return
@@ -150,7 +152,7 @@ export function InstitutionalExitModal({
                         <div className="rounded-md border bg-slate-50 dark:bg-slate-900/50 p-3 text-sm">
                             <p className="font-medium text-slate-900 dark:text-slate-100">{leave?.name}</p>
                             <p className="text-xs text-slate-500 mt-1">
-                                Window: {leave && format(new Date(leave.start_datetime), "MMM d, h:mm a")} to {leave && format(new Date(leave.end_datetime), "MMM d, h:mm a")}
+                                Scheduled leave: {leave && format(new Date(leave.start_datetime), "MMM d, h:mm a")} to {leave && format(new Date(leave.end_datetime), "MMM d, h:mm a")}
                             </p>
                         </div>
 
@@ -158,6 +160,7 @@ export function InstitutionalExitModal({
                             <div className="space-y-2">
                                 <Label>Exit Date & Time</Label>
                                 <Input type="datetime-local" value={exitDatetime} onChange={e => setExitDatetime(e.target.value)} required />
+                                <p className="text-xs text-slate-500">Exits before the scheduled start are allowed and marked as Early Exit.</p>
                             </div>
                             <div className="space-y-2">
                                 <Label>Filter by Class</Label>
@@ -171,6 +174,13 @@ export function InstitutionalExitModal({
                                 </Select>
                             </div>
                         </div>
+
+                        {isEarlyExit && (
+                            <div role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                                <p className="font-medium">Early Exit</p>
+                                <p>This exit is before the scheduled leave start and will be recorded as an early exit.</p>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">

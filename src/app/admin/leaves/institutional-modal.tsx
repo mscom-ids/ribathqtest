@@ -143,7 +143,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                     <DialogDescription>
                         {campusLocation === "inside"
                             ? "Students remain on campus while selected classes and sessions are excused."
-                            : "This defines an exit window. Students are marked outside only when their actual exit is recorded."}
+                            : "Students are marked outside when their actual exit is recorded. Exits before the scheduled start are allowed and marked as Early Exit."}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -177,7 +177,7 @@ export function InstitutionalModal({ open, onOpenChange, onSuccess }: { open: bo
                         <p className="text-xs text-slate-500">
                             {campusLocation === "inside"
                                 ? "Students remain on campus, but their applicable classes and sessions are excused."
-                                : "Creates an institutional exit window; actual exits are recorded separately."}
+                                : "Actual exits are recorded separately. Exits before the scheduled start are marked as Early Exit."}
                         </p>
                     </div>
 

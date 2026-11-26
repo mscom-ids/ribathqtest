@@ -5,6 +5,7 @@ import { getStaffId } from '../utils/staff.utils';
 import { cachedResult, invalidateCacheByPrefix, makeCacheKey } from '../utils/server-cache';
 import { lockAttendanceSessions } from '../services/attendance-session-lock.service';
 import { enqueueMovementNotifications } from '../services/student-movement-notifications.service';
+import { withInstitutionalExitTiming } from '../utils/institutional-exit-timing';
 
 const ADMIN_LEAVE_ROLES = ['admin', 'principal', 'vice_principal', 'controller'];
 const MENTOR_ROLES = ['staff', 'usthad', 'mentor'];
@@ -450,8 +451,13 @@ export const markInstitutionalExit = async (req: Request, res: Response) => {
                 throw new Error('Inside-campus institutional leave does not create student exits');
             }
             const exitTime = new Date(exit_datetime);
-            if (exitTime < new Date(inst.start_datetime) || exitTime > new Date(inst.end_datetime)) {
-                throw new Error('Exit time must be within the institutional leave window');
+            if (Number.isNaN(exitTime.getTime())) {
+                throw new Error('A valid exit time is required');
+            }
+            // Early departures are recorded against this leave, retaining the
+            // institutional start as the scheduled time for exit-status reporting.
+            if (exitTime > new Date(inst.end_datetime)) {
+                throw new Error('Exit time cannot be after the institutional leave end time');
             }
 
             const targetClasses = Array.isArray(inst.target_classes) ? inst.target_classes : [];
@@ -537,7 +543,11 @@ export const markInstitutionalExit = async (req: Request, res: Response) => {
             await enqueueMovementNotifications(client, movementLeaveIds, 'student_exit', exit_datetime);
             await client.query('COMMIT');
             invalidateLeaveCaches();
-            res.status(201).json({ success: true, count: allowedIds.length });
+            res.status(201).json({
+                success: true,
+                count: allowedIds.length,
+                exit_status: exitTime < new Date(inst.start_datetime) ? 'early' : 'normal',
+            });
         } catch (e: any) {
             await client.query('ROLLBACK');
             res.status(400).json({ success: false, error: e.message });
@@ -586,15 +596,17 @@ export const getInstitutionalLeaveStudents = async (req: Request, res: Response)
     try {
         const { id } = req.params;
         const query = `
-            SELECT sl.id as leave_id, sl.student_id, sl.status, sl.return_status, sl.actual_return_datetime,
+            SELECT sl.id as leave_id, sl.student_id, sl.leave_type, sl.status, sl.return_status, sl.actual_return_datetime,
+                   sl.start_datetime, sl.actual_exit_datetime, il.start_datetime as scheduled_start_datetime,
                    s.name, COALESCE(s.standard, s.school_standard, s.hifz_standard, 'Common') as standard, s.adm_no
             FROM student_leaves sl
             JOIN students s ON sl.student_id = s.adm_no
+            LEFT JOIN institutional_leaves il ON sl.institutional_leave_id = il.id
             WHERE sl.institutional_leave_id = $1
             ORDER BY s.name
         `;
         const result = await db.query(query, [id]);
-        res.json({ success: true, students: result.rows });
+        res.json({ success: true, students: result.rows.map(withInstitutionalExitTiming) });
     } catch (err) {
         console.error('Error fetching institutional leave students:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch students' });
@@ -1274,10 +1286,15 @@ export const getMovementHistory = async (req: Request, res: Response) => {
         const query = `
             SELECT sm.id, sm.student_id, sm.leave_id, sm.direction, sm.timestamp, sm.is_late,
                    sl.leave_type, sl.reason_category, sl.remarks,
+                   sl.start_datetime,
+                   CASE WHEN sm.direction IN ('out', 'exit') THEN sm.timestamp
+                        ELSE COALESCE(sl.actual_exit_datetime, sl.start_datetime) END as actual_exit_datetime,
+                   il.start_datetime as scheduled_start_datetime,
                    s.name as student_name, s.adm_no,
                    COALESCE(st.name, 'System') as recorded_by_name
             FROM student_movements sm
             JOIN student_leaves sl ON sm.leave_id = sl.id
+            LEFT JOIN institutional_leaves il ON sl.institutional_leave_id = il.id
             JOIN students s ON sm.student_id = s.adm_no
             LEFT JOIN staff st ON sm.recorded_by = st.profile_id
             ORDER BY sm.timestamp DESC
@@ -1289,7 +1306,7 @@ export const getMovementHistory = async (req: Request, res: Response) => {
         ]);
         res.json({
             success: true,
-            movements: result.rows,
+            movements: result.rows.map(withInstitutionalExitTiming),
             pagination: { limit, offset, total: countRes.rows[0]?.total || 0 },
         });
     } catch (err) {
@@ -1408,6 +1425,7 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
                 sl.group_value,
                 sl.institutional_leave_id,
                 il.name as institutional_leave_name,
+                il.start_datetime as scheduled_start_datetime,
                 s.name as student_name,
                 s.adm_no,
                 COALESCE(s.standard, s.school_standard, s.hifz_standard, 'Common') as standard,
@@ -1441,7 +1459,7 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
         `;
 
                 const presenceResult = await db.query(presenceQuery, params);
-                return presenceResult.rows;
+                return presenceResult.rows.map(withInstitutionalExitTiming);
             }
 
             const fallbackResult = await db.query(`
@@ -1459,6 +1477,7 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
                         sl.group_value,
                         sl.institutional_leave_id,
                         il.name as institutional_leave_name,
+                        il.start_datetime as scheduled_start_datetime,
                         s.name as student_name,
                         s.adm_no,
                         COALESCE(s.standard, s.school_standard, s.hifz_standard, 'Common') as standard,
@@ -1489,7 +1508,7 @@ export const getOutsideStudents = async (req: Request, res: Response) => {
                       ${assignmentFilter}
                     ORDER BY sl.start_datetime DESC
                 `, params);
-            return fallbackResult.rows;
+            return fallbackResult.rows.map(withInstitutionalExitTiming);
         });
 
         res.json({ success: true, students });
@@ -1529,6 +1548,8 @@ export const getAllLeaves = async (req: Request, res: Response) => {
             const [leavesRes, countRes] = await Promise.all([
                 db.query(`
                     SELECT sl.*,
+                           il.start_datetime as scheduled_start_datetime,
+                           COALESCE(exit_mv.exit_timestamp, sl.actual_exit_datetime, sl.start_datetime) as actual_exit_datetime,
                            sl.created_at + interval '30 minutes' AS exit_editable_until,
                            (sl.group_id IS NULL
                             AND sl.leave_type <> 'institutional'
@@ -1557,6 +1578,14 @@ export const getAllLeaves = async (req: Request, res: Response) => {
                            s.adm_no as student_adm_no
                     FROM student_leaves sl
                     JOIN students s ON sl.student_id = s.adm_no
+                    LEFT JOIN institutional_leaves il ON sl.institutional_leave_id = il.id
+                    LEFT JOIN LATERAL (
+                        SELECT sm.timestamp as exit_timestamp
+                        FROM student_movements sm
+                        WHERE sm.leave_id = sl.id AND sm.direction = 'out'
+                        ORDER BY sm.timestamp DESC
+                        LIMIT 1
+                    ) exit_mv ON true
                     LEFT JOIN LATERAL (
                         SELECT sm.created_at AS return_marked_at
                         FROM student_movements sm
@@ -1578,7 +1607,7 @@ export const getAllLeaves = async (req: Request, res: Response) => {
             ]);
 
             return {
-                leaves: leavesRes.rows,
+                leaves: leavesRes.rows.map(withInstitutionalExitTiming),
                 pagination: {
                     limit,
                     offset,

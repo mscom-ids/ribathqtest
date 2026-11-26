@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { isAxiosError } from "axios"
 import api from "@/lib/api"
 import { cachedGet } from "@/lib/api-cache"
 import { format, isPast } from "date-fns"
 import {
     UserCheck, RefreshCw, Loader2, Search, Filter,
-    Clock, ArrowLeftRight, Building2, MapPin, AlertTriangle
+    ArrowLeftRight, Building2, MapPin, AlertTriangle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,8 @@ interface OutsideStudent {
     madrasa_mentor_name: string | null
     exited_recorded_by_name: string | null
     actual_exit_datetime: string | null
+    scheduled_start_datetime?: string | null
+    exit_status?: "early" | "normal" | null
 }
 
 interface ReturnModalState {
@@ -148,6 +151,9 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
             {/* Leave type + reason */}
             <div className="flex flex-wrap gap-1.5 items-center">
                 {leaveTypeBadge(student.leave_type, student.institutional_leave_name)}
+                {student.exit_status === 'early' && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">Early Exit</Badge>
+                )}
                 {student.group_type && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium capitalize">
                         {student.group_type}: {student.group_value}
@@ -184,6 +190,11 @@ function StudentCard({ student, onRecordReturn }: { student: OutsideStudent, onR
                             ? format(new Date(student.actual_exit_datetime), 'dd MMM, h:mm a')
                             : format(new Date(student.start_datetime), 'dd MMM, h:mm a')}
                     </p>
+                    {student.exit_status === 'early' && student.scheduled_start_datetime && (
+                        <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">
+                            Scheduled: {format(new Date(student.scheduled_start_datetime), 'dd MMM, h:mm a')}
+                        </p>
+                    )}
                     {student.exited_recorded_by_name && (
                         <p className="text-slate-400 text-[10px]">by {student.exited_recorded_by_name}</p>
                     )}
@@ -248,8 +259,8 @@ function RecordReturnDialog({
             } else {
                 setError(res.data.error || 'Failed to record return')
             }
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to record return')
+        } catch (err: unknown) {
+            setError((isAxiosError<{ error?: string }>(err) && err.response?.data?.error) || 'Failed to record return')
         } finally {
             setLoading(false)
         }
