@@ -42,7 +42,7 @@ const rows = markup => [...markup.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map(
 const groupName = 'Hifz Valuation + Hifz Portion';
 const commonSubject = { standard: '8th', question_count: 1, question_max: 100 };
 const subjects = [
-    { ...commonSubject, id: 'valuation', name: 'Hifz Valuation', max_marks: 80, min_marks: 32, result_component_min_marks: 30, question_count: 10, question_max: 8, result_group: groupName, result_group_min_marks: 35 },
+    { ...commonSubject, id: 'valuation', name: 'Hifz Valuation', max_marks: 80, min_marks: 32, result_component_min_marks: 24, question_count: 10, question_max: 8, result_group: groupName, result_group_min_marks: 35 },
     { ...commonSubject, id: 'portion', name: 'Hifz Portion', max_marks: 20, min_marks: 7, question_max: 20, result_group: groupName, result_group_min_marks: 35 },
     { ...commonSubject, id: 'murajaa', name: "Hfz Muraja'a", max_marks: 100, min_marks: 35, result_group: "Hifz Muraja'a", result_group_min_marks: 35 },
 ];
@@ -53,7 +53,9 @@ const scenarios = [
     { id: 'R004', name: 'Recitation Zero', marks: [60, 20, 0], combined: 80, recitation: 0, total: 80, passed: false },
     { id: 'R005', name: 'Missing Recitation', marks: [30, 5, null], combined: 35, recitation: null, total: null, passed: false },
     { id: 'R006', name: 'Portion Three', marks: [32, 3, 35], combined: 35, recitation: 35, total: 70, passed: true },
-    { id: 'R007', name: 'Valuation Below Thirty', marks: [29, 6, 35], combined: 35, recitation: 35, total: 70, passed: false },
+    { id: 'R007', name: 'Valuation Below Minimum', marks: [23, 12, 35], combined: 35, recitation: 35, total: 70, passed: false },
+    { id: 'R008', name: 'Valuation Twenty Four', marks: [24, 11, 35], combined: 35, recitation: 35, total: 70, passed: true },
+    { id: 'R009', name: 'Valuation Twenty Six', marks: [26, 9, 35], combined: 35, recitation: 35, total: 70, passed: true },
 ];
 const students = scenarios.map((s, i) => ({ student_id: s.id, student_name: s.name, standard: '8th', serial_no: i + 1, center_id: 'center-k' }));
 const valuations = scenarios.flatMap(s => s.marks.map((total, i) => ({
@@ -85,7 +87,7 @@ for (const [i, scenario] of scenarios.entries()) {
     assert.equal(cardRows.length, 3, 'Only two result rows, plus their header');
     assert(cardRows[1].includes('Hifz Valuation + Hifz Portion'));
     assert(cardRows[1].includes(`${scenario.combined} / 100`));
-    assert(cardRows[1].includes('Hifz Valuation minimum: 30 / 80'));
+    assert(cardRows[1].includes('Hifz Valuation minimum: 24 / 80'));
     assert(!cardRows.some(row => row.startsWith('Hifz Portion ')), 'Portion is not a separate row');
     if (scenario.total === null) {
         assert(cardRows.some(row => row.startsWith("Hifz Muraja'a Pending 35 / 100 Pending")));

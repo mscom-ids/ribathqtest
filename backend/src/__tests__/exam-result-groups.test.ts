@@ -8,7 +8,7 @@ import { db } from '../config/db';
 const student = {student_id:'R101',standard:'8th'};
 const combined = 'Hifz Valuation + Hifz Portion';
 const subjects: ResultSubject[] = [
-    {id:'valuation',name:'Hifz Valuation',standard:'8th',max_marks:80,min_marks:32,question_count:10,result_group:combined,result_group_min_marks:35,result_component_min_marks:30},
+    {id:'valuation',name:'Hifz Valuation',standard:'8th',max_marks:80,min_marks:32,question_count:10,result_group:combined,result_group_min_marks:35,result_component_min_marks:24},
     {id:'portion',name:'Hifz Portion',standard:'8th',max_marks:20,min_marks:7,question_count:1,result_group:combined,result_group_min_marks:35},
     {id:'murajaa',name:"Hfz Muraja'a",standard:'8th',max_marks:100,min_marks:35,question_count:1,result_group:"Hifz Muraja'a",result_group_min_marks:35},
 ];
@@ -24,8 +24,9 @@ async function run() {
     assert.equal(result([80,20,30]).grade,'F','Failed group cannot receive a passing overall grade');
     assert.equal(evaluateStudentResult(student,subjects,marks([80,20,null])).grade,null,'Incomplete results have no grade');
     for (const [values,passed] of [
-        [[30,5,35],true], [[32,3,35],true], [[29,6,35],false], [[29.75,20,100],false],
-        [[28,7,35],false], [[35,0,35],true], [[15,20,35],false], [[34,1,35],true],
+        [[24,11,35],true], [[26,9,35],true], [[23,12,35],false], [[23.75,20,100],false],
+        [[30,5,35],true], [[32,3,35],true], [[29,6,35],true],
+        [[28,7,35],true], [[35,0,35],true], [[15,20,35],false], [[34,1,35],true],
         [[20,10,40],false], [[20,20,30],false], [[14.75,20,35.25],false],
         [[15,20,34.75],false], [[80,20,0],false], [[0,0,100],false], [[80,20,100],true],
     ] as const) {
@@ -63,7 +64,7 @@ async function run() {
     }));
     const exported=createResultExportRows(rows);
     assert.deepEqual(exported.map(row=>row.Result),['Pass','Pass','Pass'],'Components share combined result and valuation meets its minimum');
-    const insufficientValuation=createResultExportRows(rows.map((row,index)=>({...row,total:[29,6,35][index]})));
+    const insufficientValuation=createResultExportRows(rows.map((row,index)=>({...row,total:[23,12,35][index]})));
     assert.equal(insufficientValuation[0].Result,'Fail');
     assert(insufficientValuation.every(row=>row['Overall Result']==='Fail'&&row['Overall Grade']==='F'));
     assert.deepEqual(exported.map(row=>row['Group Total']),[35,35,35]);

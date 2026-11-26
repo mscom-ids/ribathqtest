@@ -32,14 +32,14 @@ async function marks(client) {
             const maximum = type==='valuation'?80:type==='portion'?20:100;
             assert.equal(Number(subject.max_marks),maximum,`Unexpected maximum for ${subject.name}`);
             assert.equal(subject.question_count,type==='valuation'?10:1);
-            return [{id:subject.id,standard:subject.standard,type,group:type==='murajaa'?murajaa:combined,min:35,componentMin:type==='valuation'?30:null}];
+            return [{id:subject.id,standard:subject.standard,type,group:type==='murajaa'?murajaa:combined,min:35,componentMin:type==='valuation'?24:null}];
         });
         assert.equal(plan.length,27,'Expected nine standards with three Hifz subjects');
         const standards = [...new Set(plan.map(subject=>subject.standard))];
         assert.equal(standards.length,9);
         for (const standard of standards) assert.deepEqual(plan.filter(subject=>subject.standard===standard).map(subject=>subject.type).sort(),['murajaa','portion','valuation']);
         const changes = plan.filter(row=>{const previous=beforeSubjects.find(subject=>subject.id===row.id);return previous.result_group!==row.group || Number(previous.result_group_min_marks)!==row.min || (previous.result_component_min_marks==null?null:Number(previous.result_component_min_marks))!==row.componentMin;});
-        console.log(JSON.stringify({exam:exam.title,standards,subjects:plan.length,to_configure:changes.length,rule:[{group:combined,maximum:100,minimum:35},{group:murajaa,maximum:100,minimum:35}],overall_minimum:70,require_each_group:true,marks_unchanged:true}));
+        console.log(JSON.stringify({exam:exam.title,standards,subjects:plan.length,to_configure:changes.length,valuation_minimum:24,rule:[{group:combined,maximum:100,minimum:35},{group:murajaa,maximum:100,minimum:35}],overall_minimum:70,require_each_group:true,marks_unchanged:true}));
         if (!process.argv.includes('--apply')) {await client.query('ROLLBACK');return;}
         await client.query('SELECT student_id FROM exam_portal_valuations WHERE exam_id=$1 FOR UPDATE',[examId]);
         await client.query('SELECT id FROM exam_results WHERE exam_id=$1 FOR UPDATE',[examId]);
@@ -68,7 +68,7 @@ async function marks(client) {
         }
         assert.deepEqual(await marks(client),beforeMarks,'Saved marks changed');
         assert.deepEqual((await client.query('SELECT * FROM exams WHERE id=$1',[examId])).rows[0],exam,'Exam settings changed');
-        if (changes.length) await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,'Administrator requested grouped pass rule','configure_result_groups',$2)",[examId,JSON.stringify({rule:'Valuation minimum 30/80; each 100-mark group must reach 35; combined minimum 70/200',subjects:plan,marks_unchanged:true})]);
+        if (changes.length) await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,'Administrator requested grouped pass rule','configure_result_groups',$2)",[examId,JSON.stringify({rule:'Valuation minimum 24/80; each 100-mark group must reach 35; combined minimum 70/200',subjects:plan,marks_unchanged:true})]);
         await client.query('COMMIT');
         console.log(`Committed and verified ${changes.length} subject group settings. Saved marks and existing thresholds unchanged. Backup: ${backupPath}`);
     } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}

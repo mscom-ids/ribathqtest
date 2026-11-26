@@ -117,11 +117,11 @@ async function main() {
         assert.equal((await dashboard()).class_rank, null, 'Unassigned students have no invented class rank');
         assert(queries.length > 0);
         const configured = [
-            { id: 'valuation', name: 'Hifz Valuation', standard: '7th', max_marks: 80, min_marks: 32, question_count: 10, result_group: 'Combined', result_group_min_marks: 35, result_component_min_marks: 30 },
+            { id: 'valuation', name: 'Hifz Valuation', standard: '7th', max_marks: 80, min_marks: 32, question_count: 10, result_group: 'Combined', result_group_min_marks: 35, result_component_min_marks: 24 },
             { id: 'portion', name: 'Hifz Portion', standard: '7th', max_marks: 20, min_marks: 7, question_count: 1, result_group: 'Combined', result_group_min_marks: 35 },
             { id: 'recitation', name: 'Hfz Murajaa', standard: '7th', max_marks: 100, min_marks: 35, question_count: 1, result_group: 'Recitation', result_group_min_marks: 35 },
         ];
-        for (const [marks, grade] of [[[80,20,90],'A++'], [[70,20,90],'A+'], [[30,5,35],'D+'], [[32,3,35],'D+'], [[29,6,35],'F'], [[80,20,30],'F'], [[70,20],'Pending']]) {
+        for (const [marks, grade] of [[[80,20,90],'A++'], [[70,20,90],'A+'], [[24,11,35],'D+'], [[26,9,35],'D+'], [[23,12,35],'F'], [[30,5,35],'D+'], [[32,3,35],'D+'], [[29,6,35],'D+'], [[80,20,30],'F'], [[70,20],'Pending']]) {
             examRows = marks.map((mark, index) => ({ exam_id: 'test-exam', exam_title: 'Hifz Exam', subject_id: configured[index].id, subject: configured[index].name,
                 max_marks: configured[index].max_marks, min_marks: configured[index].min_marks, marks_obtained: mark,
                 student_id: 'PARENT-Z', subject_standard: '7th', configured_subjects: configured }));
