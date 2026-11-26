@@ -19,12 +19,13 @@ async function main() {
         if (!administration.rows[0].installed) await client.query(await fs.readFile(path.resolve(__dirname, '../../..', 'supabase/migrations/20261126010000_exam_administration_access.sql'), 'utf8'));
         await client.query('BEGIN');
         await client.query("SELECT pg_advisory_xact_lock(hashtext('prepare-exam-portal-nov26'))");
-        const slug = 'mid-term-hifz-nov26';
+        const slug = 'half-yearly-hifz-nov26';
+        const examTitle = 'HALF YEARLY HIFZ EXAMINATION NOV 26';
         let exam = (await client.query('SELECT * FROM exams WHERE portal_slug=$1 FOR UPDATE', [slug])).rows[0];
         if (!exam) {
-            const existingTitle = await client.query('SELECT id FROM exams WHERE title=$1', [allocation.title]);
+            const existingTitle = await client.query('SELECT id FROM exams WHERE title=$1', [examTitle]);
             if (existingTitle.rows.length) throw new Error('An exam with this title already exists. Use its admin portal to import the allocation.');
-            exam = (await client.query("INSERT INTO exams(id,title,type,department,start_date,is_active,portal_slug,portal_enabled) VALUES($1,$2,'Hifz','Hifz','2026-11-26',true,$3,false) RETURNING *", [randomUUID(), allocation.title, slug])).rows[0];
+            exam = (await client.query("INSERT INTO exams(id,title,type,department,start_date,is_active,portal_slug,portal_enabled) VALUES($1,$2,'Hifz','Hifz','2026-11-26',true,$3,false) RETURNING *", [randomUUID(), examTitle, slug])).rows[0];
         }
         const existing = await client.query('SELECT a.student_id,a.serial_no,a.standard,a.student_name,c.code FROM exam_portal_allocations a JOIN exam_portal_centers c ON c.id=a.center_id WHERE a.exam_id=$1', [exam.id]);
         if (!existing.rows.length) await importAllocation(client, exam.id, rows, 'November workbook setup');

@@ -183,6 +183,28 @@ async function main() {
     r=await admin(`${management}/centers/${centerA.id}`,{reset_passcode:true},'PATCH');credentials.A=r.data.passcode;
     r=await call(`/exam-portal/${slug}/roster`,undefined,cookies.A);check('Passcode reset immediately revokes old sessions',()=>assert.equal(r.status,401));
     r=await call(`/exam-portal/${slug}/login`,{center:'A',passcode:credentials.A});cookies.A=r.cookie;
+    const beforeCustomCenter=(await testDb.query('SELECT examiner_name,locked FROM exam_portal_centers WHERE id=$1',[centerA.id])).rows[0];
+    const beforeCustomAllocations=(await testDb.query('SELECT * FROM exam_portal_allocations WHERE exam_id=$1 ORDER BY student_id',[id])).rows;
+    const beforeCustomMarks=(await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 ORDER BY student_id,subject_id',[id])).rows;
+    const previousCustomSession=cookies.A;const previousRandomPasscode=credentials.A;
+    r=await admin(`${management}/centers/${centerA.id}`,{passcode:'HYEN00A'},'PATCH');
+    check('Administrator can set a custom center passcode matching the exam pattern',()=>{assert.equal(r.status,200);assert.equal(r.data.passcode,'HYEN00A');});
+    r=await call(`/exam-portal/${slug}/roster`,undefined,previousCustomSession);check('Setting a custom passcode immediately revokes previous examiner sessions',()=>assert.equal(r.status,401));
+    r=await call(`/exam-portal/${slug}/login`,{center:'A',passcode:previousRandomPasscode});check('Previous generated passcode no longer signs in after custom replacement',()=>assert.equal(r.status,401));
+    credentials.A='HYEN00A';
+    r=await call(`/exam-portal/${slug}/login`,{center:'A',passcode:credentials.A});cookies.A=r.cookie;check('Custom HYEN00A passcode signs in to its assigned center',()=>{assert.equal(r.status,200);assert.equal(r.data.roster.center.code,'A');});
+    const customHash=(await testDb.query('SELECT passcode_hash FROM exam_portal_centers WHERE id=$1',[centerA.id])).rows[0].passcode_hash;
+    for(const invalid of [{passcode:'short'},{passcode:'é'.repeat(37)},{passcode:42},{passcode:'HYEN00A',reset_passcode:true}]) {
+        r=await admin(`${management}/centers/${centerA.id}`,invalid,'PATCH');assert.equal(r.status,400);
+    }
+    check('Invalid or conflicting custom passcodes do not change credentials or revoke valid sessions',()=>{});
+    assert.equal((await testDb.query('SELECT passcode_hash FROM exam_portal_centers WHERE id=$1',[centerA.id])).rows[0].passcode_hash,customHash);
+    r=await call(`/exam-portal/${slug}/roster`,undefined,cookies.A);assert.equal(r.status,200);
+    check('Changing only a center passcode preserves examiner name, lock, allocations and marks',()=>{});
+    assert.deepEqual((await testDb.query('SELECT examiner_name,locked FROM exam_portal_centers WHERE id=$1',[centerA.id])).rows[0],beforeCustomCenter);
+    assert.deepEqual((await testDb.query('SELECT * FROM exam_portal_allocations WHERE exam_id=$1 ORDER BY student_id',[id])).rows,beforeCustomAllocations);
+    assert.deepEqual((await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 ORDER BY student_id,subject_id',[id])).rows,beforeCustomMarks);
+    r=await admin(management+'?audit=true');check('Custom passcodes and credential hashes never appear in subsequent admin data or audit history',()=>{assert(!JSON.stringify(r.data).includes('HYEN00A'));assert(!JSON.stringify(r.data).includes('passcode_hash'));assert.notEqual(customHash,'HYEN00A');});
     await admin(`/exams/${id}/status`,{is_active:false},'PATCH');
     r=await call(`/exam-portal/${slug}/valuation`,{...payload,student_id:roster.students[1].student_id},cookies.A);check('Completed exam prevents writes',()=>assert.equal(r.status,423));
     await admin(`/exams/${id}/status`,{is_active:true},'PATCH');
@@ -211,6 +233,7 @@ async function main() {
     r=await call(`/exam-portal/${newExam.portal_slug}/admin`,undefined,adminCookie);check('Administration session cannot cross into another exam',()=>assert.equal(r.status,401));
     r=await call(scopedBase,undefined,cookies.B);check('Examiner session cannot act as exam administrator',()=>assert.equal(r.status,401));
     r=await call(scopedBase+'/admin-passcode',{passcode:'Unwanted-Change'},adminCookie);check('Exam administrator cannot change institution-controlled administration credential',()=>assert.equal(r.status,404));
+    r=await call(`${scopedBase}/centers/${centerA.id}`,{passcode:'HYEN00A'},adminCookie,'PATCH');check('Exam-scoped administration can set its own center custom passcode',()=>assert.equal(r.status,200));
     r=await call(scopedBase+'/move',{student_id:student.student_id,center_id:centerA.id},adminCookie);check('Exam administrator can move students between already generated centers',()=>assert.equal(r.status,200));
     r=await call(scopedBase+'/move',{student_id:student.student_id,center_id:data.centers.find(c=>c.code==='B').id},adminCookie);assert.equal(r.status,200);
     const anotherSubject=randomUUID();const otherExamSubject=randomUUID();
@@ -340,6 +363,13 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
         await adminPage.screenshot({path:path.join(outDir,'desktop-progress.png'),fullPage:true});
         await adminPage.getByRole('button',{name:'Portal & subjects',exact:true}).click();await adminPage.getByRole('heading',{name:'Subjects and questions'}).waitFor();await adminPage.screenshot({path:path.join(outDir,'desktop-setup.png'),fullPage:true});
         await adminPage.getByRole('button',{name:'Centers & examiners',exact:true}).click();await adminPage.getByRole('heading',{name:'Centers and examiner access'}).waitFor();assert.equal(await adminPage.getByRole('button',{name:'Save name',exact:true}).count(),10);
+        const customCenterCard=adminPage.locator(`#exam-center-${availableCenter.id}`);
+        await customCenterCard.getByRole('button',{name:'Use HYEN00A',exact:true}).click();
+        assert.equal(await customCenterCard.getByLabel('Set examiner passcode',{exact:true}).inputValue(),'HYEN00A');
+        adminPage.once('dialog',dialog=>dialog.accept());await customCenterCard.getByRole('button',{name:'Set passcode',exact:true}).click();
+        await adminPage.getByRole('status').filter({hasText:'Center saved.'}).waitFor();await adminPage.getByText('Center A — new passcode',{exact:true}).waitFor();
+        check('Exam administrator can fill the HYEN00A pattern and confirm its custom passcode in the center card',()=>{});assert.equal(await adminPage.getByText('HYEN00A',{exact:true}).count(),1);
+        await adminPage.screenshot({path:path.join(outDir,'desktop-custom-center-passcode.png'),fullPage:true});
         await adminPage.getByRole('button',{name:'Results & reports',exact:true}).click();await adminPage.getByRole('heading',{name:'Results and printable sheets'}).waitFor();await adminPage.getByLabel('Report type').selectOption('allocations');await adminPage.screenshot({path:path.join(outDir,'desktop-center-lists.png'),fullPage:true});
         await adminPage.getByLabel('Student whose exam marks to reset').selectOption(completedStudentId);
         adminPage.once('dialog',dialog=>dialog.dismiss());await adminPage.getByRole('button',{name:'Reset student marks',exact:true}).click();

@@ -13,10 +13,29 @@ import StudentMarkReset from './student-mark-reset'
 import PortalCenterAccessSummary from './portal-center-access-summary'
 
 const panel = 'rounded-xl border bg-white p-4 shadow-sm sm:p-5'
-function CenterEditor({ center, onSave, busy }: { center: PortalCenter; onSave: (id: string, body: unknown) => Promise<void>; busy: boolean }) {
+function CenterEditor({ center, onSave, busy }: { center: PortalCenter; onSave: (id: string, body: unknown) => Promise<boolean>; busy: boolean }) {
     const [name, setName] = useState(center.examiner_name)
-    return <div id={`exam-center-${center.id}`} className="scroll-mt-24 rounded-xl border p-4"><div className="flex items-center justify-between"><h3 className="font-bold">{center.name}</h3><span className="text-xs text-slate-500">{center.locked ? 'Locked' : 'Unlocked'}</span></div><Label className="mt-3 mb-2 block" htmlFor={`name-${center.id}`}>Examiner name</Label><Input id={`name-${center.id}`} value={name} maxLength={120} onChange={e => setName(e.target.value)} /><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={busy || !name.trim()} onClick={() => void onSave(center.id, { examiner_name: name })}>Save name</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => { if (!center.has_passcode || confirm('Reset this center passcode? All its signed-in sessions will end.')) void onSave(center.id, { examiner_name: name, reset_passcode: true }) }}>{center.has_passcode ? 'Reset passcode' : 'Generate passcode'}</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => { if (confirm(`${center.locked ? 'Unlock' : 'Lock'} this entire center?`)) void onSave(center.id, { locked: !center.locked }) }}>{center.locked ? 'Unlock' : 'Lock'}</Button></div><p className="mt-3 text-xs text-slate-500">{center.has_passcode ? 'Passcode configured. Reset to issue a new one.' : 'Generate a passcode before opening the portal.'}</p></div>
+    const [customPasscode, setCustomPasscode] = useState('')
+    const [showPasscode, setShowPasscode] = useState(false)
+    async function setPasscode() {
+        if (center.has_passcode && !confirm(`Change Center ${center.code}'s passcode? Its signed-in examiners will need to sign in again.`)) return
+        const saved = await onSave(center.id, { examiner_name: name, passcode: customPasscode })
+        if (saved) setCustomPasscode('')
+    }
+    return <div id={`exam-center-${center.id}`} className="scroll-mt-24 rounded-xl border p-4">
+        <div className="flex items-center justify-between"><h3 className="font-bold">{center.name}</h3><span className="text-xs text-slate-500">{center.locked ? 'Locked' : 'Unlocked'}</span></div>
+        <Label className="mt-3 mb-2 block" htmlFor={`name-${center.id}`}>Examiner name</Label>
+        <Input id={`name-${center.id}`} value={name} maxLength={120} onChange={event => setName(event.target.value)} />
+        <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={busy || !name.trim()} onClick={() => void onSave(center.id, { examiner_name: name })}>Save name</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => { if (confirm(`${center.locked ? 'Unlock' : 'Lock'} this entire center?`)) void onSave(center.id, { locked: !center.locked }) }}>{center.locked ? 'Unlock' : 'Lock'}</Button></div>
+        <div className="mt-4 border-t pt-3">
+            <Label htmlFor={`passcode-${center.id}`}>Set examiner passcode</Label>
+            <div className="mt-2 flex gap-2"><Input id={`passcode-${center.id}`} type={showPasscode ? 'text' : 'password'} autoComplete="new-password" minLength={6} maxLength={72} value={customPasscode} placeholder={`HYEN00${center.code}`} disabled={busy} onChange={event => setCustomPasscode(event.target.value)} /><Button type="button" size="sm" variant="ghost" aria-label={`${showPasscode ? 'Hide' : 'Show'} new passcode for Center ${center.code}`} onClick={() => setShowPasscode(!showPasscode)}>{showPasscode ? 'Hide' : 'Show'}</Button></div>
+            <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" disabled={busy || customPasscode.trim().length < 6} onClick={() => void setPasscode()}>Set passcode</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => { setCustomPasscode(`HYEN00${center.code}`); setShowPasscode(true) }}>Use HYEN00{center.code}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => { if (!center.has_passcode || confirm('Generate a random replacement? All this center’s signed-in sessions will end.')) void onSave(center.id, { examiner_name: name, reset_passcode: true }) }}>Generate random</Button></div>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">{center.has_passcode ? 'Passcode configured. Set a new one here to change it.' : 'Set a passcode to make this center available for sign in.'}</p>
+    </div>
 }
+
 const defaultSubject = { subject_id: '', name: 'Hifz Valuation', standard: '', question_count: 10, question_max: 10, min_marks: 40 }
 export default function PortalAdministration({ examId, standalone = false, portalSlug, onExpired, onSignOut, initialData }: { examId: string; standalone?: boolean; portalSlug?: string; onExpired?: () => void; onSignOut?: () => void; initialData?: PortalData }) {
     const client = useMemo(() => standalone ? axios.create({baseURL:'/api',withCredentials:true,timeout:15000}) : api, [standalone])
@@ -50,11 +69,11 @@ export default function PortalAdministration({ examId, standalone = false, porta
     }, [tab, load, standalone, onExpired])
     async function action(fn: (() => Promise<unknown>) | null, message: string) {
         setBusy(true); setError(''); setNotice('')
-        try { if (fn) await fn(); await load(tab === 'audit'); setNotice(message) }
-        catch (e) { setError(errorMessage(e)); if (standalone && isAxiosError(e) && e.response?.status === 401) onExpired?.() } finally { setBusy(false) }
+        try { if (fn) await fn(); await load(tab === 'audit'); setNotice(message); return true }
+        catch (e) { setError(errorMessage(e)); if (standalone && isAxiosError(e) && e.response?.status === 401) onExpired?.(); return false } finally { setBusy(false) }
     }
     async function saveCenter(id: string, body: unknown) {
-        await action(async () => { const response = await client.patch(`${base}/centers/${id}`, body); if (response.data.passcode) setPasscode({ code: data?.centers.find(c => c.id === id)?.code || '', value: response.data.passcode }) }, 'Center saved.')
+        return action(async () => { const response = await client.patch(`${base}/centers/${id}`, body); if (response.data.passcode) setPasscode({ code: data?.centers.find(c => c.id === id)?.code || '', value: response.data.passcode }) }, 'Center saved.')
     }
     async function importStudents(onlyPreview: boolean) {
         const body = new FormData()

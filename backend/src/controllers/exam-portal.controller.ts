@@ -155,6 +155,12 @@ export const importRoster = portalAction(async (req, res) => {
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 });
 export const updateCenter = portalAction(async (req, res) => {
+    const customPasscode = req.body.passcode;
+    const hasCustomPasscode = Object.prototype.hasOwnProperty.call(req.body, 'passcode');
+    if (hasCustomPasscode && (typeof customPasscode !== 'string' || customPasscode.trim().length < 6 || Buffer.byteLength(customPasscode, 'utf8') > 72)) throw new PortalError('Use a center passcode with at least 6 characters and at most 72 bytes.');
+    if (hasCustomPasscode && req.body.reset_passcode === true) throw new PortalError('Choose a custom passcode or generate a random one, not both.');
+    const replacement = hasCustomPasscode ? customPasscode as string : req.body.reset_passcode === true ? randomBytes(9).toString('base64url') : undefined;
+    const replacementHash = replacement !== undefined ? await bcrypt.hash(replacement, 12) : undefined;
     const client = await db.getClient();
     try {
         await client.query('BEGIN'); await examById(req.params.id, client, true, req);
@@ -164,8 +170,8 @@ export const updateCenter = portalAction(async (req, res) => {
         if (name.length > 120) throw new PortalError('Examiner name is too long.');
         if (req.body.locked !== undefined && typeof req.body.locked !== 'boolean') throw new PortalError('Invalid lock setting.');
         let passcode: string | undefined; let hash = c.passcode_hash;
-        if (req.body.reset_passcode === true) {
-            passcode = randomBytes(9).toString('base64url'); hash = await bcrypt.hash(passcode, 12);
+        if (replacement !== undefined) {
+            passcode = replacement; hash = replacementHash!;
             await client.query('DELETE FROM exam_portal_sessions WHERE center_id=$1', [c.id]);
         }
         await client.query('UPDATE exam_portal_centers SET examiner_name=$1,locked=$2,passcode_hash=$3 WHERE id=$4', [name, req.body.locked ?? c.locked, hash, c.id]);
