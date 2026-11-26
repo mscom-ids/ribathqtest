@@ -31,6 +31,7 @@ async function main() {
       CREATE TABLE exam_results(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),exam_id uuid REFERENCES exams(id) ON DELETE CASCADE,student_id text REFERENCES students(adm_no),subject_id uuid REFERENCES exam_subjects(id) ON DELETE CASCADE,marks_obtained numeric NOT NULL,remarks text,grader_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now(),UNIQUE(student_id,subject_id));`);
     await testDb.query(fs.readFileSync('supabase/migrations/20261126000000_examiner_portals.sql', 'utf8'));
     await testDb.query(fs.readFileSync('supabase/migrations/20261126010000_exam_administration_access.sql', 'utf8'));
+    await testDb.query(fs.readFileSync('supabase/migrations/20261126020000_decimal_exam_marks.sql', 'utf8'));
     const fixture = require('../backend/src/exam-allocation-nov26.json');
     const rows = fixture.centers.flatMap(c => c.students.map(s => ({ ...s, code: c.code })));
     for (const row of rows) await testDb.query('INSERT INTO students(adm_no,name) VALUES($1,$2)', [row.admission_no, row.name]);
@@ -39,7 +40,14 @@ async function main() {
     const workbookPath = process.argv[2];
     if (workbookPath) check('Excel parser matches independently extracted workbook allocation exactly', () => assert.deepEqual(service.parseAllocationWorkbook(fs.readFileSync(workbookPath)), rows.map(({code,serial_no,admission_no,name,standard})=>({code,serial_no,admission_no,name,standard}))));
     check('Duplicate admission and serial numbers are rejected', () => { assert.throws(()=>service.validateAllocation([...rows,rows[0]]),/Duplicate/);assert.throws(()=>service.validateAllocation([{...rows[0],serial_no:2}]),/restart/); });
-    check('Blank is distinct from zero and decimals/negatives/out of range fail', () => { assert.deepEqual(service.validateMarks([null,0],2,10,false),{marks:[null,0],total:0}); assert.equal(service.validateMarks([null,null],2,10,false).total,null);for(const value of [-1,11,1.5,'4',false])assert.throws(()=>service.validateMarks([value],1,10,true));assert.throws(()=>service.validateMarks([null],1,10,true)); });
+    check('Blank is distinct from zero; finite decimal marks are accepted within the question range', () => {
+        assert.deepEqual(service.validateMarks([null,0],2,10,false),{marks:[null,0],total:0});
+        assert.equal(service.validateMarks([null,null],2,10,false).total,null);
+        assert.deepEqual(service.validateMarks([9.5,9.4,0.25],3,10,true),{marks:[9.5,9.4,0.25],total:19.15});
+        assert.equal(service.validateMarks([0.1,0.2],2,10,true).total,0.3);
+        for(const value of [-1,10.01,11,NaN,Infinity,-Infinity,'4',false])assert.throws(()=>service.validateMarks([value],1,10,true));
+        assert.throws(()=>service.validateMarks([null],1,10,true));
+    });
     const app = express();app.use(express.json());app.use(cookieParser());
     app.use('/api/exams',require('../backend/src/routes/exams.routes').default);
     app.use('/api/exam-portal',require('../backend/src/routes/exam-portal.routes').default);
@@ -252,6 +260,44 @@ async function main() {
     await call(scopedBase,{slug,enabled:true},adminCookie,'PATCH');
     r=await call(`/exam-portal/${slug}/valuation`,{...payload,version:0},cookies.B);check('Old examiner tab cannot restore marks after administrator reset',()=>assert.equal(r.status,409));
     r=await call(`/exam-portal/${slug}/valuation`,{...payload,version:0,mark_revision:1},cookies.B);check('Fresh valuation can start again after reset',()=>assert.equal(r.status,200));
+    const decimalKeys=[id,student.student_id,subject.id];
+    const peersBeforeEdit=(await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id<>$2 ORDER BY student_id,subject_id',[id,student.student_id])).rows;
+    const editDraft={student_id:student.student_id,subject_id:subject.id,marks:[9.5,9.4,0.25,...Array(7).fill(null)],juz:'',remarks:'Administration decimal correction',version:r.data.valuation.version,mark_revision:1,confirmed:true};
+    r=await admin(management+'/edit-valuation',{...editDraft,confirmed:false});check('Administrative mark editing requires confirmation',()=>assert.equal(r.status,400));
+    r=await call(scopedBase+'/edit-valuation',editDraft,cookies.B);check('Examiner session cannot edit marks as an administrator',()=>assert.equal(r.status,401));
+    r=await call(scopedBase+'/edit-valuation',{...editDraft,subject_id:anotherSubject},adminCookie);check('Administration editing cannot create marks where no valuation is saved',()=>assert.equal(r.status,404));
+    assert.equal((await testDb.query('SELECT count(*)::int AS n FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',[id,student.student_id,anotherSubject])).rows[0].n,0);
+    r=await admin(management+'/edit-valuation',editDraft);check('Institution administrator can edit decimal draft marks without publishing them',()=>{assert.equal(r.status,200);assert.equal(r.data.valuation.version,editDraft.version+1);assert.equal(r.data.valuation.total,19.15);assert.equal(typeof r.data.valuation.total,'number');assert.equal(r.data.valuation.status,'draft');assert.equal(r.data.valuation.juz,'');});
+    assert.equal((await testDb.query('SELECT count(*)::int AS n FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0].n,0);
+    const editedDraftVersion=r.data.valuation.version;
+    r=await admin(management+'/edit-valuation',editDraft);check('An old administration form cannot overwrite a newer correction',()=>assert.equal(r.status,409));
+    const beforeInvalidEdit=(await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0];
+    for(const invalid of [
+        {marks:[10.01,9.4,0.25,...Array(7).fill(null)]},
+        {marks:[-0.1,9.4,0.25,...Array(7).fill(null)]},
+        {marks:['9.5',9.4,0.25,...Array(7).fill(null)]},
+        {marks:[9.5]},
+    ]) {const denied=await call(scopedBase+'/edit-valuation',{...editDraft,version:editedDraftVersion,...invalid},adminCookie);assert.equal(denied.status,400);}
+    check('Invalid decimal corrections leave the saved valuation unchanged',()=>{});assert.deepEqual((await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0],beforeInvalidEdit);
+    r=await call(scopedBase+'/edit-valuation',{...editDraft,version:editedDraftVersion,mark_revision:0},adminCookie);check('Administration edit rejects marks from before a student reset',()=>assert.equal(r.status,409));
+    r=await call(scopedBase+'/edit-valuation',{...editDraft,version:editedDraftVersion,student_id:'R999999'},adminCookie);check('Administration editing rejects a student outside this exam',()=>assert([400,404].includes(r.status)));
+    r=await call(scopedBase+'/edit-valuation',{...editDraft,version:editedDraftVersion,subject_id:otherExamSubject},adminCookie);check('Administration editing rejects a subject from another exam',()=>assert([400,404].includes(r.status)));
+    r=await call(scopedBase+'/edit-valuation',{...editDraft,version:editedDraftVersion,marks:[9.5,9.4,0.25,...Array(7).fill(0)]},adminCookie);check('Exam-passcode administrator can edit an existing draft while preserving draft status',()=>{assert.equal(r.status,200);assert.equal(r.data.valuation.status,'draft');assert.equal(r.data.valuation.total,19.15);});
+    const decimalFinal={...payload,version:r.data.valuation.version,mark_revision:1,marks:[9.5,9.4,0.25,...Array(7).fill(0)],juz:'',status:'submitted',confirmed:true};
+    r=await call(`/exam-portal/${slug}/valuation`,decimalFinal,cookies.B);check('Examiner can submit decimal marks with an empty optional Juz',()=>{assert.equal(r.status,200);assert.equal(r.data.valuation.total,19.15);assert.equal(r.data.valuation.juz,'');assert.equal(r.data.valuation.status,'submitted');});
+    const firstSubmittedAt=r.data.valuation.submitted_at;const originalExaminer=r.data.valuation.examiner_name;
+    const submittedEdit={...editDraft,version:r.data.valuation.version,marks:[9.5,9.4,0.25,...Array(7).fill(10)]};
+    r=await call(scopedBase+'/edit-valuation',{...submittedEdit,marks:[null,9.4,0.25,...Array(7).fill(10)]},adminCookie);check('Correcting a submitted valuation still requires every question mark',()=>assert.equal(r.status,400));
+    assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0].marks_obtained),19.15);
+    r=await call(scopedBase+'/edit-valuation',submittedEdit,adminCookie);check('Exam administrator corrects a submitted valuation without reopening it',()=>{assert.equal(r.status,200);assert.equal(r.data.valuation.total,89.15);assert.equal(r.data.valuation.status,'submitted');assert.equal(r.data.valuation.submitted_at,firstSubmittedAt);assert.equal(r.data.valuation.examiner_name,originalExaminer);});
+    assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0].marks_obtained),89.15);
+    r=await admin(management+'/edit-valuation',{...submittedEdit,version:r.data.valuation.version,marks:[8.5,9.4,0.25,...Array(7).fill(10)]});check('Institution correction keeps the decimal published result synchronized',()=>{assert.equal(r.status,200);assert.equal(r.data.valuation.total,88.15);});
+    assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',decimalKeys)).rows[0].marks_obtained),88.15);
+    const editAudit=(await admin(management+'?audit=true')).data.audit.filter(a=>a.action==='edit_valuation'&&a.details.student_id===student.student_id);
+    check('Correction history records prior and corrected decimal marks',()=>{assert.equal(editAudit.length,4);const correction=editAudit.find(a=>a.details.previous.total===89.15&&a.details.valuation.total===88.15);assert(correction);assert.deepEqual(correction.details.previous.marks,submittedEdit.marks);assert.deepEqual(correction.details.valuation.marks,[8.5,9.4,0.25,...Array(7).fill(10)]);assert.equal(correction.details.valuation.version,correction.details.previous.version+1);});
+    check('Mark corrections preserve other students and the student’s other-exam result',()=>{});
+    assert.deepEqual((await testDb.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id<>$2 ORDER BY student_id,subject_id',[id,student.student_id])).rows,peersBeforeEdit);
+    assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2',[newExam.id,student.student_id])).rows[0].marks_obtained),70);
     await admin(management+'/admin-passcode',{passcode:'Rotated-Exam-Admin-26'});
     r=await call(scopedBase,undefined,adminCookie);check('Changing administration passcode immediately revokes previous sessions',()=>assert.equal(r.status,401));
     r=await call(scopedBase+'/login',{passcode:'Rotated-Exam-Admin-26'});adminCookie=r.cookie;
@@ -275,6 +321,10 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
     let browser;let completedStudentId;
     try {
         const origin='http://127.0.0.1:3108';
+        const waitForPortalStyles=async page=>{
+            await page.waitForFunction(()=>Array.from(document.styleSheets).some(sheet=>sheet.href?.includes('/_next/static/css/'))&&getComputedStyle(document.body).margin==='0px');
+            await page.evaluate(()=>document.fonts.ready);
+        };
         for(let i=0;i<90;i++){try{const r=await fetch(origin+`/hifz/exam/${slug}`);if(r.ok)break;}catch{}if(i===89)throw new Error('Frontend did not start.');await new Promise(resolve=>setTimeout(resolve,1000));}
         browser=await chromium.launch({channel:'msedge',headless:true});
         const adminRequest=async(url,body,method='PATCH')=>{
@@ -293,6 +343,7 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
             const diagnosticsPage=await diagnosticsContext.newPage();
             const adminResponses=[];diagnosticsPage.on('response',response=>{if(response.url().includes('/api/exam-portal/'))adminResponses.push({url:new URL(response.url()).pathname,method:response.request().method(),status:response.status()});});
             await diagnosticsPage.goto(origin+`/hifz/exam/${slug}/administration`);
+            await waitForPortalStyles(diagnosticsPage);
             await diagnosticsPage.getByLabel('Administration passcode',{exact:true}).fill(administrationPasscode);
             check('Administration sign-in page makes one bootstrap request and no expected 401 calls',()=>{assert.equal(adminResponses.filter(r=>r.url.endsWith('/admin/bootstrap')).length,1);assert(!adminResponses.some(r=>r.status===401));});
             assert.equal(await diagnosticsPage.getByLabel('Email address',{exact:true}).count(),0);
@@ -311,7 +362,7 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
             await diagnosticsPage.screenshot({path:path.join(outDir,'desktop-partial-access.png'),fullPage:true});
             const partialContext=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1});
             try {
-                const partialPage=await partialContext.newPage();await partialPage.goto(origin+`/hifz/exam/${slug}`);
+                const partialPage=await partialContext.newPage();await partialPage.goto(origin+`/hifz/exam/${slug}`);await waitForPortalStyles(partialPage);
                 const examinerResponses=[];partialPage.on('response',response=>{if(response.url().includes('/api/exam-portal/'))examinerResponses.push({url:new URL(response.url()).pathname,method:response.request().method(),status:response.status()});});
                 const centerSelect=partialPage.getByLabel('Exam center',{exact:true});await centerSelect.waitFor();
                 const optionValues=await centerSelect.locator('option').evaluateAll(options=>options.map(option=>option.value));
@@ -331,19 +382,19 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
         }
         const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1});
         const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-        await page.goto(origin+`/hifz/exam/${slug}`);await page.getByRole('heading',{name:'Examiner sign in'}).waitFor();
+        await page.goto(origin+`/hifz/exam/${slug}`);await page.getByRole('heading',{name:'Examiner sign in'}).waitFor();await waitForPortalStyles(page);
         await page.screenshot({path:path.join(outDir,'mobile-login.png'),fullPage:true});
         check('Mobile login has no horizontal overflow',()=>{});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
         await page.getByLabel('Exam center',{exact:true}).selectOption('A');await page.getByLabel('Passcode',{exact:true}).fill(passcode);await page.getByRole('button',{name:'Open my center'}).click();await page.getByText('Your assigned students',{exact:true}).waitFor();
         await page.screenshot({path:path.join(outDir,'mobile-roster.png'),fullPage:true});
         check('Mobile login opens only the center roster',()=>{});assert.equal(await page.locator('article').count(),12);
-        await page.locator('article').first().getByRole('button').first().click();await page.getByLabel('Juz / portion examined').fill('Juz 2–6');
-        for(let i=1;i<=10;i++)await page.getByLabel(`Question ${i}`,{exact:true}).fill(i===1?'0':'10');
+        await page.locator('article').first().getByRole('button').first().click();await page.getByLabel('Juz / portion examined').fill('');
+        for(let i=1;i<=10;i++)await page.getByLabel(`Question ${i}`,{exact:true}).fill(i===1?'9.5':i===2?'9.4':i===3?'0.25':'10');
         await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('status').filter({hasText:'Draft saved'}).waitFor();
         await page.screenshot({path:path.join(outDir,'mobile-marking.png'),fullPage:true});
-        check('Mobile valuation calculates 90/100 and saves a draft',()=>{});assert(await page.getByText('90',{exact:false}).count());assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        check('Mobile valuation accepts decimal marks and saves a correct 89.15/100 draft',()=>{});assert(await page.getByText('89.15',{exact:false}).count());assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
         await page.getByRole('checkbox').check();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Submit valuation',exact:true}).click();await page.getByRole('status').filter({hasText:'Valuation submitted'}).waitFor();
-        check('Mobile final submission locks question inputs',()=>{});assert(await page.getByLabel('Question 1',{exact:true}).isDisabled());
+        check('Mobile final submission accepts blank Juz and locks question inputs',()=>{});assert(await page.getByLabel('Question 1',{exact:true}).isDisabled());
         await page.reload();await page.getByText('Your assigned students',{exact:true}).waitFor();
         check('Browser reload retains examiner session and submitted progress',()=>{});assert(await page.getByText('1 of 12 completed',{exact:false}).count());
         check('Examiner name is emphasized and assigned-students label stays secondary',()=>{});assert.equal(await page.getByRole('heading',{name:'Examiner A',exact:true}).count(),1);assert.equal(await page.getByText('Your assigned students',{exact:true}).evaluate(node=>node.tagName),'P');
@@ -371,11 +422,31 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
         check('Exam administrator can fill the HYEN00A pattern and confirm its custom passcode in the center card',()=>{});assert.equal(await adminPage.getByText('HYEN00A',{exact:true}).count(),1);
         await adminPage.screenshot({path:path.join(outDir,'desktop-custom-center-passcode.png'),fullPage:true});
         await adminPage.getByRole('button',{name:'Results & reports',exact:true}).click();await adminPage.getByRole('heading',{name:'Results and printable sheets'}).waitFor();await adminPage.getByLabel('Report type').selectOption('allocations');await adminPage.screenshot({path:path.join(outDir,'desktop-center-lists.png'),fullPage:true});
+        const editorData=await adminRequest(`/exams/${id}/portal`,undefined,'GET');
+        const editorSubject=editorData.valuations.find(v=>v.student_id===completedStudentId&&v.status==='submitted').subject_id;
+        await adminPage.getByLabel('Student marks to edit',{exact:true}).selectOption(completedStudentId);
+        await adminPage.getByLabel('Valuation subject',{exact:true}).selectOption(editorSubject);
+        await adminPage.getByRole('button',{name:'Edit marks',exact:true}).click();
+        await adminPage.getByRole('dialog',{name:'Correct student marks'}).waitFor();
+        await waitForPortalStyles(adminPage);
+        assert.equal(await adminPage.getByLabel('Edit Juz / portion (optional)',{exact:true}).inputValue(),'');
+        await adminPage.getByLabel('Edit Question 1',{exact:true}).fill('8.5');
+        await adminPage.screenshot({path:path.join(outDir,'desktop-decimal-mark-editor.png'),fullPage:false});
+        adminPage.once('dialog',dialog=>dialog.dismiss());await adminPage.getByRole('button',{name:'Save corrected marks',exact:true}).click();
+        assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',[id,completedStudentId,editorSubject])).rows[0].marks_obtained),89.15);
+        adminPage.once('dialog',dialog=>dialog.accept());await adminPage.getByRole('button',{name:'Save corrected marks',exact:true}).click();
+        await adminPage.getByRole('status').filter({hasText:'Valuation updated.'}).waitFor();
+        check('Exam administrator can confirm decimal corrections with optional blank Juz in the marking editor',()=>{});
+        const uiCorrected=(await testDb.query('SELECT status,juz,total FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',[id,completedStudentId,editorSubject])).rows[0];
+        assert.equal(Number(uiCorrected.total),88.15);assert.equal(uiCorrected.status,'submitted');assert.equal(uiCorrected.juz,'');
+        assert.equal(Number((await testDb.query('SELECT marks_obtained FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3',[id,completedStudentId,editorSubject])).rows[0].marks_obtained),88.15);
+        await adminPage.screenshot({path:path.join(outDir,'desktop-decimal-mark-correction.png'),fullPage:true});
         await adminPage.getByLabel('Student whose exam marks to reset').selectOption(completedStudentId);
         adminPage.once('dialog',dialog=>dialog.dismiss());await adminPage.getByRole('button',{name:'Reset student marks',exact:true}).click();
         assert.equal((await testDb.query('SELECT count(*)::int AS n FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2',[id,completedStudentId])).rows[0].n,1);
         adminPage.once('dialog',dialog=>dialog.accept());await adminPage.getByRole('button',{name:'Reset student marks',exact:true}).click();await adminPage.getByRole('status').filter({hasText:'Student marks reset.'}).waitFor();
         check('Passcode administrator can confirm a student reset; cancelling preserves the marks',()=>{});assert.equal((await testDb.query('SELECT count(*)::int AS n FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2',[id,completedStudentId])).rows[0].n,0);
+        assert(await adminPage.getByRole('button',{name:'Edit marks',exact:true}).isDisabled());
         await adminPage.emulateMedia({media:'print'});await adminPage.pdf({path:path.join(outDir,'center-lists.pdf'),format:'A4',printBackground:true});await adminPage.emulateMedia({media:'screen'});
         await adminPage.setViewportSize({width:390,height:844});await adminPage.getByRole('button',{name:'Portal & subjects',exact:true}).click();await adminPage.screenshot({path:path.join(outDir,'mobile-administration.png'),fullPage:true});
         check('Administration works on desktop and mobile without overflow',()=>{});assert(await adminPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));

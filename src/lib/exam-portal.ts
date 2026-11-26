@@ -15,7 +15,7 @@ export function studentResult(student: PortalStudent, subjects: PortalSubject[],
     const configured = subjects.filter(s => s.standard === student.standard && s.question_count)
     const saved = valuations.filter(v => v.student_id === student.student_id && v.status === 'submitted' && configured.some(s => s.id === v.subject_id))
     const complete = !!configured.length && saved.length === configured.length
-    const total = saved.reduce((n, v) => n + (v.total ?? 0), 0)
+    const total = Number(saved.reduce((n, v) => n + (v.total ?? 0), 0).toFixed(10))
     const max = configured.reduce((n, s) => n + Number(s.max_marks), 0)
     return { complete, total, max, percentage: complete && max ? total / max * 100 : null, passed: complete && configured.every(s => saved.some(v => v.subject_id === s.id && Number(v.total) >= Number(s.min_marks))) }
 }

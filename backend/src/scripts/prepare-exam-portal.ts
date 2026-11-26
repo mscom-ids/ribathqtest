@@ -17,6 +17,8 @@ async function main() {
         if (!schema.rows[0].installed) await client.query(await fs.readFile(path.resolve(__dirname, '../../..', 'supabase/migrations/20261126000000_examiner_portals.sql'), 'utf8'));
         const administration = await client.query("SELECT to_regclass('public.exam_portal_admin_credentials') AS installed");
         if (!administration.rows[0].installed) await client.query(await fs.readFile(path.resolve(__dirname, '../../..', 'supabase/migrations/20261126010000_exam_administration_access.sql'), 'utf8'));
+        const totalColumn = await client.query("SELECT data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='exam_portal_valuations' AND column_name='total'");
+        if (totalColumn.rows[0]?.data_type !== 'numeric') await client.query(await fs.readFile(path.resolve(__dirname, '../../..', 'supabase/migrations/20261126020000_decimal_exam_marks.sql'), 'utf8'));
         await client.query('BEGIN');
         await client.query("SELECT pg_advisory_xact_lock(hashtext('prepare-exam-portal-nov26'))");
         const slug = 'half-yearly-hifz-nov26';

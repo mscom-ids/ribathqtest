@@ -13,7 +13,7 @@ import {
 } from '../controllers/exams.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 import multer from 'multer';
-import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, exportPortal } from '../controllers/exam-portal.controller';
+import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal } from '../controllers/exam-portal.controller';
 import { getAdministrationPasscode, setAdministrationPasscode } from '../controllers/exam-administration.controller';
 
 const router = Router();
@@ -31,6 +31,7 @@ router.get('/:id/portal', requireRole(EXAM_MANAGE_ROLES), adminPortalData);
 router.get('/:id/portal/admin-passcode', requireRole(EXAM_MANAGE_ROLES), getAdministrationPasscode);
 router.post('/:id/portal/admin-passcode', requireRole(EXAM_MANAGE_ROLES), setAdministrationPasscode);
 router.post('/:id/portal/reset-student', requireRole(EXAM_MANAGE_ROLES), resetStudentMarks);
+router.post('/:id/portal/edit-valuation', requireRole(EXAM_MANAGE_ROLES), editValuation);
 router.patch('/:id/portal', requireRole(EXAM_MANAGE_ROLES), updatePortal);
 router.post('/:id/portal/import', requireRole(EXAM_MANAGE_ROLES), (req, res, next) => upload.single('workbook')(req, res, err => err ? res.status(400).json({success:false,error:'Upload one Excel workbook smaller than 5 MB.'}) : next()), importRoster);
 router.patch('/:id/portal/centers/:centerId', requireRole(EXAM_MANAGE_ROLES), updateCenter);

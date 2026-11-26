@@ -79,11 +79,11 @@ export function validateMarks(marks: unknown, count: number, max: number, submit
     if (!Array.isArray(marks) || marks.length !== count) throw new PortalError(`Enter exactly ${count} question marks.`);
     const values = marks.map(value => {
         if (value === null || value === '') return null;
-        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) throw new PortalError(`Each mark must be a whole number from 0 to ${max}.`);
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max) throw new PortalError(`Each mark must be a number between 0 and ${max}. Decimal marks are allowed.`);
         return value;
     });
     if (submit && values.some(v => v === null)) throw new PortalError('Enter every question mark before final submission.');
-    return { marks: values, total: values.every(v => v === null) ? null : values.reduce<number>((sum, value) => sum + (value ?? 0), 0) };
+    return { marks: values, total: values.every(v => v === null) ? null : Number(values.reduce<number>((sum, value) => sum + (value ?? 0), 0).toFixed(10)) };
 }
 
 export async function verifyAllocationStudents(client: Pick<PoolClient, 'query'>, rows: Allocation[]) {

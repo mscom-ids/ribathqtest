@@ -2,7 +2,7 @@ import { Router, RequestHandler } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { administrationBootstrap, administrationLogin, administrationLogout, administrationSession, type ExamAdministrationRequest } from '../controllers/exam-administration.controller';
-import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, exportPortal } from '../controllers/exam-portal.controller';
+import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal } from '../controllers/exam-portal.controller';
 
 const router = Router({ mergeParams: true });
 router.get('/bootstrap', administrationBootstrap);
@@ -25,4 +25,5 @@ router.post('/subjects', scoped(configureSubject));
 router.post('/reopen', scoped(reopenValuation));
 router.post('/move', scoped(moveStudent));
 router.post('/reset-student', scoped(resetStudentMarks));
+router.post('/edit-valuation', scoped(editValuation));
 export default router;

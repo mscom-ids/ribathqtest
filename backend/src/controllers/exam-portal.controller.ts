@@ -106,9 +106,10 @@ export const saveValuation = portalAction(async (req, res) => {
         const subjects = await client.query('SELECT * FROM exam_subjects WHERE exam_id=$1 AND id=$2 AND standard=$3 AND question_count IS NOT NULL', [c.exam_id, subject_id, assigned.rows[0].standard]);
         if (!subjects.rows.length) throw new PortalError('Subject is not configured for this student.');
         const s = subjects.rows[0]; const submit = status === 'submitted';
-        if (submit && (!juz || confirmed !== true || !center.examiner_name.trim())) throw new PortalError('Enter the Juz and confirm your valuation. An examiner name must be configured.');
+        if (submit && (confirmed !== true || !center.examiner_name.trim())) throw new PortalError('Confirm your valuation. An examiner name must be configured.');
         const checked = validateMarks(req.body.marks, s.question_count, s.question_max, submit);
         const previous = (await client.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3', [c.exam_id, student_id, subject_id])).rows[0];
+        if (previous?.total != null) previous.total = Number(previous.total);
         if (previous?.status === 'submitted') throw new PortalError('Submitted marks are locked. Ask an administrator to reopen them.', 409);
         if ((previous?.version || 0) !== version) throw new PortalError('This valuation changed in another tab. Reload before saving.', 409);
         if (submit) {
@@ -119,6 +120,7 @@ export const saveValuation = portalAction(async (req, res) => {
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $7='submitted' THEN now() END)
             ON CONFLICT(exam_id,student_id,subject_id) DO UPDATE SET marks=EXCLUDED.marks,juz=EXCLUDED.juz,remarks=EXCLUDED.remarks,status=EXCLUDED.status,total=EXCLUDED.total,examiner_name=EXCLUDED.examiner_name,submitted_at=EXCLUDED.submitted_at,updated_at=now(),version=exam_portal_valuations.version+1 RETURNING *`,
         [c.exam_id, student_id, subject_id, JSON.stringify(checked.marks), juz, remarks, status, checked.total, center.examiner_name]);
+        if (saved.rows[0].total != null) saved.rows[0].total = Number(saved.rows[0].total);
         if (submit) await client.query('INSERT INTO exam_results(exam_id,student_id,subject_id,marks_obtained,remarks) VALUES($1,$2,$3,$4,$5)', [c.exam_id, student_id, subject_id, checked.total, remarks || null]);
         await client.query('INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,$2,$3,$4)', [c.exam_id, `Center ${center.code}: ${center.examiner_name}`, status, JSON.stringify({ student_id, subject_id, previous: previous || null, valuation: saved.rows[0] })]);
         await client.query('COMMIT'); res.json({ success: true, valuation: saved.rows[0] });
@@ -129,6 +131,36 @@ export const adminPortalData = portalAction(async (req, res) => {
     const data = await readAdministrationData({ examId: req.params.id }, req.query.audit === 'true');
     if (!data) throw new PortalError('Exam not found.', 404);
     res.json({ success: true, ...data });
+});
+export const editValuation = portalAction(async (req, res) => {
+    const { student_id, subject_id, version, confirmed } = req.body;
+    if (confirmed !== true) throw new PortalError('Confirm the corrected marks before saving.');
+    if (!Number.isInteger(version) || version < 1) throw new PortalError('Reload this valuation before editing.');
+    const juz = String(req.body.juz || '').trim();
+    const remarks = String(req.body.remarks || '').trim();
+    if (juz.length > 120 || remarks.length > 2000) throw new PortalError('Juz or remarks are too long.');
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN'); await examById(req.params.id, client, true, req);
+        const allocation = (await client.query('SELECT standard,mark_revision FROM exam_portal_allocations WHERE exam_id=$1 AND student_id=$2', [req.params.id, student_id])).rows[0];
+        if (!allocation) throw new PortalError('Student is not assigned to this exam.', 404);
+        if ((req.body.mark_revision ?? 0) !== allocation.mark_revision) throw new PortalError('These marks were reset. Reload the student before editing.', 409);
+        const subject = (await client.query('SELECT * FROM exam_subjects WHERE exam_id=$1 AND id=$2 AND standard=$3 AND question_count IS NOT NULL', [req.params.id, subject_id, allocation.standard])).rows[0];
+        if (!subject) throw new PortalError('Subject is not configured for this student in this exam.', 404);
+        const keys = [req.params.id, student_id, subject_id];
+        const previous = (await client.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3 FOR UPDATE', keys)).rows[0];
+        if (!previous) throw new PortalError('There are no saved question marks to edit. Reload the results.', 404);
+        if (previous.version !== version) throw new PortalError('This valuation changed. Reload it before saving corrections.', 409);
+        if (previous.total != null) previous.total = Number(previous.total);
+        const checked = validateMarks(req.body.marks, subject.question_count, subject.question_max, previous.status === 'submitted');
+        const saved = await client.query(`UPDATE exam_portal_valuations SET marks=$4,juz=$5,remarks=$6,total=$7,version=version+1,updated_at=now()
+            WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3 RETURNING *`, [...keys, JSON.stringify(checked.marks), juz, remarks, checked.total]);
+        if (saved.rows[0].total != null) saved.rows[0].total = Number(saved.rows[0].total);
+        if (previous.status === 'submitted') await client.query(`INSERT INTO exam_results(exam_id,student_id,subject_id,marks_obtained,remarks) VALUES($1,$2,$3,$4,$5)
+            ON CONFLICT(student_id,subject_id) DO UPDATE SET marks_obtained=EXCLUDED.marks_obtained,remarks=EXCLUDED.remarks,updated_at=now()`, [...keys, checked.total, remarks || null]);
+        await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,$2,'edit_valuation',$3)", [req.params.id, actor(req), JSON.stringify({ student_id, subject_id, previous, valuation: saved.rows[0] })]);
+        await client.query('COMMIT'); res.json({ success: true, valuation: saved.rows[0] });
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 });
 export const updatePortal = portalAction(async (req, res) => {
     const client = await db.getClient();
@@ -233,6 +265,7 @@ export const reopenValuation = portalAction(async (req, res) => {
         await client.query('BEGIN'); await examById(req.params.id, client, true, req);
         const keys = [req.params.id, req.body.student_id, req.body.subject_id];
         const previous = await client.query('SELECT * FROM exam_portal_valuations WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3', keys);
+        if (previous.rows[0]?.total != null) previous.rows[0].total = Number(previous.rows[0].total);
         const result = await client.query('DELETE FROM exam_results WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3 RETURNING *', keys);
         await client.query("UPDATE exam_portal_valuations SET status='draft',submitted_at=NULL,version=version+1,updated_at=now() WHERE exam_id=$1 AND student_id=$2 AND subject_id=$3", keys);
         await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,$2,'reopen',$3)", [req.params.id, actor(req), JSON.stringify({ student_id: req.body.student_id, subject_id: req.body.subject_id, previous: previous.rows[0], result: result.rows[0] })]);
@@ -269,7 +302,7 @@ export const resetStudentMarks = portalAction(async (req, res) => {
         const results = await client.query('DELETE FROM exam_results WHERE exam_id=$1 AND student_id=$2', keys);
         await client.query('UPDATE exam_portal_allocations SET mark_revision=mark_revision+1 WHERE exam_id=$1 AND student_id=$2', keys);
         // Erase prior score snapshots while preserving the history of administrative actions.
-        await client.query("UPDATE exam_portal_audit SET details=jsonb_build_object('student_id',$2::text,'marks_cleared',true) WHERE exam_id=$1 AND details->>'student_id'=$2 AND action IN ('draft','submitted','reopen')", keys);
+        await client.query("UPDATE exam_portal_audit SET details=jsonb_build_object('student_id',$2::text,'marks_cleared',true) WHERE exam_id=$1 AND details->>'student_id'=$2 AND action IN ('draft','submitted','reopen','edit_valuation')", keys);
         await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,$2,'reset_student_marks',$3)", [req.params.id, actor(req), JSON.stringify({ student_id: req.body.student_id, deleted_valuations: valuations.rowCount, deleted_results: results.rowCount })]);
         await client.query('COMMIT'); res.json({ success: true, deleted_valuations: valuations.rowCount, deleted_results: results.rowCount });
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
@@ -279,7 +312,7 @@ export const exportPortal = portalAction(async (req, res) => {
     const result = await db.query(`SELECT c.code AS center,a.serial_no,a.student_id,a.student_name,a.standard,s.name AS subject,s.max_marks,s.min_marks,s.question_count,s.question_max,v.juz,v.marks,v.total,coalesce(v.status,'pending') AS status,v.remarks,v.examiner_name,v.submitted_at
       FROM exam_portal_allocations a JOIN exam_portal_centers c ON c.id=a.center_id LEFT JOIN exam_subjects s ON s.exam_id=a.exam_id AND s.standard=a.standard AND s.question_count IS NOT NULL LEFT JOIN exam_portal_valuations v ON v.exam_id=a.exam_id AND v.student_id=a.student_id AND v.subject_id=s.id WHERE a.exam_id=$1 ORDER BY c.code,a.serial_no,s.created_at`, [exam.id]);
     const wb = XLSX.utils.book_new();
-    const data = result.rows.map(r => ({ Center: r.center, 'SL NO': r.serial_no, 'AD. NO': r.student_id, Name: r.student_name, Standard: r.standard, Subject: r.subject || '', Juz: r.juz || '', ...Object.fromEntries(Array.from({ length: r.question_count || 0 }, (_, i) => [`Q${i + 1}`, r.marks?.[i] ?? ''])), Total: r.total ?? '', Maximum: r.max_marks ?? '', Status: r.status, Result: r.status === 'submitted' ? (r.total >= r.min_marks ? 'Pass' : 'Fail') : '', Remarks: r.remarks || '', Examiner: r.examiner_name || '', Submitted: r.submitted_at ? new Date(r.submitted_at).toISOString() : '' }));
+    const data = result.rows.map(r => ({ Center: r.center, 'SL NO': r.serial_no, 'AD. NO': r.student_id, Name: r.student_name, Standard: r.standard, Subject: r.subject || '', Juz: r.juz || '', ...Object.fromEntries(Array.from({ length: r.question_count || 0 }, (_, i) => [`Q${i + 1}`, r.marks?.[i] ?? ''])), Total: r.total == null ? '' : Number(r.total), Maximum: r.max_marks ?? '', Status: r.status, Result: r.status === 'submitted' ? (r.total >= r.min_marks ? 'Pass' : 'Fail') : '', Remarks: r.remarks || '', Examiner: r.examiner_name || '', Submitted: r.submitted_at ? new Date(r.submitted_at).toISOString() : '' }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Result Register');
     for (const code of [...new Set(result.rows.map(r => r.center))]) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.filter(r => r.Center === code)), `Center ${code}`.slice(0, 31));
     const output = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
