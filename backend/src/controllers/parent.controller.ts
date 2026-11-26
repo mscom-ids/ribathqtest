@@ -11,6 +11,7 @@ import { calculatePages, getSurahId, calculateCoveredPagesFromLogs } from '../ut
 import { countCompletedJuz } from '../utils/quran-juz';
 import { getAcademicYearContext } from '../utils/academic-year';
 import { getCalculatedMonthlyReports } from './hifz.controller';
+import { evaluateStudentResult } from '../services/exam-result.service';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -329,10 +330,16 @@ function groupExamRows(rows: any[]) {
 
     return Array.from(exams.values()).map((exam) => {
         const percentage = exam.total_max > 0 ? Math.round((exam.total_obtained / exam.total_max) * 1000) / 10 : 0;
+        const saved = rows.filter(row => row.exam_id === exam.id);
+        const first = saved[0];
+        const grouped = first?.configured_subjects?.some((subject: any) => subject.result_group)
+            ? evaluateStudentResult({ student_id: first.student_id, standard: first.subject_standard }, first.configured_subjects,
+                saved.map(row => ({ student_id: row.student_id, subject_id: row.subject_id, total: row.marks_obtained, status: 'submitted' })))
+            : null;
         return {
             ...exam,
             percentage,
-            grade: exam.total_max > 0 ? gradeFromPercentage(percentage) : '-',
+            grade: grouped ? grouped.grade || 'Pending' : exam.total_max > 0 ? gradeFromPercentage(percentage) : '-',
         };
     });
 }
@@ -514,6 +521,10 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                     es.name AS subject,
                     es.max_marks,
                     es.min_marks,
+                    es.standard AS subject_standard,
+                    (SELECT jsonb_agg(to_jsonb(configured)) FROM exam_subjects configured
+                     WHERE configured.exam_id=e.id AND configured.standard=es.standard) AS configured_subjects,
+                    er.student_id,
                     er.marks_obtained,
                     er.remarks
                  FROM exam_results er

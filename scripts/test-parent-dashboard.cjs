@@ -15,6 +15,7 @@ const roster = [
 let mentorId = 'mentor-snapshot';
 const academicYearId = 'parent-test-year';
 const queries = [];
+let examRows = [];
 
 function mockModule(relativePath, exports) {
     const filename = require.resolve(relativePath);
@@ -25,6 +26,7 @@ mockModule('../backend/src/config/db', {
     db: {
         async query(sql, params = []) {
             queries.push({ sql, params });
+            if (sql.includes('FROM exam_results er')) return { rows: examRows };
             if (sql.includes('FROM hifz_logs')) return { rows: [] };
             if (sql.includes('FROM students s')) {
                 if (sql.includes('s.dob')) {
@@ -114,6 +116,20 @@ async function main() {
         invalidateCacheByPrefix('hifz:monthly-calculate');
         assert.equal((await dashboard()).class_rank, null, 'Unassigned students have no invented class rank');
         assert(queries.length > 0);
+        const configured = [
+            { id: 'valuation', name: 'Hifz Valuation', standard: '7th', max_marks: 80, min_marks: 32, question_count: 10, result_group: 'Combined', result_group_min_marks: 35, result_component_min_marks: 30 },
+            { id: 'portion', name: 'Hifz Portion', standard: '7th', max_marks: 20, min_marks: 7, question_count: 1, result_group: 'Combined', result_group_min_marks: 35 },
+            { id: 'recitation', name: 'Hfz Murajaa', standard: '7th', max_marks: 100, min_marks: 35, question_count: 1, result_group: 'Recitation', result_group_min_marks: 35 },
+        ];
+        for (const [marks, grade] of [[[80,20,90],'A++'], [[70,20,90],'A+'], [[30,5,35],'D+'], [[32,3,35],'D+'], [[29,6,35],'F'], [[80,20,30],'F'], [[70,20],'Pending']]) {
+            examRows = marks.map((mark, index) => ({ exam_id: 'test-exam', exam_title: 'Hifz Exam', subject_id: configured[index].id, subject: configured[index].name,
+                max_marks: configured[index].max_marks, min_marks: configured[index].min_marks, marks_obtained: mark,
+                student_id: 'PARENT-Z', subject_standard: '7th', configured_subjects: configured }));
+            assert.equal((await dashboard()).exams[0].grade, grade, 'Parent exam grade uses the same bands and group requirements');
+        }
+        examRows = [{ exam_id: 'ordinary', subject_id: 'ordinary', marks_obtained: 96, max_marks: 100 }];
+        assert.equal((await dashboard()).exams[0].grade, 'A++', 'Other exams retain their existing grading');
+        examRows = [];
         console.log('Parent dashboard passed: mentor points, tie ordering, India midnight release, nested grade masking, past/future months, and unassigned students.');
     } finally {
         mock.timers.reset();

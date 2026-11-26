@@ -9,6 +9,7 @@ import type { QueryResult } from 'pg';
 import { readAdministrationData, readExaminerSession, readPublicPortal, schedulePortalSessionCleanup } from '../services/exam-portal-read.service';
 import type { ExamAdministrationRequest } from './exam-administration.controller';
 import { createValuationWorkbook } from '../services/valuation-workbook.service';
+import { createResultExportRows } from '../services/exam-result-export.service';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 type CenterRow = {id:string;exam_id:string;code:string;name:string;examiner_name:string;locked:boolean;is_active:boolean;portal_enabled:boolean;passcode_hash:string|null};
@@ -328,10 +329,10 @@ export const exportValuationSheets = portalAction(async (req, res) => {
 });
 export const exportPortal = portalAction(async (req, res) => {
     const exam = await examById(req.params.id);
-    const result = await db.query(`SELECT c.code AS center,a.serial_no,a.student_id,a.student_name,a.standard,s.name AS subject,s.max_marks,s.min_marks,s.question_count,s.question_max,v.juz,v.marks,v.total,coalesce(v.status,'pending') AS status,v.remarks,v.examiner_name,v.submitted_at
+    const result = await db.query(`SELECT c.code AS center,a.serial_no,a.student_id,a.student_name,a.standard,s.id AS subject_id,s.name AS subject,s.max_marks,s.min_marks,s.result_group,s.result_group_min_marks,s.result_component_min_marks,s.question_count,s.question_max,v.juz,v.marks,v.total,coalesce(v.status,'pending') AS status,v.remarks,v.examiner_name,v.submitted_at
       FROM exam_portal_allocations a JOIN exam_portal_centers c ON c.id=a.center_id LEFT JOIN exam_subjects s ON s.exam_id=a.exam_id AND s.standard=a.standard AND s.question_count IS NOT NULL LEFT JOIN exam_portal_valuations v ON v.exam_id=a.exam_id AND v.student_id=a.student_id AND v.subject_id=s.id WHERE a.exam_id=$1 ORDER BY c.code,a.serial_no,s.created_at`, [exam.id]);
     const wb = XLSX.utils.book_new();
-    const data = result.rows.map(r => ({ Center: r.center, 'SL NO': r.serial_no, 'AD. NO': r.student_id, Name: r.student_name, Standard: r.standard, Subject: r.subject || '', Juz: r.juz || '', ...Object.fromEntries(Array.from({ length: r.question_count || 0 }, (_, i) => [`Q${i + 1}`, r.marks?.[i] ?? ''])), Total: r.total == null ? '' : Number(r.total), Maximum: r.max_marks ?? '', Status: r.status, Result: r.status === 'submitted' ? (r.total >= r.min_marks ? 'Pass' : 'Fail') : '', Remarks: r.remarks || '', Examiner: r.examiner_name || '', Submitted: r.submitted_at ? new Date(r.submitted_at).toISOString() : '' }));
+    const data = createResultExportRows(result.rows);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Result Register');
     for (const code of [...new Set(result.rows.map(r => r.center))]) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data.filter(r => r.Center === code)), `Center ${code}`.slice(0, 31));
     const output = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

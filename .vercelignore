@@ -1,4 +1,10 @@
-/backend/
+# Include only the pure result helper shared by the frontend and backend.
+/backend/*
+!/backend/src/
+/backend/src/*
+!/backend/src/services/
+/backend/src/services/*
+!/backend/src/services/exam-result.service.ts
 /server/
 /backup_*/
 /.snapshots/
