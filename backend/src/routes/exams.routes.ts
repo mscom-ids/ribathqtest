@@ -13,7 +13,7 @@ import {
 } from '../controllers/exams.controller';
 import { verifyToken, requireRole, verifyDelegation } from '../middleware/auth.middleware';
 import multer from 'multer';
-import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal } from '../controllers/exam-portal.controller';
+import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal, exportValuationSheets } from '../controllers/exam-portal.controller';
 import { getAdministrationPasscode, setAdministrationPasscode } from '../controllers/exam-administration.controller';
 
 const router = Router();
@@ -40,6 +40,7 @@ router.delete('/:id/portal/centers/:centerId', requireRole(EXAM_MANAGE_ROLES), d
 router.post('/:id/portal/subjects', requireRole(EXAM_MANAGE_ROLES), configureSubject);
 router.post('/:id/portal/reopen', requireRole(EXAM_MANAGE_ROLES), reopenValuation);
 router.post('/:id/portal/move', requireRole(EXAM_MANAGE_ROLES), moveStudent);
+router.get('/:id/portal/valuation-sheets', requireRole(EXAM_MANAGE_ROLES), exportValuationSheets);
 router.get('/:id/portal/export', requireRole(EXAM_MANAGE_ROLES), exportPortal);
 
 // GET /api/exams

@@ -8,6 +8,7 @@ import allocation from '../exam-allocation-nov26.json';
 import type { QueryResult } from 'pg';
 import { readAdministrationData, readExaminerSession, readPublicPortal, schedulePortalSessionCleanup } from '../services/exam-portal-read.service';
 import type { ExamAdministrationRequest } from './exam-administration.controller';
+import { createValuationWorkbook } from '../services/valuation-workbook.service';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 type CenterRow = {id:string;exam_id:string;code:string;name:string;examiner_name:string;locked:boolean;is_active:boolean;portal_enabled:boolean;passcode_hash:string|null};
@@ -306,6 +307,24 @@ export const resetStudentMarks = portalAction(async (req, res) => {
         await client.query("INSERT INTO exam_portal_audit(exam_id,actor,action,details) VALUES($1,$2,'reset_student_marks',$3)", [req.params.id, actor(req), JSON.stringify({ student_id: req.body.student_id, deleted_valuations: valuations.rowCount, deleted_results: results.rowCount })]);
         await client.query('COMMIT'); res.json({ success: true, deleted_valuations: valuations.rowCount, deleted_results: results.rowCount });
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+});
+export const exportValuationSheets = portalAction(async (req, res) => {
+    await examById(req.params.id, db, false, req);
+    const data = await readAdministrationData({examId:req.params.id});
+    if (!data) throw new PortalError('Exam not found.',404);
+    if (req.query.center_id) {
+        data.centers = data.centers.filter((c:{id:string})=>c.id===req.query.center_id);
+        if (!data.centers.length) throw new PortalError('Center not found in this exam.',404);
+    }
+    if (!data.centers.length) throw new PortalError('Create an exam center first.');
+    if (req.query.mode && !['blank','saved'].includes(String(req.query.mode))) throw new PortalError('Choose blank or saved valuation sheets.');
+    const output = await createValuationWorkbook(data,req.query.mode==='blank');
+    const center = data.centers.length===1 ? `-center-${data.centers[0].code}` : '-all-centers';
+    const filename = `${data.exam.portal_slug || 'exam'}${center}-valuation-${req.query.mode==='blank'?'blank':'saved'}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g,'-');
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control','no-store');
+    res.send(output);
 });
 export const exportPortal = portalAction(async (req, res) => {
     const exam = await examById(req.params.id);

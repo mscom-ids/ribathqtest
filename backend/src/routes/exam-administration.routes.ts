@@ -2,7 +2,7 @@ import { Router, RequestHandler } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { administrationBootstrap, administrationLogin, administrationLogout, administrationSession, type ExamAdministrationRequest } from '../controllers/exam-administration.controller';
-import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal } from '../controllers/exam-portal.controller';
+import { adminPortalData, updatePortal, importRoster, updateCenter, createCenter, deleteCenter, configureSubject, reopenValuation, moveStudent, resetStudentMarks, editValuation, exportPortal, exportValuationSheets } from '../controllers/exam-portal.controller';
 
 const router = Router({ mergeParams: true });
 router.get('/bootstrap', administrationBootstrap);
@@ -16,6 +16,7 @@ const scoped = (handler: RequestHandler): RequestHandler => (req, res, next) => 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 router.get('/', scoped(adminPortalData));
 router.patch('/', scoped(updatePortal));
+router.get('/valuation-sheets', scoped(exportValuationSheets));
 router.get('/export', scoped(exportPortal));
 router.post('/import', (req, res, next) => upload.single('workbook')(req, res, error => error ? res.status(400).json({ success: false, error: 'Upload one Excel workbook smaller than 5 MB.' }) : next()), scoped(importRoster));
 router.patch('/centers/:centerId', scoped(updateCenter));

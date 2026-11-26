@@ -181,6 +181,11 @@ async function main() {
     r=await admin(`/exams/${id}/marks`,{updates:[{subject_id:subject.id,student_id:student.student_id,marks_obtained:40}]});check('Manual totals cannot contradict detailed examiner marks',()=>assert.equal(r.status,400));
     const exportRes=await fetch(base+management+'/export',{headers:{Cookie:`auth_token=${adminToken}`}});const wb=XLSX.read(Buffer.from(await exportRes.arrayBuffer()),{type:'buffer'});const exported=XLSX.utils.sheet_to_json(wb.Sheets['Result Register']);
     check('Excel export includes zero marks, submitted totals and ten centers',()=>{assert.equal(exportRes.status,200);assert.equal(wb.SheetNames.length,11);const row=exported.find(r=>r['AD. NO']===student.student_id);assert.equal(row.Q1,0);assert.equal(row.Total,90);assert.equal(row.Status,'submitted');});
+    const valuationRes=await fetch(base+management+'/valuation-sheets',{headers:{Cookie:`auth_token=${adminToken}`}});
+    const valuationBook=XLSX.read(Buffer.from(await valuationRes.arrayBuffer()),{type:'buffer'});
+    check('Valuation Excel downloads contain center sheets with titles, questions and total formulas',()=>{assert.equal(valuationRes.status,200);assert(valuationBook.SheetNames.length>=10);const sheet=valuationBook.Sheets[valuationBook.SheetNames.find(name=>name.startsWith('Center A'))];assert.equal(sheet.A1.v,data.exam.title);assert.equal(sheet.F3.v,1);assert.equal(sheet.P3.v,'TOTAL');assert(sheet.P4.f.includes('SUM(F4:O4)'));});
+    r=await admin(management+'/valuation-sheets?center_id='+randomUUID());check('Valuation downloads reject centers outside the current exam',()=>assert.equal(r.status,404));
+    r=await call(management+'/valuation-sheets',undefined,cookies.A);check('Examiner cookies cannot download all center valuations',()=>assert.equal(r.status,401));
     r=await admin(management+'/reopen',{student_id:student.student_id,subject_id:subject.id,confirmed:true});check('Admin can reopen a locked valuation',()=>assert.equal(r.status,200));
     assert.equal((await testDb.query('SELECT count(*)::int AS n FROM exam_results')).rows[0].n,0);
     r=await call(`/exam-portal/${slug}/valuation`,{...final,version:3},cookies.A);check('Reopened valuation can be corrected and republished',()=>assert.equal(r.status,200));
@@ -238,6 +243,9 @@ async function main() {
     r=await call(scopedBase+'/bootstrap',undefined,adminCookie);check('Administration session resumes with one database query',()=>{assert.equal(r.status,200);assert.equal(r.data.authenticated,true);assert.equal(countedQueries-queryStart,1);});
     r=await call(scopedBase,undefined,adminCookie);check('Passcode session can read only its exam administration',()=>{assert.equal(r.status,200);assert.equal(r.data.exam.id,id);assert(!JSON.stringify(r.data).includes('passcode_hash'));});
     r=await call('/exams',undefined,adminCookie);check('Exam administration session grants no institution access',()=>assert.equal(r.status,401));
+    const scopedSheets=await fetch(base+scopedBase+'/valuation-sheets?mode=blank&center_id='+centerA.id,{headers:{Cookie:adminCookie}});
+    const scopedBook=XLSX.read(Buffer.from(await scopedSheets.arrayBuffer()),{type:'buffer'});
+    check('Exam-passcode administrators can download one center with blank marks',()=>{assert.equal(scopedSheets.status,200);assert(scopedBook.SheetNames.length>=1);assert(scopedBook.SheetNames.every(name=>name.startsWith('Center A')));assert.equal(scopedBook.Sheets[scopedBook.SheetNames[0]].F4,undefined);});
     r=await call(`/exam-portal/${newExam.portal_slug}/admin`,undefined,adminCookie);check('Administration session cannot cross into another exam',()=>assert.equal(r.status,401));
     r=await call(scopedBase,undefined,cookies.B);check('Examiner session cannot act as exam administrator',()=>assert.equal(r.status,401));
     r=await call(scopedBase+'/admin-passcode',{passcode:'Unwanted-Change'},adminCookie);check('Exam administrator cannot change institution-controlled administration credential',()=>assert.equal(r.status,404));
@@ -412,6 +420,9 @@ async function browserChecks({base,id,slug,adminToken,passcode,centerBPasscode,a
         const adminContext=await browser.newContext({viewport:{width:1440,height:1000}});await adminContext.addCookies([{name:'auth_token',value:adminToken,url:origin,httpOnly:true,sameSite:'Lax'}]);
         const adminPage=await adminContext.newPage();adminPage.on('pageerror',e=>errors.push(e.message));await adminPage.goto(origin+`/hifz/exam/${slug}/administration`);await adminPage.getByLabel('Administration passcode',{exact:true}).fill(administrationPasscode);await adminPage.getByRole('button',{name:'Open examination administration',exact:true}).click();await adminPage.getByRole('heading',{name:'Valuation progress'}).waitFor();
         await adminPage.screenshot({path:path.join(outDir,'desktop-progress.png'),fullPage:true});
+        const [valuationDownload] = await Promise.all([adminPage.waitForEvent('download'),adminPage.getByRole('button',{name:'Download valuation Excel',exact:true}).click()]);
+        const valuationDownloadPath=path.join(outDir,'center-valuations.xlsx');await valuationDownload.saveAs(valuationDownloadPath);
+        check('Administration download control produces an Excel workbook of center valuation sheets',()=>{assert.match(valuationDownload.suggestedFilename(),/valuation-saved\.xlsx$/);assert(XLSX.readFile(valuationDownloadPath).SheetNames.length>=10);});
         await adminPage.getByRole('button',{name:'Portal & subjects',exact:true}).click();await adminPage.getByRole('heading',{name:'Subjects and questions'}).waitFor();await adminPage.screenshot({path:path.join(outDir,'desktop-setup.png'),fullPage:true});
         await adminPage.getByRole('button',{name:'Centers & examiners',exact:true}).click();await adminPage.getByRole('heading',{name:'Centers and examiner access'}).waitFor();assert.equal(await adminPage.getByRole('button',{name:'Save name',exact:true}).count(),10);
         const customCenterCard=adminPage.locator(`#exam-center-${availableCenter.id}`);

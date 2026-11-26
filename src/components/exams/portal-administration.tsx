@@ -12,6 +12,7 @@ import PortalReports from './portal-reports'
 import StudentMarkReset from './student-mark-reset'
 import AdministratorMarkEditor from './administrator-mark-editor'
 import PortalCenterAccessSummary from './portal-center-access-summary'
+import ValuationSheetDownload from './valuation-sheet-download'
 
 const panel = 'rounded-xl border bg-white p-4 shadow-sm sm:p-5'
 function CenterEditor({ center, onSave, busy }: { center: PortalCenter; onSave: (id: string, body: unknown) => Promise<boolean>; busy: boolean }) {
@@ -99,6 +100,15 @@ export default function PortalAdministration({ examId, standalone = false, porta
         {passcode && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-bold">Center {passcode.code} — new passcode</p><code className="mt-2 block select-all text-xl">{passcode.value}</code><p className="mt-2 text-xs text-amber-900">Copy and share privately with this examiner. This passcode is shown only now.</p></div><div className="flex gap-2"><Button variant="outline" onClick={() => void navigator.clipboard.writeText(`Exam: ${data.exam.title}\nLink: ${location.origin}${examPath}\nCenter: ${passcode.code}\nPasscode: ${passcode.value}`).then(() => setNotice('Examiner login details copied.')).catch(() => setError('Clipboard unavailable. Select and copy the passcode.'))}><Copy className="mr-2 h-4 w-4" />Copy login details</Button><Button variant="ghost" onClick={() => setPasscode(null)}>Dismiss</Button></div></div></div>}
         <nav className="flex gap-1 overflow-x-auto rounded-xl border bg-white p-1" aria-label="Exam administration sections">{[['overview','Progress'],['setup','Portal & subjects'],['centers','Centers & examiners'],['results','Results & reports'],['audit','Activity']].map(([value,label]) => <button key={value} onClick={() => setTab(value)} className={`whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold ${tab === value ? 'bg-emerald-50 text-emerald-800' : 'text-slate-500 hover:bg-slate-50'}`}>{label}</button>)}</nav>
         {(tab === 'overview' || tab === 'setup') && <PortalCenterAccessSummary data={data} onManage={() => setTab('centers')} />}
+        {(tab === 'overview' || tab === 'results') && <ValuationSheetDownload data={data} download={async(center,mode)=>{
+            const response = await client.get(`${base}/valuation-sheets`,{params:{center_id:center||undefined,mode},responseType:'blob'})
+            const url = URL.createObjectURL(response.data)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `${data.exam.portal_slug||'exam'}-${center?`center-${data.centers.find(c=>c.id===center)?.code}`:'all-centers'}-valuation-${mode}.xlsx`
+            document.body.appendChild(link); link.click(); link.remove()
+            setTimeout(()=>URL.revokeObjectURL(url),1000)
+        }} />}
         {tab === 'overview' && <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[['Students',data.students.length],['Centers / examiners',`${data.centers.length} / ${data.centers.filter(c=>c.examiner_name).length}`],['Fully submitted',completed],['Pending / draft',`${data.students.length-completed-draft} / ${draft}`]].map(([label,value])=><div key={label} className={panel}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 text-3xl font-bold text-emerald-900">{value}</p></div>)}</div>
             <div className={panel}><h2 className="font-bold">Valuation progress</h2><p className="mt-1 text-sm text-slate-500">{submitted} of {expected} subject valuations submitted. {data.valuations.filter(v=>v.status==='draft').length} saved drafts.</p><div className="mt-4 h-3 rounded-full bg-slate-100"><div className="h-3 rounded-full bg-emerald-600" style={{width:`${expected?submitted/expected*100:0}%`}} /></div><p className="mt-4 text-sm">Completed student average: {percents.length ? `${(percents.reduce((a,b)=>a+b,0)/percents.length).toFixed(1)}%` : '—'} · Highest: {percents.length?`${Math.max(...percents).toFixed(1)}%`:'—'} · Lowest: {percents.length?`${Math.min(...percents).toFixed(1)}%`:'—'}</p></div>
