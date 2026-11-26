@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, CalendarDays, ChevronRight, GraduationCap, Loader2, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import api from "@/lib/api"
+import AdministrationPasscodeSettings from "@/components/exams/administration-passcode-settings"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,9 +14,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-type Exam = { id: string; title: string; start_date: string; is_active: boolean }
+type Exam = { id: string; title: string; start_date: string; is_active: boolean; portal_slug?: string }
 type Subject = { id: string; max_marks: number; standard: string | null }
-const standards = ["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]
+const baseStandards = ["5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"]
 const accents = [
     { bar: "bg-blue-500", icon: "bg-blue-50 text-blue-600", hover: "hover:border-blue-200" },
     { bar: "bg-violet-500", icon: "bg-violet-50 text-violet-600", hover: "hover:border-violet-200" },
@@ -57,6 +58,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string; dep
     if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-emerald-600" /></div>
     if (!exam) return <div className="p-8">Exam not found</div>
 
+    const standards = [...new Set([...baseStandards, ...subjects.map(s => s.standard).filter((s):s is string=>!!s)])]
     const configuredStandards = standards.filter(value => subjects.some(subject => subject.standard === value)).length
 
     return <div className="mx-auto w-full max-w-[1600px] space-y-4 pb-10">
@@ -69,6 +71,9 @@ export default function ExamPage({ params }: { params: Promise<{ id: string; dep
             </div>
         </header>
 
+        {department === 'hifz' && <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-5"><div><h2 className="font-bold text-emerald-950">External examiner portal</h2><p className="mt-1 text-sm text-emerald-800">Assign centers, issue passcodes, configure questions and view submitted results.</p>{exam.portal_slug && <p className="mt-2 text-xs text-emerald-700">/hifz/exam/{exam.portal_slug}</p>}</div><Button asChild className="bg-emerald-800 hover:bg-emerald-900"><Link href={`/admin/hifz/exams/${id}/portal`}>Manage examiner portal</Link></Button></section>}
+
+        {department === 'hifz' && <AdministrationPasscodeSettings examId={id} />}
         <div className="grid grid-cols-3 gap-3">
             <Card className="border-slate-200/70 shadow-sm"><CardContent className="p-3.5 sm:p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Standards</p><p className="mt-0.5 text-2xl font-extrabold text-blue-700">{standards.length}</p></CardContent></Card>
             <Card className="border-slate-200/70 shadow-sm"><CardContent className="p-3.5 sm:p-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Configured</p><p className="mt-0.5 text-2xl font-extrabold text-emerald-700">{configuredStandards}</p></CardContent></Card>

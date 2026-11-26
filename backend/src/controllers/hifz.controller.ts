@@ -1012,294 +1012,238 @@ export const calculateMonthlyReportData = async (req: Request, res: Response) =>
     }
 };
 
-export const calculateBulkMonthlyReport = async (req: Request, res: Response) => {
-    try {
-        const { month, mentor_id } = req.query;
-        if (!month) {
-            return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
-        }
+export const getCalculatedMonthlyReports = async (
+    month: string,
+    mentor_id?: string,
+    requestedAcademicYearId?: unknown
+) => {
+    const period = getMonthlyReportPeriod(month as string);
+    const academicContext = await getAcademicYearContext(db, requestedAcademicYearId);
 
-        const period = getMonthlyReportPeriod(month as string);
-        const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
+    const results = await cachedResult(
+        makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', academic_year_id: academicContext.academicYearId || 'legacy', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
+        HIFZ_MONTHLY_TTL_MS,
+        async () => {
+            const { startDate, endDate, fullMonthEndDate, reportMonth, isCurrentMonth } = period;
+            const mentorFilterClause = mentor_id
+                ? ` AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $2`
+                : '';
+            const studentQueryParams = mentor_id
+                ? [academicContext.academicYearId, mentor_id]
+                : [academicContext.academicYearId];
 
-        const results = await cachedResult(
-            makeCacheKey('hifz:monthly-calculate', { month, mentor_id: mentor_id || 'all', academic_year_id: academicContext.academicYearId || 'legacy', report_end_date: period.endDate, point_day_version: HIFZ_MONTHLY_POINT_DAY_VERSION }),
-            HIFZ_MONTHLY_TTL_MS,
-            async () => {
-                const { startDate, endDate, fullMonthEndDate, reportMonth, isCurrentMonth } = period;
-                const mentorFilterClause = mentor_id
-                    ? ` AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $2`
-                    : '';
-                const studentQueryParams = mentor_id
-                    ? [academicContext.academicYearId, mentor_id]
-                    : [academicContext.academicYearId];
+            // When a mentor is in scope, restrict the (otherwise institution-wide)
+            // hifz_logs reads to that mentor's active roster. The per-student
+            // grouping below only ever reads logs for students in studentsResult,
+            // so this yields identical output while turning full-table scans into
+            // ~10-student lookups. Uses the SAME mentor resolution as the roster
+            // query above so the two never disagree. When no mentor_id (admin
+            // "all" view) the clause is empty and behaviour is unchanged.
+            const mentorLogScope = (ayParamIdx: number, mentorParamIdx: number) => (
+                mentor_id
+                    ? ` AND hifz_logs.student_id IN (
+                            SELECT s.adm_no FROM students s
+                            LEFT JOIN student_year_snapshots sys
+                              ON sys.student_id = s.adm_no
+                             AND sys.academic_year_id = $${ayParamIdx}
+                            WHERE s.status = 'active'
+                              AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $${mentorParamIdx}
+                       )`
+                    : ''
+            );
 
-                // When a mentor is in scope, restrict the (otherwise institution-wide)
-                // hifz_logs reads to that mentor's active roster. The per-student
-                // grouping below only ever reads logs for students in studentsResult,
-                // so this yields identical output while turning full-table scans into
-                // ~10-student lookups. Uses the SAME mentor resolution as the roster
-                // query above so the two never disagree. When no mentor_id (admin
-                // "all" view) the clause is empty and behaviour is unchanged.
-                const mentorLogScope = (ayParamIdx: number, mentorParamIdx: number) => (
+            const [studentsResult, logsResult, lifetimeNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
+                db.query(
+                    `SELECT s.adm_no, s.name,
+                     COALESCE(sys.school_standard, s.standard) AS attendance_standard,
+                     COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard,
+                     st.name as usthad_name, st.phone as usthad_phone,
+                     COALESCE(hp.hifz_stage,
+                         CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
+                     ) AS hifz_stage
+                     FROM students s
+                     LEFT JOIN student_year_snapshots sys
+                       ON sys.student_id = s.adm_no
+                      AND sys.academic_year_id = $1
+                     LEFT JOIN staff st ON st.id = COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id)
+                     LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
+                     WHERE s.status = 'active'
+                     ${mentorFilterClause}
+                     ORDER BY s.adm_no`,
+                    studentQueryParams
+                ),
+                db.query(
+                    `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
+                     start_page, end_page, juz_number, juz_portion
+                     FROM hifz_logs
+                     WHERE entry_date >= $1::date AND entry_date <= $2::date
+                       AND deleted_at IS NULL
+                       ${mentorLogScope(3, 4)}`,
                     mentor_id
-                        ? ` AND hifz_logs.student_id IN (
-                                SELECT s.adm_no FROM students s
-                                LEFT JOIN student_year_snapshots sys
-                                  ON sys.student_id = s.adm_no
-                                 AND sys.academic_year_id = $${ayParamIdx}
-                                WHERE s.status = 'active'
-                                  AND COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = $${mentorParamIdx}
-                           )`
-                        : ''
+                        ? [startDate, endDate, academicContext.academicYearId, mentor_id]
+                        : [startDate, endDate]
+                ),
+                // Lifetime New Verses logs support the first-Juz milestone and
+                // the existing start-of-month Hafiz-stage calculation.
+                db.query(
+                    `SELECT student_id, surah_name, start_v, end_v, entry_date
+                     FROM hifz_logs
+                     WHERE mode = 'New Verses'
+                       AND deleted_at IS NULL
+                       ${mentorLogScope(1, 2)}
+                     ORDER BY entry_date ASC, created_at ASC`,
+                    mentor_id
+                        ? [academicContext.academicYearId, mentor_id]
+                        : []
+                ),
+                db.query(
+                    `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
+                    [reportMonth]
+                ),
+                getDetectedClassDays(startDate, endDate),
+                getDetectedLogDays(startDate, endDate),
+                getMonthlyClassDaysSetting(reportMonth),
+            ]);
+
+            const lifetimeNewLogsByStudent: Record<string, any[]> = {};
+            for (const log of lifetimeNewLogsResult.rows) {
+                const key = String(log.student_id);
+                if (!lifetimeNewLogsByStudent[key]) lifetimeNewLogsByStudent[key] = [];
+                lifetimeNewLogsByStudent[key].push(log);
+            }
+            const wasHafizAtStartByStudent: Record<string, boolean> = {};
+            const firstJuzCompletionByStudent: Record<string, string | null> = {};
+            for (const student of studentsResult.rows) {
+                const lifetimeLogs = lifetimeNewLogsByStudent[student.adm_no] || [];
+                const priorLogs = lifetimeLogs.filter(
+                    (log: any) => toDateKey(log.entry_date) < startDate,
                 );
+                wasHafizAtStartByStudent[student.adm_no] = countCompletedJuz(priorLogs) >= 30;
+                firstJuzCompletionByStudent[student.adm_no] = getFirstJuzCompletionDate(lifetimeLogs);
+            }
 
-                const [studentsResult, logsResult, lifetimeNewLogsResult, manualReportsResult, detectedClassDays, detectedLogDays, overrideClassDays] = await Promise.all([
-                    db.query(
-                        `SELECT s.adm_no, s.name,
-                         COALESCE(sys.school_standard, s.standard) AS attendance_standard,
-                         COALESCE(sys.school_standard, s.hifz_standard, s.standard, 'Common') AS standard,
-                         st.name as usthad_name, st.phone as usthad_phone,
-                         COALESCE(hp.hifz_stage,
-                             CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
-                         ) AS hifz_stage
-                         FROM students s
-                         LEFT JOIN student_year_snapshots sys
-                           ON sys.student_id = s.adm_no
-                          AND sys.academic_year_id = $1
-                         LEFT JOIN staff st ON st.id = COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id)
-                         LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
-                         WHERE s.status = 'active'
-                         ${mentorFilterClause}
-                         ORDER BY s.adm_no`,
-                        studentQueryParams
-                    ),
-                    db.query(
-                        `SELECT student_id, mode, entry_date, surah_name, start_v, end_v,
-                         start_page, end_page, juz_number, juz_portion
-                         FROM hifz_logs
-                         WHERE entry_date >= $1::date AND entry_date <= $2::date
-                           AND deleted_at IS NULL
-                           ${mentorLogScope(3, 4)}`,
-                        mentor_id
-                            ? [startDate, endDate, academicContext.academicYearId, mentor_id]
-                            : [startDate, endDate]
-                    ),
-                    // Lifetime New Verses logs support the first-Juz milestone and
-                    // the existing start-of-month Hafiz-stage calculation.
-                    db.query(
-                        `SELECT student_id, surah_name, start_v, end_v, entry_date
-                         FROM hifz_logs
-                         WHERE mode = 'New Verses'
-                           AND deleted_at IS NULL
-                           ${mentorLogScope(1, 2)}
-                         ORDER BY entry_date ASC, created_at ASC`,
-                        mentor_id
-                            ? [academicContext.academicYearId, mentor_id]
-                            : []
-                    ),
-                    db.query(
-                        `SELECT * FROM monthly_reports WHERE report_month = $1::date`,
-                        [reportMonth]
-                    ),
-                    getDetectedClassDays(startDate, endDate),
-                    getDetectedLogDays(startDate, endDate),
-                    getMonthlyClassDaysSetting(reportMonth),
-                ]);
-
-                const lifetimeNewLogsByStudent: Record<string, any[]> = {};
-                for (const log of lifetimeNewLogsResult.rows) {
-                    const key = String(log.student_id);
-                    if (!lifetimeNewLogsByStudent[key]) lifetimeNewLogsByStudent[key] = [];
-                    lifetimeNewLogsByStudent[key].push(log);
-                }
-                const wasHafizAtStartByStudent: Record<string, boolean> = {};
-                const firstJuzCompletionByStudent: Record<string, string | null> = {};
-                for (const student of studentsResult.rows) {
-                    const lifetimeLogs = lifetimeNewLogsByStudent[student.adm_no] || [];
-                    const priorLogs = lifetimeLogs.filter(
-                        (log: any) => toDateKey(log.entry_date) < startDate,
-                    );
-                    wasHafizAtStartByStudent[student.adm_no] = countCompletedJuz(priorLogs) >= 30;
-                    firstJuzCompletionByStudent[student.adm_no] = getFirstJuzCompletionDate(lifetimeLogs);
-                }
-
-                // Two summaries: one over the elapsed range for actual attended/effective
-                // counts, one over the full month for the point-days denominator so
-                // scoring is based on the whole month's target, not just days elapsed.
-                const [attendanceSummaries, monthTargetSummaries] = await Promise.all([
-                    getStudentAttendanceSummaries(
+            // Two summaries: one over the elapsed range for actual attended/effective
+            // counts, one over the full month for the point-days denominator so
+            // scoring is based on the whole month's target, not just days elapsed.
+            const [attendanceSummaries, monthTargetSummaries] = await Promise.all([
+                getStudentAttendanceSummaries(
+                    db,
+                    studentsResult.rows,
+                    startDate,
+                    endDate,
+                    'hifz',
+                    academicContext.academicYearId
+                ),
+                endDate === fullMonthEndDate
+                    ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
+                    : getStudentAttendanceSummaries(
                         db,
                         studentsResult.rows,
                         startDate,
-                        endDate,
+                        fullMonthEndDate,
                         'hifz',
                         academicContext.academicYearId
                     ),
-                    endDate === fullMonthEndDate
-                        ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
-                        : getStudentAttendanceSummaries(
-                            db,
-                            studentsResult.rows,
-                            startDate,
-                            fullMonthEndDate,
-                            'hifz',
-                            academicContext.academicYearId
-                        ),
-                ]);
-                const targetSummaries = monthTargetSummaries || attendanceSummaries;
+            ]);
+            const targetSummaries = monthTargetSummaries || attendanceSummaries;
 
-                const logsByStudent: Record<string, any[]> = {};
-                logsResult.rows.forEach((log: any) => {
-                    if (!logsByStudent[log.student_id]) logsByStudent[log.student_id] = [];
-                    logsByStudent[log.student_id].push(log);
-                });
+            const logsByStudent: Record<string, any[]> = {};
+            logsResult.rows.forEach((log: any) => {
+                if (!logsByStudent[log.student_id]) logsByStudent[log.student_id] = [];
+                logsByStudent[log.student_id].push(log);
+            });
 
-                const manualByStudent: Record<string, any> = {};
-                manualReportsResult.rows.forEach((r: any) => {
-                    manualByStudent[r.student_id] = r;
-                });
+            const manualByStudent: Record<string, any> = {};
+            manualReportsResult.rows.forEach((r: any) => {
+                manualByStudent[r.student_id] = r;
+            });
 
-                const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
-                const scheduledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = targetSummaries.get(student.adm_no);
-                    return Math.max(max, summary?.plannedClasses || 0);
-                }, 0);
-                const fallbackAllowedForStudent = (plannedClasses: number) => (
-                    plannedClasses === 0 && scheduledClassDays === 0
+            const fallbackClassDays = detectedClassDays > 0 ? detectedClassDays : detectedLogDays;
+            const scheduledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                const summary = targetSummaries.get(student.adm_no);
+                return Math.max(max, summary?.plannedClasses || 0);
+            }, 0);
+            const fallbackAllowedForStudent = (plannedClasses: number) => (
+                plannedClasses === 0 && scheduledClassDays === 0
+            );
+            const reportClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                const summary = targetSummaries.get(student.adm_no);
+                const plannedClasses = summary?.plannedClasses || 0;
+                const value = resolvePointClassDays(
+                    summary?.pointClassDays || 0,
+                    summary?.effectiveClasses || 0,
+                    plannedClasses,
+                    fallbackAllowedForStudent(plannedClasses) ? fallbackClassDays : 0,
+                    fallbackAllowedForStudent(plannedClasses) ? overrideClassDays : null
                 );
-                const reportClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = targetSummaries.get(student.adm_no);
-                    const plannedClasses = summary?.plannedClasses || 0;
-                    const value = resolvePointClassDays(
-                        summary?.pointClassDays || 0,
-                        summary?.effectiveClasses || 0,
-                        plannedClasses,
-                        fallbackAllowedForStudent(plannedClasses) ? fallbackClassDays : 0,
-                        fallbackAllowedForStudent(plannedClasses) ? overrideClassDays : null
-                    );
-                    return Math.max(max, value);
-                }, 0);
-                const cancelledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = targetSummaries.get(student.adm_no);
-                    return Math.max(max, summary?.cancelledClasses || 0);
-                }, 0);
-                const automaticPointClassDays = studentsResult.rows.reduce((max: number, student: any) => {
-                    const summary = targetSummaries.get(student.adm_no);
-                    return Math.max(max, summary?.pointClassDays || 0);
-                }, 0);
+                return Math.max(max, value);
+            }, 0);
+            const cancelledClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                const summary = targetSummaries.get(student.adm_no);
+                return Math.max(max, summary?.cancelledClasses || 0);
+            }, 0);
+            const automaticPointClassDays = studentsResult.rows.reduce((max: number, student: any) => {
+                const summary = targetSummaries.get(student.adm_no);
+                return Math.max(max, summary?.pointClassDays || 0);
+            }, 0);
 
-                const reports = studentsResult.rows.map((student: any) => {
-                    const manualRecord = manualByStudent[student.adm_no];
-                    const attendanceSummary = attendanceSummaries.get(student.adm_no);
-                    const targetSummary = targetSummaries.get(student.adm_no);
-                    // Denominator = full month's planned − cancelled (target),
-                    // so scores climb toward a fixed monthly ceiling. Elapsed
-                    // attendance counts still come from attendanceSummary.
-                    const automaticPointClassDays = targetSummary?.pointClassDays || 0;
-                    const plannedClasses = targetSummary?.plannedClasses || 0;
-                    const allowFallback = fallbackAllowedForStudent(plannedClasses);
-                    const effectiveClassDays = resolvePointClassDays(
-                        automaticPointClassDays,
-                        targetSummary?.effectiveClasses || 0,
-                        plannedClasses,
-                        allowFallback ? fallbackClassDays : 0,
-                        allowFallback ? overrideClassDays : null
-                    );
+            const reports = studentsResult.rows.map((student: any) => {
+                const manualRecord = manualByStudent[student.adm_no];
+                const attendanceSummary = attendanceSummaries.get(student.adm_no);
+                const targetSummary = targetSummaries.get(student.adm_no);
+                // Denominator = full month's planned − cancelled (target),
+                // so scores climb toward a fixed monthly ceiling. Elapsed
+                // attendance counts still come from attendanceSummary.
+                const automaticPointClassDays = targetSummary?.pointClassDays || 0;
+                const plannedClasses = targetSummary?.plannedClasses || 0;
+                const allowFallback = fallbackAllowedForStudent(plannedClasses);
+                const effectiveClassDays = resolvePointClassDays(
+                    automaticPointClassDays,
+                    targetSummary?.effectiveClasses || 0,
+                    plannedClasses,
+                    allowFallback ? fallbackClassDays : 0,
+                    allowFallback ? overrideClassDays : null
+                );
 
-                    // Manual monthly figures remain the report display values. Live
-                    // Hifz logs still determine performance points, including range entry.
-                    // countedClasses uses the full month target so attendance points climb
-                    // toward the month's total instead of showing 100% off a single day.
-                    const studentLogs = logsByStudent[student.adm_no] || [];
-                    // Stage is evaluated as of the START of the month: a student who
-                    // completes their 30th Juz this month keeps the MEMORIZING layout
-                    // until next month. This matches the register / progress modal.
-                    const isHafiz = wasHafizAtStartByStudent[student.adm_no] === true;
-                    const effectiveStage: 'MEMORIZING' | 'HAFIZ_REVISION' =
-                        isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
-                    const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
-                        expectedClassDaysOverride: effectiveClassDays,
-                        attendedClasses: attendanceSummary?.weightedAttendedClasses ?? attendanceSummary?.attendedClasses ?? 0,
-                        countedClasses: targetSummary?.effectiveClasses || 0,
-                        isHafiz,
-                        firstJuzCompletionDate: firstJuzCompletionByStudent[student.adm_no],
-                        periodStartDate: startDate,
-                        periodEndDate: fullMonthEndDate,
-                        pointDayWeights: targetSummary?.pointDayWeights || {},
-                    });
+                // Manual monthly figures remain the report display values. Live
+                // Hifz logs still determine performance points, including range entry.
+                // countedClasses uses the full month target so attendance points climb
+                // toward the month's total instead of showing 100% off a single day.
+                const studentLogs = logsByStudent[student.adm_no] || [];
+                // Stage is evaluated as of the START of the month: a student who
+                // completes their 30th Juz this month keeps the MEMORIZING layout
+                // until next month. This matches the register / progress modal.
+                const isHafiz = wasHafizAtStartByStudent[student.adm_no] === true;
+                const effectiveStage: 'MEMORIZING' | 'HAFIZ_REVISION' =
+                    isHafiz ? 'HAFIZ_REVISION' : 'MEMORIZING';
+                const calculatedPoints = calculateHifzReportPoints(studentLogs, [], {
+                    expectedClassDaysOverride: effectiveClassDays,
+                    attendedClasses: attendanceSummary?.weightedAttendedClasses ?? attendanceSummary?.attendedClasses ?? 0,
+                    countedClasses: targetSummary?.effectiveClasses || 0,
+                    isHafiz,
+                    firstJuzCompletionDate: firstJuzCompletionByStudent[student.adm_no],
+                    periodStartDate: startDate,
+                    periodEndDate: fullMonthEndDate,
+                    pointDayWeights: targetSummary?.pointDayWeights || {},
+                });
 
-                    // Per-student Juz Revision breakdowns from this month's logs.
-                    const portionValue = (portion: any) => {
-                        if (portion === 'Full') return 1;
-                        if (typeof portion === 'string' && portion.includes('Half')) return 0.5;
-                        if (typeof portion === 'string' && portion.startsWith('Q')) return 0.25;
-                        return portion ? 1 : 0;
-                    };
-                    let plainJuzTotal = 0;
-                    let newJuzTotal = 0;
-                    let oldJuzTotal = 0;
-                    studentLogs.forEach((log: any) => {
-                        if (log.mode === 'Juz Revision' || (log.mode === 'Recent Revision' && log.juz_number)) plainJuzTotal += portionValue(log.juz_portion);
-                        else if (log.mode === 'Juz Revision (New)') newJuzTotal += portionValue(log.juz_portion);
-                        else if (log.mode === 'Juz Revision (Old)') oldJuzTotal += portionValue(log.juz_portion);
-                    });
+                // Per-student Juz Revision breakdowns from this month's logs.
+                const portionValue = (portion: any) => {
+                    if (portion === 'Full') return 1;
+                    if (typeof portion === 'string' && portion.includes('Half')) return 0.5;
+                    if (typeof portion === 'string' && portion.startsWith('Q')) return 0.25;
+                    return portion ? 1 : 0;
+                };
+                let plainJuzTotal = 0;
+                let newJuzTotal = 0;
+                let oldJuzTotal = 0;
+                studentLogs.forEach((log: any) => {
+                    if (log.mode === 'Juz Revision' || (log.mode === 'Recent Revision' && log.juz_number)) plainJuzTotal += portionValue(log.juz_portion);
+                    else if (log.mode === 'Juz Revision (New)') newJuzTotal += portionValue(log.juz_portion);
+                    else if (log.mode === 'Juz Revision (Old)') oldJuzTotal += portionValue(log.juz_portion);
+                });
 
-                    if (manualRecord) {
-                        return {
-                            adm_no: student.adm_no,
-                            name: student.name,
-                            standard: student.standard,
-                            usthad_name: student.usthad_name || 'Unassigned',
-                            usthad_phone: student.usthad_phone || '',
-                            hifz_stage: effectiveStage,
-                            hifz_pages: Number(manualRecord.hifz_pages),
-                            recent_days: Number(manualRecord.recent_pages),
-                            juz_revision: Number(manualRecord.juz_revision),
-                            new_juz_revision: parseFloat(newJuzTotal.toFixed(2)),
-                            old_juz_revision: parseFloat(oldJuzTotal.toFixed(2)),
-                            total_juz: Number(manualRecord.total_juz) || '-',
-                            attendance: manualRecord.attendance || '-',
-                            is_manual: true,
-                            ...calculatedPoints,
-                            grade: calculatedPoints.grade,
-                            totalClassDays: effectiveClassDays,
-                            detectedClassDays,
-                            scheduledClassDays: targetSummary?.plannedClasses || scheduledClassDays,
-                            pointClassDays: automaticPointClassDays,
-                            cancelledClasses: targetSummary?.cancelledClasses || 0,
-                            attendedClasses: attendanceSummary?.attendedClasses || 0,
-                            notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
-                            lateClasses: attendanceSummary?.lateClasses || 0,
-                            pendingClasses: attendanceSummary?.pendingClasses || 0,
-                        };
-                    }
-
-                    const hifzPages = calculateCoveredPagesFromLogs(
-                        studentLogs.filter((log: any) => log.mode === 'New Verses')
-                    );
-                    let maxJuz = 0;
-                    studentLogs.forEach((log: any) => {
-                        if (log.mode === 'New Verses') {
-                            if (log.juz_number > maxJuz) maxJuz = log.juz_number;
-                        }
-                    });
-
-                    const recentDates = new Set<string>();
-                    studentLogs.filter((l: any) => l.mode === 'Recent Revision').forEach((log: any) => {
-                        try {
-                            const d = new Date(log.entry_date);
-                            if (!isNaN(d.getTime())) {
-                                recentDates.add(d.toISOString().split('T')[0]);
-                            }
-                        } catch (e) {}
-                    });
-
-                    // For MEMORIZING students the Juz Rev column folds all variants
-                    // (including any transition-month Hafiz-mode logs). Hafiz students
-                    // use new_juz_revision / old_juz_revision instead.
-                    const combinedJuzTotal = plainJuzTotal + newJuzTotal + oldJuzTotal;
-
+                if (manualRecord) {
                     return {
                         adm_no: student.adm_no,
                         name: student.name,
@@ -1307,55 +1251,124 @@ export const calculateBulkMonthlyReport = async (req: Request, res: Response) =>
                         usthad_name: student.usthad_name || 'Unassigned',
                         usthad_phone: student.usthad_phone || '',
                         hifz_stage: effectiveStage,
-                        hifz_pages: parseFloat(hifzPages.toFixed(1)),
-                        recent_days: recentDates.size,
-                        juz_revision: parseFloat(combinedJuzTotal.toFixed(2)),
+                        hifz_pages: Number(manualRecord.hifz_pages),
+                        recent_days: Number(manualRecord.recent_pages),
+                        juz_revision: Number(manualRecord.juz_revision),
                         new_juz_revision: parseFloat(newJuzTotal.toFixed(2)),
                         old_juz_revision: parseFloat(oldJuzTotal.toFixed(2)),
-                        total_juz: maxJuz > 0 ? maxJuz : '-',
-                        attendance: attendanceSummary?.attendanceLabel || '-',
-                        scheduledClassDays: targetSummary?.plannedClasses || 0,
+                        total_juz: Number(manualRecord.total_juz) || '-',
+                        attendance: manualRecord.attendance || '-',
+                        is_manual: true,
+                        ...calculatedPoints,
+                        grade: calculatedPoints.grade,
+                        totalClassDays: effectiveClassDays,
+                        detectedClassDays,
+                        scheduledClassDays: targetSummary?.plannedClasses || scheduledClassDays,
                         pointClassDays: automaticPointClassDays,
                         cancelledClasses: targetSummary?.cancelledClasses || 0,
                         attendedClasses: attendanceSummary?.attendedClasses || 0,
                         notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
                         lateClasses: attendanceSummary?.lateClasses || 0,
                         pendingClasses: attendanceSummary?.pendingClasses || 0,
-                        is_manual: false,
-                        ...calculatedPoints
                     };
-                });
-
-                if (process.env.DEBUG_TOP_PERFORMERS === 'true') {
-                    console.debug('[TOP PERFORMERS]', {
-                        mentor_id: mentor_id || null,
-                        month,
-                        report_start_date: startDate,
-                        report_end_date: endDate,
-                        reports: reports.map((report: any) => ({
-                            adm_no: report.adm_no,
-                            totalPoints: report.totalPoints,
-                        })),
-                    });
                 }
 
+                const hifzPages = calculateCoveredPagesFromLogs(
+                    studentLogs.filter((log: any) => log.mode === 'New Verses')
+                );
+                let maxJuz = 0;
+                studentLogs.forEach((log: any) => {
+                    if (log.mode === 'New Verses') {
+                        if (log.juz_number > maxJuz) maxJuz = log.juz_number;
+                    }
+                });
+
+                const recentDates = new Set<string>();
+                studentLogs.filter((l: any) => l.mode === 'Recent Revision').forEach((log: any) => {
+                    try {
+                        const d = new Date(log.entry_date);
+                        if (!isNaN(d.getTime())) {
+                            recentDates.add(d.toISOString().split('T')[0]);
+                        }
+                    } catch (e) {}
+                });
+
+                // For MEMORIZING students the Juz Rev column folds all variants
+                // (including any transition-month Hafiz-mode logs). Hafiz students
+                // use new_juz_revision / old_juz_revision instead.
+                const combinedJuzTotal = plainJuzTotal + newJuzTotal + oldJuzTotal;
+
                 return {
-                    reports,
-                    class_days: reportClassDays,
-                    scheduled_class_days: scheduledClassDays,
-                    cancelled_class_days: cancelledClassDays,
-                    automatic_point_class_days: automaticPointClassDays,
-                    detected_class_days: detectedClassDays,
-                    detected_log_days: detectedLogDays,
-                    override_class_days: overrideClassDays,
-                    using_fallback_log_days: automaticPointClassDays === 0 && scheduledClassDays === 0 && detectedClassDays === 0 && detectedLogDays > 0,
+                    adm_no: student.adm_no,
+                    name: student.name,
+                    standard: student.standard,
+                    usthad_name: student.usthad_name || 'Unassigned',
+                    usthad_phone: student.usthad_phone || '',
+                    hifz_stage: effectiveStage,
+                    hifz_pages: parseFloat(hifzPages.toFixed(1)),
+                    recent_days: recentDates.size,
+                    juz_revision: parseFloat(combinedJuzTotal.toFixed(2)),
+                    new_juz_revision: parseFloat(newJuzTotal.toFixed(2)),
+                    old_juz_revision: parseFloat(oldJuzTotal.toFixed(2)),
+                    total_juz: maxJuz > 0 ? maxJuz : '-',
+                    attendance: attendanceSummary?.attendanceLabel || '-',
+                    scheduledClassDays: targetSummary?.plannedClasses || 0,
+                    pointClassDays: automaticPointClassDays,
+                    cancelledClasses: targetSummary?.cancelledClasses || 0,
+                    attendedClasses: attendanceSummary?.attendedClasses || 0,
+                    notAttendedClasses: attendanceSummary?.notAttendedClasses || 0,
+                    lateClasses: attendanceSummary?.lateClasses || 0,
+                    pendingClasses: attendanceSummary?.pendingClasses || 0,
+                    is_manual: false,
+                    ...calculatedPoints
+                };
+            });
+
+            if (process.env.DEBUG_TOP_PERFORMERS === 'true') {
+                console.debug('[TOP PERFORMERS]', {
+                    mentor_id: mentor_id || null,
+                    month,
                     report_start_date: startDate,
                     report_end_date: endDate,
-                    is_current_month: isCurrentMonth,
-                };
+                    reports: reports.map((report: any) => ({
+                        adm_no: report.adm_no,
+                        totalPoints: report.totalPoints,
+                    })),
+                });
             }
-        );
 
+            return {
+                reports,
+                class_days: reportClassDays,
+                scheduled_class_days: scheduledClassDays,
+                cancelled_class_days: cancelledClassDays,
+                automatic_point_class_days: automaticPointClassDays,
+                detected_class_days: detectedClassDays,
+                detected_log_days: detectedLogDays,
+                override_class_days: overrideClassDays,
+                using_fallback_log_days: automaticPointClassDays === 0 && scheduledClassDays === 0 && detectedClassDays === 0 && detectedLogDays > 0,
+                report_start_date: startDate,
+                report_end_date: endDate,
+                is_current_month: isCurrentMonth,
+            };
+        }
+    );
+
+    return results;
+};
+
+export const calculateBulkMonthlyReport = async (req: Request, res: Response) => {
+    try {
+        const { month, mentor_id } = req.query;
+        if (!month) {
+            return res.status(400).json({ success: false, error: 'month is required (YYYY-MM)' });
+        }
+
+        const results = await getCalculatedMonthlyReports(
+            month as string,
+            mentor_id as string | undefined,
+            req.query.academic_year_id
+        );
         res.json({ success: true, ...results });
     } catch (err: any) {
         console.error('Error calculating bulk monthly report:', err);

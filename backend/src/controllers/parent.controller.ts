@@ -7,9 +7,10 @@ import {
     StudentAttendanceSummary,
     getStudentAttendanceSummaries,
 } from '../utils/attendance-report';
-import { calculateHifzReportPoints } from '../utils/hifz-calculator';
 import { calculatePages, getSurahId, calculateCoveredPagesFromLogs } from '../utils/quran-data';
-import { countCompletedJuz, getFirstJuzCompletionDate } from '../utils/quran-juz';
+import { countCompletedJuz } from '../utils/quran-juz';
+import { getAcademicYearContext } from '../utils/academic-year';
+import { getCalculatedMonthlyReports } from './hifz.controller';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -47,7 +48,7 @@ function getMonthRange(month?: string) {
     const requested = String(month || '').trim();
     const today = formatIndiaDate(new Date());
     const fallbackKey = today.slice(0, 7);
-    const monthKey = /^\d{4}-\d{2}$/.test(requested) ? requested : fallbackKey;
+    const monthKey = /^\d{4}-(0[1-9]|1[0-2])$/.test(requested) ? requested : fallbackKey;
     const [yearText, monthText] = monthKey.split('-');
     const year = Number(yearText);
     const monthNumber = Number(monthText);
@@ -424,6 +425,10 @@ export const getParentDashboard = async (req: Request, res: Response) => {
 
         const { startDate, endDate, monthKey } = formatMonthEndForDashboard(String(req.query.month || ''));
         const fullMonth = getMonthRange(monthKey);
+        const academicContext = await getAcademicYearContext(db);
+        const gradeAvailableOn = `${monthKey}-16`;
+        const today = formatIndiaDate(new Date());
+        const gradeVisible = today >= gradeAvailableOn;
 
         const [studentResult, logsResult, monthLogsResult, lifetimeNewLogsResult, reportsResult, examRowsResult] = await Promise.all([
             db.query(
@@ -435,6 +440,7 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                     s.standard,
                     s.hifz_standard,
                     s.dob,
+                    COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) AS hifz_mentor_id,
                     hm.name AS hifz_mentor,
                     sm.name AS school_mentor,
                     mm.name AS madrasa_mentor,
@@ -442,13 +448,15 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                         CASE WHEN COALESCE(hp.completed_hifz, false) THEN 'HAFIZ_REVISION' ELSE 'MEMORIZING' END
                     ) AS hifz_stage
                  FROM students s
-                 LEFT JOIN staff hm ON s.hifz_mentor_id = hm.id
+                 LEFT JOIN student_year_snapshots sys
+                   ON sys.student_id = s.adm_no AND sys.academic_year_id = $2
+                 LEFT JOIN staff hm ON COALESCE(sys.hifz_mentor_id, s.hifz_mentor_id) = hm.id
                  LEFT JOIN staff sm ON s.school_mentor_id = sm.id
                  LEFT JOIN staff mm ON s.madrasa_mentor_id = mm.id
                  LEFT JOIN student_hifz_profiles hp ON hp.student_id = s.adm_no
                  WHERE s.adm_no = $1 AND s.status = 'active'
                  LIMIT 1`,
-                [studentId]
+                [studentId, academicContext.academicYearId]
             ),
             db.query(
                 `SELECT hl.id, hl.student_id, hl.mode, hl.entry_date,
@@ -522,16 +530,12 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, error: 'Student not found' });
         }
 
-        // Hifz scoring uses the full month's planned − cancelled as the denominator
-        // so the student's points climb toward a fixed monthly target instead of
-        // resetting each day. Attended/effective counts still come from the elapsed
-        // range so displayed attendance reflects reality.
         const hifzStudentInput = [{
             adm_no: student.adm_no,
             standard: student.hifz_standard || student.standard,
             attendance_standard: student.hifz_standard || student.standard,
         }];
-        const [attendanceSummaries, hifzAttendanceSummaries, hifzMonthTargetSummaries] = await Promise.all([
+        const [attendanceSummaries, hifzAttendanceSummaries, monthlyPoints] = await Promise.all([
             getStudentAttendanceSummaries(
                 db,
                 [{
@@ -540,67 +544,78 @@ export const getParentDashboard = async (req: Request, res: Response) => {
                     attendance_standard: student.standard,
                 }],
                 startDate,
-                endDate
+                endDate,
+                undefined,
+                academicContext.academicYearId
             ),
             getStudentAttendanceSummaries(
                 db,
                 hifzStudentInput,
                 startDate,
                 endDate,
-                'hifz'
+                'hifz',
+                academicContext.academicYearId
             ),
-            endDate === fullMonth.endDate
-                ? Promise.resolve(null as Awaited<ReturnType<typeof getStudentAttendanceSummaries>> | null)
-                : getStudentAttendanceSummaries(
-                    db,
-                    hifzStudentInput,
-                    startDate,
-                    fullMonth.endDate,
-                    'hifz'
-                ),
+            getCalculatedMonthlyReports(monthKey, student.hifz_mentor_id || undefined, academicContext.academicYearId),
         ]);
 
         const monthLogs = monthLogsResult.rows;
         const monthSummary = summarizeHifzLogs(monthLogs);
         const completedJuz = countCompletedJuz(lifetimeNewLogsResult.rows);
         const hifzAttendance = hifzAttendanceSummaries.get(student.adm_no) || null;
-        const hifzMonthTarget = (hifzMonthTargetSummaries || hifzAttendanceSummaries).get(student.adm_no) || null;
-
-        // Hafiz status is evaluated as of the start of the month being viewed —
-        // a student who completes their 30th Juz mid-month is still shown as
-        // MEMORIZING for that month, and the Hafiz view kicks in from the next month.
-        const priorMonthNewLogs = lifetimeNewLogsResult.rows.filter(
-            (log: any) => {
-                const iso = typeof log.entry_date === 'string'
-                    ? log.entry_date.slice(0, 10)
-                    : new Date(log.entry_date).toISOString().slice(0, 10);
-                return iso < startDate;
-            }
-        );
-        const isHafiz = countCompletedJuz(priorMonthNewLogs) >= 30;
-        const firstJuzCompletionDate = getFirstJuzCompletionDate(lifetimeNewLogsResult.rows);
-
-        const hifzPoints = calculateHifzReportPoints(monthLogs, [], {
-            expectedClassDaysOverride: hifzMonthTarget?.pointClassDays || hifzMonthTarget?.effectiveClasses || null,
-            attendedClasses: hifzAttendance?.weightedAttendedClasses ?? hifzAttendance?.attendedClasses ?? 0,
-            countedClasses: hifzMonthTarget?.effectiveClasses || 0,
-            isHafiz,
-            firstJuzCompletionDate,
-            periodStartDate: fullMonth.startDate,
-            periodEndDate: fullMonth.endDate,
-            pointDayWeights: hifzMonthTarget?.pointDayWeights || {},
-        });
+        const hifzPoints = monthlyPoints.reports.find((report) => report.adm_no === student.adm_no);
+        const visibleGrade = gradeVisible ? hifzPoints?.grade ?? null : null;
+        // The mentor's table orders earned points descending, then names within a tie.
+        const rankedClass = student.hifz_mentor_id ? [...monthlyPoints.reports].sort(
+            (a, b) => b.totalPoints - a.totalPoints || a.name.localeCompare(b.name)
+        ) : [];
+        const classPosition = rankedClass.findIndex((report) => report.adm_no === student.adm_no);
 
         const hifzReport = {
             month: fullMonth.monthKey,
-            is_hafiz: isHafiz,
+            is_hafiz: hifzPoints?.hifz_stage === 'HAFIZ_REVISION',
+            grade_visible: gradeVisible,
+            grade_available_on: gradeAvailableOn,
             summary: {
                 ...monthSummary,
                 total_recited: Number((monthSummary.new_pages + monthSummary.recent_pages + monthSummary.juz_revision + monthSummary.new_revision + monthSummary.old_revision).toFixed(2)),
                 completed_juz: completedJuz,
-                grade: hifzPoints.grade,
-                percentage: hifzPoints.percentage,
-                points: hifzPoints,
+                grade: visibleGrade,
+                percentage: hifzPoints?.percentage ?? null,
+                points: hifzPoints ? {
+                    detectedClassDays: hifzPoints.detectedClassDays,
+                    totalClassDays: hifzPoints.totalClassDays,
+                    newVersePoints: hifzPoints.newVersePoints,
+                    recentRevisionPoints: hifzPoints.recentRevisionPoints,
+                    juzPoints: hifzPoints.juzPoints,
+                    juzMax: hifzPoints.juzMax,
+                    totalMax: hifzPoints.totalMax,
+                    juzEligibleRatio: hifzPoints.juzEligibleRatio,
+                    juzEligiblePointDays: hifzPoints.juzEligiblePointDays,
+                    firstJuzCompletionDate: hifzPoints.firstJuzCompletionDate,
+                    attendancePoints: hifzPoints.attendancePoints,
+                    attendanceMax: hifzPoints.attendanceMax,
+                    basePoints: hifzPoints.basePoints,
+                    bonusPoints: hifzPoints.bonusPoints,
+                    bonusMax: hifzPoints.bonusMax,
+                    bonusEligible: hifzPoints.bonusEligible,
+                    expectedNewPages: hifzPoints.expectedNewPages,
+                    newHifzPages: hifzPoints.newHifzPages,
+                    extraNewHifzPages: hifzPoints.extraNewHifzPages,
+                    newHifzPointRate: hifzPoints.newHifzPointRate,
+                    newRevisionPoints: hifzPoints.newRevisionPoints,
+                    oldRevisionPoints: hifzPoints.oldRevisionPoints,
+                    newRevisionJuz: hifzPoints.newRevisionJuz,
+                    oldRevisionJuz: hifzPoints.oldRevisionJuz,
+                    newRevisionTarget: hifzPoints.newRevisionTarget,
+                    oldRevisionTarget: hifzPoints.oldRevisionTarget,
+                    newRevisionPointRate: hifzPoints.newRevisionPointRate,
+                    oldRevisionPointRate: hifzPoints.oldRevisionPointRate,
+                    attendancePercentage: hifzPoints.attendancePercentage,
+                    totalPoints: hifzPoints.totalPoints,
+                    percentage: hifzPoints.percentage,
+                    grade: visibleGrade,
+                } : null,
             },
             weekly: buildWeeklyHifzReport(monthLogs, fullMonth.startDate, fullMonth.endDate),
         };
@@ -616,10 +631,14 @@ export const getParentDashboard = async (req: Request, res: Response) => {
             attendance: withGroupedAttendanceSessions(attendanceSummaries.get(student.adm_no)),
             hifz_attendance: withGroupedAttendanceSessions(hifzAttendance),
             hifz_report: hifzReport,
+            class_rank: classPosition >= 0 ? {
+                rank: classPosition + 1,
+                total_students: rankedClass.length,
+            } : null,
             hifz_logs: logsResult.rows,
             reports: reportsResult.rows.map((report) => ({
                 ...report,
-                grade: hifzReport.summary.grade,
+                grade: toDateKey(report.report_month).slice(0, 7) === monthKey ? visibleGrade : null,
             })),
             exams: groupExamRows(examRowsResult.rows),
         });

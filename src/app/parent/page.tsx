@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -96,14 +95,16 @@ type HifzSummary = {
     old_revision: number
     total_recited?: number
     completed_juz?: number
-    grade?: string
-    percentage?: number
-    points?: { totalPoints?: number; basePoints?: number; bonusPoints?: number }
+    grade?: string | null
+    percentage?: number | null
+    points?: { totalPoints?: number; basePoints?: number; bonusPoints?: number } | null
 }
 
 type HifzReport = {
     month: string
     is_hafiz?: boolean
+    grade_visible?: boolean
+    grade_available_on?: string
     summary: HifzSummary
     weekly: HifzWeek[]
 }
@@ -166,6 +167,7 @@ type ParentDashboardData = {
     attendance: AttendanceSummary | null
     hifz_attendance?: AttendanceSummary | null
     hifz_report?: HifzReport
+    class_rank?: { rank: number; total_students: number } | null
     hifz_logs: HifzLog[]
     reports: MonthlyReport[]
     exams: ExamReport[]
@@ -253,6 +255,16 @@ function valueText(value: string | number | null | undefined, suffix = "") {
     return `${value}${suffix}`
 }
 
+function hifzGradeText(report?: HifzReport) {
+    return report?.grade_visible === false ? "Pending" : report?.summary.grade || "-"
+}
+
+function hifzGradeDetail(report?: HifzReport) {
+    return report?.grade_visible === false
+        ? `Available ${formatDate(report.grade_available_on)}`
+        : `${valueText(report?.summary.total_recited)} total recited`
+}
+
 export default function ParentDashboard() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
@@ -277,6 +289,7 @@ export default function ParentDashboard() {
                 attendance: res.data.attendance,
                 hifz_attendance: res.data.hifz_attendance,
                 hifz_report: res.data.hifz_report,
+                class_rank: res.data.class_rank,
                 hifz_logs: res.data.hifz_logs || [],
                 reports: res.data.reports || [],
                 exams: res.data.exams || [],
@@ -431,8 +444,8 @@ export default function ParentDashboard() {
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
                                     <HeroMini label="Attendance" value={`${attendance?.attendedClasses || 0}/${totalClasses}`} />
-                                    <HeroMini label="Hifz" value={`${Math.round(progress)}%`} />
-                                    <HeroMini label="Grade" value={hifzSummary?.grade || "-"} />
+                                    <HeroMini label="Class Rank" value={data.class_rank ? `#${data.class_rank.rank}` : "-"} detail={data.class_rank ? `of ${data.class_rank.total_students} students` : "No class rank"} />
+                                    <HeroMini label="Monthly Grade" value={hifzGradeText(data.hifz_report)} detail={data.hifz_report?.grade_visible === false ? `From ${formatDate(data.hifz_report.grade_available_on)}` : undefined} />
                                 </div>
                             </div>
 
@@ -500,11 +513,10 @@ export default function ParentDashboard() {
                         <TabsContent value="summary" className="mt-0 space-y-4">
                             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                                 <MetricCard icon={CalendarCheck} label="Attendance" value={`${attendancePercent}%`} detail={`${attendance?.attendedClasses || 0}/${totalClasses} attended`} tone="sky" />
-                                <MetricCard icon={TrendingUp} label="Hifz Grade" value={hifzSummary?.grade || "-"} detail={`${valueText(hifzSummary?.total_recited)} total recited`} tone="emerald" />
+                                <MetricCard icon={TrendingUp} label="Hifz Grade" value={hifzGradeText(data.hifz_report)} detail={hifzGradeDetail(data.hifz_report)} tone="emerald" />
                                 <MetricCard icon={BookOpen} label="Hifz Progress" value={`${Math.round(progress)}%`} detail={`${hifzSummary?.completed_juz || 0} completed juz`} tone="violet" />
                                 <MetricCard icon={FileText} label="Latest Exam" value={latestExam ? `${latestExam.percentage}%` : "-"} detail={latestExam?.title || "No exam marks found"} tone="amber" />
                             </div>
-                            <SummaryPanel data={data} attendancePercent={attendancePercent} totalClasses={totalClasses} isHafiz={data.hifz_report?.is_hafiz ?? false} />
                         </TabsContent>
 
                         <TabsContent value="attendance" className="mt-0 space-y-4">
@@ -565,11 +577,12 @@ export default function ParentDashboard() {
     )
 }
 
-function HeroMini({ label, value }: { label: string; value: string }) {
+function HeroMini({ label, value, detail }: { label: string; value: string; detail?: string }) {
     return (
         <div className="flex min-h-[78px] min-w-0 flex-col justify-center rounded-2xl bg-white/15 px-1 py-3 text-center backdrop-blur sm:px-3">
             <p className="wrap-anywhere text-lg font-black leading-none sm:text-2xl">{value}</p>
             <p className="mt-2 wrap-anywhere text-[9px] font-black uppercase tracking-wide text-blue-100 sm:text-[11px]">{label}</p>
+            {detail && <p className="mt-1 wrap-anywhere text-[10px] leading-snug text-blue-100">{detail}</p>}
         </div>
     )
 }
@@ -613,91 +626,6 @@ function BottomTab({ active, onClick, icon: Icon, label }: {
             </span>
             {label}
         </button>
-    )
-}
-
-function SummaryPanel({ data, attendancePercent, totalClasses, isHafiz }: {
-    data: ParentDashboardData
-    attendancePercent: number
-    totalClasses: number
-    isHafiz: boolean
-}) {
-    const hifz = data.hifz_report?.summary
-    const exam = data.exams[0]
-
-    return (
-        <div className="grid gap-4 md:grid-cols-[1.05fr_0.95fr]">
-            <Card className="rounded-lg border-slate-200">
-                <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                        <CalendarCheck className="h-4 w-4 text-sky-600" />
-                        This Month Attendance
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-[170px_1fr]">
-                    <div className="flex justify-center sm:justify-start">
-                        <ProgressRing percentage={attendancePercent} size={150} strokeWidth={12} color="text-slate-900" />
-                    </div>
-                    <div className="grid gap-3">
-                        <CountRow label="Total classes" value={totalClasses} />
-                        <CountRow label="Attended" value={data.attendance?.attendedClasses || 0} />
-                        <CountRow label="Not attended" value={data.attendance?.notAttendedClasses || 0} />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card className="rounded-lg border-slate-200">
-                <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                        <TrendingUp className="h-4 w-4 text-emerald-600" />
-                        {isHafiz ? "Monthly Revision Snapshot" : "Monthly Hifz Snapshot"}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2">
-                    {isHafiz ? (
-                        <>
-                            <MiniStat label="New revision" value={valueText(hifz?.new_revision, " juz")} />
-                            <MiniStat label="Old revision" value={valueText(hifz?.old_revision, " juz")} />
-                            <MiniStat label="Grade" value={hifz?.grade || "-"} />
-                            <MiniStat label="Total revised" value={valueText(
-                                hifz ? Number(((hifz.new_revision || 0) + (hifz.old_revision || 0)).toFixed(2)) : null,
-                                " juz"
-                            )} />
-                        </>
-                    ) : (
-                        <>
-                            <MiniStat label="New verses" value={valueText(hifz?.new_pages, " pages")} />
-                            <MiniStat label="Recent revision" value={valueText(hifz?.recent_pages, " pages")} />
-                            <MiniStat label="Juz revision" value={valueText(hifz?.juz_revision, " juz")} />
-                            <MiniStat label="Grade" value={hifz?.grade || "-"} />
-                        </>
-                    )}
-                </CardContent>
-            </Card>
-
-            <Card className="rounded-lg border-slate-200 md:col-span-2">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Latest Exam</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {exam ? (
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div>
-                                <p className="text-lg font-black text-slate-950">{exam.title}</p>
-                                <p className="text-sm text-slate-500">{exam.department || exam.type || "Exam"} - {formatDate(exam.start_date)}</p>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-center">
-                                <MiniStat label="Marks" value={`${exam.total_obtained}/${exam.total_max}`} />
-                                <MiniStat label="Percent" value={`${exam.percentage}%`} />
-                                <MiniStat label="Grade" value={exam.grade} />
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="py-6 text-center text-sm text-slate-500">No exam marks found.</p>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
     )
 }
 
@@ -1065,15 +993,17 @@ function HifzPanel({ report, logs, monthlyReports }: {
                                 </CardContent>
                             </Card>
 
-                            {report?.summary.grade && (
+                            {report && (
                                 <Card className={`min-w-0 justify-center rounded-xl py-4 ${report.summary.grade === 'O' ? "border-amber-300 bg-gradient-to-br from-amber-100 to-yellow-50 ring-1 ring-amber-200" : "border-slate-200 bg-gradient-to-br from-indigo-50 to-white"}`}>
                                     <CardContent className="flex flex-col items-center px-3 text-center sm:px-4">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monthly Grade</p>
-                                        <p className="mt-1 text-3xl font-black leading-tight text-indigo-700 sm:text-4xl">{report.summary.grade === 'O' ? '★ O' : report.summary.grade}</p>
-                                        {report.summary.percentage != null && (
+                                        <p className="mt-1 text-3xl font-black leading-tight text-indigo-700 sm:text-4xl">{report.grade_visible !== false && report.summary.grade === 'O' ? '★ O' : hifzGradeText(report)}</p>
+                                        {report.grade_visible === false ? (
+                                            <p className="mt-1 text-sm text-slate-500">{hifzGradeDetail(report)}</p>
+                                        ) : report.summary.percentage != null && (
                                             <p className="mt-1 text-sm text-slate-500">{report.summary.points?.totalPoints ?? report.summary.percentage} points · +{report.summary.points?.bonusPoints ?? 0} bonus</p>
                                         )}
-                                        {report.summary.grade === 'O' && <p className="mt-1 text-sm font-bold text-amber-800">Outstanding performance</p>}
+                                        {report.grade_visible !== false && report.summary.grade === 'O' && <p className="mt-1 text-sm font-bold text-amber-800">Outstanding performance</p>}
                                     </CardContent>
                                 </Card>
                             )}
@@ -1240,7 +1170,7 @@ function ReportPanel({ data, attendancePercent, totalClasses, isHafiz }: {
 
                 <div className="grid gap-4 md:grid-cols-3">
                     <ReportBox label="Attendance" value={`${attendancePercent}%`} detail={`${data.attendance?.attendedClasses || 0}/${totalClasses} attended`} />
-                    <ReportBox label="Hifz Grade" value={hifz?.grade || "-"} detail={`${valueText(hifz?.total_recited)} total recited`} />
+                    <ReportBox label="Hifz Grade" value={hifzGradeText(data.hifz_report)} detail={hifzGradeDetail(data.hifz_report)} />
                     <ReportBox label="Exam" value={latestExam ? `${latestExam.percentage}%` : "-"} detail={latestExam?.title || "No marks"} />
                 </div>
 
@@ -1329,15 +1259,6 @@ function CountRow({ label, value }: { label: string; value: number }) {
         <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm shadow-blue-50">
             <span className="text-sm font-medium text-slate-600">{label}</span>
             <span className="text-lg font-black text-slate-950">{value}</span>
-        </div>
-    )
-}
-
-function MiniStat({ label, value }: { label: string; value: string | number | ReactNode }) {
-    return (
-        <div className="rounded-2xl bg-slate-50 px-3 py-3 shadow-sm shadow-blue-50">
-            <p className="text-xs font-medium text-slate-500">{label}</p>
-            <p className="mt-1 text-sm font-black text-slate-900">{value}</p>
         </div>
     )
 }

@@ -13,6 +13,8 @@
     "build:staging": "node scripts/run-with-env.mjs .env.staging.local node_modules/next/dist/bin/next build --webpack",
     "build": "next build --webpack",
     "start": "next start",
+    "build:exam": "npm run build --prefix backend && npm run build",
+    "start:exam": "concurrently -k \"npm run start\" \"npm run start --prefix backend\"",
     "lint": "eslint"
   },
   "dependencies": {

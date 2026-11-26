@@ -1,0 +1,14 @@
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { publicExam, examinerBootstrap, examinerLogin, examinerLogout, examinerSession, examinerRoster, saveValuation } from '../controllers/exam-portal.controller';
+import administrationRoutes from './exam-administration.routes';
+const router = Router();
+router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+router.use('/:slug/admin', administrationRoutes);
+router.get('/:slug', publicExam);
+router.get('/:slug/bootstrap', examinerBootstrap);
+router.post('/:slug/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, error: 'Too many attempts. Please try again in 15 minutes.' } }), examinerLogin);
+router.post('/:slug/logout', examinerLogout);
+router.get('/:slug/roster', examinerRoster);
+router.post('/:slug/valuation', examinerSession, saveValuation);
+export default router;

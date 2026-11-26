@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
 import { getAcademicYearContext } from '../utils/academic-year';
+import { randomUUID } from 'crypto';
+import { portalSlug } from '../services/exam-portal.service';
 
 // --- Global Exams ---
 
@@ -28,11 +30,13 @@ export const getExams = async (req: Request, res: Response) => {
 export const createExam = async (req: Request, res: Response) => {
     try {
         const { title, department, type, start_date, end_date, is_active } = req.body;
+        if (!String(title || '').trim() || !start_date || (end_date && end_date < start_date)) return res.status(400).json({success:false,error:'Provide an exam name and valid dates.'});
+        const examId = randomUUID();
         
         const result = await db.query(
-            `INSERT INTO exams (title, department, type, start_date, end_date, is_active)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [title, department, type || department, start_date, end_date || null, is_active ?? true]
+            `INSERT INTO exams (id, title, department, type, start_date, end_date, is_active, portal_slug)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [examId, title.trim(), department, type || department, start_date, end_date || null, is_active ?? true, String(department).toLowerCase() === 'hifz' ? portalSlug(title, examId) : null]
         );
         
         res.status(201).json({ success: true, exam: result.rows[0] });
@@ -191,6 +195,13 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
         try {
             await client.query('BEGIN');
 
+            // Serialize manual marking with portal submission and administrative changes.
+            await client.query('SELECT id FROM exams WHERE id=$1 FOR UPDATE', [id]);
+            const portalRows = await client.query(`SELECT 1 FROM exam_portal_allocations a JOIN exam_subjects s ON s.exam_id=a.exam_id
+                WHERE a.exam_id=$1 AND s.question_count IS NOT NULL AND a.student_id=ANY($2::text[]) AND s.id=ANY($3::uuid[]) LIMIT 1`,
+                [id, updates.map((u:any)=>u.student_id), updates.map((u:any)=>u.subject_id)]);
+            if (portalRows.rows.length) throw new Error('Use the examiner portal to enter these question marks. Results appear here after final submission.');
+
             const subjectIds = [...new Set(updates.map((u: any) => u.subject_id))];
             const subjectResult = await client.query(
                 'SELECT id, standard, max_marks FROM exam_subjects WHERE exam_id = $1 AND id = ANY($2::uuid[])',
@@ -240,6 +251,11 @@ export const upsertExamMarks = async (req: Request, res: Response) => {
 export const getStudentsForExamMarks = async (req: Request, res: Response) => {
     try {
         const { department, standard } = req.query;
+        if (req.query.exam_id) {
+            const roster = await db.query(`SELECT student_id AS adm_no,student_name AS name,standard FROM exam_portal_allocations WHERE exam_id=$1 AND ($2::text IS NULL OR standard=$2) ORDER BY student_name`, [req.query.exam_id, standard && standard !== 'all' ? standard : null]);
+            const allocated = await db.query('SELECT 1 FROM exam_portal_allocations WHERE exam_id=$1 LIMIT 1',[req.query.exam_id]);
+            if (allocated.rows.length) return res.json({success:true,students:roster.rows});
+        }
         const academicContext = await getAcademicYearContext(db, req.query.academic_year_id);
         
         let stdColumn = 'standard';

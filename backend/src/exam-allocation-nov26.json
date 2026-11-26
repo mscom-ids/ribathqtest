@@ -1,0 +1,857 @@
+{
+  "title": "MID TERM HIFZ EXAMINATION NOV 26",
+  "centers": [
+    {
+      "code": "A",
+      "name": "Exam Center A",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R101",
+          "name": "MUHAMMED ALI",
+          "standard": "Plus Two"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R092",
+          "name": "AHMADUL KABEER FS",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R211",
+          "name": "MUHAMMED SHAFEEN",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R240",
+          "name": "ABDUL MUHAIMIN CV",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R151",
+          "name": "MUHAMMED ASHFAQ",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R148",
+          "name": "MUHAMMED SINAN PT",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R321",
+          "name": "AHMED IYAS.TV",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R395",
+          "name": "MOHAMMED SHAHIR TM",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R372",
+          "name": "MUHAMMED AZAN VK",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R406",
+          "name": "MUHAMMED NAFITH",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R402",
+          "name": "MUHAMMED SHAHEER M",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R367",
+          "name": "JINAN T",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R438",
+          "name": "RAAHIL SARFARAZ KHAN",
+          "standard": "5th"
+        }
+      ]
+    },
+    {
+      "code": "B",
+      "name": "Exam Center B",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R131",
+          "name": "MUHAMMED SHIBLI CK",
+          "standard": "Plus Two"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R184",
+          "name": "HAMDAN MAHROOF HUSSAIN P",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R207",
+          "name": "MUHAMMED SHAHAN MV",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R366",
+          "name": "AMEER PH",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R157",
+          "name": "MUHAMMED FAYYAD KT",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R227",
+          "name": "MUHAMMED SUFIYAN S",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R419",
+          "name": "AMADIR MUHAMMED JASSIR",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R416",
+          "name": "HAMAD SAEED",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R432",
+          "name": "MUHAMMED ADIL P",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R434",
+          "name": "MOHAMMED RAZAL",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R422",
+          "name": "MUHAMMED SALEEL",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R377",
+          "name": "MUHAMMED RANAN",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R414",
+          "name": "MUHAMMED SHAN T",
+          "standard": "5th"
+        }
+      ]
+    },
+    {
+      "code": "C",
+      "name": "Exam Center C",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R114",
+          "name": "RAFEED",
+          "standard": "Plus Two"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R098",
+          "name": "MOHAMMED ASHMIL V",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R241",
+          "name": "MUHAMMED SHAMIL TE",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R242",
+          "name": "FAAZ MUHAMMED CP",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R239",
+          "name": "MUHAMMED IJLAL KP",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R155",
+          "name": "MUHAMMED SUHAIL KP",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R314",
+          "name": "MOHAMMED ASHAD T",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R375",
+          "name": "MUHAMMED ASHIQ KT",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R388",
+          "name": "MUHAMMED SHIMIL",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R409",
+          "name": "MUHAMMAD SINAN V",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R431",
+          "name": "MUHAMMED FAIZAN T",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R385",
+          "name": "MUHAMMED THAMEEM ALI P",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R424",
+          "name": "MUHAMMED ASEEL MM",
+          "standard": "5th"
+        }
+      ]
+    },
+    {
+      "code": "D",
+      "name": "Exam Center D",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R033",
+          "name": "SHABEEB ABOOBACKER",
+          "standard": "Plus Two"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R250",
+          "name": "MOHAMMED AZAN T",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R169",
+          "name": "MUHAMMED UMAIR TK",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R231",
+          "name": "FAISAL SHAD M",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R265",
+          "name": "MUHAMMED MIHAL",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R386",
+          "name": "S MUHAMMED YUSUF",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R381",
+          "name": "AHAMMED IMDATH",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R369",
+          "name": "MUHAMMED HAMDAN",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R411",
+          "name": "MUHAMMED SULTAN T",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R433",
+          "name": "MUHAMMED AMIR P",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R399",
+          "name": "MUHAMMED SABEEH",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R373",
+          "name": "MUHAMMED ADHIL UK",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R398",
+          "name": "MUHAMMED SHAZIL",
+          "standard": "5th"
+        }
+      ]
+    },
+    {
+      "code": "E",
+      "name": "Exam Center E",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R221",
+          "name": "MUHAMMED RAZAL KC",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R112",
+          "name": "SHAHADATH PT",
+          "standard": "Plus One"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R263",
+          "name": "AADIL ABDUL AZEEZ",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R332",
+          "name": "HAFIL K",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R284",
+          "name": "MUHAMMED SHAMIL KT",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R296",
+          "name": "SHAHIN UMMER",
+          "standard": "10th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R325",
+          "name": "AHMED ARIF",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R340",
+          "name": "MUHAMMED IHSAN MC",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R435",
+          "name": "ZEESHAN ABDULLAH",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R417",
+          "name": "MUHAMMED MISHHAL",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R429",
+          "name": "MUHAMMED SHEFIN",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R408",
+          "name": "MUHAMMED THAMLEEKH",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R425",
+          "name": "ZAINUL ABIDEEN",
+          "standard": "6th"
+        }
+      ]
+    },
+    {
+      "code": "F",
+      "name": "Exam Center F",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R380",
+          "name": "ISMAIL KABEER V",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R389",
+          "name": "MOHAMED HUSSAIN S",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R390",
+          "name": "MUHAMMED SINAN MS",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R436",
+          "name": "MUHAMMED ABOOBACKER",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R427",
+          "name": "MUHAMMED RAZEEN VK",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R382",
+          "name": "SAHL MK",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R370",
+          "name": "MUHAMMED ABLAJ M",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R330",
+          "name": "MUHAMMED AQNAS",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R277",
+          "name": "MUHAMMED MIHAD N",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R371",
+          "name": "MUHAMMED RAIHAN",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R342",
+          "name": "SANIN ABDULLA P T",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R293",
+          "name": "MUHAMMED SHIFIN A",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R319",
+          "name": "MUHAMMED THAMEEM E",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 14,
+          "admission_no": "R230",
+          "name": "SAYYED MUHAMMED MISBAH",
+          "standard": "Non-class"
+        }
+      ]
+    },
+    {
+      "code": "G",
+      "name": "Exam Center G",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R336",
+          "name": "MOHAMMED BIN ASHRAF",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R362",
+          "name": "MUHAMMED BILAL",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R360",
+          "name": "MUHAMMED SHABIL VM",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R415",
+          "name": "MUHAMMED ARSHAQ VP",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R410",
+          "name": "MUHAMMED SUFIYAN T",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R374",
+          "name": "MUHAMMED SHAZZIN",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R356",
+          "name": "MOHAMMED FOUZAN SHEHZADI",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R329",
+          "name": "MUHAMMED FARHAN E.S",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R363",
+          "name": "MUHAMMED SAHAL N",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R335",
+          "name": "SAHAD",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R333",
+          "name": "AHMED RIHAN PV",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R292",
+          "name": "IBRAHIM BADUSHA",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R276",
+          "name": "THASHREEF TF",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 14,
+          "admission_no": "R308",
+          "name": "MOHAMMAD RISHAN",
+          "standard": "Non-class"
+        }
+      ]
+    },
+    {
+      "code": "H",
+      "name": "Exam Center H",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R407",
+          "name": "IJLAN P",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R341",
+          "name": "MUHAMMED YASEEN UK",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R413",
+          "name": "MUHAMMED MUZAMMIL K",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R420",
+          "name": "MUHAMMED RABEEH C",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R428",
+          "name": "MUHAMMED YASEEN",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R412",
+          "name": "NAZIM MUHAMMED",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R145",
+          "name": "MOHAMMED ABOOBACKER A",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R346",
+          "name": "MUHAMMED HADI TV",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R337",
+          "name": "MUHAMMED SHEES",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R338",
+          "name": "MUHAMMED UNAIS",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R297",
+          "name": "HANAN MUHAMMED",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R238",
+          "name": "IBRAHIM BADUSHA.VS",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R352",
+          "name": "MUHAMMED INSHAD",
+          "standard": "9th"
+        }
+      ]
+    },
+    {
+      "code": "I",
+      "name": "Exam Center I",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R403",
+          "name": "HAFNAN C",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R396",
+          "name": "MUHAMMED SARFRAZ",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R405",
+          "name": "AL SAANZIL AHAMMED",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R426",
+          "name": "MUHAMMED AL SHAN",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R400",
+          "name": "MUHAMMED SHAFI",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R294",
+          "name": "MUHAMMED KK",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R326",
+          "name": "MUHAMMED SABITH KA",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R387",
+          "name": "MUHAMMED SHAMMAS N",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R334",
+          "name": "RUFAID ALI",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R345",
+          "name": "SAYYID ABOOBACKER SIDHEEQ",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R278",
+          "name": "MUHAMMED HAAFIZ K",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R364",
+          "name": "MUHAMMED SAJLU RAHMAN",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R298",
+          "name": "MUHAMMED SHIBILI M",
+          "standard": "9th"
+        }
+      ]
+    },
+    {
+      "code": "J",
+      "name": "Exam Center J",
+      "students": [
+        {
+          "serial_no": 1,
+          "admission_no": "R401",
+          "name": "MUHAMMED HARITH KASIM",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 2,
+          "admission_no": "R391",
+          "name": "MUHAMMED USMAN H",
+          "standard": "7th"
+        },
+        {
+          "serial_no": 3,
+          "admission_no": "R418",
+          "name": "ABDUL BARI",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 4,
+          "admission_no": "R430",
+          "name": "MUHAMMED RAZEEN SHIBILI",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 5,
+          "admission_no": "R357",
+          "name": "MOHAMMED ZIYAD",
+          "standard": "6th"
+        },
+        {
+          "serial_no": 6,
+          "admission_no": "R379",
+          "name": "HIJAZ AHMAD",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 7,
+          "admission_no": "R318",
+          "name": "KHAJA MUEENUDHEEN KT",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 8,
+          "admission_no": "R316",
+          "name": "MUHAMMAD HADHIN K",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 9,
+          "admission_no": "R311",
+          "name": "MUHAMMED ASIF TA",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 10,
+          "admission_no": "R279",
+          "name": "MUHIYIDHEEN HASHIM",
+          "standard": "8th"
+        },
+        {
+          "serial_no": 11,
+          "admission_no": "R354",
+          "name": "ABDUL BARI",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 12,
+          "admission_no": "R349",
+          "name": "MOHAMMED HUBAIB A",
+          "standard": "9th"
+        },
+        {
+          "serial_no": 13,
+          "admission_no": "R216",
+          "name": "MUHAMMAD ZAYAN TE",
+          "standard": "Non-class"
+        }
+      ]
+    }
+  ]
+}

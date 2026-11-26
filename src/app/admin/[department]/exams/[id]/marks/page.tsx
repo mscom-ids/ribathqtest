@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { ArrowLeft, BookOpen, Check, ChevronRight, GraduationCap, Loader2, Search } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 type Exam = { id: string; title: string }
-type Subject = { id: string; name: string; max_marks: number; min_marks: number; standard: string }
+type Subject = { id: string; name: string; max_marks: number; min_marks: number; standard: string; question_count?: number | null }
 type Student = { adm_no: string; name: string; standard: string }
 type Result = { subject_id: string; student_id: string; marks_obtained: number; remarks?: string | null }
 type Draft = Record<string, { marks: string; remarks: string }>
@@ -49,11 +50,11 @@ export default function MarksPage({ params, searchParams }: { params: Promise<{ 
     useEffect(() => {
         if (!standard) return setStudents([])
         setLoadingStudents(true)
-        api.get("/exams/students", { params: { department, standard } })
+        api.get("/exams/students", { params: { department, standard, exam_id: id } })
             .then(response => setStudents(response.data.students || []))
             .catch(error => alert(error.response?.data?.error || "Failed to load students"))
             .finally(() => setLoadingStudents(false))
-    }, [department, standard])
+    }, [department, standard, id])
 
     function editStudent(selected: Student) {
         const values: Draft = {}
@@ -70,7 +71,7 @@ export default function MarksPage({ params, searchParams }: { params: Promise<{ 
             const value = draft[subject.id]?.marks.trim()
             if (value && (Number(value) < 0 || Number(value) > subject.max_marks)) return alert(`${subject.name}: marks must be between 0 and ${subject.max_marks}`)
         }
-        const updates = selectedSubjects.filter(subject => draft[subject.id]?.marks.trim()).map(subject => ({ subject_id: subject.id, student_id: student.adm_no, marks_obtained: Number(draft[subject.id].marks), remarks: draft[subject.id].remarks || null }))
+        const updates = selectedSubjects.filter(subject => !subject.question_count && draft[subject.id]?.marks.trim()).map(subject => ({ subject_id: subject.id, student_id: student.adm_no, marks_obtained: Number(draft[subject.id].marks), remarks: draft[subject.id].remarks || null }))
         if (!updates.length) return alert("Enter at least one mark")
         setSaving(true)
         try {
@@ -104,8 +105,8 @@ export default function MarksPage({ params, searchParams }: { params: Promise<{ 
         </>}
 
         <Dialog open={!!student} onOpenChange={open => !open && setStudent(null)}><DialogContent className="flex max-h-[90vh] max-w-xl flex-col overflow-hidden p-0"><DialogHeader className="border-b p-5"><DialogTitle>{student?.name}</DialogTitle><DialogDescription>{student?.adm_no} · {standard} Standard</DialogDescription></DialogHeader>
-            <div className="overflow-y-auto px-5">{selectedSubjects.map(subject => { const value = draft[subject.id] || { marks: "", remarks: "" }; const marks = Number(value.marks); return <div key={subject.id} className="border-b py-4"><div className="mb-3 flex items-center justify-between gap-2"><Label htmlFor={`mark-${subject.id}`} className="text-base font-semibold">{subject.name}</Label><span className="text-xs text-muted-foreground">Pass {subject.min_marks} / Max {subject.max_marks}</span></div><div className="grid gap-3 sm:grid-cols-[120px_1fr]"><div><Label htmlFor={`mark-${subject.id}`} className="text-xs text-muted-foreground">Mark</Label><Input id={`mark-${subject.id}`} type="number" min={0} max={subject.max_marks} value={value.marks} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, marks: event.target.value } }))} className={value.marks && marks < subject.min_marks ? "border-red-300" : ""} /></div><div><Label htmlFor={`remark-${subject.id}`} className="text-xs text-muted-foreground">Optional remark</Label><Input id={`remark-${subject.id}`} value={value.remarks} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, remarks: event.target.value } }))} placeholder="Add a remark" /></div></div></div> })}</div>
-            <DialogFooter className="border-t p-4"><Button variant="outline" onClick={() => setStudent(null)}>Cancel</Button><Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save marks</Button></DialogFooter>
+            <div className="overflow-y-auto px-5">{selectedSubjects.some(s=>s.question_count) && <p className="my-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Examiner totals appear here after submission. <Link className="font-semibold underline" href={`/admin/${department}/exams/${id}/portal`}>Manage question marks and reopen valuations</Link></p>}{selectedSubjects.map(subject => { const value = draft[subject.id] || { marks: "", remarks: "" }; const marks = Number(value.marks); return <div key={subject.id} className="border-b py-4"><div className="mb-3 flex items-center justify-between gap-2"><Label htmlFor={`mark-${subject.id}`} className="text-base font-semibold">{subject.name}</Label><span className="text-xs text-muted-foreground">Pass {subject.min_marks} / Max {subject.max_marks}</span></div><div className="grid gap-3 sm:grid-cols-[120px_1fr]"><div><Label htmlFor={`mark-${subject.id}`} className="text-xs text-muted-foreground">Mark</Label><Input id={`mark-${subject.id}`} type="number" min={0} max={subject.max_marks} value={value.marks} disabled={!!subject.question_count} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, marks: event.target.value } }))} className={value.marks && marks < subject.min_marks ? "border-red-300" : ""} /></div><div><Label htmlFor={`remark-${subject.id}`} className="text-xs text-muted-foreground">Optional remark</Label><Input id={`remark-${subject.id}`} value={value.remarks} disabled={!!subject.question_count} onChange={event => setDraft(current => ({ ...current, [subject.id]: { ...value, remarks: event.target.value } }))} placeholder="Add a remark" /></div></div></div> })}</div>
+            <DialogFooter className="border-t p-4"><Button variant="outline" onClick={() => setStudent(null)}>Cancel</Button><Button onClick={save} disabled={saving || selectedSubjects.every(s=>!!s.question_count)} className="bg-emerald-600 hover:bg-emerald-700">{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save marks</Button></DialogFooter>
         </DialogContent></Dialog>
     </div>
 }

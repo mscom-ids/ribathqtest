@@ -53,9 +53,10 @@ async function readJsonResponse(res: Response) {
 
 type LoginFormProps = {
     parentOnly?: boolean
+    redirectTo?: string
 }
 
-export default function LoginForm({ parentOnly = false }: LoginFormProps) {
+export default function LoginForm({ parentOnly = false, redirectTo }: LoginFormProps) {
     const [userId, setUserId] = useState("")
     const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
@@ -132,7 +133,8 @@ export default function LoginForm({ parentOnly = false }: LoginFormProps) {
             if (profile.role) {
                 try { sessionStorage.setItem('__urole', profile.role) } catch { /* ignore */ }
             }
-            window.location.href = parentOnly ? "/home" : getRedirectPathForRole(profile.role)
+            const examReturn = redirectTo?.startsWith('/hifz/exam/') && ['admin','principal','vice_principal','controller'].includes(profile.role) ? redirectTo : null
+            window.location.href = parentOnly ? "/home" : examReturn || getRedirectPathForRole(profile.role)
         } catch (err: unknown) {
             const error = err instanceof Error ? err : new Error("Failed to login")
             setError(error.name === "AbortError"

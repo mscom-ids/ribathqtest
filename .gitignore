@@ -17,6 +17,12 @@
 /.next/
 /.next-build-check/
 /.next-whatsapp-preview/
+/.next-exam-portal-qa/
+/.next-exam-portal-build/
+/tmp/exam-portal-pg/
+/tmp/exam-portal-pg.log
+/tmp/exam-portal-ui/
+/tmp/exam-workbook/
 /tmp/preview-whatsapp-admin.cjs
 /out/
 
